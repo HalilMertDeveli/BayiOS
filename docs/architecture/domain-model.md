@@ -193,6 +193,8 @@ Genel kurallar:
 ### Entity: `OrderStatusHistory`
 - Her geçiş: `FromStatus`, `ToStatus`, `ChangedBy`, `ChangedAt`, `Reason?`. Append-only.
 
+> **Uygulanan durum (#32/#33/#35):** satırlar yalnızca `Draft`'ta değişir (`PendingApproval`'da önce `withdraw`). Fiyat snapshot'ı onayda değil taslağın her düzenlemesinde alınır; onay snapshot'ı yeniden çözmeden dondurur. Domain event'leri yerine outbox mesajları: `orders.approved.v1`, `orders.cancelled.v1`, `orders.shipped.v1`. `OrderStatusHistory` her eylemi (`create` dahil) `Action` ile kaydeder. Geçici `OrderShipment` (Warehouse `Shipment` gelene kadar). Ayrıntı: [inventory-and-orders §7](inventory-and-orders.md#7-uygulama-durumu--siparişler-job-11--32-33-35).
+
 ---
 
 ## 9. Imports

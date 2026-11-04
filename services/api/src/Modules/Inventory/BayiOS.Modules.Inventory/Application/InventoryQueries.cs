@@ -98,6 +98,19 @@ internal sealed class InventoryQueries(InventoryDbContext db) : IStockQueries
     public Task<bool> WarehouseHasStockAsync(Guid warehouseId, CancellationToken cancellationToken) =>
         db.Balances.AnyAsync(b => b.WarehouseId == warehouseId && (b.OnHand != 0 || b.Reserved != 0), cancellationToken);
 
+    public async Task<IReadOnlyList<ReservationAllocation>> GetOpenReservationsAsync(Guid orderId, CancellationToken cancellationToken)
+    {
+        var rows = await db.Reservations.AsNoTracking()
+            .Where(r => r.OrderId == orderId && r.Status == ReservationStatuses.Active)
+            .ToListAsync(cancellationToken);
+        return [.. rows
+            .OrderBy(r => r.OrderLineId)
+            .ThenBy(r => r.LocationId is null ? 0 : 1)
+            .ThenBy(r => r.LocationId)
+            .Select(r => new ReservationAllocation(
+                r.Id, r.OrderLineId, r.VariantId, r.WarehouseId, r.LocationId, r.Quantity - r.ConsumedQuantity - r.ReleasedQuantity, r.Status))];
+    }
+
     private static BalanceResponse ToResponse(InventoryBalance b) =>
         new(b.Id, b.VariantId, b.WarehouseId, b.LocationId, b.OnHand, b.Reserved, b.OnHand - b.Reserved, b.Version, b.UpdatedAt);
 
