@@ -11,11 +11,14 @@ export default function Home() {
       </p>
       <ApiStatus />
       <div className="flex flex-wrap gap-2">
-        <Link href="/pano" className={buttonClasses("primary", "md")}>
-          Panele git
+        <Link href="/kayit" className={buttonClasses("primary", "md")}>
+          Ücretsiz başla
         </Link>
-        <Link href="/tasarim-sistemi" className={buttonClasses("secondary", "md")}>
-          Tasarım sistemi
+        <Link href="/giris" className={buttonClasses("secondary", "md")}>
+          Giriş yap
+        </Link>
+        <Link href="/pano" className={buttonClasses("ghost", "md")}>
+          Panele git
         </Link>
       </div>
     </main>
