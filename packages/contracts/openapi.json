@@ -30,10 +30,505 @@
           }
         }
       }
+    },
+    "/api/v1/me": {
+      "get": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Oturumdaki kullan\u0131c\u0131n\u0131n profili ve tenant \u00FCyelikleri",
+        "operationId": "Identity_GetMe",
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants": {
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Yeni tenant olu\u015Fturur; \u00E7a\u011F\u0131ran kullan\u0131c\u0131 owner olur",
+        "operationId": "Identity_CreateTenant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenant": {
+      "get": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "X-Tenant-Id ile se\u00E7ilen aktif tenant",
+        "operationId": "Identity_GetCurrentTenant",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "tenant.read"
+      }
+    },
+    "/api/v1/tenant/settings": {
+      "get": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Aktif tenant\u0027\u0131n ayarlanabilir kurallar\u0131 (ETag d\u00F6ner)",
+        "operationId": "Identity_GetTenantSettings",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "tenant.settings.manage"
+      },
+      "patch": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Tenant kurallar\u0131n\u0131 g\u00FCnceller (JSON merge patch, If-Match zorunlu)",
+        "operationId": "Identity_UpdateTenantSettings",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/merge-patch\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantSettingsRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Precondition Failed",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "tenant.settings.manage"
+      }
     }
   },
   "components": {
     "schemas": {
+      "CreateTenantRequest": {
+        "required": [
+          "name",
+          "slug",
+          "sector"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "slug": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "HttpValidationProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "MembershipResponse": {
+        "required": [
+          "tenantId",
+          "tenantName",
+          "tenantSlug",
+          "role",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantName": {
+            "type": "string"
+          },
+          "tenantSlug": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "MeResponse": {
+        "required": [
+          "userId",
+          "email",
+          "fullName",
+          "memberships"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fullName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "memberships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MembershipResponse"
+            }
+          }
+        }
+      },
       "MetaResponse": {
         "required": [
           "name",
@@ -52,12 +547,215 @@
             "type": "string"
           }
         }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "TenantResponse": {
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "status",
+          "sector",
+          "defaultCurrency",
+          "locale",
+          "timeZone",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "sector": {
+            "type": "string"
+          },
+          "defaultCurrency": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "TenantSettingsResponse": {
+        "required": [
+          "negativeStockPolicy",
+          "salesCanApproveOrders",
+          "salesMaxDiscountPercent",
+          "showCostToManager",
+          "showCostToViewer",
+          "staffCanAssignBarcode",
+          "staffCanApproveReceipt",
+          "require2fa"
+        ],
+        "type": "object",
+        "properties": {
+          "negativeStockPolicy": {
+            "type": "string"
+          },
+          "salesCanApproveOrders": {
+            "type": "boolean"
+          },
+          "salesMaxDiscountPercent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "showCostToManager": {
+            "type": "boolean"
+          },
+          "showCostToViewer": {
+            "type": "boolean"
+          },
+          "staffCanAssignBarcode": {
+            "type": "boolean"
+          },
+          "staffCanApproveReceipt": {
+            "type": "boolean"
+          },
+          "require2fa": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateTenantSettingsRequest": {
+        "required": [
+          "negativeStockPolicy",
+          "salesCanApproveOrders",
+          "salesMaxDiscountPercent",
+          "showCostToManager",
+          "showCostToViewer",
+          "staffCanAssignBarcode",
+          "staffCanApproveReceipt",
+          "require2fa"
+        ],
+        "type": "object",
+        "properties": {
+          "negativeStockPolicy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "salesCanApproveOrders": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "salesMaxDiscountPercent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "showCostToManager": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "showCostToViewer": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "staffCanAssignBarcode": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "staffCanApproveReceipt": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "require2fa": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "description": "Supabase Auth access token",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
       }
     }
   },
   "tags": [
     {
       "name": "Platform"
+    },
+    {
+      "name": "Identity"
     }
   ]
 }

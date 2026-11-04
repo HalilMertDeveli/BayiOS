@@ -1,0 +1,3 @@
+# EF Core migrations are tool-generated; analyzers and formatting treat them as generated code.
+[**/Migrations/*.cs]
+generated_code = true

@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.AspNetCore.Mvc.Testing;
+using BayiOS.IntegrationTests.Infrastructure;
 
 namespace BayiOS.IntegrationTests.Contracts;
 
@@ -8,7 +8,7 @@ namespace BayiOS.IntegrationTests.Contracts;
 /// Keeps packages/contracts/openapi.json in sync with the running API.
 /// Regenerate after an intentional API change with: UPDATE_CONTRACTS=1 dotnet test
 /// </summary>
-public class OpenApiContractTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public class OpenApiContractTests(ApiFixture factory)
 {
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
