@@ -173,6 +173,8 @@ Genel kurallar:
 - Invariant'lar: satır miktarı ≤ ilgili sipariş satırının kalan sevk edilebilir miktarı; onaylanan sevkiyat değişmez (iade ayrı akış).
 - Event'ler: `ShipmentConfirmed` (aynı tx'te Orders tarafından işlenir), outbox: `ShipmentConfirmedNotification`.
 
+> **Uygulanan durum (JOB 10, #36–#39):** domain event'leri yerine modül sözleşmeleri, aynı transaction'da: Orders → Warehouse `IOrderFulfillmentListener` (onayda görev oluştur; iptal/short-close'da açık görev ve onaylanmamış sevkiyatı iptal et, toplananlar için `putaway` görevi), Warehouse → Orders `IOrderFulfillment` (start_picking, pack, report_shortage, ship). `PickingTask` satırı rezervasyon (sipariş satırı + lokasyon) başınadır; `AssignedTo` null = havuz. `Shipment` durumları `draft → packed (isteğe bağlı paket kontrolü) → confirmed`, ayrıca `cancelled`; satır `PickedQuantity`, `Quantity` (sevk edilecek), `PackedQuantity`, `ShortQuantity` taşır; koliler `ShipmentPackage`. Görev ve sevkiyat geçişlerinin tek yeri `FulfillmentStateMachine`. Outbox: `warehouse.picking_task_created.v1`, `warehouse.picking_task_assigned.v1`, `warehouse.picking_completed.v1`, `warehouse.shortage_reported.v1`, `warehouse.shipment_confirmed.v1`, `warehouse.putaway_created.v1`. Ayrıntı: [inventory-and-orders §8](inventory-and-orders.md#8-uygulama-durumu--depo-hazırlama-ve-sevkiyat-job-10--36-37-38-39).
+
 ---
 
 ## 8. Orders
@@ -193,7 +195,7 @@ Genel kurallar:
 ### Entity: `OrderStatusHistory`
 - Her geçiş: `FromStatus`, `ToStatus`, `ChangedBy`, `ChangedAt`, `Reason?`. Append-only.
 
-> **Uygulanan durum (#32/#33/#35):** satırlar yalnızca `Draft`'ta değişir (`PendingApproval`'da önce `withdraw`). Fiyat snapshot'ı onayda değil taslağın her düzenlemesinde alınır; onay snapshot'ı yeniden çözmeden dondurur. Domain event'leri yerine outbox mesajları: `orders.approved.v1`, `orders.cancelled.v1`, `orders.shipped.v1`. `OrderStatusHistory` her eylemi (`create` dahil) `Action` ile kaydeder. Geçici `OrderShipment` (Warehouse `Shipment` gelene kadar). Ayrıntı: [inventory-and-orders §7](inventory-and-orders.md#7-uygulama-durumu--siparişler-job-11--32-33-35).
+> **Uygulanan durum (#32/#33/#35):** satırlar yalnızca `Draft`'ta değişir (`PendingApproval`'da önce `withdraw`). Fiyat snapshot'ı onayda değil taslağın her düzenlemesinde alınır; onay snapshot'ı yeniden çözmeden dondurur. Domain event'leri yerine outbox mesajları: `orders.approved.v1`, `orders.cancelled.v1`, `orders.shipped.v1`. `OrderStatusHistory` her eylemi (`create` dahil) `Action` ile kaydeder. `OrderShipment` = onaylanan Warehouse `Shipment`'ının sipariş tarafı kaydı (aynı kimlik, JOB 10). Depo eksik bildirimi siparişi `HasShortage` + `report_shortage` zaman çizelgesi satırıyla işaretler (durum değişmez). Ayrıntı: [inventory-and-orders §7](inventory-and-orders.md#7-uygulama-durumu--siparişler-job-11--32-33-35).
 
 ---
 

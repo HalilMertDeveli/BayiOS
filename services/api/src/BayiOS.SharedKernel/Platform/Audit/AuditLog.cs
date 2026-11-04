@@ -38,6 +38,21 @@ public static class AuditActions
 
     /// <summary>A line price or discount set outside the resolved list price (orders.price.override).</summary>
     public const string OrderPriceOverridden = "order.price_overridden";
+
+    /// <summary>A pick task finished (every line picked or reported short).</summary>
+    public const string OrderPickProgress = "order.pick_progress";
+
+    // Warehouse fulfilment (picking tasks, shipments).
+    public const string PickingTaskCreated = "picking.task_created";
+    public const string PickingTaskAssigned = "picking.task_assigned";
+    public const string PickingTaskCancelled = "picking.task_cancelled";
+
+    /// <summary>A picking or packing shortage (WHT-06); the order is flagged.</summary>
+    public const string PickingShortageReported = "picking.shortage_reported";
+    public const string ShipmentPacked = "shipment.packed";
+
+    /// <summary>Stock left the building: shipment_out movements were written for the shipment.</summary>
+    public const string ShipmentConfirmed = "shipment.confirmed";
 }
 
 /// <summary>
