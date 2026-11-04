@@ -268,7 +268,7 @@ test.describe("stok düzeltme (mock)", () => {
     await page.goto("/stok");
     await page.getByRole("link", { name: "MOCK-001-1 stoğunu düzelt" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Stok düzeltme" })).toBeVisible();
-    await expect(page.getByText("MOCK-001-1", { exact: true })).toBeVisible();
+    await expect(page.getByRole("form", { name: "Stok düzeltme" }).getByText("MOCK-001-1", { exact: true })).toBeVisible();
     await expect(page.getByText(/Mevcut: rafta 11, ayrılmış 1, satılabilir/)).toBeVisible();
 
     await page.getByLabel("Düzeltme türü").selectOption("damage_out");
@@ -311,7 +311,7 @@ test.describe("stok düzeltme (mock)", () => {
     const { catalog, inventory } = setup({ policy: "block" });
     await signedIn(page, { catalog, inventory });
     await page.goto(`/stok/duzeltme?variantId=${variantOf(catalog, 1).id}&warehouseId=${WAREHOUSE_IDS.main}`);
-    await expect(page.getByText("MOCK-001-1", { exact: true })).toBeVisible();
+    await expect(page.getByRole("form", { name: "Stok düzeltme" }).getByText("MOCK-001-1", { exact: true })).toBeVisible();
     await page.getByLabel("Düzeltme türü").selectOption("adjustment_out");
     await page.getByLabel("Miktar").fill("11");
     await page.getByLabel("Sebep").fill("Sayım farkı (mock)");
@@ -326,7 +326,7 @@ test.describe("stok düzeltme (mock)", () => {
     const { catalog, inventory } = setup();
     const api = await signedIn(page, { catalog, inventory });
     await page.goto(`/stok/duzeltme?variantId=${variantOf(catalog, 1).id}`);
-    await expect(page.getByText("MOCK-001-1", { exact: true })).toBeVisible();
+    await expect(page.getByRole("form", { name: "Stok düzeltme" }).getByText("MOCK-001-1", { exact: true })).toBeVisible();
     await page.getByLabel("Düzeltme türü").selectOption("adjustment_in");
     await page.getByLabel("Miktar").fill("2");
     await page.getByLabel("Sebep").fill("Sayım fazlası (mock)");
