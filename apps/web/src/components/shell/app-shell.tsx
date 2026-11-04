@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { useModalDialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/cn";
-import { navForRole, roleLabels } from "@/lib/navigation";
-import { previewSession } from "@/lib/mock/session.mock";
+import { navForRole } from "@/lib/navigation";
+import { useSession } from "@/lib/session/session-context";
 import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
 import { NavMenu } from "./nav-menu";
+import { SessionGate } from "./session-gate";
+import { UserMenu } from "./user-menu";
 
 const MOBILE_NAV_ID = "mobile-nav";
 
@@ -29,7 +30,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
 
 /**
  * Application shell: persistent, collapsible sidebar from md (768 px) up; off-canvas drawer below.
- * Menu items come from the *preview* role in session.mock.ts — no user is logged in yet.
+ * Menu items follow the role of the active membership (GET /api/v1/me) — visibility only, the API authorizes.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = usePersistentBoolean("bayios.sidebar.collapsed");
@@ -48,7 +49,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => desktop.removeEventListener("change", onChange);
   }, []);
 
-  const sections = navForRole(previewSession.previewRole);
+  const { role } = useSession();
+  const sections = role ? navForRole(role) : [];
 
   return (
     <div className="flex min-h-dvh w-full">
@@ -135,15 +137,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="md:hidden">
             <Brand />
           </div>
-          <div className="ml-auto flex items-center gap-2">
-            <Badge tone="warning">Giriş yapılmadı</Badge>
-            <p className="hidden text-caption text-fg-muted sm:block">
-              Önizleme menüsü: {roleLabels[previewSession.previewRole]} (örnek rol)
-            </p>
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            <UserMenu />
           </div>
         </header>
         <main id="main" tabIndex={-1} className="flex w-full flex-1 flex-col gap-6 px-4 py-6 focus:outline-none md:px-8">
-          {children}
+          <SessionGate>{children}</SessionGate>
         </main>
       </div>
     </div>

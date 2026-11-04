@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { DESKTOP, MOBILE } from "./viewports";
+import { TENANT_A, USER, signedIn } from "./support/mock-backend";
+
+// Signed-in user with one owner membership — MOCKED session and API (see support/mock-backend.ts).
+test.beforeEach(async ({ page }) => {
+  await signedIn(page);
+});
 
 test.describe("shell — desktop", () => {
   test.use({ viewport: DESKTOP });
@@ -12,10 +18,12 @@ test.describe("shell — desktop", () => {
     for (const label of ["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Müşteriler", "Raporlar", "İçe aktarma", "Ayarlar"]) {
       await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
-    await expect(page.getByText("Giriş yapılmadı")).toBeVisible();
+    await expect(page.getByTestId("session-user")).toHaveText(USER.fullName);
+    await expect(page.getByTitle("Aktif işletme")).toHaveText(TENANT_A.tenantName);
+    await expect(page.getByText("İşletme sahibi")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Bu modül henüz geliştiriliyor" })).toBeVisible();
-    // The real API status widget is still wired up (API is not running in this test → error text).
-    await expect(page.getByRole("status")).toContainText("API");
+    // The API status widget reads the (mocked) meta endpoint.
+    await expect(page.getByRole("status")).toContainText("API bağlı");
     await expect(page.getByRole("button", { name: "Menüyü aç" })).toBeHidden();
   });
 

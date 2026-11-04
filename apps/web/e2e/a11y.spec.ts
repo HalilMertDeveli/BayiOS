@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { DESKTOP, MOBILE } from "./viewports";
+import { mockApi, mockSupabaseAuth, signedIn } from "./support/mock-backend";
 
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
@@ -12,7 +13,9 @@ async function expectNoSeriousViolations(page: Page) {
   expect(summary, summary.join("\n")).toEqual([]);
 }
 
-const routes = ["/", "/pano", "/urunler", "/ice-aktarma", "/tasarim-sistemi"];
+/** Signed-in pages (MOCKED session + API) and public pages (no session). */
+const routes = ["/pano", "/urunler", "/ice-aktarma", "/tasarim-sistemi"];
+const publicRoutes = ["/", "/giris", "/kayit", "/sifre-sifirla"];
 
 for (const [name, viewport] of [
   ["desktop", DESKTOP],
@@ -21,8 +24,26 @@ for (const [name, viewport] of [
   test.describe(`axe — ${name}`, () => {
     test.use({ viewport });
 
+    for (const route of publicRoutes) {
+      test(`${route} (signed out) has no critical/serious violations`, async ({ page }) => {
+        await mockSupabaseAuth(page);
+        await mockApi(page);
+        await page.goto(route);
+        await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+        await expectNoSeriousViolations(page);
+      });
+    }
+
+    test("/isletme-olustur has no critical/serious violations", async ({ page }) => {
+      await signedIn(page, { memberships: [] });
+      await page.goto("/isletme-olustur");
+      await expect(page.getByLabel("İşletme adı")).toBeVisible();
+      await expectNoSeriousViolations(page);
+    });
+
     for (const route of routes) {
       test(`${route} has no critical/serious violations`, async ({ page }) => {
+        await signedIn(page);
         await page.goto(route);
         await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
         await expectNoSeriousViolations(page);
@@ -30,6 +51,7 @@ for (const [name, viewport] of [
     }
 
     test("/tasarim-sistemi in dark mode has no critical/serious violations", async ({ page }) => {
+      await signedIn(page);
       await page.emulateMedia({ colorScheme: "dark" });
       await page.goto("/tasarim-sistemi");
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -40,6 +62,7 @@ for (const [name, viewport] of [
 
 test.describe("axe — open overlays", () => {
   test("mobile drawer", async ({ page }) => {
+    await signedIn(page);
     await page.setViewportSize(MOBILE);
     await page.goto("/pano");
     await page.getByRole("button", { name: "Menüyü aç" }).click();
@@ -48,6 +71,7 @@ test.describe("axe — open overlays", () => {
   });
 
   test("dialog", async ({ page }) => {
+    await signedIn(page);
     await page.setViewportSize(DESKTOP);
     await page.goto("/tasarim-sistemi");
     await page.getByRole("button", { name: "Diyaloğu aç" }).click();
