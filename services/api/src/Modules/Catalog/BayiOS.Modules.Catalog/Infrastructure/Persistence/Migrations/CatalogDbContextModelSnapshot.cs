@@ -144,6 +144,109 @@ namespace BayiOS.Modules.Catalog.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BayiOS.Modules.Catalog.Domain.CustomFieldDefinition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("DataType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("data_type");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("entity_type");
+
+                    b.Property<bool>("Filterable")
+                        .HasColumnType("boolean")
+                        .HasColumnName("filterable");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("label");
+
+                    b.Property<string>("Options")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("options")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<bool>("Required")
+                        .HasColumnType("boolean")
+                        .HasColumnName("required");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("row_version");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Unit")
+                        .HasColumnType("text")
+                        .HasColumnName("unit");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_custom_field_definitions");
+
+                    b.HasAlternateKey("TenantId", "Id")
+                        .HasName("ak_custom_field_definitions_tenant_id_id");
+
+                    b.HasIndex("TenantId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ux_custom_field_definitions_tenant_id_key");
+
+                    b.HasIndex("TenantId", "EntityType", "SortOrder")
+                        .HasDatabaseName("ix_custom_field_definitions_tenant_id_entity_type_sort_order");
+
+                    b.ToTable("custom_field_definitions", "catalog", t =>
+                        {
+                            t.HasCheckConstraint("ck_custom_field_definitions_data_type", "data_type IN ('text', 'number', 'integer', 'boolean', 'enum', 'multi_enum', 'range', 'date')");
+
+                            t.HasCheckConstraint("ck_custom_field_definitions_entity_type", "entity_type IN ('product', 'variant')");
+
+                            t.HasCheckConstraint("ck_custom_field_definitions_key", "key ~ '^[a-z][a-z0-9_]{0,49}$'");
+
+                            t.HasCheckConstraint("ck_custom_field_definitions_options_array", "jsonb_typeof(options) = 'array'");
+                        });
+                });
+
             modelBuilder.Entity("BayiOS.Modules.Catalog.Domain.Product", b =>
                 {
                     b.Property<Guid>("Id")

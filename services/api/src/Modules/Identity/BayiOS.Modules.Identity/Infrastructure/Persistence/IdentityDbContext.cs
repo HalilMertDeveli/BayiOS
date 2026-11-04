@@ -73,6 +73,7 @@ internal sealed class IdentityDbContext : DbContext, ITenantScopedDbContext
             {
                 t.HasCheckConstraint("ck_tenants_status", "status IN ('active', 'suspended', 'closed')");
                 t.HasCheckConstraint("ck_tenants_sector", "sector IN ('motorcycle_parts', 'led_electronics', 'general')");
+                t.HasCheckConstraint("ck_tenants_default_currency", "default_currency ~ '^[A-Z]{3}$'");
             });
             tenant.HasKey(t => t.Id);
             tenant.Property(t => t.Name).IsRequired();
@@ -117,11 +118,14 @@ internal sealed class IdentityDbContext : DbContext, ITenantScopedDbContext
             {
                 t.HasCheckConstraint("ck_tenant_settings_negative_stock_policy", "negative_stock_policy IN ('block', 'warn', 'allow')");
                 t.HasCheckConstraint("ck_tenant_settings_sales_max_discount", "sales_max_discount_percent BETWEEN 0 AND 100");
+                t.HasCheckConstraint("ck_tenant_settings_default_tax_rate", "default_tax_rate BETWEEN 0 AND 100");
             });
             settings.HasKey(s => s.TenantId);
             settings.Property(s => s.TenantId).ValueGeneratedNever();
             settings.HasOne<Tenant>().WithOne().HasForeignKey<TenantSettings>(s => s.TenantId).OnDelete(DeleteBehavior.Restrict);
             settings.Property(s => s.SalesMaxDiscountPercent).HasPrecision(5, 2);
+            // Default for rows created before this column existed; new rows get the entity default (20).
+            settings.Property(s => s.DefaultTaxRate).HasPrecision(5, 2).HasDefaultValue(20m).ValueGeneratedNever();
             settings.Property(s => s.RowVersion).IsConcurrencyToken();
             settings.HasQueryFilter(s => s.TenantId == CurrentTenantId);
         });
