@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import type { Shortage } from "@/lib/inventory/errors";
@@ -16,6 +17,9 @@ export function NegativeStockDialog({
   confirming,
   onCancel,
   onConfirm,
+  description = "Bu işlem satılabilir stoğun altına iniyor. İşletmenizin negatif stok ayarı “uyar” olduğu için açık onayınız gerekiyor.",
+  confirmLabel = "Yine de kaydet",
+  footnote = "Onaylarsanız stok eksi bakiyeye düşer ve bu durum hareket geçmişinde görünür.",
 }: {
   open: boolean;
   shortages: readonly Shortage[];
@@ -23,6 +27,9 @@ export function NegativeStockDialog({
   confirming: boolean;
   onCancel: () => void;
   onConfirm: () => void;
+  description?: ReactNode;
+  confirmLabel?: string;
+  footnote?: ReactNode;
 }) {
   return (
     <Dialog
@@ -31,14 +38,14 @@ export function NegativeStockDialog({
       role="alertdialog"
       dismissOnBackdrop={false}
       title="Stok eksiye düşecek"
-      description="Bu işlem satılabilir stoğun altına iniyor. İşletmenizin negatif stok ayarı “uyar” olduğu için açık onayınız gerekiyor."
+      description={description}
       footer={
         <>
           <Button variant="secondary" size="lg" onClick={onCancel} disabled={confirming}>
             Vazgeç
           </Button>
           <Button variant="danger" size="lg" onClick={onConfirm} loading={confirming}>
-            Yine de kaydet
+            {confirmLabel}
           </Button>
         </>
       }
@@ -53,7 +60,7 @@ export function NegativeStockDialog({
           ))}
         </ul>
       ) : null}
-      <p className="mt-2">Onaylarsanız stok eksi bakiyeye düşer ve bu durum hareket geçmişinde görünür.</p>
+      <p className="mt-2">{footnote}</p>
     </Dialog>
   );
 }

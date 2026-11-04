@@ -11,6 +11,8 @@ export type BusyRetryOptions = {
   wait?: (ms: number) => Promise<void>;
   /** Called before the retry (e.g. to show "Tekrar deneniyor…"). */
   onRetry?: (seconds: number) => void;
+  /** Which errors count as "busy"; defaults to `inventory.busy` (orders also retry `order.busy`). */
+  isBusy?: (error: unknown) => boolean;
 };
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -24,7 +26,7 @@ export async function withBusyRetry<T>(send: () => Promise<T>, options: BusyRetr
   try {
     return await send();
   } catch (error) {
-    if (!isBusy(error)) throw error;
+    if (!(options.isBusy ?? isBusy)(error)) throw error;
     const header = error instanceof ApiError ? error.retryAfterSeconds : null;
     const seconds = Math.min(MAX_RETRY_AFTER_SECONDS, Math.max(0, header ?? DEFAULT_RETRY_AFTER_SECONDS));
     options.onRetry?.(seconds);
