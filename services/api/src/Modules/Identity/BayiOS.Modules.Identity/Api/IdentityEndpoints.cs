@@ -29,6 +29,7 @@ internal static class IdentityEndpoints
         group.MapPost("/tenants", CreateTenant)
             .WithName("Identity_CreateTenant")
             .WithSummary("Yeni tenant oluşturur; çağıran kullanıcı owner olur")
+            .RequireIdempotencyKey()
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity);
 
@@ -63,7 +64,6 @@ internal static class IdentityEndpoints
     private static async Task<Ok<MeResponse>> GetMe(IdentityService service, ClaimsPrincipal user, CancellationToken cancellationToken) =>
         TypedResults.Ok(await service.GetMeAsync(user.FindFirstValue("email"), cancellationToken));
 
-    // TODO(#12 follow-up): honour Idempotency-Key once platform.idempotency_keys exists (api-strategy §7).
     private static async Task<Results<Created<TenantResponse>, ProblemHttpResult>> CreateTenant(
         CreateTenantRequest request,
         IdentityService service,

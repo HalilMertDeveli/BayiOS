@@ -19,7 +19,7 @@ builder.Services.AddCors(options =>
         .WithOrigins(allowedOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
-        .WithExposedHeaders(CorrelationId.HeaderName, "ETag", "Location")));
+        .WithExposedHeaders(CorrelationId.HeaderName, "ETag", "Location", "Idempotent-Replayed")));
 
 builder.Services.AddDatabase();
 builder.Services.AddBayiOsAuthentication();
