@@ -6,6 +6,7 @@ import {
   Boxes,
   Settings,
   ShoppingCart,
+  Tags,
   Users,
   Warehouse,
   type LucideIcon,
@@ -42,6 +43,7 @@ const ALL: readonly Role[] = ROLES;
  * Menu derived from the page inventory (design-system-plan §4.1) and the permission matrix:
  * Pano → W03 roles; Siparişler → orders.read; Ürünler → catalog.read; Stok → inventory.read;
  * Depo → tasks.read.*; Müşteriler → customers.read; Raporlar → reports.read;
+ * Fiyat listeleri → prices.read.sell (W18; dealer groups live under Müşteriler at /musteriler/gruplar);
  * İçe aktarma → imports.run / imports.run.stock; Ayarlar → tenant.settings.manage / members.read.
  */
 export const navSections: readonly NavSection[] = [
@@ -87,7 +89,7 @@ export const navSections: readonly NavSection[] = [
       {
         href: "/musteriler",
         label: "Müşteriler",
-        description: "Müşteri kayıtları, adresler ve sipariş geçmişi burada olacak.",
+        description: "Müşteri kayıtları, adresler, bayi grupları ve fiyat listesi ataması.",
         Icon: Users,
         roles: ["owner", "admin", "manager", "sales", "viewer"],
       },
@@ -97,6 +99,13 @@ export const navSections: readonly NavSection[] = [
     id: "yonetim",
     label: "Yönetim",
     items: [
+      {
+        href: "/fiyat-listeleri",
+        label: "Fiyat listeleri",
+        description: "Satış fiyat listeleri, miktar kademeleri ve fiyat sorgulama.",
+        Icon: Tags,
+        roles: ["owner", "admin", "manager", "sales", "viewer"],
+      },
       {
         href: "/raporlar",
         label: "Raporlar",

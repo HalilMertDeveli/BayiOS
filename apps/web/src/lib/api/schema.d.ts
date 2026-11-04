@@ -549,6 +549,262 @@ export interface paths {
         patch: operations["Warehouse_UpdateLocation"];
         trace?: never;
     };
+    "/api/v1/picking-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Toplama görevleri (tümü): eskiden yeniye keyset; durum, tip, depo, sipariş, atanan (uuid | none) filtresi */
+        get: operations["Picking_List"];
+        put?: never;
+        /** Siparişin açık rezervasyonlarından toplama görevi (onayda otomatik oluşur; kalan için yeniden) */
+        post: operations["Picking_Create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/picking-tasks/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mobil iş listesi: bana atanan aktif görevler, sonra havuz (scope = all | assigned | pool) */
+        get: operations["Picking_Mine"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/picking-tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Görev ve raf sırasına göre satırlar (lokasyon, barkod, istenen/toplanan/eksik; ETag döner) */
+        get: operations["Picking_Get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/picking-tasks/{id}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Görevi personele atar (aktif üye, toplama yetkili rol) */
+        post: operations["Picking_Assign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/picking-tasks/{id}/unassign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Görevi havuza geri bırakır */
+        post: operations["Picking_Unassign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/picking-tasks/{id}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Havuzdaki görevi üstlenir; eşzamanlı iki üstlenmeden yalnızca biri kazanır */
+        post: operations["Picking_Claim"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/picking-tasks/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Toplamayı başlatır (sipariş Onaylandı → Toplanıyor) */
+        post: operations["Picking_Start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/picking-tasks/{id}/scans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Barkod okutma: lokasyon + ürün barkodu/SKU + miktar (varsayılan 1); yanlış ürün/raf ve fazla toplama reddedilir */
+        post: operations["Picking_Scan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/picking-tasks/{id}/lines/{lineId}/shortage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Eksik bildirimi (not_found, damaged, insufficient): sipariş işaretlenir, outbox bildirimi yazılır */
+        post: operations["Picking_ReportShortage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/picking-tasks/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tüm satırlar toplandı/eksik bildirildi → görev tamamlanır, sipariş Paketlendi, toplananlardan taslak sevkiyat */
+        post: operations["Picking_Complete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shipments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sevkiyatlar: eskiden yeniye keyset; durum ve sipariş filtresi (personel yalnızca kendi görevlerininkini görür) */
+        get: operations["Shipments_List"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shipments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sevkiyat: satırlar, koliler (ETag döner); stok hareketleri: GET /inventory/movements?sourceId={id} */
+        get: operations["Shipments_Get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shipments/{id}/pack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Paket kontrolü: ürünler kolilere tekrar okutulur; toplanan = paketlenen olmalı (koli sayısı kaydedilir) */
+        post: operations["Shipments_Pack"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shipments/{id}/lines/{lineId}/shortage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Paketlemede eksik: satır daha az sevk edilir, sipariş işaretlenir, outbox bildirimi yazılır */
+        post: operations["Shipments_ReportShortage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shipments/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sevkiyat onayı: rezerve stoktan tek seferlik çıkış (shipment_out), sipariş Sevk edildi veya kısmi sevk */
+        post: operations["Shipments_Confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/price-lists": {
         parameters: {
             query?: never;
@@ -762,6 +1018,197 @@ export interface paths {
         patch: operations["Customers_UpdateDealerGroup"];
         trace?: never;
     };
+    "/api/v1/import-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** İçe aktarma geçmişi (yeniden eskiye, keyset sayfalama) */
+        get: operations["Imports_List"];
+        put?: never;
+        /** Dosya yükler (.xlsx/.csv, ≤ 10 MB, ≤ 10.000 satır): içerik/magic byte, makro, zip bombası ve satır/kolon limitleri doğrulanır */
+        post: operations["Imports_Upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-jobs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Durum, önizleme sayıları ve ilerleme */
+        get: operations["Imports_Get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-jobs/{id}/mapping-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Kolon eşleme önerileri (başlık eş anlamlıları + uyan şablonlar); otomatik uygulanmaz */
+        get: operations["Imports_MappingSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-jobs/{id}/mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Kolon eşlemesini kaydeder (isteğe bağlı şablon olarak); önceki önizlemeyi siler */
+        put: operations["Imports_SaveMapping"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-jobs/{id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Önizlemeyi (dry run) arka planda çalıştırır: eşleşme, dosya içi tekrar, satır hataları */
+        post: operations["Imports_Validate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-jobs/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** İçe aktarmayı başlatır veya iptal/hata sonrası kaldığı satırdan devam ettirir */
+        post: operations["Imports_Start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-jobs/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** İptal eder; işlenmiş parçalar kalır, kalan satırlar işlenmez */
+        post: operations["Imports_Cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-jobs/{id}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Satırlar: status (error = invalid + failed) ve action filtresi, satır no ile keyset */
+        get: operations["Imports_Rows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-jobs/{id}/error-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Hatalı satırlar CSV (UTF-8 BOM, ';'; formül enjeksiyonuna karşı nötrlenmiş) */
+        get: operations["Imports_ErrorReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-mapping-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Kayıtlı kolon eşleme şablonları */
+        get: operations["Imports_ListTemplates"];
+        put?: never;
+        /** Şablon oluşturur */
+        post: operations["Imports_CreateTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-mapping-templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Şablon (ETag döner) */
+        get: operations["Imports_GetTemplate"];
+        /** Şablonu değiştirir — If-Match zorunlu */
+        put: operations["Imports_UpdateTemplate"];
+        post?: never;
+        /** Şablonu siler */
+        delete: operations["Imports_DeleteTemplate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders": {
         parameters: {
             query?: never;
@@ -866,57 +1313,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/orders/{id}/start-picking": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Onaylandı → Toplanıyor (geçici; depo toplama görevleri gelene kadar) */
-        post: operations["Orders_StartPicking"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/orders/{id}/pack": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Toplanıyor → Paketlendi (geçici; depo toplama görevleri gelene kadar) */
-        post: operations["Orders_Pack"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/orders/{id}/shipments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Sevkiyat onayı: rezerve stoktan çıkış (shipment_out); kalan varsa kısmi sevk, yoksa Sevk edildi */
-        post: operations["Orders_Ship"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/orders/{id}/close-remaining": {
         parameters: {
             query?: never;
@@ -1009,6 +1405,10 @@ export interface components {
         ApproveOrderRequest: {
             confirmNegativeStock: null | boolean;
         };
+        AssignPickingTaskRequest: {
+            /** Format: uuid */
+            userId: null | string;
+        };
         AuditEventPageResponse: {
             items: components["schemas"]["AuditEventResponse"][];
             page: components["schemas"]["AuditPageInfo"];
@@ -1089,6 +1489,25 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: null | string;
+        };
+        ColumnSuggestion: {
+            field: string;
+            header: string;
+            /** Format: double */
+            confidence: number | string;
+            source: string;
+        };
+        ConfirmShipmentRequest: {
+            carrier: null | string;
+            trackingNumber: null | string;
+            /** Format: int32 */
+            packageCount: null | number | string;
+        };
+        ConfirmShipmentResponse: {
+            shipment: components["schemas"]["ShipmentResponse"];
+            orderStatus: string;
+            orderFulfillmentStatus: string;
+            movementIds: string[];
         };
         CreateAddressRequest: {
             type: null | string;
@@ -1185,6 +1604,10 @@ export interface components {
             requestedDeliveryDate: null | string;
             notes: null | string;
             lines: null | components["schemas"]["OrderLineInput"][];
+        };
+        CreatePickingTaskRequest: {
+            /** Format: uuid */
+            orderId: null | string;
         };
         CreatePriceListRequest: {
             name: null | string;
@@ -1337,6 +1760,12 @@ export interface components {
             /** Format: date-time */
             updatedAt: null | string;
         };
+        FulfillmentPageInfo: {
+            nextCursor: null | string;
+            hasMore: boolean;
+            /** Format: int32 */
+            limit: number | string;
+        };
         HttpValidationProblemDetails: {
             type?: null | string;
             title?: null | string;
@@ -1347,6 +1776,124 @@ export interface components {
             errors?: {
                 [key: string]: string[];
             };
+        };
+        /** Format: binary */
+        IFormFile: string;
+        ImportFailure: {
+            code: string;
+            message: string;
+        };
+        ImportFieldResponse: {
+            key: string;
+            label: string;
+            requiredForCreate: boolean;
+            required: boolean;
+        };
+        ImportJobPageResponse: {
+            items: components["schemas"]["ImportJobResponse"][];
+            page: components["schemas"]["ImportPageInfo"];
+        };
+        ImportJobResponse: {
+            /** Format: uuid */
+            id: string;
+            type: string;
+            status: string;
+            fileName: string;
+            /** Format: int64 */
+            fileSizeBytes: number | string;
+            fileSha256: string;
+            fileFormat: string;
+            fileEncoding: null | string;
+            delimiter: null | string;
+            sheetName: null | string;
+            headers: string[];
+            sampleRows: string[][];
+            /** Format: int32 */
+            totalRows: number | string;
+            mapping: null | {
+                [key: string]: string;
+            };
+            matchKey: string;
+            mode: string;
+            /** Format: uuid */
+            priceListId: null | string;
+            preview: components["schemas"]["ImportPreviewCounts"];
+            progress: components["schemas"]["ImportProgress"];
+            failure: null | components["schemas"]["ImportFailure"];
+            /** Format: uuid */
+            duplicateOfImportId: null | string;
+            /** Format: int64 */
+            version: number | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            createdBy: null | string;
+            /** Format: date-time */
+            validatedAt: null | string;
+            /** Format: date-time */
+            startedAt: null | string;
+            /** Format: uuid */
+            startedBy: null | string;
+            /** Format: date-time */
+            finishedAt: null | string;
+        };
+        ImportPageInfo: {
+            nextCursor: null | string;
+            hasMore: boolean;
+            /** Format: int32 */
+            limit: number | string;
+        };
+        ImportPreviewCounts: {
+            /** Format: int32 */
+            create: number | string;
+            /** Format: int32 */
+            update: number | string;
+            /** Format: int32 */
+            skip: number | string;
+            /** Format: int32 */
+            error: number | string;
+        };
+        ImportProgress: {
+            /** Format: int32 */
+            plannedRows: number | string;
+            /** Format: int32 */
+            processedRows: number | string;
+            /** Format: int32 */
+            percent: number | string;
+            /** Format: int32 */
+            created: number | string;
+            /** Format: int32 */
+            updated: number | string;
+            /** Format: int32 */
+            skipped: number | string;
+            /** Format: int32 */
+            failed: number | string;
+        };
+        ImportRowError: {
+            field: null | string;
+            column: null | string;
+            code: string;
+            message: string;
+        };
+        ImportRowPageResponse: {
+            items: components["schemas"]["ImportRowResponse"][];
+            page: components["schemas"]["ImportPageInfo"];
+        };
+        ImportRowResponse: {
+            /** Format: int32 */
+            rowNumber: number | string;
+            action: string;
+            status: string;
+            outcome: null | string;
+            raw: string[];
+            values: {
+                [key: string]: string;
+            };
+            errors: components["schemas"]["ImportRowError"][];
+            /** Format: uuid */
+            matchedVariantId: null | string;
+            /** Format: uuid */
+            targetId: null | string;
         };
         InventoryPageInfo: {
             nextCursor: null | string;
@@ -1382,6 +1929,33 @@ export interface components {
             /** Format: int32 */
             pickSequence: number | string;
             isActive: boolean;
+            /** Format: int64 */
+            version: number | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: null | string;
+        };
+        MappingSuggestionsResponse: {
+            type: string;
+            headers: string[];
+            fields: components["schemas"]["ImportFieldResponse"][];
+            suggestions: components["schemas"]["ColumnSuggestion"][];
+            templates: components["schemas"]["MappingTemplateResponse"][];
+        };
+        MappingTemplateListResponse: {
+            items: components["schemas"]["MappingTemplateResponse"][];
+        };
+        MappingTemplateResponse: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            type: string;
+            columns: {
+                [key: string]: string;
+            };
+            matchKey: string;
+            mode: string;
             /** Format: int64 */
             version: number | string;
             /** Format: date-time */
@@ -1440,6 +2014,9 @@ export interface components {
             occurredAt: string;
             /** Format: uuid */
             createdBy: null | string;
+        };
+        MyPickingTasksResponse: {
+            items: components["schemas"]["PickingTaskSummaryResponse"][];
         };
         OrderDetailResponse: {
             order: components["schemas"]["OrderResponse"];
@@ -1564,6 +2141,7 @@ export interface components {
             /** Format: date-time */
             cancelledAt: null | string;
             cancelReason: null | string;
+            hasShortage: boolean;
             /** Format: int64 */
             version: number | string;
         };
@@ -1628,6 +2206,19 @@ export interface components {
             taxBreakdown: components["schemas"]["TaxBreakdownResponse"][];
             hasUnpricedLines: boolean;
         };
+        PackageInput: {
+            items: null | components["schemas"]["PackItemInput"][];
+        };
+        PackItemInput: {
+            code: null | string;
+            /** Format: uuid */
+            shipmentLineId: null | string;
+            /** Format: double */
+            quantity: null | number | string;
+        };
+        PackShipmentRequest: {
+            packages: null | components["schemas"]["PackageInput"][];
+        };
         PagedResponseOfProductResponse: {
             items: components["schemas"]["ProductResponse"][];
             page: components["schemas"]["PageInfo"];
@@ -1641,6 +2232,107 @@ export interface components {
             hasMore: boolean;
             /** Format: int32 */
             limit: number | string;
+        };
+        PickingTaskLineResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            sequence: number | string;
+            /** Format: uuid */
+            orderLineId: string;
+            /** Format: uuid */
+            variantId: string;
+            sku: string;
+            name: string;
+            unit: string;
+            barcode: null | string;
+            /** Format: uuid */
+            locationId: null | string;
+            locationCode: null | string;
+            locationBarcode: null | string;
+            /** Format: double */
+            quantityToPick: number | string;
+            /** Format: double */
+            quantityPicked: number | string;
+            /** Format: double */
+            quantityShort: number | string;
+            /** Format: double */
+            quantityRemaining: number | string;
+            shortageReason: null | string;
+        };
+        PickingTaskPageResponse: {
+            items: components["schemas"]["PickingTaskSummaryResponse"][];
+            page: components["schemas"]["FulfillmentPageInfo"];
+        };
+        PickingTaskResponse: {
+            task: components["schemas"]["PickingTaskSummaryResponse"];
+            lines: components["schemas"]["PickingTaskLineResponse"][];
+            /** Format: uuid */
+            shipmentId: null | string;
+        };
+        PickingTaskSummaryResponse: {
+            /** Format: uuid */
+            id: string;
+            type: string;
+            status: string;
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            /** Format: uuid */
+            warehouseId: string;
+            /** Format: uuid */
+            assignedTo: null | string;
+            /** Format: int32 */
+            lineCount: number | string;
+            /** Format: double */
+            quantityToPick: number | string;
+            /** Format: double */
+            quantityPicked: number | string;
+            /** Format: double */
+            quantityShort: number | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt: null | string;
+            /** Format: date-time */
+            completedAt: null | string;
+            /** Format: int64 */
+            version: number | string;
+        };
+        PickLineProgress: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            variantId: string;
+            sku: string;
+            /** Format: uuid */
+            locationId: null | string;
+            /** Format: double */
+            quantityToPick: number | string;
+            /** Format: double */
+            quantityPicked: number | string;
+            /** Format: double */
+            quantityShort: number | string;
+            /** Format: double */
+            quantityRemaining: number | string;
+        };
+        PickScanRequest: {
+            code: null | string;
+            location: null | string;
+            /** Format: double */
+            quantity: null | number | string;
+            /** Format: uuid */
+            lineId: null | string;
+        };
+        PickScanResponse: {
+            /** Format: uuid */
+            taskId: string;
+            status: string;
+            /** Format: int64 */
+            version: number | string;
+            lines: components["schemas"]["PickLineProgress"][];
+            /** Format: int32 */
+            openLineCount: number | string;
         };
         PriceListItemInput: {
             /** Format: uuid */
@@ -1781,6 +2473,11 @@ export interface components {
             warehouseId: string;
             movements: components["schemas"]["MovementResult"][];
         };
+        ReportShortageRequest: {
+            /** Format: double */
+            quantity: null | number | string;
+            reason: null | string;
+        };
         ResolvedPrice: {
             /** Format: uuid */
             variantId: string;
@@ -1809,6 +2506,25 @@ export interface components {
             /** Format: double */
             taxRate: number | string;
         };
+        SaveImportMappingRequest: {
+            columns: null | {
+                [key: string]: string;
+            };
+            matchKey: null | string;
+            mode: null | string;
+            /** Format: uuid */
+            priceListId: null | string;
+            saveAsTemplate: null | string;
+        };
+        SaveMappingTemplateRequest: {
+            name: null | string;
+            type: null | string;
+            columns: null | {
+                [key: string]: string;
+            };
+            matchKey: null | string;
+            mode: null | string;
+        };
         SectorTemplateField: {
             entityType: string;
             key: string;
@@ -1831,20 +2547,95 @@ export interface components {
             name: string;
             allowsFraction: boolean;
         };
-        ShipLineInput: {
+        ShipmentLineResponse: {
             /** Format: uuid */
-            orderLineId: null | string;
-            /** Format: double */
-            quantity: null | number | string;
+            id: string;
+            /** Format: uuid */
+            orderLineId: string;
+            /** Format: uuid */
+            variantId: string;
+            sku: string;
+            name: string;
+            unit: string;
             /** Format: uuid */
             locationId: null | string;
+            locationCode: null | string;
+            /** Format: double */
+            pickedQuantity: number | string;
+            /** Format: double */
+            quantity: number | string;
+            /** Format: double */
+            packedQuantity: null | number | string;
+            /** Format: double */
+            shortQuantity: number | string;
+            shortageReason: null | string;
         };
-        ShipOrderRequest: {
-            lines: null | components["schemas"]["ShipLineInput"][];
+        ShipmentPackageItemResponse: {
+            /** Format: uuid */
+            shipmentLineId: string;
+            /** Format: double */
+            quantity: number | string;
+        };
+        ShipmentPackageResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            packageNo: number | string;
+            items: components["schemas"]["ShipmentPackageItemResponse"][];
+        };
+        ShipmentPageResponse: {
+            items: components["schemas"]["ShipmentSummaryResponse"][];
+            page: components["schemas"]["FulfillmentPageInfo"];
+        };
+        ShipmentResponse: {
+            /** Format: uuid */
+            id: string;
+            number: string;
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            /** Format: uuid */
+            pickingTaskId: null | string;
+            /** Format: uuid */
+            warehouseId: string;
+            status: string;
             carrier: null | string;
             trackingNumber: null | string;
             /** Format: int32 */
             packageCount: null | number | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            packedAt: null | string;
+            /** Format: date-time */
+            shippedAt: null | string;
+            /** Format: uuid */
+            confirmedBy: null | string;
+            /** Format: int64 */
+            version: number | string;
+            lines: components["schemas"]["ShipmentLineResponse"][];
+            packages: components["schemas"]["ShipmentPackageResponse"][];
+        };
+        ShipmentSummaryResponse: {
+            /** Format: uuid */
+            id: string;
+            number: string;
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            /** Format: uuid */
+            warehouseId: string;
+            status: string;
+            /** Format: int32 */
+            lineCount: number | string;
+            /** Format: double */
+            quantity: number | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            shippedAt: null | string;
+            /** Format: int64 */
+            version: number | string;
         };
         TaxBreakdownResponse: {
             /** Format: double */
@@ -2051,6 +2842,10 @@ export interface components {
             usesLocations: null | boolean;
             status: null | string;
             isDefault: null | boolean;
+        };
+        UploadImportForm: {
+            file: components["schemas"]["IFormFile"];
+            type: string;
         };
         UpsertPriceListItemsRequest: {
             items: null | components["schemas"]["PriceListItemInput"][];
@@ -5812,6 +6607,1422 @@ export interface operations {
             };
         };
     };
+    Picking_List: {
+        parameters: {
+            query?: {
+                status?: string;
+                type?: string;
+                warehouseId?: string;
+                orderId?: string;
+                assignedTo?: string;
+                limit?: string;
+                cursor?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickingTaskPageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Picking_Create: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePickingTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickingTaskResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Picking_Mine: {
+        parameters: {
+            query?: {
+                scope?: string;
+                warehouseId?: string;
+                limit?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyPickingTasksResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Picking_Get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickingTaskResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Picking_Assign: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignPickingTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickingTaskResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Picking_Unassign: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickingTaskResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Picking_Claim: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickingTaskResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Picking_Start: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickingTaskResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Picking_Scan: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PickScanRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickScanResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Picking_ReportShortage: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+                lineId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportShortageRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickingTaskResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Picking_Complete: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickingTaskResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Shipments_List: {
+        parameters: {
+            query?: {
+                status?: string;
+                orderId?: string;
+                limit?: string;
+                cursor?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentPageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Shipments_Get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Shipments_Pack: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PackShipmentRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Shipments_ReportShortage: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+                lineId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportShortageRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Shipments_Confirm: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["ConfirmShipmentRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmShipmentResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     Pricing_ListPriceLists: {
         parameters: {
             query?: {
@@ -7413,6 +9624,1099 @@ export interface operations {
             };
         };
     };
+    Imports_List: {
+        parameters: {
+            query?: {
+                limit?: string;
+                cursor?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJobPageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_Upload: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["UploadImportForm"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJobResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Payload Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unsupported Media Type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_Get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJobResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_MappingSuggestions: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MappingSuggestionsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_SaveMapping: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveImportMappingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJobResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_Validate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJobResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_Start: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJobResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_Cancel: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJobResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_Rows: {
+        parameters: {
+            query?: {
+                status?: string;
+                action?: string;
+                limit?: string;
+                cursor?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportRowPageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_ErrorReport: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_ListTemplates: {
+        parameters: {
+            query?: {
+                type?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MappingTemplateListResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_CreateTemplate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveMappingTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MappingTemplateResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_GetTemplate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MappingTemplateResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_UpdateTemplate: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveMappingTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MappingTemplateResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Imports_DeleteTemplate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     Orders_List: {
         parameters: {
             query?: {
@@ -8041,310 +11345,6 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": null | components["schemas"]["ApproveOrderRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrderDetailResponse"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Precondition Failed */
-            412: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
-                };
-            };
-            /** @description Precondition Required */
-            428: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    Orders_StartPicking: {
-        parameters: {
-            query?: never;
-            header: {
-                "If-Match"?: string;
-                /** @description Active tenant; must be one of the caller's active memberships. */
-                "X-Tenant-Id": string;
-                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
-                "Idempotency-Key": string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrderDetailResponse"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Precondition Failed */
-            412: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
-                };
-            };
-            /** @description Precondition Required */
-            428: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    Orders_Pack: {
-        parameters: {
-            query?: never;
-            header: {
-                "If-Match"?: string;
-                /** @description Active tenant; must be one of the caller's active memberships. */
-                "X-Tenant-Id": string;
-                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
-                "Idempotency-Key": string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrderDetailResponse"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Precondition Failed */
-            412: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
-                };
-            };
-            /** @description Precondition Required */
-            428: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
-                };
-            };
-        };
-    };
-    Orders_Ship: {
-        parameters: {
-            query?: never;
-            header: {
-                "If-Match"?: string;
-                /** @description Active tenant; must be one of the caller's active memberships. */
-                "X-Tenant-Id": string;
-                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
-                "Idempotency-Key": string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ShipOrderRequest"];
             };
         };
         responses: {

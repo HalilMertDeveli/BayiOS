@@ -17,4 +17,9 @@
     <ProjectReference Include="..\..\src\BayiOS.Api\BayiOS.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Synthetic spreadsheet builder shared with the integration tests. -->
+    <Compile Include="..\BayiOS.IntegrationTests\Imports\SyntheticFiles.cs" Link="Imports\SyntheticFiles.cs" />
+  </ItemGroup>
+
 </Project>
