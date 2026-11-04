@@ -85,6 +85,10 @@ namespace BayiOS.Modules.Orders.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("grand_total");
 
+                    b.Property<bool>("HasShortage")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_shortage");
+
                     b.Property<string>("Notes")
                         .HasColumnType("text")
                         .HasColumnName("notes");
@@ -530,7 +534,7 @@ namespace BayiOS.Modules.Orders.Infrastructure.Persistence.Migrations
 
                     b.ToTable("order_status_history", "orders", t =>
                         {
-                            t.HasCheckConstraint("ck_order_status_history_action", "action IN ('create', 'submit', 'withdraw', 'reject', 'approve', 'start_picking', 'pack', 'ship', 'close_remaining', 'complete', 'cancel')");
+                            t.HasCheckConstraint("ck_order_status_history_action", "action IN ('create', 'submit', 'withdraw', 'reject', 'approve', 'start_picking', 'pack', 'ship', 'close_remaining', 'complete', 'cancel', 'report_shortage')");
 
                             t.HasCheckConstraint("ck_order_status_history_to_status", "to_status IN ('draft', 'pending_approval', 'approved', 'picking', 'packed', 'shipped', 'completed', 'cancelled')");
                         });

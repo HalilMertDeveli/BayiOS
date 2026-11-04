@@ -65,13 +65,8 @@ internal static class OrdersEndpoints
         Transition(group.MapPost("/{id:guid}/approve", Approve).WithName("Orders_Approve")
             .WithSummary("Onay bekliyor → Onaylandı: fiyat kontrolü ve tüm satırların tek transaction'da rezervasyonu (ya hep ya hiç) — If-Match zorunlu")
             .RequirePermission(Permissions.OrdersApprove));
-        Transition(group.MapPost("/{id:guid}/start-picking", StartPicking).WithName("Orders_StartPicking")
-            .WithSummary("Onaylandı → Toplanıyor (geçici; depo toplama görevleri gelene kadar)").RequirePermission(Permissions.TasksPick));
-        Transition(group.MapPost("/{id:guid}/pack", Pack).WithName("Orders_Pack")
-            .WithSummary("Toplanıyor → Paketlendi (geçici; depo toplama görevleri gelene kadar)").RequirePermission(Permissions.TasksPack));
-        Transition(group.MapPost("/{id:guid}/shipments", Ship).WithName("Orders_Ship")
-            .WithSummary("Sevkiyat onayı: rezerve stoktan çıkış (shipment_out); kalan varsa kısmi sevk, yoksa Sevk edildi")
-            .RequirePermission(Permissions.OrdersShip));
+        // Picking (approved → picking → packed) and shipping are Warehouse operations: /picking-tasks and /shipments
+        // drive the order through IOrderFulfillment (OrderStateMachine stays the single place deciding transitions).
         Transition(group.MapPost("/{id:guid}/close-remaining", CloseRemaining).WithName("Orders_CloseRemaining")
             .WithSummary("Kısmi sevk sonrası kalanı kapatır, kalan rezervasyonu serbest bırakır → Sevk edildi (sebep zorunlu)")
             .RequirePermission(Permissions.OrdersApprove));
@@ -215,19 +210,6 @@ internal static class OrdersEndpoints
 
         return Ok(http, await service.ApproveAsync(id, version, request?.ConfirmNegativeStock ?? false, http.TraceIdentifier, cancellationToken));
     }
-
-    private static async Task<Results<Ok<OrderDetailResponse>, ProblemHttpResult>> StartPicking(
-        Guid id, [FromHeader(Name = "If-Match")] string? ifMatch, OrderService service, HttpContext http, CancellationToken cancellationToken) =>
-        OptionalIfMatch(ifMatch, out var version) ?? Ok(http, await service.StartPickingAsync(id, version, http.TraceIdentifier, cancellationToken));
-
-    private static async Task<Results<Ok<OrderDetailResponse>, ProblemHttpResult>> Pack(
-        Guid id, [FromHeader(Name = "If-Match")] string? ifMatch, OrderService service, HttpContext http, CancellationToken cancellationToken) =>
-        OptionalIfMatch(ifMatch, out var version) ?? Ok(http, await service.PackAsync(id, version, http.TraceIdentifier, cancellationToken));
-
-    private static async Task<Results<Ok<OrderDetailResponse>, ProblemHttpResult>> Ship(
-        Guid id, ShipOrderRequest request, [FromHeader(Name = "If-Match")] string? ifMatch, OrderService service, HttpContext http, CancellationToken cancellationToken) =>
-        OptionalIfMatch(ifMatch, out var version)
-        ?? Ok(http, await service.ShipAsync(id, version, request, http.TraceIdentifier, cancellationToken));
 
     private static async Task<Results<Ok<OrderDetailResponse>, ProblemHttpResult>> CloseRemaining(
         Guid id, OrderReasonRequest request, [FromHeader(Name = "If-Match")] string? ifMatch, OrderService service, HttpContext http, CancellationToken cancellationToken) =>

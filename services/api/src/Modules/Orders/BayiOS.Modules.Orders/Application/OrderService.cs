@@ -19,6 +19,8 @@ namespace BayiOS.Modules.Orders.Application;
 /// locked first (<c>FOR UPDATE</c>, lock hierarchy step 1), the transition is checked by <see cref="OrderStateMachine"/>,
 /// stock changes go through <see cref="IInventoryService"/> (balances then reservations, steps 3–4), and status
 /// history, audit and outbox rows are written in the same transaction. Any error rolls everything back.
+/// Picking, packing and shipping are driven by the Warehouse module through <see cref="IOrderFulfillment"/>; this
+/// class is its only implementation and the only caller of <see cref="IInventoryService.IssueAsync"/>.
 /// </summary>
 internal sealed class OrderService(
     OrdersDbContext db,
@@ -30,10 +32,10 @@ internal sealed class OrderService(
     IOrderVariantDirectory variants,
     IWarehouseDirectory warehouses,
     IInventoryService inventory,
-    IStockQueries stock,
+    IOrderFulfillmentListener fulfillment,
     IAuditLog audit,
     IOutbox outbox,
-    TimeProvider clock)
+    TimeProvider clock) : IOrderFulfillment
 {
     public const int MaxLines = 500;
     public const string NumberPrefix = "SIP";
@@ -276,16 +278,12 @@ internal sealed class OrderService(
                 OrderEvents.Approved,
                 new { orderId = order.Id, number = order.Number, customerId = order.CustomerId, warehouseId = order.WarehouseId },
                 cancellationToken);
+
+            // OrderApproved → Warehouse picking task from the reservations just made (same transaction, WHT-01).
+            await fulfillment.OnApprovedAsync(
+                new OrderApprovedNotice(order.Id, order.Number, order.WarehouseId, [.. lines.Select(ToFulfillment)]), cancellationToken);
             return null;
         }, cancellationToken);
-
-    /// <summary>Interim (until Warehouse picking tasks, JOB 10): approved → picking.</summary>
-    public Task<AppResult<OrderDetailResponse>> StartPickingAsync(Guid id, long? expectedVersion, string? correlationId, CancellationToken cancellationToken) =>
-        TransitionAsync(id, expectedVersion, OrderActions.StartPicking, null, correlationId, _ => Task.FromResult<AppError?>(null), cancellationToken);
-
-    /// <summary>Interim (until Warehouse picking tasks, JOB 10): picking → packed.</summary>
-    public Task<AppResult<OrderDetailResponse>> PackAsync(Guid id, long? expectedVersion, string? correlationId, CancellationToken cancellationToken) =>
-        TransitionAsync(id, expectedVersion, OrderActions.Pack, null, correlationId, _ => Task.FromResult<AppError?>(null), cancellationToken);
 
     public Task<AppResult<OrderDetailResponse>> CompleteAsync(Guid id, long? expectedVersion, string? correlationId, CancellationToken cancellationToken) =>
         TransitionAsync(id, expectedVersion, OrderActions.Complete, null, correlationId, order =>
@@ -305,6 +303,9 @@ internal sealed class OrderService(
                 decimal released = 0;
                 if (OrderStateMachine.HoldsReservations(from))
                 {
+                    // Warehouse documents (lock hierarchy step 2) before balances/reservations (steps 3–4): open
+                    // picking tasks and unconfirmed shipments are cancelled, picked goods get a putaway task (ORD-07).
+                    await fulfillment.OnReservationsReleasedAsync(order.Id, FulfillmentReleaseReasons.Cancelled, cancellationToken);
                     var release = await ReleaseAsync(order, correlationId, cancellationToken);
                     if (release.Error is { } releaseError)
                     {
@@ -318,7 +319,6 @@ internal sealed class OrderService(
                 order.CancelledAt = now;
                 order.CancelledBy = UserId;
                 order.CancelReason = OrderText.Clean(reason);
-                // TODO(JOB 10): cancel open picking tasks and create a putaway task for picked items (PRD ORD-07).
                 await audit.RecordAsync(
                     new AuditEvent(OrderAuditActions.Cancelled, OrderAuditActions.EntityType, order.Id, new AuditChanges()
                         .Field("status", from, OrderStatuses.Cancelled)
@@ -331,174 +331,6 @@ internal sealed class OrderService(
                 return null;
             }, cancellationToken);
 
-    /// <summary>
-    /// §4.6 (minimal, until Warehouse shipments in JOB 10): records a shipment and issues the shipped quantities from
-    /// the line's reservations (<c>shipment_out</c>; available stock unchanged). Partial shipments keep the status and
-    /// set fulfillment <c>partial</c>; the shipment that leaves nothing open moves the order to shipped.
-    /// </summary>
-    public async Task<AppResult<OrderDetailResponse>> ShipAsync(
-        Guid id, long? expectedVersion, ShipOrderRequest request, string? correlationId, CancellationToken cancellationToken)
-    {
-        var errors = new Dictionary<string, string[]>();
-        var inputs = request.Lines ?? [];
-        if (inputs.Count is 0 or > MaxLines)
-        {
-            errors["lines"] = [$"Between 1 and {MaxLines} lines are required."];
-        }
-
-        for (var i = 0; i < inputs.Count; i++)
-        {
-            if (inputs[i] is not { } input)
-            {
-                errors[$"lines[{i}]"] = ["Required."];
-                continue;
-            }
-
-            if (input.OrderLineId is null)
-            {
-                errors[$"lines[{i}].orderLineId"] = ["Required."];
-            }
-
-            if (input.Quantity is not { } quantity || !IsQuantity(quantity))
-            {
-                errors[$"lines[{i}].quantity"] = ["Must be greater than 0 with at most 3 decimals."];
-            }
-        }
-
-        if (inputs.Where(l => l is not null).GroupBy(l => (l.OrderLineId, l.LocationId)).Any(g => g.Count() > 1))
-        {
-            errors["lines"] = ["Each (order line, location) may appear only once."];
-        }
-
-        if (request.Carrier?.Length > OrderText.MaxShortTextLength || request.TrackingNumber?.Length > OrderText.MaxShortTextLength)
-        {
-            errors["carrier"] = [$"Carrier and tracking number are at most {OrderText.MaxShortTextLength} characters."];
-        }
-
-        if (request.PackageCount is <= 0)
-        {
-            errors["packageCount"] = ["Must be greater than 0."];
-        }
-
-        if (errors.Count > 0)
-        {
-            return AppError.Validation(errors);
-        }
-
-        return await TransitionAsync(id, expectedVersion, OrderActions.Ship, null, correlationId, async order =>
-        {
-            var lines = order.Lines.ToDictionary(l => l.Id);
-            var shipping = new Dictionary<Guid, decimal>();
-            for (var i = 0; i < inputs.Count; i++)
-            {
-                if (!lines.TryGetValue(inputs[i].OrderLineId!.Value, out var line))
-                {
-                    errors[$"lines[{i}].orderLineId"] = ["Line not found in this order."];
-                    continue;
-                }
-
-                shipping[line.Id] = shipping.GetValueOrDefault(line.Id) + inputs[i].Quantity!.Value;
-            }
-
-            foreach (var (lineId, quantity) in shipping.Where(s => s.Value > lines[s.Key].Remaining))
-            {
-                errors[$"lines[{inputs.ToList().FindIndex(l => l.OrderLineId == lineId)}].quantity"] =
-                    [$"Exceeds the open quantity of the line ({lines[lineId].Remaining})."];
-            }
-
-            if (errors.Count > 0)
-            {
-                return new AppError(422, "order.ship_exceeds_remaining", "Shipment lines are invalid for this order", errors);
-            }
-
-            // Split lines without a location over the line's open reservations (allocation order).
-            var reservations = await stock.GetOpenReservationsAsync(order.Id, cancellationToken);
-            var shipment = OrderShipment.Create(
-                order, OrderText.Clean(request.Carrier), OrderText.Clean(request.TrackingNumber), request.PackageCount, UserId, clock.GetUtcNow(), correlationId);
-            foreach (var input in inputs)
-            {
-                var line = lines[input.OrderLineId!.Value];
-                if (input.LocationId is not null)
-                {
-                    shipment.Lines.Add(OrderShipmentLine.Create(shipment, line, input.LocationId, input.Quantity!.Value));
-                    continue;
-                }
-
-                var remaining = input.Quantity!.Value;
-                foreach (var reservation in reservations.Where(r => r.OrderLineId == line.Id && r.Quantity > 0))
-                {
-                    var alreadyPlanned = shipment.Lines.Where(l => l.OrderLineId == line.Id && l.LocationId == reservation.LocationId).Sum(l => l.Quantity);
-                    var take = Math.Min(remaining, reservation.Quantity - alreadyPlanned);
-                    if (take <= 0)
-                    {
-                        continue;
-                    }
-
-                    shipment.Lines.Add(OrderShipmentLine.Create(shipment, line, reservation.LocationId, take));
-                    remaining -= take;
-                    if (remaining == 0)
-                    {
-                        break;
-                    }
-                }
-
-                if (remaining > 0)
-                {
-                    return new AppError(409, "inventory.not_reserved", "The shipped quantity is not reserved for this order line");
-                }
-            }
-
-            // Merge duplicates of the same (order line, location) produced by the split.
-            var merged = shipment.Lines
-                .GroupBy(l => (l.OrderLineId, l.LocationId))
-                .Select(g => OrderShipmentLine.Create(shipment, lines[g.Key.OrderLineId], g.Key.LocationId, g.Sum(l => l.Quantity)))
-                .ToList();
-            shipment.Lines.Clear();
-            shipment.Lines.AddRange(merged);
-
-            var issued = await inventory.IssueAsync(
-                new IssueStock(
-                    shipment.Id,
-                    order.WarehouseId,
-                    [.. merged.Select(l => new IssueLine(l.Id, l.OrderLineId, l.VariantId, l.LocationId, l.Quantity))],
-                    correlationId),
-                cancellationToken);
-            if (issued.Error is { } issueError)
-            {
-                return AppError.FromInventory(issueError);
-            }
-
-            foreach (var shipped in merged)
-            {
-                var line = lines[shipped.OrderLineId];
-                line.QtyShipped += shipped.Quantity;
-                line.QtyReserved -= shipped.Quantity;
-            }
-
-            db.Shipments.Add(shipment);
-            var everything = order.Lines.All(l => l.Remaining == 0);
-            order.FulfillmentStatus = everything ? FulfillmentStatuses.Full : FulfillmentStatuses.Partial;
-            order.Status = OrderStateMachine.Next(OrderActions.Ship, order.Status, order.FulfillmentStatus, everything)!;
-            if (everything)
-            {
-                order.ShippedAt = shipment.ShippedAt;
-            }
-
-            await audit.RecordAsync(
-                new AuditEvent(OrderAuditActions.Shipped, OrderAuditActions.EntityType, order.Id, new AuditChanges()
-                    .Value("shipmentId", shipment.Id)
-                    .Value("quantity", merged.Sum(l => l.Quantity))
-                    .Value("fulfillmentStatus", order.FulfillmentStatus)
-                    .ToDictionary()),
-                cancellationToken);
-            await outbox.PublishAsync(
-                OrderEvents.Shipped,
-                new { orderId = order.Id, number = order.Number, shipmentId = (Guid?)shipment.Id, status = order.Status, fulfillmentStatus = order.FulfillmentStatus },
-                cancellationToken);
-            return null;
-        }, cancellationToken, shipsEverything: null);
-    }
-
     /// <summary>§3.1 6s: after a partial shipment, closes the rest (qty_cancelled) and releases its reservations.</summary>
     public Task<AppResult<OrderDetailResponse>> CloseRemainingAsync(
         Guid id, long? expectedVersion, string? reason, string? correlationId, CancellationToken cancellationToken) =>
@@ -506,6 +338,8 @@ internal sealed class OrderService(
             ? Task.FromResult<AppResult<OrderDetailResponse>>(error)
             : TransitionAsync(id, expectedVersion, OrderActions.CloseRemaining, OrderText.Clean(reason), correlationId, async order =>
             {
+                // Lock hierarchy: Warehouse documents (step 2) before the release touches balances (step 3).
+                await fulfillment.OnReservationsReleasedAsync(order.Id, FulfillmentReleaseReasons.Closed, cancellationToken);
                 var release = await ReleaseAsync(order, correlationId, cancellationToken);
                 if (release.Error is { } releaseError)
                 {
@@ -534,11 +368,164 @@ internal sealed class OrderService(
                 return null;
             }, cancellationToken);
 
+    // ---- IOrderFulfillment (called by Warehouse inside its request transaction) ----
+
+    public async Task<FulfillmentResult<FulfillmentOrder>> LockAsync(Guid orderId, CancellationToken cancellationToken) =>
+        ToFulfillment(await InLockedOrderAsync(orderId, null, order => Task.FromResult<AppResult<FulfillmentOrder>>(Snapshot(order)), cancellationToken));
+
+    public async Task<FulfillmentResult<FulfillmentOrder>> StartPickingAsync(Guid orderId, string? correlationId, CancellationToken cancellationToken) =>
+        ToFulfillment(await InLockedOrderAsync<FulfillmentOrder>(orderId, null, async order =>
+        {
+            if (order.Status is OrderStatuses.Picking or OrderStatuses.Packed)
+            {
+                return Snapshot(order);
+            }
+
+            return await ApplyTransitionAsync(order, OrderActions.StartPicking, null, correlationId, NoEffect, false, cancellationToken) is { } error
+                ? error
+                : Snapshot(order);
+        }, cancellationToken));
+
+    public async Task<FulfillmentResult<FulfillmentOrder>> MarkPackedAsync(Guid orderId, string? correlationId, CancellationToken cancellationToken) =>
+        ToFulfillment(await InLockedOrderAsync<FulfillmentOrder>(orderId, null, async order =>
+        {
+            if (order.Status == OrderStatuses.Packed)
+            {
+                return Snapshot(order);
+            }
+
+            return await ApplyTransitionAsync(order, OrderActions.Pack, null, correlationId, NoEffect, false, cancellationToken) is { } error
+                ? error
+                : Snapshot(order);
+        }, cancellationToken));
+
+    public async Task<FulfillmentResult<FulfillmentOrder>> ReportShortageAsync(
+        Guid orderId, string reason, string? correlationId, CancellationToken cancellationToken) =>
+        ToFulfillment(await InLockedOrderAsync<FulfillmentOrder>(orderId, null, async order =>
+        {
+            var error = await ApplyTransitionAsync(order, OrderActions.ReportShortage, reason, correlationId, o =>
+            {
+                o.HasShortage = true;
+                return Task.FromResult<AppError?>(null);
+            }, false, cancellationToken);
+            return error is null ? Snapshot(order) : error;
+        }, cancellationToken));
+
+    /// <summary>
+    /// §4.6: the quantities come from the Warehouse shipment (each line names its order line and reserved location).
+    /// Lines may not exceed what is open on the order line (I7); the stock is issued from the reservations of that
+    /// line + location (<c>shipment_out</c>; available stock unchanged). Partial shipments keep the status and set
+    /// fulfillment <c>partial</c>; the shipment that leaves nothing open moves the order to shipped.
+    /// </summary>
+    public async Task<FulfillmentResult<OrderShipmentRecorded>> ShipAsync(ShipOrderCommand command, CancellationToken cancellationToken)
+    {
+        var inputs = command.Lines;
+        if (inputs.Count is 0 or > MaxLines
+            || inputs.Any(l => !IsQuantity(l.Quantity))
+            || inputs.Select(l => l.ShipmentLineId).Distinct().Count() != inputs.Count)
+        {
+            return new FulfillmentError(422, "validation.failed", "Shipment lines are invalid", new Dictionary<string, string[]>
+            {
+                ["lines"] = [$"Between 1 and {MaxLines} distinct lines with a quantity greater than 0 (at most 3 decimals) are required."],
+            });
+        }
+
+        return ToFulfillment(await InLockedOrderAsync<OrderShipmentRecorded>(command.OrderId, null, async order =>
+        {
+            IReadOnlyList<Guid> movementIds = [];
+            var error = await ApplyTransitionAsync(order, OrderActions.Ship, null, command.CorrelationId, async o =>
+            {
+                var lines = o.Lines.ToDictionary(l => l.Id);
+                var errors = new Dictionary<string, string[]>();
+                var shipping = new Dictionary<Guid, decimal>();
+                for (var i = 0; i < inputs.Count; i++)
+                {
+                    if (!lines.TryGetValue(inputs[i].OrderLineId, out var line))
+                    {
+                        errors[$"lines[{i}].orderLineId"] = ["Line not found in this order."];
+                        continue;
+                    }
+
+                    shipping[line.Id] = shipping.GetValueOrDefault(line.Id) + inputs[i].Quantity;
+                }
+
+                foreach (var (lineId, quantity) in shipping.Where(s => s.Value > lines[s.Key].Remaining))
+                {
+                    errors[$"lines[{inputs.ToList().FindIndex(l => l.OrderLineId == lineId)}].quantity"] =
+                        [$"Exceeds the open quantity of the line ({lines[lineId].Remaining})."];
+                }
+
+                if (errors.Count > 0)
+                {
+                    return new AppError(422, "order.ship_exceeds_remaining", "Shipment lines are invalid for this order", errors);
+                }
+
+                var shipment = OrderShipment.Create(
+                    command.ShipmentId,
+                    o,
+                    OrderText.Clean(command.Carrier),
+                    OrderText.Clean(command.TrackingNumber),
+                    command.PackageCount,
+                    UserId,
+                    clock.GetUtcNow(),
+                    command.CorrelationId);
+                foreach (var input in inputs)
+                {
+                    shipment.Lines.Add(OrderShipmentLine.Create(input.ShipmentLineId, shipment, lines[input.OrderLineId], input.LocationId, input.Quantity));
+                }
+
+                var issued = await inventory.IssueAsync(
+                    new IssueStock(
+                        shipment.Id,
+                        o.WarehouseId,
+                        [.. shipment.Lines.Select(l => new IssueLine(l.Id, l.OrderLineId, l.VariantId, l.LocationId, l.Quantity))],
+                        command.CorrelationId),
+                    cancellationToken);
+                if (issued.Error is { } issueError)
+                {
+                    return AppError.FromInventory(issueError);
+                }
+
+                movementIds = [.. issued.Value!.Movements.Select(m => m.Id)];
+                foreach (var shipped in shipment.Lines)
+                {
+                    var line = lines[shipped.OrderLineId];
+                    line.QtyShipped += shipped.Quantity;
+                    line.QtyReserved -= shipped.Quantity;
+                }
+
+                db.Shipments.Add(shipment);
+                var everything = o.Lines.All(l => l.Remaining == 0);
+                o.FulfillmentStatus = everything ? FulfillmentStatuses.Full : FulfillmentStatuses.Partial;
+                o.Status = OrderStateMachine.Next(OrderActions.Ship, o.Status, o.FulfillmentStatus, everything)!;
+                if (everything)
+                {
+                    o.ShippedAt = shipment.ShippedAt;
+                }
+
+                await audit.RecordAsync(
+                    new AuditEvent(OrderAuditActions.Shipped, OrderAuditActions.EntityType, o.Id, new AuditChanges()
+                        .Value("shipmentId", shipment.Id)
+                        .Value("quantity", shipment.Lines.Sum(l => l.Quantity))
+                        .Value("fulfillmentStatus", o.FulfillmentStatus)
+                        .ToDictionary()),
+                    cancellationToken);
+                await outbox.PublishAsync(
+                    OrderEvents.Shipped,
+                    new { orderId = o.Id, number = o.Number, shipmentId = (Guid?)shipment.Id, status = o.Status, fulfillmentStatus = o.FulfillmentStatus },
+                    cancellationToken);
+                return null;
+            }, null, cancellationToken);
+            return error is null
+                ? new OrderShipmentRecorded(order.Id, order.Status, order.FulfillmentStatus, order.RowVersion, movementIds)
+                : error;
+        }, cancellationToken));
+    }
+
     // ---- Shared ----
 
-    /// <param name="shipsEverything">
-    /// For <c>ship</c> the effect decides the target itself (null); other actions get their target up front.
-    /// </param>
+    private static readonly Func<Order, Task<AppError?>> NoEffect = _ => Task.FromResult<AppError?>(null);
+
     private Task<AppResult<OrderDetailResponse>> TransitionAsync(
         Guid id,
         long? expectedVersion,
@@ -546,48 +533,75 @@ internal sealed class OrderService(
         string? reason,
         string? correlationId,
         Func<Order, Task<AppError?>> effect,
-        CancellationToken cancellationToken,
-        bool? shipsEverything = false) =>
-        WithLockedOrderAsync(id, expectedVersion, async order =>
+        CancellationToken cancellationToken) =>
+        WithLockedOrderAsync(
+            id, expectedVersion, order => ApplyTransitionAsync(order, action, reason, correlationId, effect, false, cancellationToken), cancellationToken);
+
+    /// <summary>
+    /// Checks <paramref name="action"/> against <see cref="OrderStateMachine"/>, runs the effect (which sees the order
+    /// still in its source status), sets the target, writes the history row and saves. The order must be locked.
+    /// </summary>
+    /// <param name="shipsEverything">For <c>ship</c> the effect decides the target itself (null); other actions get it up front.</param>
+    private async Task<AppError?> ApplyTransitionAsync(
+        Order order,
+        string action,
+        string? reason,
+        string? correlationId,
+        Func<Order, Task<AppError?>> effect,
+        bool? shipsEverything,
+        CancellationToken cancellationToken)
+    {
+        var from = order.Status;
+        // For ship the final status depends on the quantities: any legal "ship" source is accepted here.
+        if (OrderStateMachine.Next(action, from, order.FulfillmentStatus, shipsEverything ?? false) is not { } target)
         {
-            var from = order.Status;
-            // For ship the final status depends on the quantities: any legal "ship" source is accepted here.
-            if (OrderStateMachine.Next(action, from, order.FulfillmentStatus, shipsEverything ?? false) is not { } target)
-            {
-                return AppError.InvalidTransition(action, from);
-            }
+            return AppError.InvalidTransition(action, from);
+        }
 
-            // The effect sees the order still in its source status.
-            if (await effect(order) is { } error)
-            {
-                return error;
-            }
+        if (await effect(order) is { } error)
+        {
+            return error;
+        }
 
-            var now = clock.GetUtcNow();
-            if (shipsEverything is not null)
+        var now = clock.GetUtcNow();
+        if (shipsEverything is not null)
+        {
+            order.Status = target;
+            if (action == OrderActions.Submit)
             {
-                order.Status = target;
-                if (action == OrderActions.Submit)
-                {
-                    order.SubmittedAt = now;
-                    order.SubmittedBy = UserId;
-                }
+                order.SubmittedAt = now;
+                order.SubmittedBy = UserId;
             }
+        }
 
-            db.History.Add(OrderStatusChange.Create(order, action, from, reason, UserId, now, correlationId));
-            order.Touch(UserId, now);
-            await db.SaveChangesAsync(cancellationToken);
-            return null;
-        }, cancellationToken);
+        db.History.Add(OrderStatusChange.Create(order, action, from, reason, UserId, now, correlationId));
+        order.Touch(UserId, now);
+        await db.SaveChangesAsync(cancellationToken);
+        return null;
+    }
 
     /// <summary>Locks the header (lock hierarchy step 1), checks the version, runs the change and returns the detail.</summary>
     private async Task<AppResult<OrderDetailResponse>> WithLockedOrderAsync(
         Guid id, long? expectedVersion, Func<Order, Task<AppError?>> change, CancellationToken cancellationToken)
     {
+        var changed = await InLockedOrderAsync<bool>(
+            id, expectedVersion, async order => await change(order) is { } error ? error : true, cancellationToken);
+        if (changed.Error is { } changeError)
+        {
+            return changeError;
+        }
+
+        return await queries.DetailAsync(id, cancellationToken) is { } detail ? detail : AppError.NotFound();
+    }
+
+    /// <summary>Joins the request transaction, locks the header (<c>FOR UPDATE</c>, 5 s), loads it with its lines.</summary>
+    private async Task<AppResult<T>> InLockedOrderAsync<T>(
+        Guid id, long? expectedVersion, Func<Order, Task<AppResult<T>>> change, CancellationToken cancellationToken)
+    {
         try
         {
             await db.JoinTransactionAsync(cancellationToken);
-            if (!await LockAsync(id, cancellationToken))
+            if (!await LockHeaderAsync(id, cancellationToken))
             {
                 return AppError.NotFound();
             }
@@ -598,10 +612,7 @@ internal sealed class OrderService(
                 return AppError.VersionMismatch();
             }
 
-            if (await change(order) is { } error)
-            {
-                return error;
-            }
+            return await change(order);
         }
         catch (PostgresException ex) when (ex.SqlState is PostgresErrorCodes.LockNotAvailable or PostgresErrorCodes.DeadlockDetected)
         {
@@ -611,9 +622,23 @@ internal sealed class OrderService(
         {
             return AppError.Busy();
         }
-
-        return await queries.DetailAsync(id, cancellationToken) is { } detail ? detail : AppError.NotFound();
     }
+
+    private static FulfillmentOrder Snapshot(Order order) => new(
+        order.Id,
+        order.Number,
+        order.WarehouseId,
+        order.Status,
+        order.FulfillmentStatus,
+        OrderStateMachine.HoldsReservations(order.Status),
+        order.RowVersion,
+        [.. order.Lines.OrderBy(l => l.LineNo).Select(ToFulfillment)]);
+
+    private static FulfillmentOrderLine ToFulfillment(OrderLine line) => new(
+        line.Id, line.LineNo, line.VariantId, line.Sku, line.Name, line.Unit, line.Quantity, line.QtyReserved, line.QtyShipped, line.QtyCancelled);
+
+    private static FulfillmentResult<T> ToFulfillment<T>(AppResult<T> result) =>
+        result.Error is { } error ? new FulfillmentError(error.Status, error.Code, error.Title, error.Errors) : result.Value!;
 
     /// <summary>Releases every open reservation of the order; returns the released total and updates the line mirrors.</summary>
     private async Task<AppResult<decimal>> ReleaseAsync(Order order, string? correlationId, CancellationToken cancellationToken)
@@ -880,7 +905,7 @@ internal sealed class OrderService(
     private static OrderLineInput AsInput(OrderLine line) =>
         new(line.Id, line.VariantId, line.Quantity, line.PriceOverridden ? line.UnitPrice : null, line.DiscountPercent, line.DiscountAmount);
 
-    private async Task<bool> LockAsync(Guid id, CancellationToken cancellationToken)
+    private async Task<bool> LockHeaderAsync(Guid id, CancellationToken cancellationToken)
     {
         await using var command = Command(
             """
