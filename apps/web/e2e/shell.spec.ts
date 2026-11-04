@@ -15,7 +15,7 @@ test.describe("shell — desktop", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Pano" })).toBeVisible();
     const nav = page.getByRole("navigation", { name: "Ana menü" });
     await expect(nav).toBeVisible();
-    for (const label of ["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Müşteriler", "Raporlar", "İçe aktarma", "Ayarlar"]) {
+    for (const label of ["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Müşteriler", "Fiyat listeleri", "Raporlar", "İçe aktarma", "Ayarlar"]) {
       await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
     await expect(page.getByTestId("session-user")).toHaveText(USER.fullName);

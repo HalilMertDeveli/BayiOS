@@ -5,21 +5,22 @@ const labelsFor = (role: Role) => navForRole(role).flatMap((s) => s.items.map((i
 
 describe("navigation", () => {
   it("shows the full menu to owner and admin", () => {
-    const all = ["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Müşteriler", "Raporlar", "İçe aktarma", "Ayarlar"];
+    const all = ["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Müşteriler", "Fiyat listeleri", "Raporlar", "İçe aktarma", "Ayarlar"];
     expect(labelsFor("owner")).toEqual(all);
     expect(labelsFor("admin")).toEqual(all);
   });
 
   it("follows the permission matrix for restricted roles", () => {
-    // sales: no imports.run, no tenant settings / members.read
-    expect(labelsFor("sales")).toEqual(["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Müşteriler", "Raporlar"]);
+    // sales: prices.read.sell, no imports.run, no tenant settings / members.read
+    expect(labelsFor("sales")).toEqual(["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Müşteriler", "Fiyat listeleri", "Raporlar"]);
     // viewer: read-only, no imports or settings
-    expect(labelsFor("viewer")).toEqual(["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Müşteriler", "Raporlar"]);
-    // warehouse_staff: task-focused; no customers, reports, imports, settings
+    expect(labelsFor("viewer")).toEqual(["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Müşteriler", "Fiyat listeleri", "Raporlar"]);
+    // warehouse_staff: task-focused; no customers, prices, reports, imports, settings
     expect(labelsFor("warehouse_staff")).toEqual(["Siparişler", "Ürünler", "Stok", "Depo"]);
     // manager: imports.run.stock and members.read
     expect(labelsFor("manager")).toContain("İçe aktarma");
     expect(labelsFor("manager")).toContain("Ayarlar");
+    expect(labelsFor("manager")).toContain("Fiyat listeleri");
   });
 
   it("drops sections that would be empty", () => {
