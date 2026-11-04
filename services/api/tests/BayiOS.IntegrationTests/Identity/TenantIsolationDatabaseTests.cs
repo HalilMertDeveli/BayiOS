@@ -110,6 +110,29 @@ public sealed class TenantIsolationDatabaseTests(ApiFixture fixture) : IAsyncLif
     }
 
     [Fact]
+    public async Task Business_settings_of_tenant_B_cannot_be_changed_and_checks_hold()
+    {
+        await using (var session = await AppSession.BeginAsync(fixture, _tenantA, _userA))
+        {
+            Assert.Equal(0, await session.Execute($"UPDATE identity.tenant_settings SET default_tax_rate = 1, prices_include_tax_display = true WHERE tenant_id = '{_tenantB}'"));
+            Assert.Equal(0, await session.Execute($"UPDATE identity.tenants SET logo_object_path = '{_tenantA}/x.png', default_currency = 'USD' WHERE id = '{_tenantB}'"));
+            Assert.Equal(1, await session.Execute($"UPDATE identity.tenant_settings SET default_tax_rate = 10 WHERE tenant_id = '{_tenantA}'"));
+            await session.CommitAsync();
+        }
+
+        await using (var asB = await AppSession.BeginAsync(fixture, _tenantB, _userB))
+        {
+            Assert.Equal(20m, await asB.Scalar<decimal>("SELECT default_tax_rate FROM identity.tenant_settings"));
+            Assert.Equal("TRY", await asB.Scalar<string>("SELECT default_currency FROM identity.tenants"));
+            Assert.Equal(DBNull.Value, await asB.Scalar<object>("SELECT logo_object_path FROM identity.tenants"));
+        }
+
+        await using var checks = await AppSession.BeginAsync(fixture, _tenantA, _userA);
+        var currency = await Assert.ThrowsAsync<PostgresException>(() => checks.Execute($"UPDATE identity.tenants SET default_currency = 'tl ' WHERE id = '{_tenantA}'"));
+        Assert.Equal(PostgresErrorCodes.CheckViolation, currency.SqlState);
+    }
+
+    [Fact]
     public async Task Rls_moving_own_row_to_tenant_B_is_rejected()
     {
         await using var session = await AppSession.BeginAsync(fixture, _tenantA, _userA);

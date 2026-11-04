@@ -18,6 +18,7 @@ internal sealed class CatalogDbContext : DbContext, ITenantScopedDbContext
     public const string UnitCodeUniqueIndex = "ux_units_tenant_id_code";
     public const string BrandNameUniqueIndex = "ux_brands_tenant_id_lower_name";
     public const string CategoryNameUniqueIndex = "ux_categories_tenant_id_parent_id_lower_name";
+    public const string CustomFieldKeyUniqueIndex = "ux_custom_field_definitions_tenant_id_key";
 
     private static readonly TenantGuardInterceptor TenantGuard = new();
 
@@ -40,6 +41,8 @@ internal sealed class CatalogDbContext : DbContext, ITenantScopedDbContext
     public DbSet<Product> Products => Set<Product>();
 
     public DbSet<ProductVariant> Variants => Set<ProductVariant>();
+
+    public DbSet<CustomFieldDefinition> CustomFields => Set<CustomFieldDefinition>();
 
     public Guid? CurrentTenantId => _requestContext.TenantId;
 
@@ -165,7 +168,32 @@ internal sealed class CatalogDbContext : DbContext, ITenantScopedDbContext
             variant.HasIndex(v => new { v.TenantId, v.ProductId });
             variant.HasQueryFilter(v => v.TenantId == CurrentTenantId);
         });
+
+        modelBuilder.Entity<CustomFieldDefinition>(field =>
+        {
+            field.ToTable("custom_field_definitions", t =>
+            {
+                t.HasCheckConstraint("ck_custom_field_definitions_entity_type", InCheck("entity_type", CustomFieldEntityTypes.All));
+                t.HasCheckConstraint("ck_custom_field_definitions_data_type", InCheck("data_type", CustomFieldDataTypes.All));
+                t.HasCheckConstraint("ck_custom_field_definitions_key", "key ~ '^[a-z][a-z0-9_]{0,49}$'");
+                t.HasCheckConstraint("ck_custom_field_definitions_options_array", "jsonb_typeof(options) = 'array'");
+            });
+            MapCommon(field);
+            field.Property(f => f.EntityType).IsRequired();
+            field.Property(f => f.Key).IsRequired();
+            field.Property(f => f.Label).IsRequired();
+            field.Property(f => f.DataType).IsRequired();
+            field.Property(f => f.Options).HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb");
+            // One key per tenant across products and variants (attr.<key> filters stay unambiguous); archived keys
+            // are not reused. data-model §5.3.
+            field.HasIndex(f => new { f.TenantId, f.Key }).IsUnique().HasDatabaseName(CustomFieldKeyUniqueIndex);
+            field.HasIndex(f => new { f.TenantId, f.EntityType, f.SortOrder });
+            field.HasQueryFilter(f => f.TenantId == CurrentTenantId);
+        });
     }
+
+    private static string InCheck(string column, IEnumerable<string> values) =>
+        $"{column} IN ({string.Join(", ", values.Select(v => $"'{v}'"))})";
 
     private static void MapCommon<T>(EntityTypeBuilder<T> entity)
         where T : CatalogEntity

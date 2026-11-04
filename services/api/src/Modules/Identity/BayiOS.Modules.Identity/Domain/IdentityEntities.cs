@@ -54,6 +54,15 @@ internal sealed class Tenant
 
     public string TimeZone { get; private set; } = "Europe/Istanbul";
 
+    /// <summary>Storage object path of the logo (<c>{tenantId}/…png|jpg|jpeg|svg</c>); the upload itself is not built yet.</summary>
+    public string? LogoObjectPath { get; private set; }
+
+    public string? TaxNumber { get; private set; }
+
+    public string? TaxOffice { get; private set; }
+
+    public string? Phone { get; private set; }
+
     public long RowVersion { get; private set; } = 1;
 
     public DateTimeOffset CreatedAt { get; private set; }
@@ -68,6 +77,21 @@ internal sealed class Tenant
         Sector = sector,
         CreatedAt = now,
     };
+
+    /// <summary>Business profile (PRD TEN-03/04/05). Values are validated by the caller.</summary>
+    public void UpdateProfile(
+        string name, string sector, string defaultCurrency, string? logoObjectPath, string? taxNumber, string? taxOffice, string? phone, DateTimeOffset now)
+    {
+        Name = name;
+        Sector = sector;
+        DefaultCurrency = defaultCurrency;
+        LogoObjectPath = logoObjectPath;
+        TaxNumber = taxNumber;
+        TaxOffice = taxOffice;
+        Phone = phone;
+        RowVersion++;
+        UpdatedAt = now;
+    }
 }
 
 /// <summary>identity.memberships — the only source of a user's tenant access and role.</summary>
@@ -156,6 +180,12 @@ internal sealed class TenantSettings : ITenantOwned
     public bool StaffCanApproveReceipt { get; set; }
 
     public bool Require2fa { get; set; }
+
+    /// <summary>Default VAT rate (%) for new products (PRD TEN-05).</summary>
+    public decimal DefaultTaxRate { get; set; } = 20m;
+
+    /// <summary>Show prices VAT-inclusive (PRD TEN-05, AQ-09: default exclusive).</summary>
+    public bool PricesIncludeTaxDisplay { get; set; }
 
     public long RowVersion { get; private set; } = 1;
 

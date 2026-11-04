@@ -17,6 +17,7 @@ public static class CatalogModule
             CatalogDbContext.Configure(options, sp.GetRequiredService<UnitOfWork>().Connection));
         services.AddScoped<ReferenceDataService>();
         services.AddScoped<ProductService>();
+        services.AddScoped<CustomFieldService>();
         services.TryAddSingleton(TimeProvider.System);
         return services;
     }

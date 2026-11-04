@@ -69,7 +69,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** İşletme profili: ad, sektör, para birimi, logo yolu, vergi no/dairesi, telefon (JSON merge patch, If-Match zorunlu) */
+        patch: operations["Identity_UpdateTenant"];
         trace?: never;
     };
     "/api/v1/tenant/settings": {
@@ -205,7 +206,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Ürün listesi: keyset sayfalama, arama (ad/SKU/barkod), filtre (kategori/marka/durum) */
+        /** Ürün listesi: keyset sayfalama, arama (ad/SKU/barkod), filtre (kategori/marka/durum/attr.<key>) */
         get: operations["Catalog_ListProducts"];
         put?: never;
         /** Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants) */
@@ -305,10 +306,88 @@ export interface paths {
         patch: operations["Catalog_UpdateVariant"];
         trace?: never;
     };
+    "/api/v1/custom-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Özel alan tanımları (entityType: product | variant; sayfasız) */
+        get: operations["Catalog_ListCustomFields"];
+        put?: never;
+        /** Özel alan tanımı oluşturur */
+        post: operations["Catalog_CreateCustomField"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/custom-fields/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Özel alanı arşivler (If-Match zorunlu) */
+        delete: operations["Catalog_ArchiveCustomField"];
+        options?: never;
+        head?: never;
+        /** Özel alanı günceller (key/entityType/dataType değişmez; If-Match zorunlu) */
+        patch: operations["Catalog_UpdateCustomField"];
+        trace?: never;
+    };
+    "/api/v1/sector-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sektör şablonları: birimler, kategoriler, özel alanlar */
+        get: operations["Catalog_ListSectorTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sector-templates/{code}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Şablonu tenant'a uygular (idempotent: mevcut birim/kategori/alan atlanır) */
+        post: operations["Catalog_ApplySectorTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ApplySectorTemplateResponse: {
+            template: string;
+            unitsCreated: string[];
+            categoriesCreated: string[];
+            fieldsCreated: string[];
+            /** Format: int32 */
+            skipped: number | string;
+        };
         BrandResponse: {
             /** Format: uuid */
             id: string;
@@ -350,6 +429,18 @@ export interface components {
             /** Format: int32 */
             sortOrder: null | number | string;
         };
+        CreateCustomFieldRequest: {
+            entityType: null | string;
+            key: null | string;
+            label: null | string;
+            dataType: null | string;
+            unit: null | string;
+            options: null | string[];
+            required: null | boolean;
+            filterable: null | boolean;
+            /** Format: int32 */
+            sortOrder: null | number | string;
+        };
         CreateProductRequest: {
             name: null | string;
             description: null | string;
@@ -365,6 +456,8 @@ export interface components {
             sku: null | string;
             barcode: null | string;
             variants: null | components["schemas"]["CreateVariantRequest"][];
+            attributes?: null | Record<string, never>;
+            variantAttributes?: null | Record<string, never>;
         };
         CreateTenantRequest: {
             name: null | string;
@@ -386,6 +479,28 @@ export interface components {
             /** Format: uuid */
             unitId: null | string;
             status: null | string;
+            attributes?: null | Record<string, never>;
+        };
+        CustomFieldResponse: {
+            /** Format: uuid */
+            id: string;
+            entityType: string;
+            key: string;
+            label: string;
+            dataType: string;
+            unit: null | string;
+            options: string[];
+            required: boolean;
+            filterable: boolean;
+            /** Format: int32 */
+            sortOrder: number | string;
+            isArchived: boolean;
+            /** Format: int64 */
+            version: number | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: null | string;
         };
         HttpValidationProblemDetails: {
             type?: null | string;
@@ -403,6 +518,12 @@ export interface components {
         };
         ListResponseOfCategoryResponse: {
             items: components["schemas"]["CategoryResponse"][];
+        };
+        ListResponseOfCustomFieldResponse: {
+            items: components["schemas"]["CustomFieldResponse"][];
+        };
+        ListResponseOfSectorTemplateResponse: {
+            items: components["schemas"]["SectorTemplateResponse"][];
         };
         ListResponseOfUnitResponse: {
             items: components["schemas"]["UnitResponse"][];
@@ -476,6 +597,28 @@ export interface components {
             /** Format: uuid */
             updatedBy: null | string;
         };
+        SectorTemplateField: {
+            entityType: string;
+            key: string;
+            label: string;
+            dataType: string;
+            unit: null | string;
+            options: string[];
+            required: boolean;
+            filterable: boolean;
+        };
+        SectorTemplateResponse: {
+            code: string;
+            name: string;
+            units: components["schemas"]["SectorTemplateUnit"][];
+            categories: string[];
+            fields: components["schemas"]["SectorTemplateField"][];
+        };
+        SectorTemplateUnit: {
+            code: string;
+            name: string;
+            allowsFraction: boolean;
+        };
         TenantResponse: {
             /** Format: uuid */
             id: string;
@@ -487,6 +630,12 @@ export interface components {
             locale: string;
             timeZone: string;
             role: string;
+            logoObjectPath: null | string;
+            taxNumber: null | string;
+            taxOffice: null | string;
+            phone: null | string;
+            /** Format: int64 */
+            version: number | string;
         };
         TenantSettingsResponse: {
             negativeStockPolicy: string;
@@ -498,6 +647,9 @@ export interface components {
             staffCanAssignBarcode: boolean;
             staffCanApproveReceipt: boolean;
             require2fa: boolean;
+            /** Format: double */
+            defaultTaxRate: number | string;
+            pricesIncludeTaxDisplay: boolean;
         };
         UnitResponse: {
             /** Format: uuid */
@@ -521,6 +673,15 @@ export interface components {
             /** Format: int32 */
             sortOrder: null | number | string;
         };
+        UpdateCustomFieldRequest: {
+            label: null | string;
+            unit: null | string;
+            options: null | string[];
+            required: null | boolean;
+            filterable: null | boolean;
+            /** Format: int32 */
+            sortOrder: null | number | string;
+        };
         UpdateProductRequest: {
             name: null | string;
             description: null | string;
@@ -533,6 +694,16 @@ export interface components {
             /** Format: double */
             taxRate: null | number | string;
             status: null | string;
+            attributes?: null | Record<string, never>;
+        };
+        UpdateTenantRequest: {
+            name: null | string;
+            sector: null | string;
+            defaultCurrency: null | string;
+            logoObjectPath: null | string;
+            taxNumber: null | string;
+            taxOffice: null | string;
+            phone: null | string;
         };
         UpdateTenantSettingsRequest: {
             negativeStockPolicy: null | string;
@@ -544,6 +715,9 @@ export interface components {
             staffCanAssignBarcode: null | boolean;
             staffCanApproveReceipt: null | boolean;
             require2fa: null | boolean;
+            /** Format: double */
+            defaultTaxRate?: null | number | string;
+            pricesIncludeTaxDisplay?: null | boolean;
         };
         UpdateUnitRequest: {
             name: null | string;
@@ -559,6 +733,7 @@ export interface components {
             /** Format: uuid */
             unitId: null | string;
             status: null | string;
+            attributes?: null | Record<string, never>;
         };
         VariantResponse: {
             /** Format: uuid */
@@ -757,6 +932,89 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Identity_UpdateTenant: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/merge-patch+json": components["schemas"]["UpdateTenantRequest"];
+                "application/json": components["schemas"]["UpdateTenantRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2749,6 +3007,481 @@ export interface operations {
             };
             /** @description Precondition Failed */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Catalog_ListCustomFields: {
+        parameters: {
+            query?: {
+                entityType?: string;
+                includeArchived?: boolean;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListResponseOfCustomFieldResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Catalog_CreateCustomField: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCustomFieldRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Catalog_ArchiveCustomField: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Catalog_UpdateCustomField: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/merge-patch+json": components["schemas"]["UpdateCustomFieldRequest"];
+                "application/json": components["schemas"]["UpdateCustomFieldRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Catalog_ListSectorTemplates: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListResponseOfSectorTemplateResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Catalog_ApplySectorTemplate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplySectorTemplateResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

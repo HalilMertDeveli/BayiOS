@@ -12,6 +12,18 @@ namespace BayiOS.Modules.Identity.Application;
 
 internal sealed record AppError(int Status, string Code, string Title, IDictionary<string, string[]>? Errors = null);
 
+/// <summary>A merge-patch member: <see cref="IsSet"/> is false when absent from the document.</summary>
+internal readonly record struct PatchValue(bool IsSet, string? Value);
+
+internal sealed record TenantPatch(
+    PatchValue Name,
+    PatchValue Sector,
+    PatchValue DefaultCurrency,
+    PatchValue LogoObjectPath,
+    PatchValue TaxNumber,
+    PatchValue TaxOffice,
+    PatchValue Phone);
+
 internal sealed record AppResult<T>(T? Value, AppError? Error)
 {
     public static implicit operator AppResult<T>(T value) => new(value, null);
@@ -128,6 +140,11 @@ internal sealed partial class IdentityService(
             errors["salesMaxDiscountPercent"] = ["Must be between 0 and 100."];
         }
 
+        if (request.DefaultTaxRate is { } taxRate && (taxRate is < 0 or > 100 || decimal.Round(taxRate, 2) != taxRate))
+        {
+            errors["defaultTaxRate"] = ["Must be a percentage between 0 and 100 with at most 2 decimals."];
+        }
+
         if (errors.Count > 0)
         {
             return ValidationFailed(errors);
@@ -152,6 +169,8 @@ internal sealed partial class IdentityService(
         settings.StaffCanAssignBarcode = request.StaffCanAssignBarcode ?? settings.StaffCanAssignBarcode;
         settings.StaffCanApproveReceipt = request.StaffCanApproveReceipt ?? settings.StaffCanApproveReceipt;
         settings.Require2fa = request.Require2fa ?? settings.Require2fa;
+        settings.DefaultTaxRate = request.DefaultTaxRate ?? settings.DefaultTaxRate;
+        settings.PricesIncludeTaxDisplay = request.PricesIncludeTaxDisplay ?? settings.PricesIncludeTaxDisplay;
         settings.MarkUpdated(UserId, clock.GetUtcNow());
 
         try
@@ -166,6 +185,92 @@ internal sealed partial class IdentityService(
         return (ToResponse(settings), settings.RowVersion);
     }
 
+    /// <summary>Business profile of the current tenant (PRD TEN-03/04/05); optimistic concurrency on tenants.row_version.</summary>
+    public async Task<AppResult<TenantResponse>> UpdateTenantAsync(TenantPatch patch, long expectedVersion, CancellationToken cancellationToken)
+    {
+        var tenantId = TenantId;
+        var tenant = await db.Tenants.SingleOrDefaultAsync(t => t.Id == tenantId, cancellationToken);
+        if (tenant is null)
+        {
+            return NotFound();
+        }
+
+        var errors = new Dictionary<string, string[]>();
+        var name = patch.Name.IsSet ? patch.Name.Value?.Trim() ?? string.Empty : tenant.Name;
+        if (name.Length is < 2 or > 200)
+        {
+            errors["name"] = ["Name must be 2–200 characters."];
+        }
+
+        var sector = patch.Sector.IsSet ? patch.Sector.Value ?? string.Empty : tenant.Sector;
+        if (!Sectors.All.Contains(sector))
+        {
+            errors["sector"] = [$"Sector must be one of: {string.Join(", ", Sectors.All)}."];
+        }
+
+        var currency = patch.DefaultCurrency.IsSet ? patch.DefaultCurrency.Value?.Trim().ToUpperInvariant() ?? string.Empty : tenant.DefaultCurrency;
+        if (!CurrencyPattern().IsMatch(currency))
+        {
+            errors["defaultCurrency"] = ["Must be a 3-letter ISO 4217 currency code (e.g. TRY)."];
+        }
+
+        var logo = patch.LogoObjectPath.IsSet ? Clean(patch.LogoObjectPath.Value) : tenant.LogoObjectPath;
+        if (logo is not null && !IsValidLogoPath(logo, tenantId))
+        {
+            errors["logoObjectPath"] = [$"Must be a storage path '{tenantId}/<name>.png|jpg|jpeg|svg' (≤ 512 characters, no '..')."];
+        }
+
+        var taxNumber = patch.TaxNumber.IsSet ? Clean(patch.TaxNumber.Value) : tenant.TaxNumber;
+        if (taxNumber is not null && !TaxNumberPattern().IsMatch(taxNumber))
+        {
+            errors["taxNumber"] = ["Must be 10 (VKN) or 11 (TCKN) digits."];
+        }
+
+        var taxOffice = patch.TaxOffice.IsSet ? Clean(patch.TaxOffice.Value) : tenant.TaxOffice;
+        if (taxOffice is { Length: > 100 })
+        {
+            errors["taxOffice"] = ["Must be at most 100 characters."];
+        }
+
+        var phone = patch.Phone.IsSet ? Clean(patch.Phone.Value) : tenant.Phone;
+        if (phone is not null && !PhonePattern().IsMatch(phone))
+        {
+            errors["phone"] = ["Must be 7–20 characters of digits, spaces, '+', '-', '(' and ')'."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return ValidationFailed(errors);
+        }
+
+        if (tenant.RowVersion != expectedVersion)
+        {
+            return VersionMismatch();
+        }
+
+        tenant.UpdateProfile(name, sector, currency, logo, taxNumber, taxOffice, phone, clock.GetUtcNow());
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return VersionMismatch();
+        }
+
+        return ToResponse(tenant, requestContext.Role!);
+    }
+
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>Tenant-prefixed object path (threat-model TB2→TB3); only the reference is stored here.</summary>
+    private static bool IsValidLogoPath(string path, Guid tenantId) =>
+        path.Length <= 512
+        && path.StartsWith($"{tenantId:D}/", StringComparison.Ordinal)
+        && !path.Contains("..", StringComparison.Ordinal)
+        && !path.Contains("//", StringComparison.Ordinal)
+        && LogoPathPattern().IsMatch(path);
+
     private static AppError ValidationFailed(IDictionary<string, string[]> errors) =>
         new(422, "validation.failed", "Validation failed", errors);
 
@@ -175,7 +280,20 @@ internal sealed partial class IdentityService(
         new(412, "concurrency.version_mismatch", "The resource was modified; reload and retry");
 
     private static TenantResponse ToResponse(Tenant tenant, string role) => new(
-        tenant.Id, tenant.Name, tenant.Slug, tenant.Status, tenant.Sector, tenant.DefaultCurrency, tenant.Locale, tenant.TimeZone, role);
+        tenant.Id,
+        tenant.Name,
+        tenant.Slug,
+        tenant.Status,
+        tenant.Sector,
+        tenant.DefaultCurrency,
+        tenant.Locale,
+        tenant.TimeZone,
+        role,
+        tenant.LogoObjectPath,
+        tenant.TaxNumber,
+        tenant.TaxOffice,
+        tenant.Phone,
+        tenant.RowVersion);
 
     private static TenantSettingsResponse ToResponse(TenantSettings s) => new(
         s.NegativeStockPolicy,
@@ -185,8 +303,22 @@ internal sealed partial class IdentityService(
         s.ShowCostToViewer,
         s.StaffCanAssignBarcode,
         s.StaffCanApproveReceipt,
-        s.Require2fa);
+        s.Require2fa,
+        s.DefaultTaxRate,
+        s.PricesIncludeTaxDisplay);
 
     [GeneratedRegex("^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$", RegexOptions.CultureInvariant)]
     private static partial Regex SlugPattern();
+
+    [GeneratedRegex(@"^[A-Z]{3}\z", RegexOptions.CultureInvariant)]
+    private static partial Regex CurrencyPattern();
+
+    [GeneratedRegex(@"^[0-9a-f-]{36}/[A-Za-z0-9_\-./]+\.(png|jpg|jpeg|svg)\z", RegexOptions.CultureInvariant)]
+    private static partial Regex LogoPathPattern();
+
+    [GeneratedRegex(@"^([0-9]{10}|[0-9]{11})\z", RegexOptions.CultureInvariant)]
+    private static partial Regex TaxNumberPattern();
+
+    [GeneratedRegex(@"^[0-9+\-() ]{7,20}\z", RegexOptions.CultureInvariant)]
+    private static partial Regex PhonePattern();
 }
