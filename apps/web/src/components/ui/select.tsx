@@ -7,8 +7,10 @@ import { Field, controlClasses, fieldDescribedBy, type FieldBaseProps } from "./
 
 export type SelectOption = { value: string; label: string; disabled?: boolean };
 
-export type SelectProps = Omit<ComponentProps<"select">, "children" | "multiple"> &
+export type SelectProps = Omit<ComponentProps<"select">, "children" | "multiple" | "size"> &
   FieldBaseProps & {
+    /** md = 36 px (web default); lg = 48 px touch target for mobile/warehouse screens. */
+    size?: "md" | "lg";
     options: readonly SelectOption[];
     /** Adds an empty first option (e.g. "Seçiniz"). */
     placeholder?: string;
@@ -28,6 +30,7 @@ export function Select({
   id: idProp,
   className,
   required,
+  size = "md",
   ...rest
 }: SelectProps) {
   const autoId = useId();
@@ -41,7 +44,7 @@ export function Select({
           required={required}
           aria-invalid={error ? true : undefined}
           aria-describedby={fieldDescribedBy(id, hint, error)}
-          className={cn(controlClasses, "h-9 appearance-none pr-9 pl-3", error ? "border-danger-fg" : "border-line-strong")}
+          className={cn(controlClasses, size === "lg" ? "h-12 pl-4" : "h-9 pl-3", "appearance-none pr-9", error ? "border-danger-fg" : "border-line-strong")}
           {...rest}
         >
           {placeholder !== undefined && <option value="">{placeholder}</option>}

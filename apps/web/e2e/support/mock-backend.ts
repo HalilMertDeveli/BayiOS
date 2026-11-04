@@ -9,6 +9,7 @@
  */
 import type { BrowserContext, Page, Route } from "@playwright/test";
 import { createMockCatalog, handleCatalog, type MockCatalog } from "./mock-catalog";
+import { createMockInventory, handleInventory, type MockInventory } from "./mock-inventory";
 
 /** Must match the build-time env used for the e2e build (ci-web.yml / README). */
 export const SUPABASE_URL = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
@@ -115,14 +116,18 @@ export type ApiMockOptions = {
   applyTemplate?: (route: Route) => unknown;
   /** In-memory Catalog API (mock-catalog.ts). Defaults to a small synthetic catalog; null disables it. */
   catalog?: MockCatalog | null;
+  /** In-memory Inventory/Warehouse API (mock-inventory.ts). Defaults to two warehouses and a few balances; null disables it. */
+  inventory?: MockInventory | null;
 };
 
 /** Mocked BayiOS API. `state.memberships` can be changed by a test (e.g. after a tenant is created). */
 export async function mockApi(page: Page, options: ApiMockOptions = {}) {
   const catalog = options.catalog === undefined ? createMockCatalog({ products: 3 }) : options.catalog;
+  const inventory = options.inventory === undefined ? createMockInventory(catalog) : options.inventory;
   const state = {
     memberships: options.memberships ?? [TENANT_A],
     catalog,
+    inventory,
     requests: [] as { method: string; path: string; search: string; headers: Record<string, string>; body: unknown }[],
   };
 
@@ -169,6 +174,7 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
     if (path === "/api/v1/tenant/settings" && method === "PATCH") {
       return json(route, 200, { ...defaultSettings, ...(request.postDataJSON() as object) }, { ETag: 'W/"1"' });
     }
+    if (inventory && (await handleInventory(route, inventory, catalog))) return;
     if (catalog && (await handleCatalog(route, catalog))) return;
     return json(route, 404, problem(404, "resource.not_found"));
   });

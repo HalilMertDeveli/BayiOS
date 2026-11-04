@@ -157,7 +157,7 @@ test.describe("ürün oluştur / düzenle (mock)", () => {
     await page.getByRole("button", { name: "Ürünü oluştur" }).click();
 
     await expect(page.getByRole("heading", { level: 1, name: "LED Panel 60x60 (mock)" })).toBeVisible();
-    await expect(page).toHaveURL(/\/urunler\/duzenle\?id=/);
+    await expect(page).toHaveURL(/\/urunler\/[0-9a-f-]{36}$/);
     const post = api.requests.find((r) => r.method === "POST" && r.path === "/api/v1/products")!;
     expect(post.headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
     expect(post.headers["x-tenant-id"]).toBe(TENANT_A.tenantId);
@@ -234,7 +234,7 @@ test.describe("ürün oluştur / düzenle (mock)", () => {
   test("412: başkası değiştirdiyse uyarı, yeniden yükle ve tekrar kaydet", async ({ page }) => {
     const catalog = createMockCatalog({ products: [makeProduct(1, { name: "Fren Balatası (mock)" })] });
     const api = await signedIn(page, { catalog });
-    await page.goto(`/urunler/duzenle?id=${productId(1)}`);
+    await page.goto(`/urunler/${productId(1)}`);
     await expect(page.getByLabel("Ürün adı")).toHaveValue("Fren Balatası (mock)");
 
     // Someone else saves the product meanwhile.
@@ -261,7 +261,7 @@ test.describe("ürün oluştur / düzenle (mock)", () => {
   test("arşivleme onay diyaloğuyla yapılır", async ({ page }) => {
     const catalog = createMockCatalog({ products: [makeProduct(1, { name: "Arşivlenecek (mock)" })] });
     const api = await signedIn(page, { catalog });
-    await page.goto(`/urunler/duzenle?id=${productId(1)}`);
+    await page.goto(`/urunler/${productId(1)}`);
     await page.getByRole("button", { name: "Arşivle", exact: true }).click();
     const dialog = page.getByRole("alertdialog", { name: "Ürünü arşivle" });
     await expect(dialog).toBeVisible();
@@ -280,7 +280,7 @@ test.describe("ürün oluştur / düzenle (mock)", () => {
   test("varyant ekleme ve düzenleme kendi sürümüyle yapılır", async ({ page }) => {
     const catalog = createMockCatalog({ products: [makeProduct(1)] });
     const api = await signedIn(page, { catalog });
-    await page.goto(`/urunler/duzenle?id=${productId(1)}`);
+    await page.goto(`/urunler/${productId(1)}`);
     await page.getByRole("button", { name: "Varyant ekle" }).click();
     const dialog = page.getByRole("dialog", { name: "Varyant ekle" });
     await dialog.getByLabel("SKU (stok kodu)").fill("MOCK-001-2");
@@ -303,7 +303,7 @@ test.describe("ürün oluştur / düzenle (mock)", () => {
 
   test("ürün sayfası erişilebilirlik (axe) — masaüstü ve mobil", async ({ page }) => {
     await signedIn(page, { catalog: createMockCatalog({ products: [makeProduct(1, { name: "Erişilebilir (mock)" })] }) });
-    await page.goto(`/urunler/duzenle?id=${productId(1)}`);
+    await page.goto(`/urunler/${productId(1)}`);
     await expect(page.getByLabel("Ürün adı")).toHaveValue("Erişilebilir (mock)");
     await expectNoSeriousViolations(page);
     await page.setViewportSize(MOBILE);
@@ -331,6 +331,32 @@ test.describe("yetkiler (mock)", () => {
     await page.goto("/urunler/yeni");
     await expect(page.getByRole("heading", { name: "Ürün ekleme yetkiniz yok" })).toBeVisible();
     expect(api.requests.some((r) => r.method !== "GET")).toBe(false);
+  });
+});
+
+test.describe("ürün sayfası yönlendirme (#87, mock)", () => {
+  test("/urunler/[id] doğrudan açılır; eski /urunler/duzenle?id= adresi yönlendirilir", async ({ page }) => {
+    await signedIn(page, { catalog: createMockCatalog({ products: [makeProduct(1, { name: "Dinamik Rota (mock)" })] }) });
+    await page.goto(`/urunler/${productId(1)}`);
+    await expect(page.getByRole("heading", { level: 1, name: "Dinamik Rota (mock)" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Ürünler" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await expect(page).toHaveTitle("Ürün · BayiOS");
+
+    await page.goto(`/urunler/duzenle?id=${productId(1)}`);
+    await expect(page).toHaveURL(new RegExp(`/urunler/${productId(1)}$`));
+    await expect(page.getByRole("heading", { level: 1, name: "Dinamik Rota (mock)" })).toBeVisible();
+
+    await page.goto("/urunler/duzenle");
+    await expect(page).toHaveURL(/\/urunler$/);
+  });
+
+  test("bilinmeyen ürün kimliği: bulunamadı durumu", async ({ page }) => {
+    await signedIn(page, { catalog: createMockCatalog({ products: 1 }) });
+    await page.goto("/urunler/00000000-0000-4000-8000-d99999999999");
+    await expect(page.getByRole("heading", { name: /bulunamadı/i })).toBeVisible();
   });
 });
 

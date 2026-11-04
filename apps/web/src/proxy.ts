@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { ROUTES, isGuestOnlyPath, isPublicPath, signInUrl } from "@/lib/auth/routes";
+import { legacyRedirect } from "@/lib/legacy-routes";
 import { supabaseEnv } from "@/lib/supabase/env";
 
 /**
@@ -15,6 +16,10 @@ import { supabaseEnv } from "@/lib/supabase/env";
  * tenant membership on each request (ADR 0002/0003). A forged cookie therefore only reaches an empty shell.
  */
 export async function proxy(request: NextRequest) {
+  // Moved pages (bookmarks, shared links): redirect before anything else; the target is gated as usual.
+  const moved = legacyRedirect(request.nextUrl.pathname, request.nextUrl.searchParams);
+  if (moved) return NextResponse.redirect(new URL(moved, request.url), 308);
+
   let response = NextResponse.next({ request });
   const { url, publishableKey } = supabaseEnv();
 
