@@ -16,7 +16,28 @@ public sealed record TenantResponse(
     string DefaultCurrency,
     string Locale,
     string TimeZone,
-    string Role);
+    string Role,
+    string? LogoObjectPath,
+    string? TaxNumber,
+    string? TaxOffice,
+    string? Phone,
+    long Version);
+
+/// <summary>
+/// Business profile (PRD TEN-03/04/05) as a JSON merge patch: omitted fields are unchanged; <c>null</c> clears
+/// <c>logoObjectPath</c>, <c>taxNumber</c>, <c>taxOffice</c> and <c>phone</c>. <c>sector</c>: motorcycle_parts,
+/// led_electronics, general (changing it does not apply a template; see <c>/sector-templates</c>).
+/// <c>defaultCurrency</c>: ISO 4217 code. <c>logoObjectPath</c>: a storage object path under the tenant's prefix,
+/// <c>{tenantId}/…</c>, ending in .png, .jpg, .jpeg or .svg (upload is not part of this endpoint).
+/// </summary>
+public sealed record UpdateTenantRequest(
+    string? Name,
+    string? Sector,
+    string? DefaultCurrency,
+    string? LogoObjectPath,
+    string? TaxNumber,
+    string? TaxOffice,
+    string? Phone);
 
 public sealed record TenantSettingsResponse(
     string NegativeStockPolicy,
@@ -26,7 +47,9 @@ public sealed record TenantSettingsResponse(
     bool ShowCostToViewer,
     bool StaffCanAssignBarcode,
     bool StaffCanApproveReceipt,
-    bool Require2fa);
+    bool Require2fa,
+    decimal DefaultTaxRate,
+    bool PricesIncludeTaxDisplay);
 
 /// <summary>JSON merge patch: omitted (null) fields are left unchanged.</summary>
 public sealed record UpdateTenantSettingsRequest(
@@ -37,4 +60,6 @@ public sealed record UpdateTenantSettingsRequest(
     bool? ShowCostToViewer,
     bool? StaffCanAssignBarcode,
     bool? StaffCanApproveReceipt,
-    bool? Require2fa);
+    bool? Require2fa,
+    decimal? DefaultTaxRate = null,
+    bool? PricesIncludeTaxDisplay = null);

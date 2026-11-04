@@ -33,6 +33,7 @@ internal sealed record AppError(int Status, string Code, string Title, IDictiona
                 CatalogDbContext.UnitCodeUniqueIndex => Conflict("catalog.unit_code_taken", "Unit code is already used in this tenant"),
                 CatalogDbContext.BrandNameUniqueIndex => Conflict("catalog.brand_name_taken", "Brand name is already used in this tenant"),
                 CatalogDbContext.CategoryNameUniqueIndex => Conflict("catalog.category_name_taken", "A sibling category with this name exists"),
+                CatalogDbContext.CustomFieldKeyUniqueIndex => Conflict("catalog.field_key_taken", "Custom field key is already used in this tenant"),
                 _ => null,
             }
             : null;
@@ -118,6 +119,83 @@ internal sealed class PatchReader(JsonObject document)
 
         Errors[name] = ["Must be a number."];
         return Optional<decimal?>.Unset;
+    }
+
+    public Optional<bool?> Bool(string name)
+    {
+        if (!document.TryGetPropertyValue(name, out var node))
+        {
+            return Optional<bool?>.Unset;
+        }
+
+        if (node is JsonValue value && value.GetValueKind() is JsonValueKind.True or JsonValueKind.False)
+        {
+            return new(true, value.GetValue<bool>());
+        }
+
+        Errors[name] = ["Must be true or false."];
+        return Optional<bool?>.Unset;
+    }
+
+    public Optional<int?> Int(string name)
+    {
+        if (!document.TryGetPropertyValue(name, out var node))
+        {
+            return Optional<int?>.Unset;
+        }
+
+        if (node is JsonValue value && value.GetValueKind() == JsonValueKind.Number && value.TryGetValue<int>(out var number))
+        {
+            return new(true, number);
+        }
+
+        Errors[name] = ["Must be an integer."];
+        return Optional<int?>.Unset;
+    }
+
+    public Optional<IReadOnlyList<string>?> StringList(string name)
+    {
+        if (!document.TryGetPropertyValue(name, out var node))
+        {
+            return Optional<IReadOnlyList<string>?>.Unset;
+        }
+
+        if (node is JsonArray array)
+        {
+            var result = new List<string>(array.Count);
+            foreach (var item in array)
+            {
+                if (item is not JsonValue value || !value.TryGetValue<string>(out var text))
+                {
+                    Errors[name] = ["Must be an array of strings."];
+                    return Optional<IReadOnlyList<string>?>.Unset;
+                }
+
+                result.Add(text);
+            }
+
+            return new(true, result);
+        }
+
+        Errors[name] = ["Must be an array of strings."];
+        return Optional<IReadOnlyList<string>?>.Unset;
+    }
+
+    /// <summary>A nested merge-patch object (e.g. <c>attributes</c>); its members are merged by the caller.</summary>
+    public Optional<JsonObject?> Object(string name)
+    {
+        if (!document.TryGetPropertyValue(name, out var node))
+        {
+            return Optional<JsonObject?>.Unset;
+        }
+
+        if (node is JsonObject map)
+        {
+            return new(true, map);
+        }
+
+        Errors[name] = ["Must be an object."];
+        return Optional<JsonObject?>.Unset;
     }
 
     public Optional<IReadOnlyDictionary<string, string>?> StringMap(string name)

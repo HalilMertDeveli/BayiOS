@@ -175,8 +175,8 @@ internal sealed class Product : CatalogEntity
 
     public string Status { get; private set; } = CatalogStatuses.Active;
 
-    /// <summary>JSON object (jsonb). Validated against custom field definitions once those exist (#19).</summary>
-    public string Attributes { get; private init; } = "{}";
+    /// <summary>JSON object (jsonb) of custom field values, validated against the tenant's product field definitions.</summary>
+    public string Attributes { get; set; } = "{}";
 
     public DateTimeOffset? ArchivedAt { get; private set; }
 
@@ -247,7 +247,8 @@ internal sealed class ProductVariant : CatalogEntity
 
     public string Status { get; private set; } = CatalogStatuses.Active;
 
-    public string Attributes { get; private init; } = "{}";
+    /// <summary>JSON object (jsonb) of custom field values, validated against the tenant's variant field definitions.</summary>
+    public string Attributes { get; set; } = "{}";
 
     public DateTimeOffset? ArchivedAt { get; private set; }
 
@@ -289,6 +290,98 @@ internal sealed class ProductVariant : CatalogEntity
         Status = status;
         ArchivedAt = status == CatalogStatuses.Archived ? ArchivedAt ?? now : null;
     }
+}
+
+/// <summary>Which catalog record a custom field belongs to.</summary>
+internal static class CustomFieldEntityTypes
+{
+    public const string Product = "product";
+    public const string Variant = "variant";
+
+    public static readonly IReadOnlyList<string> All = [Product, Variant];
+}
+
+/// <summary>Value types of a custom field (PRD CAT-05). The type is fixed once the field exists.</summary>
+internal static class CustomFieldDataTypes
+{
+    public const string Text = "text";
+    public const string Number = "number";
+    public const string Integer = "integer";
+    public const string Boolean = "boolean";
+    public const string Enum = "enum";
+    public const string MultiEnum = "multi_enum";
+    public const string Range = "range";
+    public const string Date = "date";
+
+    public static readonly IReadOnlyList<string> All = [Text, Number, Integer, Boolean, Enum, MultiEnum, Range, Date];
+
+    public static bool HasOptions(string dataType) => dataType is Enum or MultiEnum;
+
+    public static bool HasUnit(string dataType) => dataType is Number or Integer or Range;
+}
+
+/// <summary>
+/// catalog.custom_field_definitions — a tenant's custom field (data-model §4). Values live in the
+/// <c>attributes</c> jsonb of products or variants under <see cref="Key"/>. <c>key</c>, <c>entity_type</c> and
+/// <c>data_type</c> are immutable; a key is unique per tenant across products and variants (so <c>attr.&lt;key&gt;</c>
+/// filters are unambiguous) and is never reused, archived or not.
+/// </summary>
+internal sealed class CustomFieldDefinition : CatalogEntity
+{
+    private CustomFieldDefinition()
+    {
+    }
+
+    public string EntityType { get; private init; } = CustomFieldEntityTypes.Product;
+
+    public string Key { get; private init; } = string.Empty;
+
+    public string Label { get; set; } = string.Empty;
+
+    public string DataType { get; private init; } = CustomFieldDataTypes.Text;
+
+    /// <summary>Display unit for number/integer/range fields (W, K, V, mm, ay).</summary>
+    public string? Unit { get; set; }
+
+    /// <summary>JSON array of allowed values for enum/multi_enum; <c>[]</c> otherwise.</summary>
+    public string Options { get; set; } = "[]";
+
+    public bool Required { get; set; }
+
+    public bool Filterable { get; set; }
+
+    public int SortOrder { get; set; }
+
+    public DateTimeOffset? ArchivedAt { get; set; }
+
+    public static CustomFieldDefinition Create(
+        Guid tenantId,
+        string entityType,
+        string key,
+        string label,
+        string dataType,
+        string? unit,
+        string optionsJson,
+        bool required,
+        bool filterable,
+        int sortOrder,
+        Guid userId,
+        DateTimeOffset now) => new()
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            EntityType = entityType,
+            Key = key,
+            Label = label,
+            DataType = dataType,
+            Unit = unit,
+            Options = optionsJson,
+            Required = required,
+            Filterable = filterable,
+            SortOrder = sortOrder,
+            CreatedAt = now,
+            CreatedBy = userId,
+        };
 }
 
 /// <summary>Value normalisation shared by writes and lookups (domain-model §0: <c>Sku</c>, <c>Barcode</c>).</summary>

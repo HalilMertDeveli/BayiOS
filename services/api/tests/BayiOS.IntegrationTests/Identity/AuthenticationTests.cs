@@ -59,6 +59,9 @@ public class AuthenticationTests(ApiFixture fixture)
     [InlineData("GET", "/api/v1/tenant")]
     [InlineData("GET", "/api/v1/tenant/settings")]
     [InlineData("PATCH", "/api/v1/tenant/settings")]
+    [InlineData("PATCH", "/api/v1/tenant")]
+    [InlineData("GET", "/api/v1/custom-fields")]
+    [InlineData("POST", "/api/v1/sector-templates/general/apply")]
     [InlineData("POST", "/api/v1/tenants")]
     public async Task Business_endpoints_reject_anonymous_calls(string method, string path)
     {

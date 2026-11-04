@@ -16,7 +16,8 @@ namespace BayiOS.Modules.Catalog.Api;
 
 /// <summary>
 /// Catalog API (api-strategy §12.3). Reads need <c>catalog.read</c>; products, variants and brands need
-/// <c>catalog.write</c>; units and categories need <c>catalog.fields.manage</c> (roles-permissions §3.2).
+/// <c>catalog.write</c>; units, categories, custom fields and applying sector templates need
+/// <c>catalog.fields.manage</c> (roles-permissions §3.2).
 /// Create endpoints require Idempotency-Key (#68).
 /// </summary>
 internal static class CatalogEndpoints
@@ -24,6 +25,7 @@ internal static class CatalogEndpoints
     private const string MergePatch = "application/merge-patch+json";
     private const int DefaultLimit = 50;
     private const int MaxLimit = 200;
+    private const int MaxAttributeFilters = 10;
 
     public static IEndpointRouteBuilder MapCatalogEndpoints(this IEndpointRouteBuilder app)
     {
@@ -71,7 +73,7 @@ internal static class CatalogEndpoints
 
         // Products
         group.MapGet("/products", ListProducts).WithName("Catalog_ListProducts")
-            .WithSummary("Ürün listesi: keyset sayfalama, arama (ad/SKU/barkod), filtre (kategori/marka/durum)")
+            .WithSummary("Ürün listesi: keyset sayfalama, arama (ad/SKU/barkod), filtre (kategori/marka/durum/attr.<key>)")
             .RequirePermission(Permissions.CatalogRead);
         group.MapGet("/products/{id:guid}", GetProduct).WithName("Catalog_GetProduct")
             .WithSummary("Ürün ve varyantları (ETag döner)").RequirePermission(Permissions.CatalogRead)
@@ -102,6 +104,24 @@ internal static class CatalogEndpoints
             .Accepts<UpdateVariantRequest>(MergePatch, "application/json"));
         Update(group.MapDelete("/variants/{id:guid}", ArchiveVariant).WithName("Catalog_ArchiveVariant")
             .WithSummary("Varyantı arşivler (If-Match zorunlu; son varyant arşivlenemez)").RequirePermission(Permissions.CatalogWrite));
+
+        // Custom fields (PRD CAT-05)
+        group.MapGet("/custom-fields", ListCustomFields).WithName("Catalog_ListCustomFields")
+            .WithSummary("Özel alan tanımları (entityType: product | variant; sayfasız)").RequirePermission(Permissions.CatalogRead);
+        Write(group.MapPost("/custom-fields", CreateCustomField).WithName("Catalog_CreateCustomField")
+            .WithSummary("Özel alan tanımı oluşturur").RequirePermission(Permissions.CatalogFieldsManage));
+        Update(group.MapPatch("/custom-fields/{id:guid}", UpdateCustomField).WithName("Catalog_UpdateCustomField")
+            .WithSummary("Özel alanı günceller (key/entityType/dataType değişmez; If-Match zorunlu)").RequirePermission(Permissions.CatalogFieldsManage)
+            .Accepts<UpdateCustomFieldRequest>(MergePatch, "application/json"));
+        Update(group.MapDelete("/custom-fields/{id:guid}", ArchiveCustomField).WithName("Catalog_ArchiveCustomField")
+            .WithSummary("Özel alanı arşivler (If-Match zorunlu)").RequirePermission(Permissions.CatalogFieldsManage));
+
+        // Sector templates (PRD TEN-03)
+        group.MapGet("/sector-templates", ListSectorTemplates).WithName("Catalog_ListSectorTemplates")
+            .WithSummary("Sektör şablonları: birimler, kategoriler, özel alanlar").RequirePermission(Permissions.CatalogRead);
+        Write(group.MapPost("/sector-templates/{code}/apply", ApplySectorTemplate).WithName("Catalog_ApplySectorTemplate")
+            .WithSummary("Şablonu tenant'a uygular (idempotent: mevcut birim/kategori/alan atlanır)").RequirePermission(Permissions.CatalogFieldsManage)
+            .ProducesProblem(StatusCodes.Status404NotFound));
 
         return app;
     }
@@ -205,6 +225,12 @@ internal static class CatalogEndpoints
     /// <param name="categoryId">Kategori (alt kategoriler dahil).</param>
     /// <param name="status">Virgülle: active, inactive, archived. Varsayılan active,inactive.</param>
     /// <param name="sort">-createdAt (varsayılan) veya name.</param>
+    /// <remarks>
+    /// Özel alan filtreleri (yalnızca filterable alanlar, en çok 10): attr.&lt;key&gt;=değer (text/enum/date eşitlik,
+    /// multi_enum içerir, boolean true/false, sayı eşitlik, range: değer aralığın içinde), attr.&lt;key&gt;.min /
+    /// attr.&lt;key&gt;.max (number/integer sınırları). Varyant alanları, koşulu sağlayan arşivlenmemiş bir varyantı olan
+    /// ürünleri döndürür.
+    /// </remarks>
     private static async Task<Results<Ok<PagedResponse<ProductResponse>>, ProblemHttpResult>> ListProducts(
         HttpRequest http,
         ProductService service,
@@ -217,7 +243,28 @@ internal static class CatalogEndpoints
         string? cursor,
         CancellationToken cancellationToken)
     {
-        if (RejectUnknownQuery(http, "q", "categoryId", "brandId", "status", "sort", "limit", "cursor") is { } unknown)
+        var attributeFilters = new List<AttributeFilter>();
+        foreach (var (name, values) in http.Query)
+        {
+            if (!name.StartsWith(AttributeFilter.Prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (values.Count != 1 || !AttributeFilter.TryParse(name, values[0] ?? string.Empty, out var filter))
+            {
+                return Malformed($"{name} must be given once as attr.<key>, attr.<key>.min or attr.<key>.max");
+            }
+
+            attributeFilters.Add(filter);
+        }
+
+        if (attributeFilters.Count > MaxAttributeFilters)
+        {
+            return Malformed($"At most {MaxAttributeFilters} attr.* filters");
+        }
+
+        if (RejectUnknownQuery(http, ["q", "categoryId", "brandId", "status", "sort", "limit", "cursor", .. attributeFilters.Select(f => ParameterName(f))]) is { } unknown)
         {
             return unknown;
         }
@@ -248,9 +295,13 @@ internal static class CatalogEndpoints
             return statusProblem;
         }
 
-        var query = new ProductListQuery(q, category, brand, statuses, effectiveSort, pageSize, keyset);
-        return TypedResults.Ok(await service.ListProductsAsync(query, cancellationToken));
+        var query = new ProductListQuery(q, category, brand, statuses, effectiveSort, pageSize, keyset, attributeFilters);
+        var result = await service.ListProductsAsync(query, cancellationToken);
+        return result.Error is { } error ? Problem(error) : TypedResults.Ok(result.Value);
     }
+
+    private static string ParameterName(AttributeFilter filter) =>
+        AttributeFilter.Prefix + filter.Key + (filter.Operator == "eq" ? string.Empty : "." + filter.Operator);
 
     private static async Task<Results<Ok<ProductResponse>, ProblemHttpResult>> GetProduct(
         Guid id, ProductService service, HttpContext http, CancellationToken cancellationToken) =>
@@ -282,7 +333,8 @@ internal static class CatalogEndpoints
             reader.Guid("brandId"),
             reader.Guid("defaultUnitId"),
             reader.Decimal("taxRate"),
-            reader.String("status"));
+            reader.String("status"),
+            reader.Object("attributes"));
         if (reader.Errors.Count > 0)
         {
             return TypedResults.Problem(ApiProblems.Validation(reader.Errors));
@@ -380,7 +432,8 @@ internal static class CatalogEndpoints
             reader.String("name"),
             reader.StringMap("optionValues"),
             reader.Guid("unitId"),
-            reader.String("status"));
+            reader.String("status"),
+            reader.Object("attributes"));
         if (reader.Errors.Count > 0)
         {
             return TypedResults.Problem(ApiProblems.Validation(reader.Errors));
@@ -392,6 +445,76 @@ internal static class CatalogEndpoints
     private static async Task<Results<NoContent, ProblemHttpResult>> ArchiveVariant(
         Guid id, [FromHeader(Name = "If-Match")] string? ifMatch, ProductService service, CancellationToken cancellationToken) =>
         IfMatch(ifMatch, out var version) is { } problem ? problem : NoContent(await service.ArchiveVariantAsync(id, version, cancellationToken));
+
+    // ---- Custom fields ----
+
+    /// <param name="entityType">product veya variant; yoksa ikisi.</param>
+    private static async Task<Results<Ok<ListResponse<CustomFieldResponse>>, ProblemHttpResult>> ListCustomFields(
+        HttpRequest http, CustomFieldService service, string? entityType, bool? includeArchived, CancellationToken cancellationToken)
+    {
+        if (RejectUnknownQuery(http, "entityType", "includeArchived") is { } unknown)
+        {
+            return unknown;
+        }
+
+        if (entityType is not null && !CustomFieldEntityTypes.All.Contains(entityType))
+        {
+            return Malformed($"entityType must be one of: {string.Join(", ", CustomFieldEntityTypes.All)}");
+        }
+
+        return TypedResults.Ok(new ListResponse<CustomFieldResponse>(await service.ListAsync(entityType, includeArchived ?? false, cancellationToken)));
+    }
+
+    private static async Task<Results<Created<CustomFieldResponse>, ProblemHttpResult>> CreateCustomField(
+        CreateCustomFieldRequest request, CustomFieldService service, HttpContext http, CancellationToken cancellationToken) =>
+        Created(http, await service.CreateAsync(request, cancellationToken), f => $"/api/v1/custom-fields/{f.Id}", f => f.Version);
+
+    private static async Task<Results<Ok<CustomFieldResponse>, ProblemHttpResult>> UpdateCustomField(
+        Guid id, [FromHeader(Name = "If-Match")] string? ifMatch, CustomFieldService service, HttpContext http, CancellationToken cancellationToken)
+    {
+        if (IfMatch(ifMatch, out var version) is { } problem)
+        {
+            return problem;
+        }
+
+        var document = await ReadPatchAsync(http.Request, cancellationToken);
+        if (document is null)
+        {
+            return Malformed("Body must be a JSON object");
+        }
+
+        var reader = new PatchReader(document);
+        var patch = new CustomFieldPatch(
+            reader.String("label"),
+            reader.String("unit"),
+            reader.StringList("options"),
+            reader.Bool("required"),
+            reader.Bool("filterable"),
+            reader.Int("sortOrder"));
+        if (reader.Errors.Count > 0)
+        {
+            return TypedResults.Problem(ApiProblems.Validation(reader.Errors));
+        }
+
+        return Ok(http, await service.UpdateAsync(id, patch, version, cancellationToken), f => f.Version);
+    }
+
+    private static async Task<Results<NoContent, ProblemHttpResult>> ArchiveCustomField(
+        Guid id, [FromHeader(Name = "If-Match")] string? ifMatch, CustomFieldService service, CancellationToken cancellationToken) =>
+        IfMatch(ifMatch, out var version) is { } problem ? problem : NoContent(await service.ArchiveAsync(id, version, cancellationToken));
+
+    // ---- Sector templates ----
+
+    private static Ok<ListResponse<SectorTemplateResponse>> ListSectorTemplates() =>
+        TypedResults.Ok(new ListResponse<SectorTemplateResponse>(SectorTemplates.All));
+
+    /// <param name="code">motorcycle_parts, led_electronics veya general.</param>
+    private static async Task<Results<Ok<ApplySectorTemplateResponse>, ProblemHttpResult>> ApplySectorTemplate(
+        string code, CustomFieldService service, CancellationToken cancellationToken)
+    {
+        var result = await service.ApplyTemplateAsync(code, cancellationToken);
+        return result.Error is { } error ? Problem(error) : TypedResults.Ok(result.Value);
+    }
 
     // ---- Helpers ----
 

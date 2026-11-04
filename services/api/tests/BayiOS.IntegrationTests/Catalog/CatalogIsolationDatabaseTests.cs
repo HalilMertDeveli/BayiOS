@@ -12,7 +12,7 @@ namespace BayiOS.IntegrationTests.Catalog;
 /// </summary>
 public sealed class CatalogIsolationDatabaseTests(ApiFixture fixture) : IAsyncLifetime
 {
-    private static readonly string[] CatalogTables = ["brands", "categories", "product_variants", "products", "units"];
+    private static readonly string[] CatalogTables = ["brands", "categories", "custom_field_definitions", "product_variants", "products", "units"];
 
     private readonly Guid _tenantA = Guid.CreateVersion7();
     private readonly Guid _tenantB = Guid.CreateVersion7();
@@ -36,6 +36,9 @@ public sealed class CatalogIsolationDatabaseTests(ApiFixture fixture) : IAsyncLi
             INSERT INTO catalog.product_variants (id, tenant_id, product_id, sku, barcode, unit_id, status, row_version, created_at)
             VALUES (gen_random_uuid(), @a, @pa, 'SAME-SKU', '111', @ua, 'active', 1, now()),
                    (gen_random_uuid(), @b, @pb, 'SAME-SKU', '111', @ub, 'active', 1, now());
+            INSERT INTO catalog.custom_field_definitions (id, tenant_id, entity_type, key, label, data_type, options, required, filterable, sort_order, row_version, created_at)
+            VALUES (gen_random_uuid(), @a, 'product', 'guc', 'Güç', 'number', '[]', false, true, 0, 1, now()),
+                   (gen_random_uuid(), @b, 'product', 'guc', 'Güç B', 'number', '[]', true, true, 0, 1, now());
             """,
             connection);
         command.Parameters.AddWithValue("a", _tenantA);
@@ -84,6 +87,33 @@ public sealed class CatalogIsolationDatabaseTests(ApiFixture fixture) : IAsyncLi
 
         await using var asB = await AppSession.BeginAsync(fixture, _tenantB);
         Assert.Equal([_productB], await asB.Ids("SELECT id FROM catalog.products WHERE name = 'B ürünü'"));
+    }
+
+    [Fact]
+    public async Task Custom_field_definitions_are_isolated_per_tenant_by_rls()
+    {
+        await using var session = await AppSession.BeginAsync(fixture, _tenantA);
+
+        Assert.Equal(1L, await session.Scalar<long>("SELECT count(*) FROM catalog.custom_field_definitions WHERE key = 'guc'"));
+        Assert.Equal("Güç", await session.Scalar<string>("SELECT label FROM catalog.custom_field_definitions WHERE key = 'guc'"));
+        Assert.Equal(0, await session.Execute($"UPDATE catalog.custom_field_definitions SET required = false WHERE tenant_id = '{_tenantB}'"));
+        var insert = await Assert.ThrowsAsync<PostgresException>(() => session.Execute(
+            $"INSERT INTO catalog.custom_field_definitions (id, tenant_id, entity_type, key, label, data_type, required, filterable, sort_order, row_version, created_at) VALUES (gen_random_uuid(), '{_tenantB}', 'product', 'x', 'X', 'text', false, false, 0, 1, now())"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, insert.SqlState);
+
+        await using var fresh = await AppSession.BeginAsync(fixture, _tenantA);
+        var delete = await Assert.ThrowsAsync<PostgresException>(() => fresh.Execute("DELETE FROM catalog.custom_field_definitions"));
+        Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, delete.SqlState);
+    }
+
+    [Fact]
+    public async Task Custom_field_definition_checks_reject_bad_keys_and_types()
+    {
+        await using var session = await AppSession.BeginAsync(fixture, _tenantA);
+
+        var badKey = await Assert.ThrowsAsync<PostgresException>(() => session.Execute(
+            $"INSERT INTO catalog.custom_field_definitions (id, tenant_id, entity_type, key, label, data_type, required, filterable, sort_order, row_version, created_at) VALUES (gen_random_uuid(), '{_tenantA}', 'product', 'Bad Key', 'X', 'text', false, false, 0, 1, now())"));
+        Assert.Equal(PostgresErrorCodes.CheckViolation, badKey.SqlState);
     }
 
     [Fact]

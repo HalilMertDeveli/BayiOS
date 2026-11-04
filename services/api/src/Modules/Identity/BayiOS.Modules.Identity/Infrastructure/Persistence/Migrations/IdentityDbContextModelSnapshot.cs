@@ -103,10 +103,18 @@ namespace BayiOS.Modules.Identity.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("locale");
 
+                    b.Property<string>("LogoObjectPath")
+                        .HasColumnType("text")
+                        .HasColumnName("logo_object_path");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("name");
+
+                    b.Property<string>("Phone")
+                        .HasColumnType("text")
+                        .HasColumnName("phone");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
@@ -128,6 +136,14 @@ namespace BayiOS.Modules.Identity.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("status");
 
+                    b.Property<string>("TaxNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("tax_number");
+
+                    b.Property<string>("TaxOffice")
+                        .HasColumnType("text")
+                        .HasColumnName("tax_office");
+
                     b.Property<string>("TimeZone")
                         .IsRequired()
                         .HasColumnType("text")
@@ -146,6 +162,8 @@ namespace BayiOS.Modules.Identity.Infrastructure.Persistence.Migrations
 
                     b.ToTable("tenants", "identity", t =>
                         {
+                            t.HasCheckConstraint("ck_tenants_default_currency", "default_currency ~ '^[A-Z]{3}$'");
+
                             t.HasCheckConstraint("ck_tenants_sector", "sector IN ('motorcycle_parts', 'led_electronics', 'general')");
 
                             t.HasCheckConstraint("ck_tenants_status", "status IN ('active', 'suspended', 'closed')");
@@ -166,10 +184,20 @@ namespace BayiOS.Modules.Identity.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
+                    b.Property<decimal>("DefaultTaxRate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasDefaultValue(20m)
+                        .HasColumnName("default_tax_rate");
+
                     b.Property<string>("NegativeStockPolicy")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("negative_stock_policy");
+
+                    b.Property<bool>("PricesIncludeTaxDisplay")
+                        .HasColumnType("boolean")
+                        .HasColumnName("prices_include_tax_display");
 
                     b.Property<bool>("Require2fa")
                         .HasColumnType("boolean")
@@ -218,6 +246,8 @@ namespace BayiOS.Modules.Identity.Infrastructure.Persistence.Migrations
 
                     b.ToTable("tenant_settings", "identity", t =>
                         {
+                            t.HasCheckConstraint("ck_tenant_settings_default_tax_rate", "default_tax_rate BETWEEN 0 AND 100");
+
                             t.HasCheckConstraint("ck_tenant_settings_negative_stock_policy", "negative_stock_policy IN ('block', 'warn', 'allow')");
 
                             t.HasCheckConstraint("ck_tenant_settings_sales_max_discount", "sales_max_discount_percent BETWEEN 0 AND 100");

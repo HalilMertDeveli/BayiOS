@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using BayiOS.Modules.Catalog.Contracts;
 using BayiOS.Modules.Catalog.Domain;
 using BayiOS.Modules.Catalog.Infrastructure.Persistence;
@@ -14,7 +15,8 @@ internal sealed record ProductListQuery(
     IReadOnlyList<string> Statuses,
     string Sort,
     int Limit,
-    KeysetCursor? Cursor);
+    KeysetCursor? Cursor,
+    IReadOnlyList<AttributeFilter>? AttributeFilters = null);
 
 internal sealed record VariantListQuery(
     string? Q,
@@ -32,7 +34,8 @@ internal sealed record ProductPatch(
     Optional<Guid?> BrandId,
     Optional<Guid?> DefaultUnitId,
     Optional<decimal?> TaxRate,
-    Optional<string?> Status);
+    Optional<string?> Status,
+    Optional<JsonObject?> Attributes);
 
 internal sealed record VariantPatch(
     Optional<string?> Sku,
@@ -40,7 +43,8 @@ internal sealed record VariantPatch(
     Optional<string?> Name,
     Optional<IReadOnlyDictionary<string, string>?> OptionValues,
     Optional<Guid?> UnitId,
-    Optional<string?> Status);
+    Optional<string?> Status,
+    Optional<JsonObject?> Attributes);
 
 /// <summary>Products and their variants (domain-model §3, aggregate <c>Product</c>).</summary>
 internal sealed class ProductService(CatalogDbContext db, IRequestContext requestContext, TimeProvider clock)
@@ -65,9 +69,22 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
     /// Keyset-paged product list. Search: product name contains <c>q</c> (pg_trgm GIN index, ILIKE), or a variant
     /// whose SKU contains <c>q</c> (pg_trgm GIN index) or whose barcode equals <c>q</c> (unique btree index).
     /// </summary>
-    public async Task<PagedResponse<ProductResponse>> ListProductsAsync(ProductListQuery query, CancellationToken cancellationToken)
+    public async Task<AppResult<PagedResponse<ProductResponse>>> ListProductsAsync(ProductListQuery query, CancellationToken cancellationToken)
     {
-        var products = db.Products.AsNoTracking().Where(p => query.Statuses.Contains(p.Status));
+        var source = db.Products;
+        IQueryable<Product> products = source;
+        if (query.AttributeFilters is { Count: > 0 } filters)
+        {
+            var built = AttributeFilterSql.Build(await FieldSet.LoadAsync(db, cancellationToken), filters);
+            if (built.Error is { } error)
+            {
+                return error;
+            }
+
+            products = source.FromSqlRaw(built.Value.Sql, built.Value.Parameters);
+        }
+
+        products = products.AsNoTracking().Where(p => query.Statuses.Contains(p.Status));
 
         if (query.BrandId is { } brandId)
         {
@@ -222,12 +239,15 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
             errors["defaultUnitId"] = ["Required."];
         }
 
+        var fields = await FieldSet.LoadAsync(db, cancellationToken);
+        var attributes = CustomFieldValidator.ValidateNew(fields, CustomFieldEntityTypes.Product, request.Attributes, "attributes", errors);
         var specs = new List<VariantSpec>();
+        var variantAttributes = new List<string>();
         if (request.Variants is { } variants)
         {
-            if (request.Sku is not null || request.Barcode is not null)
+            if (request.Sku is not null || request.Barcode is not null || request.VariantAttributes is not null)
             {
-                errors["sku"] = ["Pass either sku/barcode (simple product) or variants, not both."];
+                errors["sku"] = ["Pass either sku/barcode/variantAttributes (simple product) or variants, not both."];
             }
 
             if (variants.Count is 0 or > MaxVariantsPerRequest)
@@ -239,11 +259,13 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
             {
                 var v = variants[i];
                 specs.Add(ValidateVariant(errors, $"variants[{i}].", v.Sku, v.Barcode, v.Name, v.OptionValues, v.UnitId, v.Status));
+                variantAttributes.Add(CustomFieldValidator.ValidateNew(fields, CustomFieldEntityTypes.Variant, v.Attributes, $"variants[{i}].attributes", errors));
             }
         }
         else
         {
             specs.Add(ValidateVariant(errors, string.Empty, request.Sku, request.Barcode, null, null, null, null));
+            variantAttributes.Add(CustomFieldValidator.ValidateNew(fields, CustomFieldEntityTypes.Variant, request.VariantAttributes, "variantAttributes", errors));
         }
 
         CheckDuplicatesWithinRequest(errors, specs);
@@ -262,8 +284,14 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
         var now = CatalogText.Now(clock);
         var userId = UserId;
         var product = Product.Create(TenantId, name!, description, request.CategoryId, request.BrandId, defaultUnitId, request.TaxRate!.Value, status, userId, now);
+        product.Attributes = attributes;
         var created = specs
-            .Select(s => ProductVariant.Create(product, s.Sku, s.Barcode, s.Name, s.OptionValuesJson, s.UnitId ?? defaultUnitId, s.Status, userId, now))
+            .Select((s, i) =>
+            {
+                var variant = ProductVariant.Create(product, s.Sku, s.Barcode, s.Name, s.OptionValuesJson, s.UnitId ?? defaultUnitId, s.Status, userId, now);
+                variant.Attributes = variantAttributes[i];
+                return variant;
+            })
             .ToList();
 
         db.Products.Add(product);
@@ -305,6 +333,7 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
         var description = patch.Description.IsSet ? CatalogText.Clean(patch.Description.Value) : product.Description;
         var taxRate = patch.TaxRate.Or(product.TaxRate);
         ValidateProductFields(errors, name, description, taxRate, product.Status, taxRateRequired: false);
+        var attributes = await MergeAttributesAsync(CustomFieldEntityTypes.Product, product.Attributes, patch.Attributes, errors, cancellationToken);
         if (errors.Count > 0)
         {
             return AppError.Validation(errors);
@@ -336,6 +365,7 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
         product.BrandId = brandId;
         product.DefaultUnitId = defaultUnitId;
         product.TaxRate = taxRate!.Value;
+        product.Attributes = attributes;
         if (patch.Status.IsSet)
         {
             product.SetStatus(patch.Status.Value!, now);
@@ -387,6 +417,8 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
 
         var errors = new Dictionary<string, string[]>();
         var spec = ValidateVariant(errors, string.Empty, request.Sku, request.Barcode, request.Name, request.OptionValues, request.UnitId, request.Status);
+        var attributes = CustomFieldValidator.ValidateNew(
+            await FieldSet.LoadAsync(db, cancellationToken), CustomFieldEntityTypes.Variant, request.Attributes, "attributes", errors);
         if (errors.Count == 0)
         {
             await ValidateReferencesAsync(errors, null, null, [spec.UnitId ?? product.DefaultUnitId], cancellationToken);
@@ -399,6 +431,7 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
 
         var variant = ProductVariant.Create(
             product, spec.Sku, spec.Barcode, spec.Name, spec.OptionValuesJson, spec.UnitId ?? product.DefaultUnitId, spec.Status, UserId, CatalogText.Now(clock));
+        variant.Attributes = attributes;
         db.Variants.Add(variant);
         return await SaveAsync(cancellationToken) ?? (AppResult<VariantResponse>)ToResponse(variant);
     }
@@ -436,6 +469,7 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
             patch.OptionValues.IsSet ? patch.OptionValues.Value : CatalogText.ReadOptions(variant.OptionValues),
             patch.UnitId.Value ?? variant.UnitId,
             patch.Status.IsSet ? patch.Status.Value : CatalogStatuses.Active);
+        var attributes = await MergeAttributesAsync(CustomFieldEntityTypes.Variant, variant.Attributes, patch.Attributes, errors, cancellationToken);
         if (errors.Count == 0 && patch.UnitId.IsSet)
         {
             await ValidateReferencesAsync(errors, null, null, [spec.UnitId!.Value], cancellationToken);
@@ -457,6 +491,7 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
         variant.Name = spec.Name;
         variant.OptionValues = spec.OptionValuesJson;
         variant.UnitId = spec.UnitId!.Value;
+        variant.Attributes = attributes;
         if (patch.Status.IsSet)
         {
             variant.SetStatus(spec.Status, now);
@@ -623,6 +658,23 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
         {
             errors["unitId"] = ["Unit not found."];
         }
+    }
+
+    /// <summary>
+    /// Applies an <c>attributes</c> merge patch (absent: unchanged, <c>null</c>: clear all) and validates the result.
+    /// Unpatched writes keep the stored attributes as they are, so adding a required field later does not block
+    /// unrelated edits.
+    /// </summary>
+    private async Task<string> MergeAttributesAsync(
+        string entityType, string current, Optional<JsonObject?> patch, Dictionary<string, string[]> errors, CancellationToken cancellationToken)
+    {
+        if (!patch.IsSet)
+        {
+            return current;
+        }
+
+        var fields = await FieldSet.LoadAsync(db, cancellationToken);
+        return CustomFieldValidator.Merge(fields, entityType, patch.Value is null ? "{}" : current, patch.Value ?? [], "attributes", errors);
     }
 
     private async Task<AppError?> SaveAsync(CancellationToken cancellationToken)
