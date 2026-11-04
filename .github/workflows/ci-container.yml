@@ -1,0 +1,88 @@
+name: ci-container
+
+# Builds the API container image, proves it starts (GET /health -> 200) and scans it.
+# No registry login, no push, no deploy. Deploy workflows come later and need owner approval.
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**"
+      - ".github/workflows/ci-container.yml"
+  push:
+    branches: [main, preview]
+    paths:
+      - "services/api/**"
+      - ".github/workflows/ci-container.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: bayios-api:ci-${{ github.sha }}
+
+jobs:
+  container:
+    # Keep this name stable: it is intended to become a required status check.
+    name: api container build, smoke & scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build --pull -t "$IMAGE" services/api
+
+      - name: Image size
+        run: docker image ls "$IMAGE"
+
+      - name: Smoke test (container starts, /health returns 200)
+        run: |
+          docker run -d --name api-smoke -p 127.0.0.1:8080:8080 \
+            --read-only --cap-drop ALL --security-opt no-new-privileges \
+            "$IMAGE"
+          if ! curl --fail --silent --show-error \
+                --retry 20 --retry-connrefused --retry-delay 1 \
+                http://127.0.0.1:8080/health; then
+            echo "::error::Container did not serve /health"
+            docker logs api-smoke
+            exit 1
+          fi
+          echo
+          user="$(docker inspect -f '{{.Config.User}}' "$IMAGE")"
+          echo "Image user: ${user}"
+          case "$user" in
+            ""|root|0|0:*) echo "::error::Image must not run as root"; exit 1 ;;
+          esac
+          docker logs api-smoke
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f api-smoke || true
+
+      - name: Scan image (report HIGH and CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.70.0
+          image-ref: ${{ env.IMAGE }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          format: table
+          exit-code: "0"
+
+      - name: Scan image (fail on fixable CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.70.0
+          image-ref: ${{ env.IMAGE }}
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+          skip-setup-trivy: true
