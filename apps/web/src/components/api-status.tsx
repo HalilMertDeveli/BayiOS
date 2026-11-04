@@ -22,7 +22,7 @@ export function ApiStatus() {
   }, []);
 
   return (
-    <p role="status" aria-live="polite" className="text-sm text-neutral-600 dark:text-neutral-300">
+    <p role="status" aria-live="polite" className="text-body text-fg-muted">
       {state.kind === "loading" && "API bağlantısı kontrol ediliyor…"}
       {state.kind === "ready" &&
         `API bağlı: ${state.meta.name} ${state.meta.version} (${state.meta.environment})`}

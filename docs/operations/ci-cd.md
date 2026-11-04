@@ -3,7 +3,7 @@
 | Alan | Değer |
 |---|---|
 | Sahip | DevOps Engineer |
-| Durum | Plan — workflow dosyaları henüz yazılmadı; GitHub reposu (`HalilMertDeveli/BayiOS`) henüz yok |
+| Durum | Kısmen uygulandı — mevcut: `ci-api.yml`, `ci-web.yml`, `ci-container.yml`, `codeql.yml`, `dependency-review.yml`; diğerleri plan |
 | Son güncelleme | 2026-11-04 |
 
 ## 1. Genel kurallar
@@ -20,6 +20,7 @@
 | Dosya | Tetikleyici | Adımlar |
 |---|---|---|
 | `ci-api.yml` | PR, push (`preview`, `main`) — `services/api/**` | `setup-dotnet` (10.x) → `dotnet restore` → `dotnet build -warnaserror` → `dotnet format --verify-no-changes` → `dotnet test` (Testcontainers; Docker runner'da mevcut) → `dotnet list package --vulnerable --include-transitive` (bulunursa hata) → test sonuç artefaktı |
+| `ci-container.yml` | PR, push (`preview`, `main`) — `services/api/**` veya workflow'un kendisi | `docker build` (`services/api/Dockerfile`, push yok) → container'ı `--read-only --cap-drop ALL` ile çalıştır → `GET /health` = 200 → non-root kontrolü → Trivy (SHA pin) HIGH+CRITICAL rapor, düzeltmesi olan CRITICAL'da hata. Job adı: `api container build, smoke & scan` |
 | `ci-web.yml` | PR, push — `apps/web/**` | `setup-node` (LTS) → `npm ci` → `lint` → `typecheck` → `test` (Vitest) → `build` → Playwright smoke + axe-core (local API'ye karşı veya MSW) |
 | `ci-mobile.yml` | PR, push — `apps/mobile/**` (Flutter eklendiğinde) | `subosito/flutter-action` (SHA pin) → `flutter pub get` → `flutter analyze` → `flutter test` → (opsiyonel) `flutter build apk --flavor dev` |
 | `contracts.yml` | PR — `services/api/**`, `packages/contracts/**` | API'den OpenAPI üret → `packages/contracts/openapi.json` ile `git diff --exit-code` (ADR 0007) → `preview` sözleşmesine karşı kırıcı değişiklik diff'i (ör. oasdiff); TS/Dart istemci üretimi derlenir |
@@ -28,7 +29,7 @@
 | `dependency-review.yml` | PR | `actions/dependency-review-action` — `fail-on-severity: high`; lisans deny listesi (ör. ticari/kısıtlı lisanslar) |
 | `secrets.yml` | PR, push | gitleaks (SHA pin) tam geçmiş taraması (`fetch-depth: 0`) |
 | `ci-gate.yml` (veya her workflow sonunda) | — | Yukarıdakilerin sonucunu toplayan tek zorunlu kontrol |
-| `deploy-preview.yml` | push `preview` | Migration `bayios-preview` → API preview deploy → smoke test (GitHub Environment `preview`) |
+| `deploy-preview.yml` | push `preview` | Migration `bayios-preview` → API imajı değişmez etiketle (git SHA) push → `fly deploy --image` (`infra/deploy/fly.preview.toml`) → smoke test (GitHub Environment `preview`). Hosting onayı bekliyor; ayrıntı `deploy-and-rollback.md` |
 | `deploy-production.yml` | tag `v*` (yalnızca `main`'den) | GitHub Environment `production` (**required reviewer: ürün sahibi**) → prod migration → API deploy → smoke → Vercel prod promote |
 
 ## 3. Dependabot planı (`.github/dependabot.yml`)

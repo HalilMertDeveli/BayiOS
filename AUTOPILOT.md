@@ -24,6 +24,7 @@ Ajan raporu: değişen dosyalar, çalıştırılan komutlar ve gerçek çıktıl
 
 ## 3. Paralellik
 - Aynı anda en fazla 3–5 bağımsız iş akışı. Aynı dosya kümesine iki yazar yok.
+- Çalışma hatları (A–F), 18 iş emri, sahiplik kuralları, bağımlılık grafiği ve token politikası: `docs/operations/work-orders.md`.
 - Sözleşme önce: API değişikliği → `packages/contracts` (OpenAPI) güncellenir, sonra web/mobil.
 - Bağımlı işler sıralı yürür. Paralellik maliyeti haklı çıkarmıyorsa sıralı çalışılır.
 
