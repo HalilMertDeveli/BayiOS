@@ -9,6 +9,7 @@
  */
 import type { BrowserContext, Page, Route } from "@playwright/test";
 import { createMockCatalog, handleCatalog, type MockCatalog } from "./mock-catalog";
+import { createMockCommerce, handleCommerce, type MockCommerce } from "./mock-commerce";
 import { createMockInventory, handleInventory, type MockInventory } from "./mock-inventory";
 
 /** Must match the build-time env used for the e2e build (ci-web.yml / README). */
@@ -118,16 +119,20 @@ export type ApiMockOptions = {
   catalog?: MockCatalog | null;
   /** In-memory Inventory/Warehouse API (mock-inventory.ts). Defaults to two warehouses and a few balances; null disables it. */
   inventory?: MockInventory | null;
+  /** In-memory Customers + Pricing API (mock-commerce.ts). Defaults to 3 customers, 2 dealer groups, 3 price lists; null disables it. */
+  commerce?: MockCommerce | null;
 };
 
 /** Mocked BayiOS API. `state.memberships` can be changed by a test (e.g. after a tenant is created). */
 export async function mockApi(page: Page, options: ApiMockOptions = {}) {
   const catalog = options.catalog === undefined ? createMockCatalog({ products: 3 }) : options.catalog;
   const inventory = options.inventory === undefined ? createMockInventory(catalog) : options.inventory;
+  const commerce = options.commerce === undefined ? createMockCommerce(catalog) : options.commerce;
   const state = {
     memberships: options.memberships ?? [TENANT_A],
     catalog,
     inventory,
+    commerce,
     requests: [] as { method: string; path: string; search: string; headers: Record<string, string>; body: unknown }[],
   };
 
@@ -141,7 +146,7 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
         status: 204,
         headers: {
           "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE",
+          "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE",
           "Access-Control-Allow-Headers": "*",
         },
       });
@@ -175,6 +180,10 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
       return json(route, 200, { ...defaultSettings, ...(request.postDataJSON() as object) }, { ETag: 'W/"1"' });
     }
     if (inventory && (await handleInventory(route, inventory, catalog))) return;
+    if (commerce) {
+      const role = state.memberships.find((m) => m.tenantId === request.headers()["x-tenant-id"])?.role ?? "viewer";
+      if (await handleCommerce(route, commerce, catalog, role)) return;
+    }
     if (catalog && (await handleCatalog(route, catalog))) return;
     return json(route, 404, problem(404, "resource.not_found"));
   });
