@@ -1,0 +1,63 @@
+name: ci-migrations
+
+# ADR 0005 §4: per-module idempotent migration scripts as a reviewable artefact, applied to an empty
+# PostgreSQL 17 (bootstrapped with infra/docker/initdb) as bayios_migrator, plus a pending-model-changes check.
+# Logic lives in infra/ci/ef-migrations.sh so it runs identically on a laptop. No secrets, no deploy.
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**"
+      - "infra/docker/initdb/**"
+      - "infra/ci/ef-migrations.sh"
+      - ".github/workflows/ci-migrations.yml"
+  push:
+    branches: [main, preview]
+    paths:
+      - "services/api/**"
+      - "infra/docker/initdb/**"
+      - "infra/ci/ef-migrations.sh"
+      - ".github/workflows/ci-migrations.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migrations:
+    # Keep this name stable; ci-gate aggregates it.
+    name: api migrations script, apply & drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PG_IMAGE: postgres:17
+      # Throwaway container bound to 127.0.0.1 inside the runner; not secrets.
+      POSTGRES_PASSWORD: ci-local-only
+      BAYIOS_APP_PASSWORD: ci-local-only
+      BAYIOS_MIGRATOR_PASSWORD: ci-local-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: services/api/global.json
+
+      - name: Generate idempotent scripts, apply twice as bayios_migrator, check model drift
+        run: bash infra/ci/ef-migrations.sh
+        env:
+          OUT_DIR: ${{ runner.temp }}/bayios-migrations
+
+      # Uploaded on failure too (for review/debugging); the script itself fails when no script is produced.
+      - name: Upload idempotent migration scripts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: migrations-sql-${{ github.sha }}
+          path: ${{ runner.temp }}/bayios-migrations/*.sql
+          if-no-files-found: warn
+          retention-days: 30
