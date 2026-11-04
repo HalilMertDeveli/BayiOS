@@ -453,7 +453,7 @@ Not: hacim büyüdüğünde `occurred_at` üzerinden aylık partitioning değerl
 | id **PK** · tenant_id NULL · type text · payload jsonb · status (queued, running, succeeded, failed, dead) · priority smallint · run_after timestamptz · attempts · max_attempts · locked_by text · locked_until timestamptz · last_error · dedupe_key text NULL · created_at · finished_at |
 | IX (status, priority DESC, run_after) WHERE status = 'queued' · UQ (type, dedupe_key) WHERE dedupe_key IS NOT NULL AND status IN ('queued','running') |
 
-**platform.idempotency_keys** — RLS: tenant + kullanıcı kapsamı (#68). Sahibi `PlatformDbContext` (`BayiOS.SharedKernel/Platform/Persistence`, migration geçmişi `platform.__ef_migrations_history`).
+**platform.idempotency_keys** — RLS: tenant + kullanıcı kapsamı (#68). Sahibi `PlatformDbContext` (`src/Modules/Platform/BayiOS.Modules.Platform` — yalnızca şema + migration; çalışma zamanı kodu `BayiOS.SharedKernel/Platform/Idempotency` ham SQL kullanır; migration geçmişi `platform.__ef_migrations_history`).
 Politika `idempotency_scope`: okuma `tenant_id = app.tenant_id` **veya** (`tenant_id IS NULL` ve `user_id = app.user_id`); yazma ayrıca `user_id = app.user_id` ister.
 | Kolon | Tip | Not |
 |---|---|---|

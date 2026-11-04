@@ -1,11 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
-namespace BayiOS.SharedKernel.Platform.Persistence;
+namespace BayiOS.Modules.Platform.Persistence;
 
 /// <summary>
 /// Schema owner of the cross-cutting <c>platform</c> tables (system-architecture §5, ADR 0005). Used for migrations
-/// only: the runtime code touches these tables with raw SQL on the request's <see cref="SharedKernel.Persistence.UnitOfWork"/>
+/// only: the runtime code (BayiOS.SharedKernel) touches these tables with raw SQL on the request's UnitOfWork
 /// connection, because it needs <c>INSERT … ON CONFLICT</c> semantics.
 /// </summary>
 internal sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : DbContext(options)

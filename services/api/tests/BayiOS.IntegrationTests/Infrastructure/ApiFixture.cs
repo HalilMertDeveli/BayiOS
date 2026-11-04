@@ -2,7 +2,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using BayiOS.IntegrationTests.Infrastructure;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
-using BayiOS.SharedKernel.Platform.Persistence;
+using BayiOS.Modules.Platform.Persistence;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;

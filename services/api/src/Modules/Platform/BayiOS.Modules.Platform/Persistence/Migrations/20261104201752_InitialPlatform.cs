@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace BayiOS.SharedKernel.Platform.Persistence.Migrations
+namespace BayiOS.Modules.Platform.Persistence.Migrations
 {
     /// <inheritdoc />
     public partial class InitialPlatform : Migration

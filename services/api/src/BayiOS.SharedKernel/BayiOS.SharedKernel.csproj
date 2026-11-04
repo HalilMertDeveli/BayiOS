@@ -9,15 +9,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="EFCore.NamingConventions" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <InternalsVisibleTo Include="BayiOS.UnitTests" />
-    <InternalsVisibleTo Include="BayiOS.IntegrationTests" />
   </ItemGroup>
 
 </Project>
