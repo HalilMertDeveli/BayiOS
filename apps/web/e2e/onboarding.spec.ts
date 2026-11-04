@@ -80,7 +80,11 @@ test("kayıt → onboarding → pano (mock): slug conflict is retried with the s
   await page.getByRole("button", { name: "Devam" }).click();
 
   // Step 3 — commercial settings.
-  await expect(page.getByLabel("Para birimi")).toHaveValue("Türk lirası (TRY)");
+  await expect(page.getByLabel("Para birimi")).toHaveValue("TRY");
+  await expect(page.getByLabel("Varsayılan KDV oranı")).toHaveValue("20");
+  await page.getByLabel("Para birimi").selectOption("EUR");
+  await page.getByLabel("Varsayılan KDV oranı").selectOption("10");
+  await page.getByLabel("Fiyat gösterimi").selectOption("included");
   await page.getByLabel("Negatif stok").selectOption("warn");
   await page.getByRole("button", { name: "Devam" }).click();
 
@@ -105,10 +109,59 @@ test("kayıt → onboarding → pano (mock): slug conflict is retried with the s
   expect(posts[0].headers["authorization"]).toMatch(/^Bearer /);
   expect(posts[1].body).toEqual({ name: "Yılmaz Motor Yedek Parça", slug: "yilmaz-motor-2", sector: "motorcycle_parts" });
 
+  // Sector template applied by the client right after creation, as the new owner (Identity cannot call Catalog).
+  const apply = api.requests.filter((r) => r.method === "POST" && r.path === "/api/v1/sector-templates/motorcycle_parts/apply");
+  expect(apply).toHaveLength(1);
+  expect(apply[0].headers["x-tenant-id"]).toBe(NEW_TENANT.tenantId);
+  expect(apply[0].headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
+
   const patch = api.requests.find((r) => r.method === "PATCH" && r.path === "/api/v1/tenant/settings");
   expect(patch?.headers["x-tenant-id"]).toBe(NEW_TENANT.tenantId);
   expect(patch?.headers["if-match"]).toBe('W/"0"');
-  expect(patch?.body).toEqual({ negativeStockPolicy: "warn" });
+  expect(patch?.body).toEqual({ negativeStockPolicy: "warn", defaultTaxRate: 10, pricesIncludeTaxDisplay: true });
+
+  const currency = api.requests.find((r) => r.method === "PATCH" && r.path === "/api/v1/tenant");
+  expect(currency?.headers["if-match"]).toBe('W/"0"');
+  expect(currency?.body).toEqual({ defaultCurrency: "EUR" });
+});
+
+test("a failed template apply is retried with the same key, without creating a second tenant", async ({ page }) => {
+  let applyCalls = 0;
+  const api = await signedIn(page, {
+    memberships: [],
+    createTenant: (route) => {
+      api.memberships = [NEW_TENANT];
+      return created(route);
+    },
+    applyTemplate: (route) => {
+      applyCalls++;
+      if (applyCalls === 1) return route.abort("connectionreset");
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ template: "general", unitsCreated: [], categoriesCreated: [], fieldsCreated: [], skipped: 3 }),
+      });
+    },
+  });
+  await page.goto("/isletme-olustur");
+  await page.getByLabel("İşletme adı").fill("Deneme Toptan");
+  await page.getByRole("button", { name: "Devam" }).click();
+  await page.getByLabel(/Genel toptan/).check();
+  await page.getByRole("button", { name: "Devam" }).click();
+  await page.getByRole("button", { name: "Devam" }).click();
+  await page.getByRole("button", { name: "İşletmeyi oluştur" }).click();
+
+  await expect(page.getByRole("alert").filter({ hasText: "İşletmeniz oluşturuldu, ancak sektör şablonu" })).toBeVisible();
+  await page.getByRole("button", { name: "Kalan adımları tamamla" }).click();
+  await expect(page).toHaveURL("/pano");
+
+  expect(api.requests.filter((r) => r.method === "POST" && r.path === "/api/v1/tenants")).toHaveLength(1);
+  const applies = api.requests.filter((r) => r.path.endsWith("/apply"));
+  expect(applies).toHaveLength(2);
+  expect(applies[1].headers["idempotency-key"]).toBe(applies[0].headers["idempotency-key"]);
+  // Defaults chosen → no settings/currency PATCH needed.
+  expect(api.requests.some((r) => r.method === "PATCH")).toBe(false);
 });
 
 test("a user without memberships is sent from the app to onboarding", async ({ page }) => {

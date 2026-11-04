@@ -58,6 +58,26 @@ export const negativeStockOptions: readonly { value: NegativeStockPolicy; label:
   { value: "allow", label: "İzin ver" },
 ];
 
+/** ISO 4217 codes offered in the wizard (the API accepts any 3-letter code). TRY is the tenant default. */
+export const currencyOptions: readonly { value: string; label: string }[] = [
+  { value: "TRY", label: "Türk lirası (TRY)" },
+  { value: "USD", label: "ABD doları (USD)" },
+  { value: "EUR", label: "Euro (EUR)" },
+];
+
+/** Turkish VAT (KDV) rates in use; 20 is the API default. */
+export const taxRateOptions: readonly { value: string; label: string }[] = [
+  { value: "20", label: "%20" },
+  { value: "10", label: "%10" },
+  { value: "1", label: "%1" },
+  { value: "0", label: "%0 (KDV'siz)" },
+];
+
+export const priceDisplayOptions: readonly { value: "excluded" | "included"; label: string }[] = [
+  { value: "excluded", label: "KDV hariç" },
+  { value: "included", label: "KDV dahil" },
+];
+
 /** API field names (lower camel) → wizard step that owns the field. */
 export const FIELD_STEP: Record<string, number> = { name: 0, slug: 0, sector: 1 };
 

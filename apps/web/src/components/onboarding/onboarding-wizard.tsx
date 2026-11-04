@@ -11,19 +11,26 @@ import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api/client";
 import {
+  applySectorTemplate,
   createTenant,
+  getCurrentTenant,
   getTenantSettings,
+  updateTenant,
   updateTenantSettings,
   type NegativeStockPolicy,
   type Sector,
+  type TenantSettings,
 } from "@/lib/api/identity";
 import { ROUTES } from "@/lib/auth/routes";
 import { cn } from "@/lib/cn";
 import {
   FIELD_STEP,
+  currencyOptions,
   negativeStockOptions,
+  priceDisplayOptions,
   sectorOptions,
   slugify,
+  taxRateOptions,
   tenantFieldMessage,
   validateSlug,
   validateTenantName,
@@ -33,17 +40,41 @@ import { useSession } from "@/lib/session/session-context";
 
 const STEPS = ["İşletme bilgileri", "Sektör", "Ticari ayarlar", "Onay"] as const;
 
-type Values = { name: string; slug: string; slugEdited: boolean; sector: Sector | ""; negativeStock: NegativeStockPolicy };
+type Values = {
+  name: string;
+  slug: string;
+  slugEdited: boolean;
+  sector: Sector | "";
+  currency: string;
+  taxRate: string;
+  priceDisplay: "excluded" | "included";
+  negativeStock: NegativeStockPolicy;
+};
 type Errors = { name?: string; slug?: string; sector?: string };
 
-function newIdempotencyKey(): string {
-  return crypto.randomUUID();
+/** Work done after POST /tenants succeeded; each part is retried on its own and never repeated once done. */
+type FollowUp = "template" | "settings" | "currency";
+const FOLLOW_UP_LABELS: Record<FollowUp, string> = {
+  template: "sektör şablonu (birimler, kategoriler, özel alanlar)",
+  settings: "ticari ayarlar (KDV, fiyat gösterimi, negatif stok)",
+  currency: "para birimi",
+};
+
+class FollowUpError extends Error {
+  constructor(
+    readonly step: FollowUp,
+    readonly cause: unknown,
+  ) {
+    super(step);
+  }
 }
 
+const newIdempotencyKey = () => crypto.randomUUID();
+
 /**
- * AF-01 onboarding, limited to what the API supports today: name/slug + sector → POST /api/v1/tenants,
- * then the negative-stock rule via PATCH /api/v1/tenant/settings. Currency and VAT are shown as fixed
- * defaults because the API has no field for them yet.
+ * AF-01 onboarding: name/slug + sector → POST /api/v1/tenants, then — as the new owner, with the new tenant
+ * as X-Tenant-Id — apply the sector template (Catalog), the commercial settings (PATCH /tenant/settings)
+ * and the currency (PATCH /tenant). Identity cannot call Catalog, so the client applies the template.
  */
 export function OnboardingWizard() {
   const router = useRouter();
@@ -51,13 +82,25 @@ export function OnboardingWizard() {
   const { toast } = useToast();
 
   const [step, setStep] = useState(0);
-  const [values, setValues] = useState<Values>({ name: "", slug: "", slugEdited: false, sector: "", negativeStock: "block" });
+  const [values, setValues] = useState<Values>({
+    name: "",
+    slug: "",
+    slugEdited: false,
+    sector: "",
+    currency: "TRY",
+    taxRate: "20",
+    priceDisplay: "excluded",
+    negativeStock: "block",
+  });
   const [errors, setErrors] = useState<Errors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // One key per creation attempt, reused for every retry (network error, double click, corrected input):
-  // the API either replays the stored 201 or — after a 4xx, which it rolls back — runs the corrected request.
-  const idempotencyKey = useRef<string | null>(null);
+  const [createdTenantId, setCreatedTenantId] = useState<string | null>(null);
+  // Stable keys per wizard attempt, reused for every retry (network error, double click, corrected input):
+  // the API replays a stored 2xx, or — after a 4xx, which it rolls back — runs the corrected request.
+  const createKey = useRef<string | null>(null);
+  const templateKey = useRef<string | null>(null);
+  const done = useRef(new Set<FollowUp>());
   const headingRef = useRef<HTMLHeadingElement>(null);
   const firstRender = useRef(true);
 
@@ -70,7 +113,11 @@ export function OnboardingWizard() {
   }, [step]);
 
   if (state.status === "loading") {
-    return <p role="status" className="text-body text-fg-muted">Oturum yükleniyor…</p>;
+    return (
+      <p role="status" className="text-body text-fg-muted">
+        Oturum yükleniyor…
+      </p>
+    );
   }
   if (state.status === "error") {
     return <FormMessage tone="error">{state.message}</FormMessage>;
@@ -96,83 +143,128 @@ export function OnboardingWizard() {
     if (Object.keys(stepErrors).length === 0) setStep((s) => s + 1);
   };
 
-  const finish = async (tenantId: string) => {
+  const runFollowUp = async (key: FollowUp, work: () => Promise<unknown>) => {
+    if (done.current.has(key)) return;
+    try {
+      await work();
+      done.current.add(key);
+    } catch (error) {
+      throw new FollowUpError(key, error);
+    }
+  };
+
+  /** Everything after the tenant exists. Throws FollowUpError on the first failing part. */
+  const completeTenant = async (tenantId: string, sector: Sector) => {
     if (state.status !== "ready") return;
     writeActiveTenantId(state.user.id, tenantId);
-    await reload(); // picks up the new owner membership and makes it active for X-Tenant-Id
-    try {
+    await reload(); // picks up the new owner membership and makes it the X-Tenant-Id
+
+    await runFollowUp("template", () => {
+      templateKey.current ??= newIdempotencyKey();
+      return applySectorTemplate(api, sector, templateKey.current);
+    });
+
+    await runFollowUp("settings", async () => {
       const { settings, etag } = await getTenantSettings(api);
-      if (etag && settings.negativeStockPolicy !== values.negativeStock) {
-        await updateTenantSettings(api, { negativeStockPolicy: values.negativeStock }, etag);
+      const wanted: Partial<TenantSettings> = {
+        negativeStockPolicy: values.negativeStock,
+        defaultTaxRate: Number(values.taxRate),
+        pricesIncludeTaxDisplay: values.priceDisplay === "included",
+      };
+      // Numbers may arrive as strings ("20.00"); compare numerically. Send only what differs from the defaults.
+      const differs = (current: unknown, next: unknown) => (typeof next === "number" ? Number(current) !== next : current !== next);
+      const patch = Object.fromEntries(
+        Object.entries(wanted).filter(([field, value]) => differs(settings[field as keyof TenantSettings], value)),
+      ) as Partial<TenantSettings>;
+      if (Object.keys(patch).length > 0 && etag) await updateTenantSettings(api, patch, etag);
+    });
+
+    await runFollowUp("currency", async () => {
+      const { tenant, etag } = await getCurrentTenant(api);
+      if (tenant.defaultCurrency !== values.currency && etag) {
+        await updateTenant(api, { defaultCurrency: values.currency }, etag);
       }
-    } catch {
-      toast({
-        tone: "error",
-        title: "Negatif stok ayarı kaydedilemedi",
-        description: "İşletmeniz oluşturuldu. Bu ayarı daha sonra Ayarlar sayfasından değiştirebilirsiniz.",
-      });
-    }
+    });
+
     toast({ tone: "success", title: "İşletmeniz hazır", description: `${values.name.trim()} oluşturuldu.` });
     router.replace(ROUTES.home);
   };
 
   const submit = async () => {
     if (!values.sector) return;
+    const sector = values.sector;
     setSubmitting(true);
     setSubmitError(null);
-    idempotencyKey.current ??= newIdempotencyKey();
+
+    let tenantId = createdTenantId;
+    if (!tenantId) {
+      createKey.current ??= newIdempotencyKey();
+      try {
+        const tenant = await createTenant(api, { name: values.name.trim(), slug: values.slug.trim(), sector }, createKey.current);
+        tenantId = tenant.id;
+        setCreatedTenantId(tenant.id);
+      } catch (error) {
+        setSubmitting(false);
+        await handleCreateError(error);
+        return;
+      }
+    }
+
     try {
-      const tenant = await createTenant(
-        api,
-        { name: values.name.trim(), slug: values.slug.trim(), sector: values.sector },
-        idempotencyKey.current,
-      );
-      await finish(tenant.id);
+      await completeTenant(tenantId, sector);
     } catch (error) {
       setSubmitting(false);
-      if (!(error instanceof ApiError)) {
-        setSubmitError("Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.");
-        return;
-      }
-      if (error.code === "tenant.slug_taken") {
-        setErrors({ slug: error.userMessage });
-        setStep(0);
-        return;
-      }
-      if (error.code === "validation.failed") {
-        const fieldErrors: Errors = {};
-        for (const field of Object.keys(error.fieldErrors)) {
-          if (field in FIELD_STEP) fieldErrors[field as keyof Errors] = tenantFieldMessage(field);
-        }
-        setErrors(fieldErrors);
-        const steps = Object.keys(fieldErrors).map((f) => FIELD_STEP[f]);
-        if (steps.length > 0) setStep(Math.min(...steps));
-        setSubmitError(error.userMessage);
-        return;
-      }
-      if (error.code === "idempotency.key_reused") {
-        // An earlier attempt with this key already succeeded (e.g. its response was lost).
-        const memberships = await reload();
-        if (memberships.length > 0) {
-          router.replace(memberships.length === 1 ? ROUTES.home : ROUTES.tenantPicker);
-          return;
-        }
-        idempotencyKey.current = newIdempotencyKey();
-      }
-      if (error.status === 401) return; // the session layer redirects to sign-in
-      setSubmitError(error.userMessage);
+      const cause = error instanceof FollowUpError ? error.cause : error;
+      if (cause instanceof ApiError && cause.status === 401) return; // the session layer redirects to sign-in
+      const part = error instanceof FollowUpError ? FOLLOW_UP_LABELS[error.step] : "kurulum";
+      const reason = cause instanceof ApiError ? ` ${cause.userMessage}` : "";
+      setSubmitError(`İşletmeniz oluşturuldu, ancak ${part} kaydedilemedi.${reason}`);
     }
   };
 
-  const sectorLabel = sectorOptions.find((s) => s.value === values.sector)?.label ?? "—";
-  const policyLabel = negativeStockOptions.find((p) => p.value === values.negativeStock)?.label ?? "—";
+  const handleCreateError = async (error: unknown) => {
+    if (!(error instanceof ApiError)) {
+      setSubmitError("Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.");
+      return;
+    }
+    if (error.code === "tenant.slug_taken") {
+      setErrors({ slug: error.userMessage });
+      setStep(0);
+      return;
+    }
+    if (error.code === "validation.failed") {
+      const fieldErrors: Errors = {};
+      for (const field of Object.keys(error.fieldErrors)) {
+        if (field in FIELD_STEP) fieldErrors[field as keyof Errors] = tenantFieldMessage(field);
+      }
+      setErrors(fieldErrors);
+      const steps = Object.keys(fieldErrors).map((f) => FIELD_STEP[f]);
+      if (steps.length > 0) setStep(Math.min(...steps));
+      setSubmitError(error.userMessage);
+      return;
+    }
+    if (error.code === "idempotency.key_reused") {
+      // An earlier attempt with this key already succeeded (e.g. its response was lost).
+      const memberships = await reload();
+      if (memberships.length > 0) {
+        router.replace(memberships.length === 1 ? ROUTES.home : ROUTES.tenantPicker);
+        return;
+      }
+      createKey.current = newIdempotencyKey();
+    }
+    if (error.status === 401) return; // the session layer redirects to sign-in
+    setSubmitError(error.userMessage);
+  };
+
+  const label = <T extends { value: string; label: string }>(options: readonly T[], value: string) =>
+    options.find((o) => o.value === value)?.label ?? "—";
 
   return (
     <div className="flex flex-col gap-6">
       <ol aria-label="Kurulum adımları" className="grid grid-cols-4 gap-2">
-        {STEPS.map((label, index) => (
+        {STEPS.map((stepLabel, index) => (
           <li
-            key={label}
+            key={stepLabel}
             aria-current={index === step ? "step" : undefined}
             className={cn(
               "flex flex-col gap-1 border-t-4 pt-2 text-caption",
@@ -182,7 +274,7 @@ export function OnboardingWizard() {
             <span className="flex items-center gap-1">
               {index < step ? <Check className="size-3.5" aria-hidden="true" /> : null}
               <span className="sr-only">Adım {index + 1}: </span>
-              <span className="hidden sm:inline">{label}</span>
+              <span className="hidden sm:inline">{stepLabel}</span>
               <span aria-hidden="true" className="sm:hidden">
                 {index + 1}
               </span>
@@ -191,7 +283,18 @@ export function OnboardingWizard() {
         ))}
       </ol>
 
-      <form noValidate onSubmit={step < 3 ? goNext : (e) => (e.preventDefault(), void submit())} className="flex flex-col gap-5">
+      <form
+        noValidate
+        onSubmit={
+          step < 3
+            ? goNext
+            : (e) => {
+                e.preventDefault();
+                void submit();
+              }
+        }
+        className="flex flex-col gap-5"
+      >
         <h2 ref={headingRef} tabIndex={-1} className="text-h2 text-fg focus:outline-none">
           {STEPS[step]}
         </h2>
@@ -229,7 +332,7 @@ export function OnboardingWizard() {
         {step === 1 ? (
           <fieldset className="flex flex-col gap-3" aria-describedby={errors.sector ? "sector-error" : undefined}>
             <legend className="mb-2 text-body text-fg-muted">
-              Sektörünüz ürün şablonunu ve özel alanları belirler. Daha sonra değiştirilebilir.
+              Sektörünüz hazır birimleri, kategorileri ve ürün özel alanlarını belirler.
             </legend>
             {sectorOptions.map((option) => (
               <label
@@ -263,12 +366,24 @@ export function OnboardingWizard() {
 
         {step === 2 ? (
           <>
-            <Input label="Para birimi" value="Türk lirası (TRY)" readOnly hint="Şu an yalnızca Türk lirası destekleniyor." />
-            <Input
+            <Select
+              label="Para birimi"
+              value={values.currency}
+              onChange={(e) => setValues((v) => ({ ...v, currency: e.target.value }))}
+              options={currencyOptions}
+            />
+            <Select
               label="Varsayılan KDV oranı"
-              value="%20"
-              readOnly
+              value={values.taxRate}
+              onChange={(e) => setValues((v) => ({ ...v, taxRate: e.target.value }))}
+              options={taxRateOptions}
               hint="Yeni ürünlerde varsayılan oran; her ürün için ayrıca belirlenebilir."
+            />
+            <Select
+              label="Fiyat gösterimi"
+              value={values.priceDisplay}
+              onChange={(e) => setValues((v) => ({ ...v, priceDisplay: e.target.value as Values["priceDisplay"] }))}
+              options={priceDisplayOptions}
             />
             <Select
               label="Negatif stok"
@@ -287,16 +402,24 @@ export function OnboardingWizard() {
             <dt className="text-fg-muted">İşletme adresi</dt>
             <dd className="font-mono text-fg">{values.slug}</dd>
             <dt className="text-fg-muted">Sektör</dt>
-            <dd className="text-fg">{sectorLabel}</dd>
+            <dd className="text-fg">{label(sectorOptions, values.sector)}</dd>
             <dt className="text-fg-muted">Para birimi</dt>
-            <dd className="text-fg">TRY</dd>
+            <dd className="text-fg">{label(currencyOptions, values.currency)}</dd>
+            <dt className="text-fg-muted">Varsayılan KDV</dt>
+            <dd className="text-fg">
+              {label(taxRateOptions, values.taxRate)} · {label(priceDisplayOptions, values.priceDisplay)}
+            </dd>
             <dt className="text-fg-muted">Negatif stok</dt>
-            <dd className="text-fg">{policyLabel}</dd>
+            <dd className="text-fg">{label(negativeStockOptions, values.negativeStock)}</dd>
           </dl>
         ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {step > 0 ? (
+          {createdTenantId ? (
+            <Link href={ROUTES.home} className="text-body text-brand-fg underline-offset-2 hover:underline">
+              Şimdilik atla, panoya geç
+            </Link>
+          ) : step > 0 ? (
             <Button variant="secondary" onClick={() => setStep((s) => s - 1)} disabled={submitting}>
               Geri
             </Button>
@@ -308,7 +431,7 @@ export function OnboardingWizard() {
             <span />
           )}
           <Button type="submit" loading={submitting}>
-            {step < 3 ? "Devam" : "İşletmeyi oluştur"}
+            {step < 3 ? "Devam" : createdTenantId ? "Kalan adımları tamamla" : "İşletmeyi oluştur"}
           </Button>
         </div>
       </form>

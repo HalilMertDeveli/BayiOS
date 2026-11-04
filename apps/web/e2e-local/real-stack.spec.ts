@@ -49,22 +49,33 @@ test("sign-up → e-mail confirmation → onboarding → dashboard → sign-out 
   await page.getByRole("button", { name: "Devam" }).click();
   await page.getByLabel(/Motosiklet yedek parça/).check();
   await page.getByRole("button", { name: "Devam" }).click();
+  await page.getByLabel("Para birimi").selectOption("EUR");
+  await page.getByLabel("Varsayılan KDV oranı").selectOption("10");
+  await page.getByLabel("Fiyat gösterimi").selectOption("included");
   await page.getByLabel("Negatif stok").selectOption("warn");
   await page.getByRole("button", { name: "Devam" }).click();
   await expect(page.getByText(slug)).toBeVisible();
 
   const created = page.waitForResponse((r) => r.url().endsWith("/api/v1/tenants") && r.request().method() === "POST");
+  const applied = page.waitForResponse((r) => r.url().endsWith("/sector-templates/motorcycle_parts/apply"));
   const patched = page.waitForResponse((r) => r.url().endsWith("/api/v1/tenant/settings") && r.request().method() === "PATCH");
+  const currency = page.waitForResponse((r) => r.url().endsWith("/api/v1/tenant") && r.request().method() === "PATCH");
   await page.getByRole("button", { name: "İşletmeyi oluştur" }).click();
   const createResponse = await created;
   expect(createResponse.status()).toBe(201);
   expect(createResponse.request().headers()["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
+  const applyResponse = await applied;
+  expect(applyResponse.status()).toBe(200);
+  const applyBody = (await applyResponse.json()) as { template: string; unitsCreated: unknown[]; fieldsCreated: unknown[] };
+  expect(applyBody.template).toBe("motorcycle_parts");
+  expect(applyBody.unitsCreated.length + applyBody.fieldsCreated.length).toBeGreaterThan(0);
   expect((await patched).status()).toBe(200);
+  expect((await currency).status()).toBe(200);
 
   await expect(page).toHaveURL(/\/pano$/);
   await expect(page.getByRole("heading", { level: 1, name: "Pano" })).toBeVisible();
-  await expect(page.getByTestId("session-user")).toHaveText(email);
-  await expect(page.getByText("İşletme sahibi")).toBeVisible();
+  await expect(page.getByTestId("session-user")).toHaveText("Yerel Test Kullanıcısı");
+  await expect(page.getByRole("banner").getByText("İşletme sahibi")).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Ayarlar" })).toBeVisible();
   await page.screenshot({ path: "test-results/real-stack-pano.png", fullPage: true });
 
@@ -77,7 +88,7 @@ test("sign-up → e-mail confirmation → onboarding → dashboard → sign-out 
   await page.locator("input[name=password]").fill(password);
   await page.getByRole("button", { name: "Giriş yap" }).click();
   await expect(page).toHaveURL(/\/pano$/);
-  await expect(page.getByTestId("session-user")).toHaveText(email);
+  await expect(page.getByTestId("session-user")).toHaveText("Yerel Test Kullanıcısı");
 });
 
 test("wrong password shows a Turkish error and stays on sign-in", async ({ page }) => {

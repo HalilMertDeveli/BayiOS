@@ -110,6 +110,8 @@ export type ApiMockOptions = {
   memberships?: MockMembership[];
   /** Override for POST /api/v1/tenants. */
   createTenant?: (route: Route) => unknown;
+  /** Override for POST /api/v1/sector-templates/{code}/apply. */
+  applyTemplate?: (route: Route) => unknown;
 };
 
 /** Mocked BayiOS API. `state.memberships` can be changed by a test (e.g. after a tenant is created). */
@@ -140,6 +142,18 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
       if (options.createTenant) return options.createTenant(route);
       return json(route, 201, {});
     }
+    if (path.startsWith("/api/v1/sector-templates/") && path.endsWith("/apply") && method === "POST") {
+      if (options.applyTemplate) return options.applyTemplate(route);
+      return json(route, 200, { template: path.split("/")[4], unitsCreated: ["ADET"], categoriesCreated: [], fieldsCreated: [], skipped: 0 });
+    }
+    if (path === "/api/v1/tenant" && method === "GET") {
+      const m = state.memberships.find((x) => x.tenantId === request.headers()["x-tenant-id"]);
+      return json(route, 200, { ...tenantBody(m), version: 0 }, { ETag: 'W/"0"' });
+    }
+    if (path === "/api/v1/tenant" && method === "PATCH") {
+      const m = state.memberships.find((x) => x.tenantId === request.headers()["x-tenant-id"]);
+      return json(route, 200, { ...tenantBody(m), ...(request.postDataJSON() as object), version: 1 }, { ETag: 'W/"1"' });
+    }
     if (path === "/api/v1/tenant/settings" && method === "GET") {
       return json(route, 200, defaultSettings, { ETag: 'W/"0"' });
     }
@@ -151,6 +165,24 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
   return state;
 }
 
+function tenantBody(m: MockMembership | undefined) {
+  return {
+    id: m?.tenantId ?? "",
+    name: m?.tenantName ?? "",
+    slug: m?.tenantSlug ?? "",
+    status: "active",
+    sector: "general",
+    defaultCurrency: "TRY",
+    locale: "tr-TR",
+    timeZone: "Europe/Istanbul",
+    role: m?.role ?? "owner",
+    logoObjectPath: null,
+    taxNumber: null,
+    taxOffice: null,
+    phone: null,
+  };
+}
+
 export const defaultSettings = {
   negativeStockPolicy: "block",
   salesCanApproveOrders: false,
@@ -160,6 +192,8 @@ export const defaultSettings = {
   staffCanAssignBarcode: false,
   staffCanApproveReceipt: false,
   require2fa: false,
+  defaultTaxRate: 20,
+  pricesIncludeTaxDisplay: false,
 };
 
 /** Signed-in user with the given memberships; the first one is selected when there is only one. */
