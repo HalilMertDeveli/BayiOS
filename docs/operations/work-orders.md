@@ -51,11 +51,11 @@ Durumlar: `NOT_STARTED · READY · IN_PROGRESS · BLOCKED · IN_REVIEW · CI_FAI
 | 04 | Identity ve tenancy | A | #11, #12, #15 (izolasyon testleri) | 01 | P0 | DONE (PR #67) · takip: #68 idempotency IN_PROGRESS, #69 K/O izinleri NOT_STARTED |
 | 05 | Next.js web platformu | B | #9 (kabuk), #13 | 02, 04 (gerçek auth için) | P1 | Kabuk DONE (PR #65) · #13 READY (Supabase Auth ortamına bağlı) |
 | 06 | Flutter temeli | C | #7 (mobil kısmı), #15 | 01 | P2 | BLOCKED (Flutter/Android SDK yok — #61) |
-| 07 | Katalog ve varyantlar | D | #14, #16–#20 | 04 | P1 | IN_PROGRESS (#16, #17) |
+| 07 | Katalog ve varyantlar | D | #14, #16–#20 | 04 | P1 | DONE (#75, #77) · #18 web ekranları NOT_STARTED · #20 performans NOT_STARTED |
 | 08 | Toplu import motoru | D | #21–#25 | 07 | P1 | NOT_STARTED |
-| 09 | Inventory ledger ve rezervasyon | D | #26, #27, #30 | 04, 07 (kimlik sözleşmesi) | P0 | NOT_STARTED |
+| 09 | Inventory ledger ve rezervasyon | D | #26, #27, #30 | 04, 07 (kimlik sözleşmesi) | P0 | DONE (#80) |
 | 10 | Depo yönetimi | D/C | #28, #29, #36–#39, #41–#43 | 09, 11 (picking) | P1 | NOT_STARTED |
-| 11 | Sipariş ve fiyatlandırma | A | #31–#35 | 07, 09 | P1 | NOT_STARTED |
+| 11 | Sipariş ve fiyatlandırma | A | #31–#35, #78 | 07, 09 | P1 | #31 + #78 IN_PROGRESS · #32–#35 sıradaki |
 | 12 | AI WhatsApp ayrıştırıcı | A | #46–#50 | 07, 11 (taslak sözleşmesi) | P2 | NOT_STARTED · #46 (veri sözleşmesi + sentetik küme) 07 sonrası erken başlayabilir |
 | 13 | Bayi portalı | B/A | yeni issue açılacak (MVP sonrası) | 04, 07, 09, 11 | P3 | NOT_STARTED |
 | 14 | SaaS entitlements | A/B | #51, #52 (asgari kısmı W3'te, bkz. ROADMAP notu) | 04 | P2 | NOT_STARTED |
