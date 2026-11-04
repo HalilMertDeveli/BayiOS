@@ -1,0 +1,47 @@
+name: ci-gate
+
+# Single required status check for PRs into preview/main (issue #71). It always runs, waits for every other
+# workflow triggered by this PR's head commit (and non-Actions checks such as the CodeQL alert check), and fails if
+# any did not succeed. Path-filtered workflows that did not start (e.g. ci-container on a web-only PR) are
+# legitimately skipped. Logic: infra/ci/ci-gate.sh. Read-only token; no third-party actions.
+#
+# If a gated workflow is re-run after a failure, re-run this workflow too (it does not watch for re-runs).
+
+on:
+  pull_request:
+    branches: [preview, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    # Keep this name stable: "ci gate" is the check to mark as required in the preview/main rulesets.
+    name: ci gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: infra/ci
+
+      - name: Wait for all PR workflows and checks
+        run: bash infra/ci/ci-gate.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          SELF_RUN_ID: ${{ github.run_id }}
+          SELF_WORKFLOW_PATH: .github/workflows/ci-gate.yml
+          SELF_CHECK_NAME: ci gate
+          TIMEOUT: "3300"
