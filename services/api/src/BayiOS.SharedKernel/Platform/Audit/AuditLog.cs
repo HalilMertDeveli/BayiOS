@@ -26,6 +26,18 @@ public static class AuditActions
 
     /// <summary>A stock change that went below zero after an explicit confirmation under the <c>warn</c> policy.</summary>
     public const string InventoryNegativeStockConfirmed = "inventory.negative_stock_confirmed";
+
+    // Order lifecycle (inventory-and-orders §3.1).
+    public const string OrderCreated = "order.created";
+    public const string OrderApproved = "order.approved";
+    public const string OrderCancelled = "order.cancelled";
+    public const string OrderShipped = "order.shipped";
+
+    /// <summary>Short-close: the rest of a partially shipped order is closed and its reservations released.</summary>
+    public const string OrderRemainingClosed = "order.remaining_closed";
+
+    /// <summary>A line price or discount set outside the resolved list price (orders.price.override).</summary>
+    public const string OrderPriceOverridden = "order.price_overridden";
 }
 
 /// <summary>

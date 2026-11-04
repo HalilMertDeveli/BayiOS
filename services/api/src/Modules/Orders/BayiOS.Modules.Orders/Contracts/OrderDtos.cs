@@ -1,0 +1,169 @@
+namespace BayiOS.Modules.Orders.Contracts;
+
+// ---- Requests ----
+
+/// <param name="WarehouseId">Null = the tenant's default warehouse.</param>
+/// <param name="Source">manual (default), whatsapp_ai, import, mobile.</param>
+/// <param name="Currency">ISO 4217; null = the customer's currency, else the tenant default.</param>
+/// <param name="PricesIncludeTax">Null = the tax mode of the first resolved list price, else false.</param>
+public sealed record CreateOrderRequest(
+    Guid? CustomerId,
+    Guid? WarehouseId,
+    string? Source,
+    Guid? SourceReferenceId,
+    string? Currency,
+    bool? PricesIncludeTax,
+    DateOnly? RequestedDeliveryDate,
+    string? Notes,
+    IReadOnlyList<OrderLineInput>? Lines);
+
+/// <summary>
+/// One complete line. <paramref name="UnitPrice"/> null = the resolved list price; a value is a manual override
+/// (<c>orders.price.override</c>). Discount: percent or amount (not both); none given = the dealer group default.
+/// </summary>
+/// <param name="Id">An existing line of this order to keep (edits); null = new line.</param>
+public sealed record OrderLineInput(
+    Guid? Id,
+    Guid? VariantId,
+    decimal? Quantity,
+    decimal? UnitPrice,
+    decimal? DiscountPercent,
+    decimal? DiscountAmount);
+
+/// <summary>Merge patch of a draft. <c>lines</c>, when present, replaces all lines; prices are resolved again.</summary>
+public sealed record UpdateOrderRequest(
+    Guid? CustomerId,
+    Guid? WarehouseId,
+    bool? PricesIncludeTax,
+    DateOnly? RequestedDeliveryDate,
+    string? Notes,
+    IReadOnlyList<OrderLineInput>? Lines);
+
+/// <param name="ConfirmNegativeStock">Explicit confirmation under the <c>warn</c> negative-stock policy.</param>
+public sealed record ApproveOrderRequest(bool? ConfirmNegativeStock);
+
+/// <summary>Reason is required (PRD ORD-07 for cancel; reject and short-close likewise).</summary>
+public sealed record OrderReasonRequest(string? Reason);
+
+/// <param name="PackageCount">PRD ORD-15.</param>
+public sealed record ShipOrderRequest(
+    IReadOnlyList<ShipLineInput>? Lines,
+    string? Carrier,
+    string? TrackingNumber,
+    int? PackageCount);
+
+/// <param name="LocationId">Required only to pick a specific reserved location; null = the line's reservations in order.</param>
+public sealed record ShipLineInput(Guid? OrderLineId, decimal? Quantity, Guid? LocationId);
+
+// ---- Responses ----
+
+public sealed record TaxBreakdownResponse(decimal Rate, decimal TaxBase, decimal Tax, decimal Total);
+
+/// <param name="PricesIncludeTax">Whether unit prices, subtotal and discount include VAT.</param>
+/// <param name="NetTotal">Total excluding VAT.</param>
+/// <param name="HasUnpricedLines">True while any line has no price (such lines are not in the totals).</param>
+public sealed record OrderTotalsResponse(
+    bool PricesIncludeTax,
+    decimal Subtotal,
+    decimal DiscountTotal,
+    decimal TaxTotal,
+    decimal NetTotal,
+    decimal GrandTotal,
+    IReadOnlyList<TaxBreakdownResponse> TaxBreakdown,
+    bool HasUnpricedLines);
+
+public sealed record OrderResponse(
+    Guid Id,
+    string Number,
+    Guid CustomerId,
+    Guid WarehouseId,
+    string Status,
+    string FulfillmentStatus,
+    string Source,
+    Guid? SourceReferenceId,
+    string Currency,
+    DateOnly PriceDate,
+    DateOnly? RequestedDeliveryDate,
+    string? Notes,
+    OrderTotalsResponse Totals,
+    DateTimeOffset CreatedAt,
+    Guid? CreatedBy,
+    DateTimeOffset? SubmittedAt,
+    DateTimeOffset? ApprovedAt,
+    Guid? ApprovedBy,
+    DateTimeOffset? ShippedAt,
+    DateTimeOffset? CompletedAt,
+    DateTimeOffset? CancelledAt,
+    string? CancelReason,
+    long Version);
+
+/// <param name="PriceStatus"><c>priced</c> or <c>no_price</c>.</param>
+/// <param name="OpenQuantity">quantity − shipped − cancelled.</param>
+public sealed record OrderLineResponse(
+    Guid Id,
+    int LineNo,
+    Guid VariantId,
+    string Sku,
+    string Name,
+    string Unit,
+    decimal Quantity,
+    string PriceStatus,
+    decimal? UnitPrice,
+    string? PriceSource,
+    Guid? PriceListId,
+    bool PriceOverridden,
+    decimal? DiscountPercent,
+    decimal? DiscountAmount,
+    decimal TaxRate,
+    decimal? LineSubtotal,
+    decimal? LineDiscount,
+    decimal? LineTotal,
+    decimal ReservedQuantity,
+    decimal ShippedQuantity,
+    decimal CancelledQuantity,
+    decimal OpenQuantity);
+
+public sealed record OrderHistoryResponse(
+    Guid Id,
+    string Action,
+    string? FromStatus,
+    string ToStatus,
+    string FulfillmentStatus,
+    string? Reason,
+    Guid? ChangedBy,
+    DateTimeOffset ChangedAt);
+
+public sealed record OrderShipmentLineResponse(Guid Id, Guid OrderLineId, Guid VariantId, Guid? LocationId, decimal Quantity);
+
+public sealed record OrderShipmentResponse(
+    Guid Id,
+    string? Carrier,
+    string? TrackingNumber,
+    int? PackageCount,
+    DateTimeOffset ShippedAt,
+    Guid? ShippedBy,
+    IReadOnlyList<OrderShipmentLineResponse> Lines);
+
+public sealed record OrderDetailResponse(
+    OrderResponse Order,
+    IReadOnlyList<OrderLineResponse> Lines,
+    IReadOnlyList<OrderHistoryResponse> History,
+    IReadOnlyList<OrderShipmentResponse> Shipments);
+
+public sealed record OrderSummaryResponse(
+    Guid Id,
+    string Number,
+    Guid CustomerId,
+    Guid WarehouseId,
+    string Status,
+    string FulfillmentStatus,
+    string Source,
+    string Currency,
+    decimal GrandTotal,
+    int LineCount,
+    DateTimeOffset CreatedAt,
+    long Version);
+
+public sealed record OrderPageInfo(string? NextCursor, bool HasMore, int Limit);
+
+public sealed record OrderPageResponse(IReadOnlyList<OrderSummaryResponse> Items, OrderPageInfo Page);
