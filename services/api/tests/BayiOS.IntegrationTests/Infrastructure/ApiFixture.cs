@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using BayiOS.IntegrationTests.Infrastructure;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
+using BayiOS.Modules.Platform.Persistence;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
@@ -55,8 +56,17 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
 
         var options = new DbContextOptionsBuilder<IdentityDbContext>();
         IdentityDbContext.Configure(options, MigratorConnectionString);
-        await using var db = new IdentityDbContext(options.Options, new RequestContext());
-        await db.Database.MigrateAsync();
+        await using (var db = new IdentityDbContext(options.Options, new RequestContext()))
+        {
+            await db.Database.MigrateAsync();
+        }
+
+        var platformOptions = new DbContextOptionsBuilder<PlatformDbContext>();
+        PlatformDbContext.Configure(platformOptions, MigratorConnectionString);
+        await using (var platform = new PlatformDbContext(platformOptions.Options))
+        {
+            await platform.Database.MigrateAsync();
+        }
     }
 
     public override async ValueTask DisposeAsync()

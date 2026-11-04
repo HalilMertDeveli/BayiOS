@@ -107,13 +107,14 @@
 
 ## 7. Idempotency
 
-- `Idempotency-Key` zorunlu: tüm oluşturma `POST`'ları ve durum geçişleri. Eksikse `428`.
+- `Idempotency-Key` zorunlu: tüm oluşturma `POST`'ları ve durum geçişleri. Eksikse `428`; 100 karakterden uzun veya birden çok değer → `400 request.malformed`.
+- **Uygulama (#68):** uç tanımında tek çağrı — `.RequireIdempotencyKey()` (`BayiOS.SharedKernel`, `WithUnitOfWork` ile birlikte). Filtre istek UnitOfWork transaction'ı **içinde** çalışır (ilk taslaktaki "ayrı kısa transaction" yerine): anahtar kaydı ile iş yazımı birlikte commit olur ya da birlikte geri alınır; çökme sonrası `in_progress`'te takılı anahtar kalmaz.
 - Akış:
-  1. `INSERT INTO platform.idempotency_keys (tenant_id, key, user_id, method, path, request_hash, status='in_progress') ON CONFLICT DO NOTHING` — **iş transaction'ından ayrı, kısa bir transaction'da**.
-  2. Çakışma varsa: kayıt `completed` ve hash aynı → kayıtlı yanıtı döndür (`Idempotent-Replayed: true`); hash farklı → `422 idempotency.key_reused`; `in_progress` → `409 idempotency.in_progress` + `Retry-After`.
-  3. İş transaction'ı commit olunca yanıt kaydedilir (`status='completed'`, durum kodu, gövde, başlıklar). İş transaction'ı başarısız olur ve sonuç 5xx ise anahtar silinir (yeniden denenebilir); 4xx iş hataları kaydedilir (aynı istek aynı sonucu alır).
-- Saklama: 24 saat; temizlik job'ı.
-- Anahtar kapsamı: (tenant_id, key); aynı anahtarın farklı kullanıcı/uç ile kullanımı `422`.
+  1. `INSERT INTO platform.idempotency_keys (…, status='in_progress') ON CONFLICT (kapsam, key) DO UPDATE … WHERE expires_at <= now` — süresi dolmuş anahtar yeni sayılır. Aynı anahtarla eşzamanlı ikinci istek unique index üzerinde ilk transaction bitene kadar bekler (`lock_timeout` 5 sn), sonra kayıtlı yanıtı alır; süre aşılırsa `409 idempotency.in_progress` + `Retry-After`.
+  2. Canlı kayıt varsa: farklı kullanıcı veya farklı hash (metot + gerçek yol + bağlanmış JSON gövde, SHA-256) → `422 idempotency.key_reused`; aynı → kayıtlı yanıt birebir (durum, `Content-Type`/`Location`/`ETag`, gövde baytları) + `Idempotent-Replayed: true`.
+  3. Handler 2xx dönerse yanıt aynı transaction'da kaydedilir (`status='completed'`). 4xx/5xx sonuçlarda transaction (anahtar dahil) geri alınır: hata yanıtları **saklanmaz**, aynı anahtarla düzeltilmiş istek yeniden çalışır (iş yazımı da geri alındığından çift etki olmaz).
+- Saklama: 24 saat (`expires_at`); temizlik job'ı henüz yok (job altyapısı gelince `ix_idempotency_keys_expires_at` ile silinecek).
+- Anahtar kapsamı: tenant'lı uçlarda (tenant_id, key); tenant'sız uçlarda (ör. `POST /tenants`) (user_id, key). Aynı anahtarın farklı kullanıcı/uç ile kullanımı `422`.
 
 ## 8. Optimistic concurrency (ETag / If-Match)
 

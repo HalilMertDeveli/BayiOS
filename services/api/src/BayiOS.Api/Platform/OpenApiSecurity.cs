@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using BayiOS.Api.Platform.Tenancy;
+using BayiOS.SharedKernel.Platform.Idempotency;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.OpenApi;
@@ -51,6 +52,20 @@ internal static class OpenApiSecurity
                     Required = true,
                     Description = "Active tenant; must be one of the caller's active memberships.",
                     Schema = new OpenApiSchema { Type = JsonSchemaType.String, Format = "uuid" },
+                });
+            }
+
+            if (metadata.OfType<IdempotencyMetadata>().Any())
+            {
+                operation.Parameters ??= [];
+                operation.Parameters.Add(new OpenApiParameter
+                {
+                    Name = IdempotencyMetadata.HeaderName,
+                    In = ParameterLocation.Header,
+                    Required = true,
+                    Description = "Client-generated key (UUID recommended). Retries with the same key and body replay the "
+                        + "stored success response with Idempotent-Replayed: true for 24 hours.",
+                    Schema = new OpenApiSchema { Type = JsonSchemaType.String, MinLength = 1, MaxLength = IdempotencyMetadata.MaxKeyLength },
                 });
             }
 
