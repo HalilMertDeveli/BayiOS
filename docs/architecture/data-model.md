@@ -235,6 +235,10 @@ Gösterim: **PK**, FK (modül içi, bileşik tenant FK), UQ = unique, IX = index
 
 ### 5.4 `pricing`
 
+> **Uygulanan durum (migration `InitialPricing`, #78):** `price_lists` ve `price_list_items` oluşturuldu; ENABLE + FORCE RLS (std), EF global query filter, `bayios_app`: listelerde `SELECT/INSERT/UPDATE` (**DELETE yok**, liste `status = archived` ile arşivlenir), kalemlerde ayrıca `DELETE`. Ek kolonlar (§5.13): `base_price_list_id` (bileşik tenant FK, aynı tablo) + `discount_percent numeric(5,2)` — ikisi birlikte set edilir (CHECK), taban liste aynı para birimi ve KDV modunda, kendisi türetilmemiş bir satış listesi olmalıdır (tek seviye; zincir/döngü yok). `status` (active, inactive, archived) + `archived_at`; varsayılan liste yalnızca aktif satış listesi olabilir (CHECK) ve tenant + para birimi başına tektir (kısmi UQ); bir para biriminin ilk satış listesi varsayılan olur. Ad UQ `(tenant_id, name)` arşivlenmemişlerde. Kalem UQ adı 63 bayt sınırı nedeniyle `ux_price_list_items_tenant_id_list_id_variant_id_min_qty`. `purchase` listeleri yalnızca koşulsuz `prices.read.cost` iznine görünür.
+>
+> **Çözümleme (`IPriceResolver`, Pricing.Contracts):** satır başına sıra: müşteri listesi (`customers.price_list_id`) → bayi grubu listesi (`dealer_groups.price_list_id`, grup arşivli değilse) → tenant varsayılan satış listesi (istenen para biriminde). Her listede önce en büyük `min_quantity ≤ miktar` kalemi (`item`), yoksa liste türetilmişse taban listenin kalemi × (100 − yüzde) / 100, 4 haneye yarım-sıfırdan-uzağa yuvarlanır (`base_discount`). Aktif olmayan, tarih penceresi dışındaki, satış olmayan ya da başka para birimindeki listeler atlanır. Hiçbiri fiyat vermezse satır `no_price` ve `unitPrice = null` (asla 0). KDV oranı Catalog ürününün `tax_rate`'idir; `pricesIncludeTax` listeden gelir. `POST /api/v1/pricing/quote` (`prices.read.sell`) aynı servisi çağırır.
+
 **pricing.price_lists** — RLS: std · UQ (tenant_id, id)
 | id · name · kind (sales, purchase) · currency char(3) · is_default bool · prices_include_tax bool · valid_from date NULL · valid_to date NULL · status · row_version |
 | UQ (tenant_id, currency) WHERE is_default AND kind='sales' (kısmi) · CHECK valid_to ≥ valid_from |
@@ -244,6 +248,8 @@ Gösterim: **PK**, FK (modül içi, bileşik tenant FK), UQ = unique, IX = index
 | UQ (tenant_id, price_list_id, variant_id, min_quantity) · IX (tenant_id, variant_id) |
 
 ### 5.5 `customers`
+
+> **Uygulanan durum (migration `InitialCustomers`, #31):** `dealer_groups`, `customers`, `customer_addresses` oluşturuldu; ENABLE + FORCE RLS (std), EF global query filter, `bayios_app`: grup ve müşterilerde `SELECT/INSERT/UPDATE` (**DELETE yok** — arşiv veya anonimleştirme), adreslerde ayrıca `DELETE`. `dealer_groups.status` (active, archived) + `archived_at`; ad benzersizliği `UQ (tenant_id, lower(name)) WHERE status <> 'archived'` (ifade index'i, SQL ile). `customers` ek kolonlar: `contact_name`, `notes`, `anonymized_at`; `tax_number` CHECK `^[0-9]{10,11}$`; `payment_term_days` 0–3650; `currency` NULL = tenant para birimi; `whatsapp_numbers` E.164 (en çok 5). `attributes` (özel alanlar) **henüz yok** (Catalog `CustomFieldValidator` sözleşmesi gerekiyor). Arama: `name` pg_trgm GIN (ILIKE) + kod ILIKE + vergi no / telefon / WhatsApp tam eşleşme; liste keyset `(name, id)`. Adres: tür başına ilk adres varsayılan olur; varsayılan silinirse en eski adres varsayılan olur. Bayi grubu / müşteri fiyat listesi ataması ayrıca `pricelists.assign` ister. Kişisel veri (data-policy §2, §5): listelerde 11 haneli vergi no maskelenir; `POST /customers/{id}/anonymize` (owner/admin) kişisel alanları siler, adresleri kaldırır, müşteriyi arşivler.
 
 **customers.dealer_groups** — RLS: std · UQ (tenant_id, lower(name)), UQ (tenant_id, id)
 | id · name · price_list_id uuid NULL (→ pricing) · default_discount_percent numeric(5,2) NULL |

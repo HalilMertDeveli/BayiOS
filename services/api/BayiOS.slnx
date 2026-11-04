@@ -7,6 +7,9 @@
   <Folder Name="/src/Modules/Catalog/">
     <Project Path="src/Modules/Catalog/BayiOS.Modules.Catalog/BayiOS.Modules.Catalog.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Customers/">
+    <Project Path="src/Modules/Customers/BayiOS.Modules.Customers/BayiOS.Modules.Customers.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Identity/">
     <Project Path="src/Modules/Identity/BayiOS.Modules.Identity/BayiOS.Modules.Identity.csproj" />
   </Folder>
@@ -15,6 +18,9 @@
   </Folder>
   <Folder Name="/src/Modules/Platform/">
     <Project Path="src/Modules/Platform/BayiOS.Modules.Platform/BayiOS.Modules.Platform.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Pricing/">
+    <Project Path="src/Modules/Pricing/BayiOS.Modules.Pricing/BayiOS.Modules.Pricing.csproj" />
   </Folder>
   <Folder Name="/src/Modules/Warehouse/">
     <Project Path="src/Modules/Warehouse/BayiOS.Modules.Warehouse/BayiOS.Modules.Warehouse.csproj" />

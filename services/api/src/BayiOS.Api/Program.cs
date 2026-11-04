@@ -4,8 +4,10 @@ using BayiOS.Api.Platform.Jobs;
 using BayiOS.Api.Platform.Persistence;
 using BayiOS.Api.Platform.Tenancy;
 using BayiOS.Modules.Catalog;
+using BayiOS.Modules.Customers;
 using BayiOS.Modules.Identity;
 using BayiOS.Modules.Inventory;
+using BayiOS.Modules.Pricing;
 using BayiOS.Modules.Warehouse;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,6 +36,9 @@ builder.Services.AddInventoryModule();
 builder.Services.AddWarehouseModule();
 builder.Services.AddInventoryPorts();
 builder.Services.AddPlatformRuntime();
+builder.Services.AddPricingModule();
+builder.Services.AddCustomersModule();
+builder.Services.AddPricingPorts();
 
 var app = builder.Build();
 
@@ -58,6 +63,8 @@ app.MapCatalogModule();
 app.MapInventoryModule();
 app.MapWarehouseModule();
 app.MapPlatformRuntime();
+app.MapPricingModule();
+app.MapCustomersModule();
 
 app.Run();
 
