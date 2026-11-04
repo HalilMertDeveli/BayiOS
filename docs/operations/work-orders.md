@@ -46,12 +46,12 @@ Durumlar: `NOT_STARTED · READY · IN_PROGRESS · BLOCKED · IN_REVIEW · CI_FAI
 | Job | Ad | Hat | Issue'lar | Bağımlılık | Öncelik | Durum |
 |---|---|---|---|---|---|---|
 | 01 | Ürün mimarisi ve sözleşmeler | A | #4 (kapalı), #10 (auth sözleşmesi kısmı) | — | P0 | DONE (Phase 0 belgeleri + ADR 0001–0010); API sözleşmesi uç bazında JOB 04/07/09/11 ile büyür |
-| 02 | UX/UI tasarım sistemi | B | #9 | 01 | P2 | IN_PROGRESS |
-| 03 | DevOps ve CI temeli | F | #8, #10 (preview kısmı) | — | P0 | CI DONE (PR #62) · container/preview kısmı IN_PROGRESS |
-| 04 | Identity ve tenancy | A | #11, #12, #15 (izolasyon testleri) | 01 | P0 | IN_PROGRESS (#11, #12) |
-| 05 | Next.js web platformu | B | #9 (kabuk), #13 | 02, 04 (gerçek auth için) | P1 | #9 kabuğu IN_PROGRESS · #13 04'e bağlı |
+| 02 | UX/UI tasarım sistemi | B | #9 | 01 | P2 | DONE (PR #65; Figma → #66) |
+| 03 | DevOps ve CI temeli | F | #8, #10 (preview kısmı) | — | P0 | DONE (PR #62, #64) · ci-gate + migration CI IN_PROGRESS (#70, #71) · preview URL BLOCKED (sahip onayı) |
+| 04 | Identity ve tenancy | A | #11, #12, #15 (izolasyon testleri) | 01 | P0 | DONE (PR #67) · takip: #68 idempotency IN_PROGRESS, #69 K/O izinleri NOT_STARTED |
+| 05 | Next.js web platformu | B | #9 (kabuk), #13 | 02, 04 (gerçek auth için) | P1 | Kabuk DONE (PR #65) · #13 READY (Supabase Auth ortamına bağlı) |
 | 06 | Flutter temeli | C | #7 (mobil kısmı), #15 | 01 | P2 | BLOCKED (Flutter/Android SDK yok — #61) |
-| 07 | Katalog ve varyantlar | D | #14, #16–#20 | 04 | P1 | NOT_STARTED |
+| 07 | Katalog ve varyantlar | D | #14, #16–#20 | 04 | P1 | IN_PROGRESS (#16, #17) |
 | 08 | Toplu import motoru | D | #21–#25 | 07 | P1 | NOT_STARTED |
 | 09 | Inventory ledger ve rezervasyon | D | #26, #27, #30 | 04, 07 (kimlik sözleşmesi) | P0 | NOT_STARTED |
 | 10 | Depo yönetimi | D/C | #28, #29, #36–#39, #41–#43 | 09, 11 (picking) | P1 | NOT_STARTED |
@@ -101,16 +101,20 @@ Kritik yol: **04 → 07 → 09 → 11 → 10 → (06 mobil depo)**. Bu zincir d�
 - CI loglarından yalnızca başarısız adımın kuyruğu okunur.
 - Model: Şef ve P0 işler (auth/tenancy, stok, sipariş, güvenlik) Opus 5.5. Daha ucuz model kullanımı yalnızca ürün
   sahibi onayıyla.
-- Ölçüm: Bu ortam Şef'e oturum bazlı token telemetrisi vermiyor; ajan başına gerçek tüketim görülemiyor. Raporlarda
-  tahmini değer ölçüm gibi sunulmaz; yalnızca çalıştırılan ajan sayısı ve kapsamı raporlanır.
+- Ölçüm: Ajan bitiş bildirimleri ajan başına gerçek token sayısını verir; plan limiti doluluğu (haftalık %) uygulama
+  üzerinden okunur. Para cinsinden maliyet görülemez; tahmini değer ölçüm gibi sunulmaz.
+  Dalga 1 ölçümü: 3 ajan ≈ 676k token (F 134k, B 218k, A 324k); haftalık limit %62 → %63.
 
-## 8. Aktif atamalar (Dalga 1)
+## 8. Aktif atamalar
+
+Dalga 1 (DONE): PR #64 (container/preview hazırlığı), #65 (tasarım sistemi + kabuk), #67 (auth + tenancy).
 
 | Hat | Job | Issue | Branch | Ajan | Başlangıç |
 |---|---|---|---|---|---|
-| A | 04 | #11, #12, #10 (DB health) | `feature/12-auth-tenancy-foundation` | backend-lead (worktree) | 2026-11-04 |
-| B | 02 + 05 kabuk | #9 | `feature/9-design-system-shell` | frontend-lead (worktree) | 2026-11-04 |
-| F | 03 | #10 (container + preview hazırlığı) | `chore/10-container-preview` | devops-engineer (worktree) | 2026-11-04 |
-| C | 06 | #7 (mobil) | — | — | BLOCKED: Flutter SDK |
+| A | 04 takip | #68 Idempotency-Key | `feature/68-idempotency-key` | backend (worktree) | 2026-11-04 |
+| D | 07 | #16, #17 | `feature/16-catalog-core` | catalog backend + DB (worktree) | 2026-11-04 |
+| F | 03 | #70, #71 | `chore/70-71-ci-gate-migrations` | devops (worktree) | 2026-11-04 |
+| C | 06 | #7 | — | — | BLOCKED: Flutter SDK |
 
-Migration sahibi bu dalgada Hat A ajanıdır; 07/09 bu PR `preview`'e girmeden başlamaz.
+Migration'lar modül içinde (ADR 0005): Catalog ajanı yalnızca Catalog migration'larını, #68 ajanı yalnızca platform migration'ını yazar.
+Ortak dosyalar (`Program.cs`, `BayiOS.slnx`, `Directory.Packages.props`, `openapi.json`): ikinci birleşen PR `preview`'i alıp çakışmayı çözer.
