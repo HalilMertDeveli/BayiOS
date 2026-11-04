@@ -12,10 +12,10 @@
 #
 # Secrets are NEVER written here. They are set on the Fly app (`fly secrets set NAME=...`)
 # by the owner or by a GitHub Environment "preview" deploy job. Required secret NAMES:
-#   DATABASE_URL            -> bayios_app role (NOBYPASSRLS, not table owner); never postgres/service-role
-#   SUPABASE_URL, SUPABASE_JWKS_URL, SUPABASE_JWT_ISSUER, SUPABASE_JWT_AUDIENCE
-#   CORS_ALLOWED_ORIGINS    -> preview web origin(s) only (exact binding to API config is owned by the API team)
-# NOT on the API app: DATABASE_MIGRATION_URL (bayios_migrator) — used only by the CI migration step.
+#   ConnectionStrings__Default -> bayios_app role (NOBYPASSRLS, not table owner); never postgres/service-role
+#   Auth__Authority, Auth__Audience, optional Auth__JwksUrl (Supabase Auth JWKS)
+#   Cors__AllowedOrigins__0..n -> preview web origin(s) only (array binding, one variable per origin)
+# NOT on the API app: ConnectionStrings__Migrator (bayios_migrator) — used only by the CI migration step.
 
 app = "bayios-api-preview"          # placeholder; final name chosen at app creation (globally unique)
 primary_region = "fra"              # Frankfurt — same city as Supabase eu-central-1

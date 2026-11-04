@@ -1,0 +1,154 @@
+using System.Data.Common;
+using BayiOS.Modules.Identity.Domain;
+using BayiOS.SharedKernel.Authorization;
+using BayiOS.SharedKernel.Persistence;
+using BayiOS.SharedKernel.Tenancy;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
+
+namespace BayiOS.Modules.Identity.Infrastructure.Persistence;
+
+internal sealed class IdentityDbContext : DbContext, ITenantScopedDbContext
+{
+    public const string Schema = "identity";
+
+    private static readonly TenantGuardInterceptor TenantGuard = new();
+
+    private readonly IRequestContext _requestContext;
+    private readonly UnitOfWork? _unitOfWork;
+
+    public IdentityDbContext(DbContextOptions<IdentityDbContext> options, IRequestContext requestContext, UnitOfWork? unitOfWork = null)
+        : base(options)
+    {
+        _requestContext = requestContext;
+        _unitOfWork = unitOfWork;
+    }
+
+    public DbSet<Tenant> Tenants => Set<Tenant>();
+
+    public DbSet<Membership> Memberships => Set<Membership>();
+
+    public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
+
+    public DbSet<TenantSettings> TenantSettings => Set<TenantSettings>();
+
+    public Guid? CurrentTenantId => _requestContext.TenantId;
+
+    public Guid? CurrentUserId => _requestContext.UserId;
+
+    /// <summary>Shared configuration for runtime, design-time and test contexts.</summary>
+    public static void Configure(DbContextOptionsBuilder builder, DbConnection connection)
+    {
+        builder.UseNpgsql(connection, ConfigureNpgsql);
+        Finish(builder);
+    }
+
+    public static void Configure(DbContextOptionsBuilder builder, string connectionString)
+    {
+        builder.UseNpgsql(connectionString, ConfigureNpgsql);
+        Finish(builder);
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        // Join the request transaction so EF does not try to open its own (nested transactions are not supported).
+        if (_unitOfWork?.Transaction is { } transaction && Database.CurrentTransaction is null)
+        {
+            await Database.UseTransactionAsync(transaction, cancellationToken);
+        }
+
+        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess) =>
+        throw new NotSupportedException("Use SaveChangesAsync so the request transaction is joined.");
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema(Schema);
+
+        modelBuilder.Entity<Tenant>(tenant =>
+        {
+            tenant.ToTable("tenants", t =>
+            {
+                t.HasCheckConstraint("ck_tenants_status", "status IN ('active', 'suspended', 'closed')");
+                t.HasCheckConstraint("ck_tenants_sector", "sector IN ('motorcycle_parts', 'led_electronics', 'general')");
+            });
+            tenant.HasKey(t => t.Id);
+            tenant.Property(t => t.Name).IsRequired();
+            tenant.Property(t => t.Slug).IsRequired();
+            tenant.HasIndex(t => t.Slug).IsUnique().HasDatabaseName("ux_tenants_slug");
+            tenant.Property(t => t.DefaultCurrency).HasColumnType("char(3)");
+            tenant.Property(t => t.RowVersion).IsConcurrencyToken();
+
+            // Mirrors the RLS exception: own context, or a tenant the caller is a member of.
+            tenant.HasQueryFilter(t => t.Id == CurrentTenantId
+                || Memberships.Any(m => m.TenantId == t.Id && m.UserId == CurrentUserId));
+        });
+
+        modelBuilder.Entity<Membership>(membership =>
+        {
+            membership.ToTable("memberships", t =>
+            {
+                t.HasCheckConstraint("ck_memberships_role", RoleCheck());
+                t.HasCheckConstraint("ck_memberships_status", "status IN ('invited', 'active', 'disabled')");
+            });
+            membership.HasKey(m => m.Id);
+            membership.HasOne<Tenant>().WithMany().HasForeignKey(m => m.TenantId).OnDelete(DeleteBehavior.Restrict);
+            membership.HasIndex(m => new { m.TenantId, m.UserId }).IsUnique();
+            membership.HasIndex(m => new { m.UserId, m.Status });
+
+            // Tenant resolution runs before a tenant is chosen, so the caller's own rows stay visible.
+            membership.HasQueryFilter(m => m.TenantId == CurrentTenantId || m.UserId == CurrentUserId);
+        });
+
+        modelBuilder.Entity<UserProfile>(profile =>
+        {
+            profile.ToTable("user_profiles");
+            profile.HasKey(p => p.UserId);
+            profile.Property(p => p.UserId).ValueGeneratedNever();
+            profile.HasQueryFilter(p => p.UserId == CurrentUserId
+                || Memberships.Any(m => m.UserId == p.UserId && m.TenantId == CurrentTenantId));
+        });
+
+        modelBuilder.Entity<TenantSettings>(settings =>
+        {
+            settings.ToTable("tenant_settings", t =>
+            {
+                t.HasCheckConstraint("ck_tenant_settings_negative_stock_policy", "negative_stock_policy IN ('block', 'warn', 'allow')");
+                t.HasCheckConstraint("ck_tenant_settings_sales_max_discount", "sales_max_discount_percent BETWEEN 0 AND 100");
+            });
+            settings.HasKey(s => s.TenantId);
+            settings.Property(s => s.TenantId).ValueGeneratedNever();
+            settings.HasOne<Tenant>().WithOne().HasForeignKey<TenantSettings>(s => s.TenantId).OnDelete(DeleteBehavior.Restrict);
+            settings.Property(s => s.SalesMaxDiscountPercent).HasPrecision(5, 2);
+            settings.Property(s => s.RowVersion).IsConcurrencyToken();
+            settings.HasQueryFilter(s => s.TenantId == CurrentTenantId);
+        });
+    }
+
+    private static string RoleCheck() =>
+        $"role IN ({string.Join(", ", Roles.All.Select(r => $"'{r}'"))})";
+
+    private static void ConfigureNpgsql(Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.NpgsqlDbContextOptionsBuilder npgsql) =>
+        npgsql.MigrationsHistoryTable("__ef_migrations_history", Schema);
+
+    private static void Finish(DbContextOptionsBuilder builder) =>
+        builder.UseSnakeCaseNamingConvention().AddInterceptors(TenantGuard);
+}
+
+/// <summary>
+/// For <c>dotnet ef</c>. Applying migrations uses the schema-owner role: set <c>ConnectionStrings__Migrator</c>
+/// (never the runtime <c>bayios_app</c> connection). Adding migrations needs no database.
+/// </summary>
+internal sealed class IdentityDesignTimeDbContextFactory : IDesignTimeDbContextFactory<IdentityDbContext>
+{
+    public IdentityDbContext CreateDbContext(string[] args)
+    {
+        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Migrator")
+            ?? "Host=localhost;Database=bayios;Username=bayios_migrator";
+        var builder = new DbContextOptionsBuilder<IdentityDbContext>();
+        IdentityDbContext.Configure(builder, connectionString);
+        return new IdentityDbContext(builder.Options, new RequestContext());
+    }
+}

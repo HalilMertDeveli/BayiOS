@@ -1,8 +1,12 @@
 using BayiOS.Api.Platform;
+using BayiOS.Api.Platform.Auth;
+using BayiOS.Api.Platform.Persistence;
+using BayiOS.Api.Platform.Tenancy;
+using BayiOS.Modules.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddOpenApi("v1");
+builder.Services.AddOpenApi("v1", options => options.AddBayiOsSecurity());
 builder.Services.AddProblemDetails(options =>
 {
     options.CustomizeProblemDetails = context =>
@@ -15,14 +19,23 @@ builder.Services.AddCors(options =>
         .WithOrigins(allowedOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
-        .WithExposedHeaders(CorrelationId.HeaderName)));
+        .WithExposedHeaders(CorrelationId.HeaderName, "ETag", "Location")));
+
+builder.Services.AddDatabase();
+builder.Services.AddBayiOsAuthentication();
+builder.Services.AddPermissionAuthorization();
+builder.Services.AddIdentityModule();
 
 var app = builder.Build();
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.UseRouting();
 app.UseCors();
+app.UseAuthentication();
+app.UseMiddleware<TenantContextMiddleware>();
+app.UseAuthorization();
 
 if (!app.Environment.IsProduction())
 {
@@ -30,6 +43,8 @@ if (!app.Environment.IsProduction())
 }
 
 app.MapPlatformEndpoints();
+app.MapReadiness();
+app.MapIdentityModule();
 
 app.Run();
 

@@ -22,8 +22,10 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_NOLOGO=1
 
 # Restore layer: only inputs that affect package resolution, so source edits do not invalidate it.
-COPY global.json Directory.Build.props Directory.Packages.props ./
+COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
 COPY src/BayiOS.Api/BayiOS.Api.csproj src/BayiOS.Api/
+COPY src/BayiOS.SharedKernel/BayiOS.SharedKernel.csproj src/BayiOS.SharedKernel/
+COPY src/Modules/Identity/BayiOS.Modules.Identity/BayiOS.Modules.Identity.csproj src/Modules/Identity/BayiOS.Modules.Identity/
 RUN dotnet restore src/BayiOS.Api/BayiOS.Api.csproj
 
 COPY src/ src/

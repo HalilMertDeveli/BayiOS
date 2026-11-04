@@ -1,10 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
-using Microsoft.AspNetCore.Mvc.Testing;
+using BayiOS.IntegrationTests.Infrastructure;
 
 namespace BayiOS.IntegrationTests.Platform;
 
-public class PlatformEndpointsTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public class PlatformEndpointsTests(ApiFixture factory)
 {
     private readonly HttpClient _client = factory.CreateClient();
 

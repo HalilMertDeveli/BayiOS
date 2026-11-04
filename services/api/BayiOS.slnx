@@ -1,6 +1,11 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/BayiOS.Api/BayiOS.Api.csproj" />
+    <Project Path="src/BayiOS.SharedKernel/BayiOS.SharedKernel.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Identity/">
+    <Project Path="src/Modules/Identity/BayiOS.Modules.Identity/BayiOS.Modules.Identity.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BayiOS.IntegrationTests/BayiOS.IntegrationTests.csproj" />
