@@ -1,5 +1,6 @@
 using BayiOS.Api.Platform;
 using BayiOS.Api.Platform.Auth;
+using BayiOS.Api.Platform.Jobs;
 using BayiOS.Api.Platform.Persistence;
 using BayiOS.Api.Platform.Tenancy;
 using BayiOS.Modules.Catalog;
@@ -32,6 +33,7 @@ builder.Services.AddCatalogModule();
 builder.Services.AddInventoryModule();
 builder.Services.AddWarehouseModule();
 builder.Services.AddInventoryPorts();
+builder.Services.AddPlatformRuntime();
 
 var app = builder.Build();
 
@@ -55,6 +57,7 @@ app.MapIdentityModule();
 app.MapCatalogModule();
 app.MapInventoryModule();
 app.MapWarehouseModule();
+app.MapPlatformRuntime();
 
 app.Run();
 

@@ -25,6 +25,17 @@ Arka plan işleri: Excel/CSV import doğrulama ve içe aktarma, AI ayrıştırma
 4. Worker'lar MVP'de API sürecinde `BackgroundService` olarak çalışır; yapılandırmayla kapatılıp aynı image ayrı "worker" container'ında çalıştırılabilir.
 5. Tek seferlik zamanlanmış işler (mutabakat, temizlik) job tablosuna `dedupe_key` (ör. `reconcile:2026-11-04`) ile yazan basit bir zamanlayıcı.
 
+## Uygulama notları (#79, 2026-11-05)
+- Tablolar `PlatformDbContext` migration'ı `AuditJobsOutbox` ile gelir (data-model §5.12). Çalışma zamanı: arayüzler `BayiOS.SharedKernel/Platform/Jobs` (`IBackgroundJobs`, `IOutbox`, `IJobHandler`, `IOutboxHandler`, `AddJobHandler<T>(type)`, `AddOutboxHandler<T>(messageType)`), uygulama `BayiOS.Api/Platform/Jobs` (ham SQL).
+- `IBackgroundJobs.EnqueueAsync` ve `IOutbox.PublishAsync` isteğin UnitOfWork transaction'ında yazar; tenant her zaman istek bağlamından gelir (çağıran veremez).
+- Durumlar: `queued → running → succeeded`; başarısız deneme `queued`'a `run_after = now() + BackoffBase × 2^(attempt-1)` (üst sınır `BackoffMax`) ile döner, `max_attempts` dolunca `dead` (Error log = alarm kancası). `failed` durumu kullanılmaz.
+- Worker yalnızca **handler'ı kayıtlı** tipleri alır (`type = ANY(...)`): ayrı worker container'ı / kısmi dağıtım başka tipteki işi çalmaz.
+- Handler, job'ın tenant'ıyla (kullanıcısız) kurulan yeni bir DI scope + UnitOfWork transaction'ında çalışır; `succeeded` işareti handler'ın yazmalarıyla **aynı** transaction'da commit edilir. Lease kaybedilmişse (başka worker'a geçmişse) sonuç geri alınır.
+- Outbox dağıtıcısı mesajı tüketicilere doğrudan çağırmaz: abone başına bir `platform.outbox_delivery` job'ı (dedupe = mesaj id + abone adı) yazıp mesajı aynı transaction'da `processed_at` ile işaretler; teslim böylece job kuyruğunun yeniden deneme, dead-letter ve tenant bağlamını kullanır. Abonesi olmayan mesaj yalnızca işaretlenir.
+- Zamanlayıcı: worker her `Jobs:MaintenanceInterval`'da (varsayılan 1 saat) `platform.idempotency_cleanup` job'ını aralık kovası `dedupe_key`'iyle yazar.
+- Yapılandırma `Jobs:*`: `Enabled` (varsayılan true; integration testlerinde false), `BatchSize`, `PollInterval`, `MaxIdleInterval`, `Lease`, `BackoffBase`, `BackoffMax`, `MaintenanceInterval`, `WorkerId`. Durdurmada alınmış ama bitmemiş işler deneme sayılmadan kuyruğa geri verilir.
+- `LISTEN/NOTIFY` uyandırması henüz yok (yalnızca polling); tamamlanan job/outbox kayıtlarının periyodik silinmesi henüz yok (index'ler hazır).
+
 ## Değerlendirilen alternatifler
 | Alternatif | Neden seçilmedi |
 |---|---|

@@ -1,5 +1,6 @@
 using BayiOS.Modules.Inventory.Contracts;
 using BayiOS.Modules.Inventory.Infrastructure.Persistence;
+using BayiOS.SharedKernel.Platform.Audit;
 using Npgsql;
 
 namespace BayiOS.Modules.Inventory.Application;
@@ -13,12 +14,14 @@ namespace BayiOS.Modules.Inventory.Application;
 /// movements and reservations,</item>
 /// <item>on any error rolls back to the savepoint, so a failed command leaves no partial change behind.</item>
 /// </list>
+/// Receipts, adjustments and confirmed negative stock are audited inside the same savepoint (threat-model §7).
 /// </summary>
 internal sealed class InventoryService(
     StockStore store,
     IWarehouseDirectory warehouses,
     IVariantDirectory variants,
-    INegativeStockPolicyProvider policies) : IInventoryService
+    INegativeStockPolicyProvider policies,
+    IAuditLog audit) : IInventoryService
 {
     public const int MaxLines = 500;
     public const int MaxReasonLength = 500;
@@ -104,6 +107,13 @@ internal sealed class InventoryService(
                 cancellationToken));
         }
 
+        await audit.RecordAsync(
+            new AuditEvent(AuditActions.InventoryReceiptPosted, "inventory_receipt", receiptId, new AuditChanges()
+                .Value("warehouseId", warehouse!.Id)
+                .Value("lineCount", movements.Count)
+                .Value("totalQuantity", movements.Sum(m => m.Quantity))
+                .ToDictionary()),
+            cancellationToken);
         return new ReceiptResult(receiptId, warehouse!.Id, movements);
     }
 
@@ -149,6 +159,7 @@ internal sealed class InventoryService(
 
         var outbound = MovementTypes.Outbound.Contains(command.Type);
         var delta = outbound ? -command.Quantity : command.Quantity;
+        StockShortage? confirmedShortage = null;
         if (outbound && row.Available < command.Quantity)
         {
             // Reserved stock cannot be adjusted away (§4.2): the check is against available, not on_hand.
@@ -158,15 +169,51 @@ internal sealed class InventoryService(
             {
                 return decision;
             }
+
+            confirmedShortage = policy == NegativeStockPolicies.Warn ? shortage : null;
         }
 
         var after = await store.UpdateBalanceAsync(
             row, delta, 0m, NextAllowNegative(row, allowNegative, row.OnHand + delta, row.Reserved, worsening: outbound), cancellationToken);
-        return await store.InsertMovementAsync(
+        var movement = await store.InsertMovementAsync(
             new NewMovement(key, command.Type, delta, null, MovementSourceTypes.Adjustment, Guid.CreateVersion7(), null, reason, command.CorrelationId),
             after,
             cancellationToken);
+
+        // The free-text reason stays on the ledger row; the audit event links to it by id.
+        await audit.RecordAsync(
+            new AuditEvent(AuditActions.InventoryAdjustmentPosted, "inventory_movement", movement.Id, new AuditChanges()
+                .Value("type", movement.Type)
+                .Value("variantId", movement.VariantId)
+                .Value("warehouseId", movement.WarehouseId)
+                .Value("locationId", movement.LocationId)
+                .Value("quantity", movement.Quantity)
+                .Value("balanceAfter", movement.BalanceAfter)
+                .ToDictionary()),
+            cancellationToken);
+        if (confirmedShortage is not null)
+        {
+            await AuditNegativeStockConfirmedAsync("inventory_movement", movement.Id, [confirmedShortage], cancellationToken);
+        }
+
+        return movement;
     }
+
+    /// <summary>The caller explicitly confirmed going below zero under the <c>warn</c> policy (PRD TEN-12).</summary>
+    private Task AuditNegativeStockConfirmedAsync(
+        string entityType, Guid entityId, IReadOnlyList<StockShortage> shortages, CancellationToken cancellationToken) =>
+        audit.RecordAsync(
+            new AuditEvent(AuditActions.InventoryNegativeStockConfirmed, entityType, entityId, new AuditChanges()
+                .Value("shortages", shortages.Select(s => new
+                {
+                    variantId = s.VariantId,
+                    warehouseId = s.WarehouseId,
+                    locationId = s.LocationId,
+                    requested = s.Requested,
+                    available = s.Available,
+                }).ToList())
+                .ToDictionary()),
+            cancellationToken);
 
     // ---- §4.3 Reservation on order approval (all or nothing) ----
 
@@ -305,6 +352,11 @@ internal sealed class InventoryService(
             var id = Guid.CreateVersion7();
             await store.InsertReservationAsync(id, command.OrderId, line.OrderLineId, row.Key, quantity, command.CorrelationId, cancellationToken);
             result.Add(new ReservationAllocation(id, line.OrderLineId, line.VariantId, row.Key.WarehouseId, row.Key.LocationId, quantity, "active"));
+        }
+
+        if (shortages.Count > 0 && policy == NegativeStockPolicies.Warn)
+        {
+            await AuditNegativeStockConfirmedAsync("order", command.OrderId, shortages, cancellationToken);
         }
 
         return new ReservationResult(command.OrderId, result);

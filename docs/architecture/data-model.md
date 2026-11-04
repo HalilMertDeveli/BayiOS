@@ -59,7 +59,7 @@ CREATE POLICY tenant_isolation ON catalog.products
 | `identity.memberships` | `tenant_id = app.tenant_id` **veya** `user_id = app.user_id` (tenant çözümleme, tenant bilinmeden yapılır) — yalnızca okuma; yazma yalnızca `tenant_id = app.tenant_id` |
 | `identity.user_profiles` | `user_id = app.user_id` veya aynı tenant üyeleri (okuma); yazma yalnızca `user_id = app.user_id` |
 | `billing.subscription_plans` | Tenant'sız referans veri; RLS yok, `bayios_app` yalnızca `SELECT` |
-| `platform.outbox_messages`, `platform.jobs` | Çok tenant'lı dispatcher tarafından okunur. RLS **yok**; yalnızca `bayios_app` erişir; worker bir işi işlerken iş öncesi `app.tenant_id`'yi o kaydın tenant'ına ayarlar, böylece iş verisine erişim yine RLS'li olur |
+| `platform.outbox_messages`, `platform.jobs` | Çok tenant'lı dispatcher tarafından okunur. RLS **yok**; yalnızca `bayios_app` erişir; worker bir işi işlerken iş öncesi `app.tenant_id`'yi o kaydın tenant'ına ayarlar, böylece iş verisine erişim yine RLS'li olur. Tenant bağlamı içindeyken başka tenant'a kayıt yazmayı tetikleyici engeller (§5.12) |
 | `platform.idempotency_keys` | `tenant_id = app.tenant_id` **veya** (`tenant_id IS NULL` ve `user_id = app.user_id`) — tenant'sız uçların (ör. `POST /tenants`) anahtarları kullanıcıya kapsanır; yazma her zaman `user_id = app.user_id` (§5.12) |
 
 ### 2.4 EF Core tarafı (birincil zorlama)
@@ -434,9 +434,15 @@ Not: hacim büyüdüğünde `occurred_at` üzerinden aylık partitioning değerl
 
 ### 5.11 `audit` ve `notifications`
 
-**audit.audit_events** — RLS: std · append-only (yalnızca INSERT/SELECT)
-| id · actor_user_id · actor_role · action text · entity_type · entity_id · changes jsonb · ip_hash bytea (SHA-256 + tuz; data-policy §8) · user_agent (kısaltılmış) · correlation_id · occurred_at |
-| IX (tenant_id, occurred_at DESC) · IX (tenant_id, entity_type, entity_id, occurred_at DESC) |
+**audit.audit_events** — RLS: std · append-only (yalnızca INSERT/SELECT) — #79
+| id · actor_user_id NULL (sistem/job aktörü) · actor_role · action text · entity_type · entity_id uuid NULL · changes jsonb NULL · ip_hash bytea (HMAC-SHA-256, anahtar `Audit:IpHashKey`; anahtar yoksa NULL; data-policy §8) · user_agent (≤ 200, yazdırılabilir) · correlation_id · occurred_at |
+| IX (tenant_id, occurred_at DESC, id DESC) — keyset · IX (tenant_id, entity_type, entity_id, occurred_at DESC) |
+| CHECK: action `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$` (≤ 100) · `pg_column_size(changes) ≤ 32 KB` |
+
+- Sahibi `PlatformDbContext` (migration `AuditJobsOutbox`); çalışma zamanı: `IAuditLog.RecordAsync` (SharedKernel arayüzü, `BayiOS.Api/Platform/Audit` ham SQL) — **isteğin UnitOfWork transaction'ında** yazar; tenant/aktör/rol/correlation id istek bağlamından gelir.
+- `changes` yalnızca değişen alanlar: `{"alan": {"from": …, "to": …}}`; kişisel veri (vergi no/TCKN, telefon) yalnızca `{"changed": true}`; serbest metin (stok düzeltme sebebi) audit'e kopyalanmaz, kayda id ile bağlanır.
+- `bayios_app`: yalnızca `SELECT, INSERT`; `trg_audit_events_append_only` / `_no_truncate` UPDATE/DELETE/TRUNCATE'i sahip ve süper kullanıcı için de reddeder. Saklama süresi (data-policy §6, 2 yıl) için silme yolu **henüz yok**: bilinçli, gözden geçirilmiş bir istisna gerektirir.
+- Okuma: `GET /api/v1/audit-events` (`audit.read` — owner/admin), filtre: entityType, entityId, action, actorUserId, from, to; keyset sayfalama.
 
 **notifications.device_tokens** — RLS: std (+ `user_id = app.user_id` ile kendi token'ları)
 | id · user_id · platform (android, ios, web) · token text · app_version · last_seen_at · UQ (token) |
@@ -459,11 +465,18 @@ Not: hacim büyüdüğünde `occurred_at` üzerinden aylık partitioning değerl
 | attempts | int DEFAULT 0 | |
 | next_attempt_at | timestamptz NOT NULL DEFAULT now() | |
 | last_error | text | |
-| IX | (next_attempt_at) WHERE processed_at IS NULL | dispatcher |
+| IX | (next_attempt_at) WHERE processed_at IS NULL | dispatcher (`ix_outbox_messages_pending`) |
+| IX | (processed_at) WHERE processed_at IS NOT NULL | ileride temizlik |
 
 **platform.jobs** — RLS yok (§2.3)
-| id **PK** · tenant_id NULL · type text · payload jsonb · status (queued, running, succeeded, failed, dead) · priority smallint · run_after timestamptz · attempts · max_attempts · locked_by text · locked_until timestamptz · last_error · dedupe_key text NULL · created_at · finished_at |
-| IX (status, priority DESC, run_after) WHERE status = 'queued' · UQ (type, dedupe_key) WHERE dedupe_key IS NOT NULL AND status IN ('queued','running') |
+| id **PK** · tenant_id NULL · type text · payload jsonb · status (queued, running, succeeded, dead) · priority smallint · run_after timestamptz · attempts · max_attempts (1–100) · locked_by text · locked_until timestamptz · last_error (≤ 1000) · dedupe_key text NULL · correlation_id · created_at · finished_at |
+| IX (priority DESC, run_after) WHERE status = 'queued' · IX (locked_until) WHERE status = 'running' (lease süpürücü) · IX (finished_at) WHERE status IN ('succeeded','dead') · UQ (type, dedupe_key) WHERE dedupe_key IS NOT NULL AND status IN ('queued','running') |
+
+- Başarısız deneme `failed` durumu tutmaz: `max_attempts` dolmadıysa üstel geri çekilmeyle `queued`'a (`run_after`), dolduysa `dead`'e döner.
+- **Tenant koruması (RLS yerine):** `platform.enforce_queue_tenant()` tetikleyicisi (`trg_jobs_tenant`, `trg_outbox_messages_tenant`) — `app.tenant_id` ayarlıyken (istek veya job handler'ı) yalnızca **aynı** tenant'a satır yazılabilir; tenant'sız bağlam (worker'ın kendi alma/dağıtma transaction'ları) her tenant'ı yazabilir.
+- `bayios_app`: `SELECT, INSERT, UPDATE, DELETE` (jobs, outbox_messages).
+
+**Süresi dolmuş idempotency anahtarı temizliği:** tenant'sız `platform.idempotency_cleanup` job'ı `platform.purge_expired_idempotency_keys(p_limit)` fonksiyonunu çağırır (SECURITY DEFINER, sahibi `bayios_migrator`, `search_path = pg_catalog`; `bayios_app` yalnızca EXECUTE). Sahip FORCE RLS altında olduğundan yalnızca `bayios_migrator`'a özel `idempotency_purge_select/_delete` politikaları (`expires_at < now()`) eklidir: fonksiyon yalnızca süresi dolmuş satırları görebilir ve silebilir; `idempotency_scope` gevşetilmedi.
 
 **platform.idempotency_keys** — RLS: tenant + kullanıcı kapsamı (#68). Sahibi `PlatformDbContext` (`src/Modules/Platform/BayiOS.Modules.Platform` — yalnızca şema + migration; çalışma zamanı kodu `BayiOS.SharedKernel/Platform/Idempotency` ham SQL kullanır; migration geçmişi `platform.__ef_migrations_history`).
 Politika `idempotency_scope`: okuma `tenant_id = app.tenant_id` **veya** (`tenant_id IS NULL` ve `user_id = app.user_id`); yazma ayrıca `user_id = app.user_id` ister.
@@ -480,7 +493,7 @@ Politika `idempotency_scope`: okuma `tenant_id = app.tenant_id` **veya** (`tenan
 | response_body | bytea NULL | yanıt baytları birebir (jsonb anahtar sırasını değiştirirdi) |
 | response_headers | jsonb NULL | Content-Type, Location, ETag |
 | created_at | timestamptz | |
-| expires_at | timestamptz | created_at + 24 saat; süresi dolan anahtar yeniden kullanılabilir; temizlik job'ı (henüz yok) |
+| expires_at | timestamptz | created_at + 24 saat; süresi dolan anahtar yeniden kullanılabilir; saatlik `platform.idempotency_cleanup` job'ı siler |
 | UQ | (tenant_id, key) WHERE tenant_id IS NOT NULL | `ux_idempotency_keys_tenant_key` |
 | UQ | (user_id, key) WHERE tenant_id IS NULL | `ux_idempotency_keys_user_key` |
 | IX | (expires_at) | temizlik |

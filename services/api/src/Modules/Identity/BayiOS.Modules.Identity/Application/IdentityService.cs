@@ -4,6 +4,7 @@ using BayiOS.Modules.Identity.Domain;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
 using BayiOS.SharedKernel.Authorization;
 using BayiOS.SharedKernel.Persistence;
+using BayiOS.SharedKernel.Platform.Audit;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -35,6 +36,7 @@ internal sealed partial class IdentityService(
     IdentityDbContext db,
     IRequestContext requestContext,
     UnitOfWork unitOfWork,
+    IAuditLog audit,
     TimeProvider clock)
 {
     private Guid UserId => requestContext.UserId ?? throw new InvalidOperationException("No authenticated user.");
@@ -108,6 +110,12 @@ internal sealed partial class IdentityService(
             return new AppError(409, "tenant.slug_taken", "Slug is already in use");
         }
 
+        await audit.RecordAsync(
+            new AuditEvent(AuditActions.TenantCreated, "tenant", tenant.Id, new AuditChanges()
+                .Value("slug", tenant.Slug)
+                .Value("sector", tenant.Sector)
+                .ToDictionary()),
+            cancellationToken);
         return ToResponse(tenant, Roles.Owner);
     }
 
@@ -161,6 +169,7 @@ internal sealed partial class IdentityService(
             return VersionMismatch();
         }
 
+        var before = ToResponse(settings);
         settings.NegativeStockPolicy = request.NegativeStockPolicy ?? settings.NegativeStockPolicy;
         settings.SalesCanApproveOrders = request.SalesCanApproveOrders ?? settings.SalesCanApproveOrders;
         settings.SalesMaxDiscountPercent = request.SalesMaxDiscountPercent ?? settings.SalesMaxDiscountPercent;
@@ -182,7 +191,26 @@ internal sealed partial class IdentityService(
             return VersionMismatch();
         }
 
-        return (ToResponse(settings), settings.RowVersion);
+        var after = ToResponse(settings);
+        var changes = new AuditChanges()
+            .Field("negativeStockPolicy", before.NegativeStockPolicy, after.NegativeStockPolicy)
+            .Field("salesCanApproveOrders", before.SalesCanApproveOrders, after.SalesCanApproveOrders)
+            .Field("salesMaxDiscountPercent", before.SalesMaxDiscountPercent, after.SalesMaxDiscountPercent)
+            .Field("showCostToManager", before.ShowCostToManager, after.ShowCostToManager)
+            .Field("showCostToViewer", before.ShowCostToViewer, after.ShowCostToViewer)
+            .Field("staffCanAssignBarcode", before.StaffCanAssignBarcode, after.StaffCanAssignBarcode)
+            .Field("staffCanApproveReceipt", before.StaffCanApproveReceipt, after.StaffCanApproveReceipt)
+            .Field("require2fa", before.Require2fa, after.Require2fa)
+            .Field("defaultTaxRate", before.DefaultTaxRate, after.DefaultTaxRate)
+            .Field("pricesIncludeTaxDisplay", before.PricesIncludeTaxDisplay, after.PricesIncludeTaxDisplay);
+        if (changes.HasChanges)
+        {
+            await audit.RecordAsync(
+                new AuditEvent(AuditActions.TenantSettingsChanged, "tenant_settings", settings.TenantId, changes.ToDictionary()),
+                cancellationToken);
+        }
+
+        return (after, settings.RowVersion);
     }
 
     /// <summary>Business profile of the current tenant (PRD TEN-03/04/05); optimistic concurrency on tenants.row_version.</summary>
@@ -248,6 +276,15 @@ internal sealed partial class IdentityService(
             return VersionMismatch();
         }
 
+        // Audited without personal data: tax number (may be a TCKN) and phone only as "changed" markers (data-policy §8).
+        var changes = new AuditChanges()
+            .Field("name", tenant.Name, name)
+            .Field("sector", tenant.Sector, sector)
+            .Field("defaultCurrency", tenant.DefaultCurrency, currency)
+            .Field("logoObjectPath", tenant.LogoObjectPath, logo)
+            .Redacted("taxNumber", tenant.TaxNumber, taxNumber)
+            .Field("taxOffice", tenant.TaxOffice, taxOffice)
+            .Redacted("phone", tenant.Phone, phone);
         tenant.UpdateProfile(name, sector, currency, logo, taxNumber, taxOffice, phone, clock.GetUtcNow());
         try
         {
@@ -256,6 +293,12 @@ internal sealed partial class IdentityService(
         catch (DbUpdateConcurrencyException)
         {
             return VersionMismatch();
+        }
+
+        if (changes.HasChanges)
+        {
+            await audit.RecordAsync(
+                new AuditEvent(AuditActions.TenantSettingsChanged, "tenant", tenant.Id, changes.ToDictionary()), cancellationToken);
         }
 
         return ToResponse(tenant, requestContext.Role!);

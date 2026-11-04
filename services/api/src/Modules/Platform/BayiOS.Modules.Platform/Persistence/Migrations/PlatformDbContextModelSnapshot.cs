@@ -23,6 +23,81 @@ namespace BayiOS.Modules.Platform.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("BayiOS.Modules.Platform.Persistence.AuditEventRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("action");
+
+                    b.Property<string>("ActorRole")
+                        .HasColumnType("text")
+                        .HasColumnName("actor_role");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<string>("Changes")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("changes");
+
+                    b.Property<string>("CorrelationId")
+                        .HasColumnType("text")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("entity_type");
+
+                    b.Property<byte[]>("IpHash")
+                        .HasColumnType("bytea")
+                        .HasColumnName("ip_hash");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("UserAgent")
+                        .HasColumnType("text")
+                        .HasColumnName("user_agent");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audit_events");
+
+                    b.HasIndex("TenantId", "OccurredAt", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_audit_events_tenant_occurred");
+
+                    b.HasIndex("TenantId", "EntityType", "EntityId", "OccurredAt")
+                        .IsDescending(false, false, false, true)
+                        .HasDatabaseName("ix_audit_events_tenant_entity");
+
+                    b.ToTable("audit_events", "audit", t =>
+                        {
+                            t.HasCheckConstraint("ck_audit_events_action", "action ~ '^[a-z][a-z0-9_]*([.][a-z][a-z0-9_]*)+$' AND char_length(action) <= 100");
+
+                            t.HasCheckConstraint("ck_audit_events_changes", "changes IS NULL OR pg_column_size(changes) <= 32768");
+
+                            t.HasCheckConstraint("ck_audit_events_entity_type", "char_length(entity_type) BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("ck_audit_events_user_agent", "user_agent IS NULL OR char_length(user_agent) <= 200");
+                        });
+                });
+
             modelBuilder.Entity("BayiOS.Modules.Platform.Persistence.IdempotencyKeyRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -103,6 +178,167 @@ namespace BayiOS.Modules.Platform.Persistence.Migrations
                             t.HasCheckConstraint("ck_idempotency_keys_key", "char_length(key) BETWEEN 1 AND 100");
 
                             t.HasCheckConstraint("ck_idempotency_keys_status", "status IN ('in_progress', 'completed')");
+                        });
+                });
+
+            modelBuilder.Entity("BayiOS.Modules.Platform.Persistence.JobRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<string>("CorrelationId")
+                        .HasColumnType("text")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DedupeKey")
+                        .HasColumnType("text")
+                        .HasColumnName("dedupe_key");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text")
+                        .HasColumnName("last_error");
+
+                    b.Property<string>("LockedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("locked_by");
+
+                    b.Property<DateTimeOffset?>("LockedUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("locked_until");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_attempts");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<short>("Priority")
+                        .HasColumnType("smallint")
+                        .HasColumnName("priority");
+
+                    b.Property<DateTimeOffset>("RunAfter")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("run_after");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id")
+                        .HasName("pk_jobs");
+
+                    b.HasIndex("FinishedAt")
+                        .HasDatabaseName("ix_jobs_finished")
+                        .HasFilter("status IN ('succeeded', 'dead')");
+
+                    b.HasIndex("LockedUntil")
+                        .HasDatabaseName("ix_jobs_running_lease")
+                        .HasFilter("status = 'running'");
+
+                    b.HasIndex("Priority", "RunAfter")
+                        .IsDescending(true, false)
+                        .HasDatabaseName("ix_jobs_queued")
+                        .HasFilter("status = 'queued'");
+
+                    b.HasIndex("Type", "DedupeKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_jobs_type_dedupe_key")
+                        .HasFilter("dedupe_key IS NOT NULL AND status IN ('queued', 'running')");
+
+                    b.ToTable("jobs", "platform", t =>
+                        {
+                            t.HasCheckConstraint("ck_jobs_attempts", "attempts >= 0 AND max_attempts BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("ck_jobs_status", "status IN ('queued', 'running', 'succeeded', 'dead')");
+
+                            t.HasCheckConstraint("ck_jobs_type", "char_length(type) BETWEEN 1 AND 200");
+                        });
+                });
+
+            modelBuilder.Entity("BayiOS.Modules.Platform.Persistence.OutboxMessageRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<string>("CorrelationId")
+                        .HasColumnType("text")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id")
+                        .HasName("pk_outbox_messages");
+
+                    b.HasIndex("NextAttemptAt")
+                        .HasDatabaseName("ix_outbox_messages_pending")
+                        .HasFilter("processed_at IS NULL");
+
+                    b.HasIndex("ProcessedAt")
+                        .HasDatabaseName("ix_outbox_messages_processed")
+                        .HasFilter("processed_at IS NOT NULL");
+
+                    b.ToTable("outbox_messages", "platform", t =>
+                        {
+                            t.HasCheckConstraint("ck_outbox_messages_type", "char_length(type) BETWEEN 1 AND 200");
                         });
                 });
 #pragma warning restore 612, 618
