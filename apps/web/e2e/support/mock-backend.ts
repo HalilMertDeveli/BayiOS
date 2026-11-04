@@ -8,6 +8,7 @@
  * The real end-to-end run (local Supabase + API, no mocks) lives in e2e-local/ — see apps/web/README.md.
  */
 import type { BrowserContext, Page, Route } from "@playwright/test";
+import { createMockCatalog, handleCatalog, type MockCatalog } from "./mock-catalog";
 
 /** Must match the build-time env used for the e2e build (ci-web.yml / README). */
 export const SUPABASE_URL = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
@@ -112,15 +113,23 @@ export type ApiMockOptions = {
   createTenant?: (route: Route) => unknown;
   /** Override for POST /api/v1/sector-templates/{code}/apply. */
   applyTemplate?: (route: Route) => unknown;
+  /** In-memory Catalog API (mock-catalog.ts). Defaults to a small synthetic catalog; null disables it. */
+  catalog?: MockCatalog | null;
 };
 
 /** Mocked BayiOS API. `state.memberships` can be changed by a test (e.g. after a tenant is created). */
 export async function mockApi(page: Page, options: ApiMockOptions = {}) {
-  const state = { memberships: options.memberships ?? [TENANT_A], requests: [] as { method: string; path: string; headers: Record<string, string>; body: unknown }[] };
+  const catalog = options.catalog === undefined ? createMockCatalog({ products: 3 }) : options.catalog;
+  const state = {
+    memberships: options.memberships ?? [TENANT_A],
+    catalog,
+    requests: [] as { method: string; path: string; search: string; headers: Record<string, string>; body: unknown }[],
+  };
 
   await page.route(`${API_URL}/api/v1/**`, async (route) => {
     const request = route.request();
-    const path = new URL(request.url()).pathname;
+    const url = new URL(request.url());
+    const path = url.pathname;
     const method = request.method();
     if (method === "OPTIONS") {
       return route.fulfill({
@@ -132,7 +141,7 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
         },
       });
     }
-    state.requests.push({ method, path, headers: request.headers(), body: request.postDataJSON?.() ?? null });
+    state.requests.push({ method, path, search: url.search, headers: request.headers(), body: request.postDataJSON?.() ?? null });
 
     if (path === "/api/v1/meta") return json(route, 200, { name: "BayiOS API (mock)", version: "0.0.0", environment: "Mock" });
     if (path === "/api/v1/me") {
@@ -160,6 +169,7 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
     if (path === "/api/v1/tenant/settings" && method === "PATCH") {
       return json(route, 200, { ...defaultSettings, ...(request.postDataJSON() as object) }, { ETag: 'W/"1"' });
     }
+    if (catalog && (await handleCatalog(route, catalog))) return;
     return json(route, 404, problem(404, "resource.not_found"));
   });
   return state;
