@@ -25,6 +25,16 @@ public sealed class IdempotencyMetadata
 }
 
 /// <summary>
+/// Endpoint metadata that adds request parts the bound JSON body does not cover (e.g. multipart file bytes) to the
+/// <c>Idempotency-Key</c> request hash, so reusing a key with different content is answered with
+/// <c>idempotency.key_reused</c> instead of a replay. Runs before the handler; it must leave the request readable.
+/// </summary>
+public interface IIdempotencyHashContributor
+{
+    ValueTask ContributeAsync(HttpContext context, IncrementalHash hash, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// <c>Idempotency-Key</c> handling (api-strategy §7) inside the request's <see cref="UnitOfWork"/> transaction:
 /// the key row is claimed first (<c>INSERT … ON CONFLICT</c>), the handler runs, and a successful response is stored
 /// in the same transaction as the business write — both commit or neither does. A concurrent duplicate blocks on the
@@ -72,7 +82,7 @@ internal static class IdempotencyFilter
 
         var now = (services.GetService<TimeProvider>() ?? TimeProvider.System).GetUtcNow();
         var path = http.Request.Path.Value ?? string.Empty;
-        var hash = RequestHash(context, path);
+        var hash = await RequestHashAsync(context, path, http.RequestAborted);
         var cancellationToken = http.RequestAborted;
 
         Guid? claimedId;
@@ -128,8 +138,11 @@ internal static class IdempotencyFilter
             StatusCodes.Status409Conflict, "idempotency.in_progress", "A request with this Idempotency-Key is still in progress"));
     }
 
-    /// <summary>SHA-256 over method, concrete path (route values included) and the bound JSON body.</summary>
-    private static byte[] RequestHash(EndpointFilterInvocationContext context, string path)
+    /// <summary>
+    /// SHA-256 over method, concrete path (route values included), the bound JSON body and whatever the endpoint's
+    /// <see cref="IIdempotencyHashContributor"/> metadata adds (e.g. multipart file bytes).
+    /// </summary>
+    private static async Task<byte[]> RequestHashAsync(EndpointFilterInvocationContext context, string path, CancellationToken cancellationToken)
     {
         var http = context.HttpContext;
         var bodyType = http.GetEndpoint()?.Metadata.GetMetadata<IAcceptsMetadata>()?.RequestType;
@@ -141,6 +154,11 @@ internal static class IdempotencyFilter
         if (body is not null)
         {
             hash.AppendData(JsonSerializer.SerializeToUtf8Bytes(body, body.GetType(), json));
+        }
+
+        foreach (var contributor in http.GetEndpoint()?.Metadata.GetOrderedMetadata<IIdempotencyHashContributor>() ?? [])
+        {
+            await contributor.ContributeAsync(http, hash, cancellationToken);
         }
 
         return hash.GetHashAndReset();
