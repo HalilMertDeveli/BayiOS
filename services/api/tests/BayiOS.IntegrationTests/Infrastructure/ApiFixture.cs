@@ -6,6 +6,7 @@ using BayiOS.Modules.Customers.Infrastructure.Persistence;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
 using BayiOS.Modules.Imports.Infrastructure.Persistence;
 using BayiOS.Modules.Inventory.Infrastructure.Persistence;
+using BayiOS.Modules.Orders.Infrastructure.Persistence;
 using BayiOS.Modules.Platform.Persistence;
 using BayiOS.Modules.Pricing.Infrastructure.Persistence;
 using BayiOS.Modules.Warehouse.Infrastructure.Persistence;
@@ -114,6 +115,13 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         await using (var imports = new ImportsDbContext(importsOptions.Options, new RequestContext()))
         {
             await imports.Database.MigrateAsync();
+        }
+
+        var ordersOptions = new DbContextOptionsBuilder<OrdersDbContext>();
+        OrdersDbContext.Configure(ordersOptions, MigratorConnectionString);
+        await using (var orders = new OrdersDbContext(ordersOptions.Options, new RequestContext()))
+        {
+            await orders.Database.MigrateAsync();
         }
     }
 

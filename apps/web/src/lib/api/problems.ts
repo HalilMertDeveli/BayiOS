@@ -12,6 +12,8 @@ export type ProblemDetails = {
   code?: string | null;
   correlationId?: string | null;
   errors?: Record<string, string[]> | null;
+  /** Extension members (RFC 9457 §3.2), e.g. inventory `shortages` / `confirmationRequired`. */
+  [extension: string]: unknown;
 };
 
 const MESSAGES: Record<string, string> = {

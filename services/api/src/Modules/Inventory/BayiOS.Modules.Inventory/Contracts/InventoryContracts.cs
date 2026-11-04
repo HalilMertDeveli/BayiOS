@@ -29,6 +29,13 @@ public interface IStockQueries
 {
     /// <summary>True when any balance row of the warehouse has on_hand or reserved different from zero.</summary>
     Task<bool> WarehouseHasStockAsync(Guid warehouseId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The order's active reservations with their <b>open</b> quantity (quantity − consumed − released) in
+    /// <see cref="ReservationAllocation.Quantity"/>, ordered by order line and location. Unlocked read: commands lock
+    /// and re-check before changing anything.
+    /// </summary>
+    Task<IReadOnlyList<ReservationAllocation>> GetOpenReservationsAsync(Guid orderId, CancellationToken cancellationToken);
 }
 
 /// <summary>Movement types (ADR 0004 §1). Quantities are signed; the sign must match the type.</summary>

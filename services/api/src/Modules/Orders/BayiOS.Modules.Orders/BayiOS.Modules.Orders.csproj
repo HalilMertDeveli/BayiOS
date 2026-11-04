@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>BayiOS.Modules.Orders</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BayiOS.SharedKernel\BayiOS.SharedKernel.csproj" />
+    <!-- Orders calls the public contracts of Inventory (reserve / release / issue) and Pricing (price resolution and the
+         customer pricing profile). Dependencies point from Orders to them, never back. -->
+    <ProjectReference Include="..\..\Inventory\BayiOS.Modules.Inventory\BayiOS.Modules.Inventory.csproj" />
+    <ProjectReference Include="..\..\Pricing\BayiOS.Modules.Pricing\BayiOS.Modules.Pricing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BayiOS.Api" />
+    <InternalsVisibleTo Include="BayiOS.UnitTests" />
+    <InternalsVisibleTo Include="BayiOS.IntegrationTests" />
+  </ItemGroup>
+
+</Project>
