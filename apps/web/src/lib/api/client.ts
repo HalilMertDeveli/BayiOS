@@ -10,24 +10,43 @@ export class ApiError extends Error {
   readonly fieldErrors: Record<string, string[]>;
   /** Turkish, user-facing message. */
   readonly userMessage: string;
+  /** The full problem body, including extension members (e.g. `shortages`, `confirmationRequired`). */
+  readonly problem: ProblemDetails | null;
+  /**
+   * Seconds from a `Retry-After` header, or null when absent/unreadable. Cross-origin, the browser only exposes it
+   * when the API lists it in Access-Control-Expose-Headers.
+   */
+  readonly retryAfterSeconds: number | null;
 
   constructor(
     message: string,
     readonly status: number,
     problem?: ProblemDetails | null,
     userMessage?: string,
+    retryAfterSeconds: number | null = null,
   ) {
     super(message);
     this.name = "ApiError";
     this.code = problem?.code ?? null;
     this.fieldErrors = problem?.errors ?? {};
     this.userMessage = userMessage ?? problemMessage(status, problem);
+    this.problem = problem ?? null;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 
   /** True when no HTTP response was received (offline, DNS, CORS, aborted connection). */
   get isNetworkError(): boolean {
     return this.status === 0;
   }
+}
+
+/** `Retry-After` as delay-seconds (the API sends integers); an HTTP-date is converted relative to `now`. */
+export function parseRetryAfter(value: string | null, now: number = Date.now()): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  const date = Date.parse(trimmed);
+  return Number.isNaN(date) ? null : Math.max(0, Math.ceil((date - now) / 1000));
 }
 
 export function apiBaseUrl(): string {
@@ -119,7 +138,13 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         const problem = await readProblem(response);
         if (response.status === 401) options.onUnauthorized?.();
         if (response.status === 403 && problem?.code === "tenant.access_denied") options.onTenantAccessDenied?.();
-        throw new ApiError(`${method} ${path} failed with ${response.status}`, response.status, problem);
+        throw new ApiError(
+          `${method} ${path} failed with ${response.status}`,
+          response.status,
+          problem,
+          undefined,
+          parseRetryAfter(response.headers.get("Retry-After")),
+        );
       }
 
       const data = (response.status === 204 ? undefined : await response.json()) as T;

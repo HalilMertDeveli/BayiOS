@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, createApiClient, getMeta } from "./client";
+import { ApiError, createApiClient, getMeta, parseRetryAfter } from "./client";
 import { problemMessage } from "./problems";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -122,5 +122,32 @@ describe("problemMessage", () => {
     expect(problemMessage(412, null)).toContain("değişti");
     expect(problemMessage(500, { title: "NullReferenceException" })).toBe("Beklenmeyen bir hata oluştu. Lütfen biraz sonra tekrar deneyin.");
     expect(problemMessage(418, { code: "unknown.code" })).toBe("Beklenmeyen bir hata oluştu. Lütfen biraz sonra tekrar deneyin.");
+  });
+});
+
+describe("problem extensions and Retry-After", () => {
+  it("keeps extension members and reads Retry-After (inventory.busy)", async () => {
+    const body = { status: 409, code: "inventory.busy", confirmationRequired: true, shortages: [{ variantId: "v" }] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(body), { status: 409, headers: { "Content-Type": "application/problem+json", "Retry-After": "1" } }),
+      ),
+    );
+    const api = createApiClient({ getAccessToken: async () => "t", getTenantId: () => "tenant-1" });
+    const error = await api.request("/api/v1/inventory/adjustments", { method: "POST", tenant: true, body: {} }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).retryAfterSeconds).toBe(1);
+    expect((error as ApiError).problem?.confirmationRequired).toBe(true);
+    expect((error as ApiError).problem?.shortages).toEqual([{ variantId: "v" }]);
+  });
+
+  it("parses delay-seconds and HTTP-dates; ignores garbage", () => {
+    expect(parseRetryAfter(null)).toBeNull();
+    expect(parseRetryAfter(" 3 ")).toBe(3);
+    expect(parseRetryAfter("soon")).toBeNull();
+    const now = Date.parse("2026-11-05T10:00:00Z");
+    expect(parseRetryAfter("Thu, 05 Nov 2026 10:00:02 GMT", now)).toBe(2);
+    expect(parseRetryAfter("Thu, 05 Nov 2026 09:59:00 GMT", now)).toBe(0);
   });
 });
