@@ -27,6 +27,8 @@ COPY src/BayiOS.Api/BayiOS.Api.csproj src/BayiOS.Api/
 COPY src/BayiOS.SharedKernel/BayiOS.SharedKernel.csproj src/BayiOS.SharedKernel/
 COPY src/Modules/Identity/BayiOS.Modules.Identity/BayiOS.Modules.Identity.csproj src/Modules/Identity/BayiOS.Modules.Identity/
 COPY src/Modules/Catalog/BayiOS.Modules.Catalog/BayiOS.Modules.Catalog.csproj src/Modules/Catalog/BayiOS.Modules.Catalog/
+COPY src/Modules/Inventory/BayiOS.Modules.Inventory/BayiOS.Modules.Inventory.csproj src/Modules/Inventory/BayiOS.Modules.Inventory/
+COPY src/Modules/Warehouse/BayiOS.Modules.Warehouse/BayiOS.Modules.Warehouse.csproj src/Modules/Warehouse/BayiOS.Modules.Warehouse/
 RUN dotnet restore src/BayiOS.Api/BayiOS.Api.csproj
 
 COPY src/ src/
