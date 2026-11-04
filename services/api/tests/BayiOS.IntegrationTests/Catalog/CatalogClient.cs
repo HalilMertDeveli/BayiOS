@@ -57,7 +57,7 @@ internal sealed class CatalogClient(HttpClient http, Guid tenantId, Guid userId)
     {
         using var request = new HttpRequestMessage(method, path);
         request.Headers.Add("X-Tenant-Id", TenantId.ToString());
-        if (method == HttpMethod.Post)
+        if (method == HttpMethod.Post || idempotencyKey is not null)
         {
             // Create endpoints require Idempotency-Key (#68); a fresh key per call unless the test pins one.
             request.Headers.Add(IdempotentRequests.Header, idempotencyKey ?? Guid.NewGuid().ToString());

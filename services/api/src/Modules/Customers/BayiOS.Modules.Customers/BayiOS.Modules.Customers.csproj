@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>BayiOS.Modules.Customers</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BayiOS.SharedKernel\BayiOS.SharedKernel.csproj" />
+    <!-- Customers implements Pricing's customer port and validates price list assignments through its contracts (dependency points to Pricing). -->
+    <ProjectReference Include="..\..\Pricing\BayiOS.Modules.Pricing\BayiOS.Modules.Pricing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BayiOS.Api" />
+    <InternalsVisibleTo Include="BayiOS.UnitTests" />
+    <InternalsVisibleTo Include="BayiOS.IntegrationTests" />
+  </ItemGroup>
+
+</Project>
