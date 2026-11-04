@@ -1,0 +1,24 @@
+# Build context = services/api. Keep the context minimal and secret-free.
+**/bin/
+**/obj/
+**/TestResults/
+**/*.user
+**/*.trx
+**/.vs/
+**/.vscode/
+**/.idea/
+
+# Tests are not part of the runtime image (CI runs them in ci-api.yml).
+tests/
+
+# Never send local secrets or dev-only settings into the build context.
+**/.env
+**/.env.*
+**/*.pem
+**/*.p12
+**/secrets*.json
+**/appsettings.Development.json
+**/appsettings.*.local.json
+
+Dockerfile
+.dockerignore

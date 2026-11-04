@@ -13,7 +13,7 @@
 | Amaç | Geliştirme, test, ajan çalışması | PR doğrulama, entegrasyon (`preview` dalı), demo | Gerçek tenant'lar (pilot) |
 | Veri | Sentetik seed | **Yalnızca sentetik** | Gerçek müşteri verisi |
 | Web | `npm run dev` (localhost:3000) | Vercel Preview (PR başına URL) + `preview` dalı için sabit alias | Vercel Production |
-| API | `dotnet run` veya compose içinde | Seçilen hosttaki preview uygulaması (bkz. hosting-options.md) | Seçilen hosttaki prod uygulaması (EU) |
+| API | `dotnet run` (localhost:5280) veya `services/api/Dockerfile` imajı (port 8080) | Seçilen hosttaki preview uygulaması (bkz. hosting-options.md; Fly.io şablonu `infra/deploy/fly.preview.toml`, deploy edilmedi) | Seçilen hosttaki prod uygulaması (EU) |
 | DB | Docker compose `postgres:17` | Supabase `bayios-preview` projesi (**onay bekliyor**) | Supabase `bayios-prod` (**onay + muhtemelen Pro plan**) |
 | Auth | Local: Supabase CLI local stack (kurulunca) veya test JWT üretici | `bayios-preview` Supabase Auth | `bayios-prod` Supabase Auth |
 | Storage | Local Supabase stack veya MinIO/disk adaptörü | `bayios-preview` Storage | `bayios-prod` Storage |
@@ -88,6 +88,8 @@ FCM ücretsizdir (https://firebase.google.com/pricing, 2026-11-04). Spark planı
 6. Production migration'ları asla ajan tarafından elle/MCP ile uygulanmaz.
 
 ## 8. Rollback
+Adım adım deploy/rollback akışı: `deploy-and-rollback.md`.
+
 | Bileşen | Yöntem |
 |---|---|
 | Web (Vercel) | Önceki production deployment'ı "promote/rollback" (anlık) |
