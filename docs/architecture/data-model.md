@@ -275,6 +275,8 @@ Gösterim: **PK**, FK (modül içi, bileşik tenant FK), UQ = unique, IX = index
 | id · warehouse_id FK (tenant_id, warehouse_id) · code text · barcode text NULL · pick_sequence int · is_active bool |
 | UQ (tenant_id, warehouse_id, code) · UQ (tenant_id, barcode) WHERE barcode IS NOT NULL |
 
+> Uygulandı (JOB 09, migration `InitialWarehouse`): `warehouses` ve `warehouse_locations` std kolonlarla (`row_version`, `created_*`, `updated_*`); `address` kolonu henüz yok. Kod büyük harfe normalize edilir; varsayılan depo kısmi benzersiz index `ux_warehouses_tenant_id_default`. Lokasyon FK'si bileşik `(tenant_id, warehouse_id)`. `bayios_app`: SELECT/INSERT/UPDATE (DELETE yok).
+
 **warehouse.stock_counts** / **warehouse.stock_count_lines** — RLS: std
 | counts: id · warehouse_id · scope · is_blind bool NOT NULL DEFAULT false (INV-06) · status (open, submitted, applied, cancelled) · snapshot_at timestamptz · applied_at · applied_by · row_version |
 | lines: id · stock_count_id FK · variant_id · location_id NULL · expected_qty numeric(18,3) · counted_qty numeric(18,3) NULL · line_status (pending, counted, needs_review, applied) · applied_delta numeric(18,3) NULL · UQ NULLS NOT DISTINCT (tenant_id, stock_count_id, variant_id, location_id) |
@@ -352,6 +354,8 @@ Not: hacim büyüdüğünde `occurred_at` üzerinden aylık partitioning değerl
 | status | text | active, consumed, released |
 | IX | (tenant_id, order_id) WHERE status = 'active' | |
 | UQ | NULLS NOT DISTINCT (tenant_id, order_line_id, location_id) WHERE status='active' | |
+
+> Uygulandı (JOB 09, migration `InitialInventory`): üç tablo yukarıdaki gibi; ek kolonlar: `inventory_movements.created_by` (aktör), `inventory_balances.created_at`, `stock_reservations.correlation_id/created_at/created_by/updated_at/updated_by`. Ek CHECK'ler: hareket `source_type` listesi, `unit_cost >= 0`, rezervasyon `status <> 'active'` ise `consumed + released = quantity`. Append-only: `bayios_app` yalnızca SELECT/INSERT + `trg_inventory_movements_append_only` (BEFORE UPDATE/DELETE) ve `trg_inventory_movements_no_truncate` trigger'ları (`restrict_violation`). Bakiye ve rezervasyonlarda `bayios_app` için DELETE yok. Index adları: `ux_inventory_balances_key`, `ux_inventory_movements_source_line`, `ux_stock_reservations_active_line`.
 
 ### 5.8 `orders`
 

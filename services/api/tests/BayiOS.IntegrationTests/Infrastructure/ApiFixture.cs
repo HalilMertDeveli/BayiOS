@@ -3,7 +3,9 @@ using System.Security.Cryptography;
 using BayiOS.IntegrationTests.Infrastructure;
 using BayiOS.Modules.Catalog.Infrastructure.Persistence;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
+using BayiOS.Modules.Inventory.Infrastructure.Persistence;
 using BayiOS.Modules.Platform.Persistence;
+using BayiOS.Modules.Warehouse.Infrastructure.Persistence;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
@@ -74,6 +76,20 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         await using (var catalog = new CatalogDbContext(catalogOptions.Options, new RequestContext()))
         {
             await catalog.Database.MigrateAsync();
+        }
+
+        var warehouseOptions = new DbContextOptionsBuilder<WarehouseDbContext>();
+        WarehouseDbContext.Configure(warehouseOptions, MigratorConnectionString);
+        await using (var warehouse = new WarehouseDbContext(warehouseOptions.Options, new RequestContext()))
+        {
+            await warehouse.Database.MigrateAsync();
+        }
+
+        var inventoryOptions = new DbContextOptionsBuilder<InventoryDbContext>();
+        InventoryDbContext.Configure(inventoryOptions, MigratorConnectionString);
+        await using (var inventory = new InventoryDbContext(inventoryOptions.Options, new RequestContext()))
+        {
+            await inventory.Database.MigrateAsync();
         }
     }
 

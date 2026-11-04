@@ -14,6 +14,8 @@
     <ProjectReference Include="..\BayiOS.SharedKernel\BayiOS.SharedKernel.csproj" />
     <ProjectReference Include="..\Modules\Catalog\BayiOS.Modules.Catalog\BayiOS.Modules.Catalog.csproj" />
     <ProjectReference Include="..\Modules\Identity\BayiOS.Modules.Identity\BayiOS.Modules.Identity.csproj" />
+    <ProjectReference Include="..\Modules\Inventory\BayiOS.Modules.Inventory\BayiOS.Modules.Inventory.csproj" />
+    <ProjectReference Include="..\Modules\Warehouse\BayiOS.Modules.Warehouse\BayiOS.Modules.Warehouse.csproj" />
   </ItemGroup>
 
   <ItemGroup>
