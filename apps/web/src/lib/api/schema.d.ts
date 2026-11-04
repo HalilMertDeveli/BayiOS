@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audit olayları (yeniden eskiye): keyset sayfalama; entityType/entityId/action/actorUserId/from/to filtresi */
+        get: operations["Audit_ListEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -782,6 +799,32 @@ export interface components {
             fieldsCreated: string[];
             /** Format: int32 */
             skipped: number | string;
+        };
+        AuditEventPageResponse: {
+            items: components["schemas"]["AuditEventResponse"][];
+            page: components["schemas"]["AuditPageInfo"];
+        };
+        AuditEventResponse: {
+            /** Format: uuid */
+            id: string;
+            action: string;
+            entityType: string;
+            /** Format: uuid */
+            entityId: null | string;
+            /** Format: uuid */
+            actorUserId: null | string;
+            actorRole: null | string;
+            changes: null | Record<string, never>;
+            userAgent: null | string;
+            correlationId: null | string;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        AuditPageInfo: {
+            nextCursor: null | string;
+            hasMore: boolean;
+            /** Format: int32 */
+            limit: number | string;
         };
         BalancePageResponse: {
             items: components["schemas"]["BalanceResponse"][];
@@ -1641,6 +1684,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MetaResponse"];
+                };
+            };
+        };
+    };
+    Audit_ListEvents: {
+        parameters: {
+            query?: {
+                entityType?: string;
+                entityId?: string;
+                action?: string;
+                actorUserId?: string;
+                from?: string;
+                to?: string;
+                limit?: string;
+                cursor?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

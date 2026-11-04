@@ -127,6 +127,8 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("ConnectionStrings:Default", AppConnectionString);
         builder.UseSetting("Auth:Authority", TestTokens.Issuer);
         builder.UseSetting("Auth:Audience", TestTokens.Audience);
+        // Background worker off in the shared host; job/outbox tests drive the worker explicitly (Platform/JobsTests).
+        builder.UseSetting("Jobs:Enabled", "false");
         builder.ConfigureTestServices(services =>
             services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
                 options.BackchannelHttpHandler = new TestJwksHandler()));

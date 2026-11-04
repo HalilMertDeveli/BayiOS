@@ -19,6 +19,8 @@ internal sealed partial class TenantContextMiddleware(RequestDelegate next, ILog
 
     public async Task InvokeAsync(HttpContext context, RequestContext requestContext)
     {
+        // Already server-formatted by CorrelationIdMiddleware; used by audit events, jobs and outbox messages.
+        requestContext.CorrelationId = context.TraceIdentifier;
         var endpoint = context.GetEndpoint();
         if (endpoint?.Metadata.GetMetadata<UnitOfWorkMetadata>() is null
             || context.User.Identity?.IsAuthenticated != true
