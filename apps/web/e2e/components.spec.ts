@@ -1,7 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { DESKTOP } from "./viewports";
+import { signedIn } from "./support/mock-backend";
 
 test.use({ viewport: DESKTOP });
+
+// /tasarim-sistemi is inside the protected (app) group — MOCKED session and API.
+test.beforeEach(async ({ page }) => {
+  await signedIn(page);
+});
 
 test("dialog traps focus, closes with Escape and restores focus", async ({ page }) => {
   await page.goto("/tasarim-sistemi");
