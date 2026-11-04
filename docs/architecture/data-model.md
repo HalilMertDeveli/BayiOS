@@ -55,9 +55,9 @@ CREATE POLICY tenant_isolation ON catalog.products
 
 | Tablo | Politika |
 |---|---|
-| `identity.tenants` | `id = app.tenant_id` **veya** `id IN (SELECT tenant_id FROM identity.memberships WHERE user_id = app.user_id)` (kullanıcının tenant listesi) |
-| `identity.memberships` | `tenant_id = app.tenant_id` **veya** `user_id = app.user_id` (tenant çözümleme, tenant bilinmeden yapılır) |
-| `identity.user_profiles` | `user_id = app.user_id` veya aynı tenant üyeleri |
+| `identity.tenants` | `id = app.tenant_id` **veya** `id IN (SELECT tenant_id FROM identity.memberships WHERE user_id = app.user_id)` (kullanıcının tenant listesi) — yalnızca okuma; yazma yalnızca `id = app.tenant_id` |
+| `identity.memberships` | `tenant_id = app.tenant_id` **veya** `user_id = app.user_id` (tenant çözümleme, tenant bilinmeden yapılır) — yalnızca okuma; yazma yalnızca `tenant_id = app.tenant_id` |
+| `identity.user_profiles` | `user_id = app.user_id` veya aynı tenant üyeleri (okuma); yazma yalnızca `user_id = app.user_id` |
 | `billing.subscription_plans` | Tenant'sız referans veri; RLS yok, `bayios_app` yalnızca `SELECT` |
 | `platform.outbox_messages`, `platform.jobs` | Çok tenant'lı dispatcher tarafından okunur. RLS **yok**; yalnızca `bayios_app` erişir; worker bir işi işlerken iş öncesi `app.tenant_id`'yi o kaydın tenant'ına ayarlar, böylece iş verisine erişim yine RLS'li olur |
 | `platform.idempotency_keys` | Standart tenant RLS |

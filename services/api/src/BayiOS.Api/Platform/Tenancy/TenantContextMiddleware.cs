@@ -17,7 +17,7 @@ internal sealed partial class TenantContextMiddleware(RequestDelegate next, ILog
 {
     public const string TenantHeader = "X-Tenant-Id";
 
-    public async Task InvokeAsync(HttpContext context, RequestContext requestContext, UnitOfWork unitOfWork)
+    public async Task InvokeAsync(HttpContext context, RequestContext requestContext)
     {
         var endpoint = context.GetEndpoint();
         if (endpoint?.Metadata.GetMetadata<UnitOfWorkMetadata>() is null
@@ -30,6 +30,7 @@ internal sealed partial class TenantContextMiddleware(RequestDelegate next, ILog
         }
 
         requestContext.UserId = userId;
+        var unitOfWork = context.RequestServices.GetRequiredService<UnitOfWork>();
         var cancellationToken = context.RequestAborted;
         var readOnly = HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method);
         await unitOfWork.BeginAsync(readOnly, cancellationToken);

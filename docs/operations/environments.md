@@ -26,15 +26,19 @@ Ayrıntılı sır tablosu: `docs/security/data-policy.md` §9. Özet:
 - **Local:** `.env` (git-ignored) — `.env.example` yalnızca değişken adları.
 - **Preview:** GitHub Environment `preview` (deploy token'ları), API host env, Vercel "Preview" env.
 - **Production:** GitHub Environment `production` (required reviewer: ürün sahibi), API host env, Vercel "Production" env.
-- `DATABASE_URL` = `bayios_app` rolü (`NOBYPASSRLS`, tablo sahibi değil); `DATABASE_MIGRATION_URL` = `bayios_migrator` (yalnızca CI/deploy migration adımı). `postgres`/service-role ile uygulama bağlantısı yasaktır; local compose'da da aynı bootstrap SQL'i çalıştırılır.
+- `ConnectionStrings__Default` = `bayios_app` rolü (`NOBYPASSRLS`, tablo sahibi değil); `ConnectionStrings__Migrator` = `bayios_migrator` (yalnızca CI/deploy migration adımı, API'ye verilmez). `postgres`/service-role ile uygulama bağlantısı yasaktır; local compose'da da aynı bootstrap SQL'i (`infra/docker/initdb/`) çalıştırılır.
+- API yapılandırması ASP.NET Core adlandırmasını kullanır (`:` → `__`). Diziler indeksle verilir: CORS için `Cors__AllowedOrigins__0`, `Cors__AllowedOrigins__1`, … (tek değerli `Cors__AllowedOrigins=` diziye bağlanmaz).
+- Eksik `ConnectionStrings__Default` / `Auth__*` ile API yine açılır (`/health` 200) ama kapalı-güvenli kalır: `/health/ready` 503, tüm token'lar 401.
 - Değişken adları tüm ortamlarda aynı; değerler farklı. API `ASPNETCORE_ENVIRONMENT` = `Development | Preview | Production`.
 
 Örnek değişken adları (değer yok):
 ```
-DATABASE_URL, DATABASE_MIGRATION_URL, SUPABASE_URL, SUPABASE_JWKS_URL, SUPABASE_JWT_ISSUER, SUPABASE_JWT_AUDIENCE,
-SUPABASE_SECRET_KEY, STORAGE_BUCKET_IMPORTS, ANTHROPIC_API_KEY, AI_MODE (mock|live), AI_DAILY_TENANT_QUOTA,
-FCM_SERVICE_ACCOUNT_JSON, CORS_ALLOWED_ORIGINS, NEXT_PUBLIC_API_BASE_URL, NEXT_PUBLIC_SUPABASE_URL,
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+API (uygulanmış): ConnectionStrings__Default, ConnectionStrings__Migrator (yalnızca migration adımı),
+Auth__Authority (= JWT issuer, https://<ref>.supabase.co/auth/v1), Auth__Audience, Auth__JwksUrl (opsiyonel;
+varsayılan {Authority}/.well-known/jwks.json), Cors__AllowedOrigins__0..n
+API (henüz uygulanmadı, ad önerisi): SUPABASE_URL, SUPABASE_SECRET_KEY, STORAGE_BUCKET_IMPORTS, ANTHROPIC_API_KEY,
+AI_MODE (mock|live), AI_DAILY_TENANT_QUOTA, FCM_SERVICE_ACCOUNT_JSON
+Web: NEXT_PUBLIC_API_BASE_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ```
 
 ## 3. Veri kuralları

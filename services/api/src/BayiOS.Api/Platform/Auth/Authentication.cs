@@ -39,23 +39,25 @@ internal static class AuthenticationSetup
         services.AddOptions<AuthSettings>()
             .BindConfiguration("Auth")
             .ValidateDataAnnotations()
-            .Validate(s => Uri.TryCreate(s.Authority, UriKind.Absolute, out _), "Auth:Authority must be an absolute URI.")
-            .ValidateOnStart();
+            .Validate(s => Uri.TryCreate(s.Authority, UriKind.Absolute, out _), "Auth:Authority must be an absolute URI.");
+
+        // No ValidateOnStart (see DatabaseSetup): missing auth settings make /health/ready 503 and every
+        // authenticated request fail closed instead of preventing the process from starting.
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
             .Configure<IOptions<AuthSettings>>((options, settings) =>
             {
-                var auth = settings.Value;
+                var auth = TryGet(settings);
                 options.MapInboundClaims = false;
                 options.RefreshOnIssuerKeyNotFound = true; // unknown kid => refresh JWKS once (key rotation)
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
-                    ValidIssuer = auth.Authority,
+                    ValidIssuer = auth?.Authority, // null when unconfigured => issuer check fails closed
                     ValidateAudience = true,
-                    ValidAudience = auth.Audience,
+                    ValidAudience = auth?.Audience,
                     ValidateLifetime = true,
                     RequireExpirationTime = true,
                     ValidateIssuerSigningKey = true,
@@ -94,18 +96,38 @@ internal static class AuthenticationSetup
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
             .PostConfigure<IOptions<AuthSettings>>((options, settings) =>
             {
+                if (TryGet(settings) is not { } auth)
+                {
+                    // Unconfigured: no keys, no issuer => every token is rejected (401) without network calls.
+                    options.Configuration = new OpenIdConnectConfiguration();
+                    options.ConfigurationManager = new StaticConfigurationManager<OpenIdConnectConfiguration>(options.Configuration);
+                    return;
+                }
+
                 var httpClient = new HttpClient(options.BackchannelHttpHandler ?? new HttpClientHandler())
                 {
                     Timeout = options.BackchannelTimeout,
                     MaxResponseContentBufferSize = 1024 * 1024,
                 };
                 options.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
-                    settings.Value.ResolvedJwksUrl,
-                    new JwksRetriever(settings.Value.Authority),
-                    new HttpDocumentRetriever(httpClient) { RequireHttps = settings.Value.RequireHttpsMetadata });
+                    auth.ResolvedJwksUrl,
+                    new JwksRetriever(auth.Authority),
+                    new HttpDocumentRetriever(httpClient) { RequireHttps = auth.RequireHttpsMetadata });
             });
 
         return services;
+    }
+
+    private static AuthSettings? TryGet(IOptions<AuthSettings> settings)
+    {
+        try
+        {
+            return settings.Value;
+        }
+        catch (OptionsValidationException)
+        {
+            return null;
+        }
     }
 }
 

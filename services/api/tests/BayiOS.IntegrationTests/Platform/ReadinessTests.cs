@@ -34,4 +34,24 @@ public class ReadinessTests(ApiFixture fixture)
         Assert.DoesNotContain("127.0.0.1", await ready.Content.ReadAsStringAsync(Ct));
         Assert.Equal(HttpStatusCode.OK, live.StatusCode);
     }
+
+    [Fact]
+    public async Task Unconfigured_instance_starts_but_is_not_ready_and_rejects_tokens()
+    {
+        // Mirrors the container smoke test (no env): process must start, yet fail closed.
+        await using var unconfigured = fixture.WithWebHostBuilder(builder => builder
+            .UseSetting("ConnectionStrings:Default", string.Empty)
+            .UseSetting("Auth:Authority", string.Empty)
+            .UseSetting("Auth:Audience", string.Empty));
+        var client = unconfigured.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", TestTokens.Create(Guid.NewGuid()));
+
+        var live = await client.GetAsync("/health", Ct);
+        var ready = await client.GetAsync("/health/ready", Ct);
+        var me = await client.GetAsync("/api/v1/me", Ct);
+
+        Assert.Equal(HttpStatusCode.OK, live.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, ready.StatusCode);
+        await HttpAssert.ProblemAsync(me, HttpStatusCode.Unauthorized, "auth.invalid_token");
+    }
 }
