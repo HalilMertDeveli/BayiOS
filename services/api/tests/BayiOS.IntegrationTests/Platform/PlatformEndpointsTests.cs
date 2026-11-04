@@ -28,14 +28,14 @@ public class PlatformEndpointsTests(WebApplicationFactory<Program> factory) : IC
     }
 
     [Fact]
-    public async Task Response_echoes_safe_correlation_id()
+    public async Task Response_echoes_guid_correlation_id()
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/health");
-        request.Headers.Add("X-Correlation-Id", "test-123");
+        request.Headers.Add("X-Correlation-Id", "0f8fad5bd9cb469fa16570867728950e");
 
         var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
-        Assert.Equal("test-123", response.Headers.GetValues("X-Correlation-Id").Single());
+        Assert.Equal("0f8fad5bd9cb469fa16570867728950e", response.Headers.GetValues("X-Correlation-Id").Single());
     }
 
     [Fact]

@@ -1,25 +1,15 @@
 namespace BayiOS.Api.Platform;
 
 /// <summary>
-/// Accepts a caller-supplied correlation id only when it is short and made of safe characters,
-/// so it can be echoed into logs and response headers without log injection.
+/// Accepts a caller-supplied correlation id only when it is a GUID and re-formats it server-side,
+/// so no caller-controlled text reaches logs or response headers (log injection).
 /// </summary>
 internal static class CorrelationId
 {
     public const string HeaderName = "X-Correlation-Id";
-    private const int MaxLength = 64;
 
-    public static string Resolve(string? incoming)
-    {
-        if (!string.IsNullOrEmpty(incoming) && incoming.Length <= MaxLength && incoming.All(IsAllowed))
-        {
-            return incoming;
-        }
-
-        return Guid.NewGuid().ToString("N");
-    }
-
-    private static bool IsAllowed(char c) => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.';
+    public static string Resolve(string? incoming) =>
+        (Guid.TryParse(incoming, out var parsed) ? parsed : Guid.NewGuid()).ToString("N");
 }
 
 internal sealed class CorrelationIdMiddleware(RequestDelegate next, ILogger<CorrelationIdMiddleware> logger)

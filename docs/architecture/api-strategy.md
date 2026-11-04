@@ -39,7 +39,7 @@
 | `X-Tenant-Id: <uuid>` | İstek | Tenant bağımsız uçlar hariç zorunlu |
 | `Idempotency-Key: <uuid>` | İstek | Tüm `POST` oluşturma ve durum geçişi uçlarında zorunlu |
 | `If-Match: "<etag>"` | İstek | Düzenlenebilir kaynaklarda `PATCH/PUT/DELETE` ve onay gibi geçişlerde zorunlu |
-| `X-Correlation-Id` | İki yön | Yoksa sunucu üretir; yanıtta döner |
+| `X-Correlation-Id` | İki yön | GUID ise normalize edilip (`N` biçimi) kullanılır; yoksa veya GUID değilse sunucu üretir; yanıtta döner |
 | `X-Client-Version`, `X-Client-Platform` | İstek | `web`, `android`, `ios` |
 | `Accept-Language` | İstek | `tr-TR` varsayılan (yalnızca sunucu tarafı metinler için) |
 | `ETag` | Yanıt | `W/"<row_version>"` |
