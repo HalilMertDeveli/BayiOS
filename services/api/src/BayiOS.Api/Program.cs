@@ -42,6 +42,7 @@ builder.Services.AddCustomersModule();
 builder.Services.AddPricingPorts();
 builder.Services.AddOrdersModule();
 builder.Services.AddOrdersPorts();
+builder.Services.AddFulfillmentPorts();
 
 var app = builder.Build();
 

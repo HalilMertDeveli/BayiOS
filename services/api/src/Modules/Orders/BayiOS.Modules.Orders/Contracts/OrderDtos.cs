@@ -45,16 +45,6 @@ public sealed record ApproveOrderRequest(bool? ConfirmNegativeStock);
 /// <summary>Reason is required (PRD ORD-07 for cancel; reject and short-close likewise).</summary>
 public sealed record OrderReasonRequest(string? Reason);
 
-/// <param name="PackageCount">PRD ORD-15.</param>
-public sealed record ShipOrderRequest(
-    IReadOnlyList<ShipLineInput>? Lines,
-    string? Carrier,
-    string? TrackingNumber,
-    int? PackageCount);
-
-/// <param name="LocationId">Required only to pick a specific reserved location; null = the line's reservations in order.</param>
-public sealed record ShipLineInput(Guid? OrderLineId, decimal? Quantity, Guid? LocationId);
-
 // ---- Responses ----
 
 public sealed record TaxBreakdownResponse(decimal Rate, decimal TaxBase, decimal Tax, decimal Total);
@@ -95,6 +85,7 @@ public sealed record OrderResponse(
     DateTimeOffset? CompletedAt,
     DateTimeOffset? CancelledAt,
     string? CancelReason,
+    bool HasShortage,
     long Version);
 
 /// <param name="PriceStatus"><c>priced</c> or <c>no_price</c>.</param>

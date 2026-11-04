@@ -1,5 +1,6 @@
 using System.Net;
 using BayiOS.IntegrationTests.Infrastructure;
+using BayiOS.IntegrationTests.Warehouse;
 using BayiOS.Modules.Orders.Contracts;
 
 namespace BayiOS.IntegrationTests.Orders;
@@ -100,16 +101,23 @@ public class OrdersConcurrencyTests(ApiFixture fixture)
         for (var round = 0; round < Rounds; round++)
         {
             var approved = await kit.ApprovedOrderAsync(OrdersKit.Line(variant, 2m));
-            var picking = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, approved, "start-picking"));
+            // Picked and packed: the draft shipment is ready to confirm.
+            var task = await Fulfillment.ActiveTaskAsync(kit.Owner, approved.Order.Id);
+            var completed = await Fulfillment.PickAndCompleteAsync(kit.Owner, task, new Dictionary<Guid, decimal> { [approved.Lines[0].Id] = 2m });
+            var packed = await kit.GetAsync(approved.Order.Id);
 
             var responses = await Parallel(2, i => i == 0
-                ? OrdersKit.ActAsync(kit.Owner, picking, "cancel", new { reason = "Yarış" }, ifMatch: false)
-                : OrdersKit.ActAsync(kit.Owner, picking, "shipments", new { lines = new[] { new { orderLineId = picking.Lines[0].Id, quantity = 2m } } }, ifMatch: false));
+                ? OrdersKit.ActAsync(kit.Owner, packed, "cancel", new { reason = "Yarış" }, ifMatch: false)
+                : Fulfillment.ConfirmAsync(kit.Owner, completed.ShipmentId!.Value));
 
             Assert.Equal(1, responses.Count(r => r.StatusCode == HttpStatusCode.OK));
-            await HttpAssert.ProblemAsync(responses.Single(r => r.StatusCode != HttpStatusCode.OK), HttpStatusCode.Conflict, "order.invalid_transition");
-            var final = await kit.GetAsync(picking.Order.Id);
+            var loser = responses.Single(r => r.StatusCode != HttpStatusCode.OK);
+            Assert.Equal(HttpStatusCode.Conflict, loser.StatusCode);
+            var final = await kit.GetAsync(packed.Order.Id);
             Assert.Contains(final.Order.Status, RaceOutcomes);
+            // Cancel won: the shipment was cancelled with the order (confirm sees it), picked goods go back (putaway).
+            // Shipment won: cancel is an illegal transition after shipping.
+            await HttpAssert.ProblemAsync(loser, HttpStatusCode.Conflict, final.Order.Status == "cancelled" ? "shipment.invalid_transition" : "order.invalid_transition");
         }
 
         await kit.AssertConsistentAsync();

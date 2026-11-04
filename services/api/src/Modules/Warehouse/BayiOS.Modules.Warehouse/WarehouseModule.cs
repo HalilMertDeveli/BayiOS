@@ -1,4 +1,5 @@
 using BayiOS.Modules.Inventory.Contracts;
+using BayiOS.Modules.Orders.Contracts;
 using BayiOS.Modules.Warehouse.Api;
 using BayiOS.Modules.Warehouse.Application;
 using BayiOS.Modules.Warehouse.Infrastructure.Persistence;
@@ -18,9 +19,24 @@ public static class WarehouseModule
             WarehouseDbContext.Configure(options, sp.GetRequiredService<UnitOfWork>().Connection));
         services.AddScoped<WarehouseService>();
         services.AddScoped<IWarehouseDirectory, WarehouseDirectory>();
+
+        // Fulfilment (JOB 10). The host provides IFulfillmentCatalog and ITaskAssigneeDirectory (Catalog/Identity
+        // adapters); Orders provides IOrderFulfillment and receives this module's IOrderFulfillmentListener.
+        services.AddScoped<FulfillmentAccess>();
+        services.AddScoped<FulfillmentLocks>();
+        services.AddScoped<FulfillmentQueries>();
+        services.AddScoped<PickingTaskBuilder>();
+        services.AddScoped<PickingService>();
+        services.AddScoped<ShipmentService>();
+        services.AddScoped<IOrderFulfillmentListener, FulfillmentListener>();
         services.TryAddSingleton(TimeProvider.System);
         return services;
     }
 
-    public static IEndpointRouteBuilder MapWarehouseModule(this IEndpointRouteBuilder app) => app.MapWarehouseEndpoints();
+    public static IEndpointRouteBuilder MapWarehouseModule(this IEndpointRouteBuilder app)
+    {
+        app.MapWarehouseEndpoints();
+        app.MapFulfillmentEndpoints();
+        return app;
+    }
 }

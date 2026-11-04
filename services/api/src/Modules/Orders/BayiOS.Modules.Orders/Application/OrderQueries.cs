@@ -148,6 +148,7 @@ internal sealed class OrderQueries(OrdersDbContext db)
             o.CompletedAt,
             o.CancelledAt,
             o.CancelReason,
+            o.HasShortage,
             o.RowVersion);
     }
 

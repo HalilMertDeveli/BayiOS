@@ -17,6 +17,9 @@ internal sealed class WarehouseDbContext : DbContext, ITenantScopedDbContext
     public const string DefaultUniqueIndex = "ux_warehouses_tenant_id_default";
     public const string LocationCodeUniqueIndex = "ux_warehouse_locations_tenant_id_warehouse_id_code";
     public const string LocationBarcodeUniqueIndex = "ux_warehouse_locations_tenant_id_barcode";
+    public const string ActivePickTaskUniqueIndex = "ux_picking_tasks_tenant_id_order_id_active";
+    public const string ShipmentNumberUniqueIndex = "ux_shipments_tenant_id_number";
+    public const string OpenShipmentUniqueIndex = "ux_shipments_tenant_id_order_id_open";
 
     private static readonly TenantGuardInterceptor TenantGuard = new();
 
@@ -34,7 +37,26 @@ internal sealed class WarehouseDbContext : DbContext, ITenantScopedDbContext
 
     public DbSet<WarehouseLocation> Locations => Set<WarehouseLocation>();
 
+    public DbSet<PickingTask> PickingTasks => Set<PickingTask>();
+
+    public DbSet<PickingTaskLine> PickingTaskLines => Set<PickingTaskLine>();
+
+    public DbSet<Shipment> Shipments => Set<Shipment>();
+
+    public DbSet<ShipmentLine> ShipmentLines => Set<ShipmentLine>();
+
+    public DbSet<ShipmentPackage> ShipmentPackages => Set<ShipmentPackage>();
+
     public Guid? CurrentTenantId => _requestContext.TenantId;
+
+    /// <summary>Joins the request transaction (raw SQL and EF queries must run inside it).</summary>
+    public async Task JoinTransactionAsync(CancellationToken cancellationToken)
+    {
+        if (_unitOfWork?.Transaction is { } transaction && Database.CurrentTransaction is null)
+        {
+            await Database.UseTransactionAsync(transaction, cancellationToken);
+        }
+    }
 
     public static void Configure(DbContextOptionsBuilder builder, DbConnection connection)
     {
@@ -96,7 +118,165 @@ internal sealed class WarehouseDbContext : DbContext, ITenantScopedDbContext
             location.HasIndex(l => new { l.TenantId, l.WarehouseId, l.PickSequence });
             location.HasQueryFilter(l => l.TenantId == CurrentTenantId);
         });
+
+        MapFulfillment(modelBuilder);
     }
+
+    /// <summary>Picking tasks, shipments and packages (data-model §5.6, JOB 10).</summary>
+    private void MapFulfillment(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PickingTask>(task =>
+        {
+            task.ToTable("picking_tasks", t =>
+            {
+                t.HasCheckConstraint("ck_picking_tasks_type", $"type IN ({Quoted(PickingTaskTypes.All)})");
+                t.HasCheckConstraint("ck_picking_tasks_status", $"status IN ({Quoted(PickingTaskStatuses.All)})");
+            });
+            MapCommon(task);
+            task.Property(t => t.Type).IsRequired();
+            task.Property(t => t.OrderNumber).IsRequired();
+            task.Property(t => t.Status).IsRequired();
+            task.HasOne<WarehouseModel>().WithMany()
+                .HasForeignKey(t => new { t.TenantId, t.WarehouseId })
+                .HasPrincipalKey(w => new { w.TenantId, w.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            task.HasMany(t => t.Lines).WithOne()
+                .HasForeignKey(l => new { l.TenantId, l.PickingTaskId })
+                .HasPrincipalKey(t => new { t.TenantId, t.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            task.HasIndex(t => new { t.TenantId, t.WarehouseId, t.Status });
+            task.HasIndex(t => new { t.TenantId, t.OrderId });
+            task.HasIndex(t => new { t.TenantId, t.AssignedTo, t.Status });
+            task.HasIndex(t => new { t.TenantId, t.CreatedAt, t.Id });
+            // At most one active pick task per order: the last defence against double picking.
+            task.HasIndex(t => new { t.TenantId, t.OrderId }, ActivePickTaskUniqueIndex).IsUnique()
+                .HasFilter("type = 'pick' AND status IN ('open', 'in_progress')")
+                .HasDatabaseName(ActivePickTaskUniqueIndex);
+            task.HasQueryFilter(t => t.TenantId == CurrentTenantId);
+        });
+
+        modelBuilder.Entity<PickingTaskLine>(line =>
+        {
+            line.ToTable("picking_task_lines", t =>
+            {
+                t.HasCheckConstraint("ck_picking_task_lines_quantities", "qty_to_pick > 0 AND qty_picked >= 0 AND qty_short >= 0 AND qty_picked + qty_short <= qty_to_pick");
+                t.HasCheckConstraint("ck_picking_task_lines_shortage_reason", $"shortage_reason IS NULL OR shortage_reason IN ({Quoted(ShortageReasons.All)})");
+            });
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.HasAlternateKey(l => new { l.TenantId, l.Id });
+            line.Property(l => l.Sku).IsRequired();
+            line.Property(l => l.Name).IsRequired();
+            line.Property(l => l.Unit).IsRequired();
+            line.Property(l => l.QtyToPick).HasPrecision(18, 3);
+            line.Property(l => l.QtyPicked).HasPrecision(18, 3);
+            line.Property(l => l.QtyShort).HasPrecision(18, 3);
+            line.Ignore(l => l.Remaining);
+            line.HasOne<WarehouseLocation>().WithMany()
+                .HasForeignKey(l => new { l.TenantId, l.LocationId })
+                .HasPrincipalKey(l => new { l.TenantId, l.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            line.HasIndex(l => new { l.TenantId, l.PickingTaskId, l.Sequence }).IsUnique();
+            line.HasIndex(l => new { l.TenantId, l.OrderLineId });
+            line.HasQueryFilter(l => l.TenantId == CurrentTenantId);
+        });
+
+        modelBuilder.Entity<Shipment>(shipment =>
+        {
+            shipment.ToTable("shipments", t =>
+            {
+                t.HasCheckConstraint("ck_shipments_status", $"status IN ({Quoted(ShipmentStatuses.All)})");
+                t.HasCheckConstraint("ck_shipments_package_count", "package_count IS NULL OR package_count > 0");
+                t.HasCheckConstraint("ck_shipments_confirmed", "status <> 'confirmed' OR (shipped_at IS NOT NULL AND confirmed_by IS NOT NULL)");
+            });
+            MapCommon(shipment);
+            shipment.Property(s => s.Number).IsRequired();
+            shipment.Property(s => s.OrderNumber).IsRequired();
+            shipment.Property(s => s.Status).IsRequired();
+            shipment.HasOne<WarehouseModel>().WithMany()
+                .HasForeignKey(s => new { s.TenantId, s.WarehouseId })
+                .HasPrincipalKey(w => new { w.TenantId, w.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            shipment.HasOne<PickingTask>().WithMany()
+                .HasForeignKey(s => new { s.TenantId, s.PickingTaskId })
+                .HasPrincipalKey(t => new { t.TenantId, t.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            shipment.HasMany(s => s.Lines).WithOne()
+                .HasForeignKey(l => new { l.TenantId, l.ShipmentId })
+                .HasPrincipalKey(s => new { s.TenantId, s.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            shipment.HasMany(s => s.Packages).WithOne()
+                .HasForeignKey(p => new { p.TenantId, p.ShipmentId })
+                .HasPrincipalKey(s => new { s.TenantId, s.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            shipment.HasIndex(s => new { s.TenantId, s.Number }).IsUnique().HasDatabaseName(ShipmentNumberUniqueIndex);
+            shipment.HasIndex(s => new { s.TenantId, s.OrderId });
+            shipment.HasIndex(s => new { s.TenantId, s.CreatedAt, s.Id });
+            // At most one unconfirmed shipment per order (picking completes into exactly one draft).
+            shipment.HasIndex(s => new { s.TenantId, s.OrderId }, OpenShipmentUniqueIndex).IsUnique()
+                .HasFilter("status IN ('draft', 'packed')")
+                .HasDatabaseName(OpenShipmentUniqueIndex);
+            shipment.HasQueryFilter(s => s.TenantId == CurrentTenantId);
+        });
+
+        modelBuilder.Entity<ShipmentLine>(line =>
+        {
+            line.ToTable("shipment_lines", t =>
+            {
+                t.HasCheckConstraint(
+                    "ck_shipment_lines_quantities",
+                    "picked_quantity > 0 AND quantity >= 0 AND short_quantity >= 0 AND quantity + short_quantity = picked_quantity "
+                    + "AND (packed_quantity IS NULL OR (packed_quantity >= 0 AND packed_quantity <= quantity))");
+                t.HasCheckConstraint("ck_shipment_lines_shortage_reason", $"shortage_reason IS NULL OR shortage_reason IN ({Quoted(ShortageReasons.All)})");
+            });
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.HasAlternateKey(l => new { l.TenantId, l.Id });
+            line.Property(l => l.Sku).IsRequired();
+            line.Property(l => l.Name).IsRequired();
+            line.Property(l => l.Unit).IsRequired();
+            line.Property(l => l.PickedQuantity).HasPrecision(18, 3);
+            line.Property(l => l.Quantity).HasPrecision(18, 3);
+            line.Property(l => l.PackedQuantity).HasPrecision(18, 3);
+            line.Property(l => l.ShortQuantity).HasPrecision(18, 3);
+            line.HasOne<WarehouseLocation>().WithMany()
+                .HasForeignKey(l => new { l.TenantId, l.LocationId })
+                .HasPrincipalKey(l => new { l.TenantId, l.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            line.HasIndex(l => new { l.TenantId, l.OrderLineId });
+            line.HasQueryFilter(l => l.TenantId == CurrentTenantId);
+        });
+
+        modelBuilder.Entity<ShipmentPackage>(package =>
+        {
+            package.ToTable("shipment_packages", t => t.HasCheckConstraint("ck_shipment_packages_package_no", "package_no > 0"));
+            package.HasKey(p => p.Id);
+            package.Property(p => p.Id).ValueGeneratedNever();
+            package.HasAlternateKey(p => new { p.TenantId, p.Id });
+            package.HasMany(p => p.Items).WithOne()
+                .HasForeignKey(i => new { i.TenantId, i.PackageId })
+                .HasPrincipalKey(p => new { p.TenantId, p.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            package.HasIndex(p => new { p.TenantId, p.ShipmentId, p.PackageNo }).IsUnique();
+            package.HasQueryFilter(p => p.TenantId == CurrentTenantId);
+        });
+
+        modelBuilder.Entity<ShipmentPackageItem>(item =>
+        {
+            item.ToTable("shipment_package_items", t => t.HasCheckConstraint("ck_shipment_package_items_quantity", "quantity > 0"));
+            item.HasKey(i => i.Id);
+            item.Property(i => i.Id).ValueGeneratedNever();
+            item.Property(i => i.Quantity).HasPrecision(18, 3);
+            item.HasOne<ShipmentLine>().WithMany()
+                .HasForeignKey(i => new { i.TenantId, i.ShipmentLineId })
+                .HasPrincipalKey(l => new { l.TenantId, l.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            item.HasIndex(i => new { i.TenantId, i.PackageId });
+            item.HasQueryFilter(i => i.TenantId == CurrentTenantId);
+        });
+    }
+
+    private static string Quoted(IEnumerable<string> values) => string.Join(", ", values.Select(v => $"'{v}'"));
 
     private static void MapCommon<T>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<T> entity)
         where T : Domain.WarehouseModuleEntity
