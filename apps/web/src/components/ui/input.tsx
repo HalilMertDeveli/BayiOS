@@ -4,12 +4,14 @@ import { useId, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Field, controlClasses, fieldDescribedBy, type FieldBaseProps } from "./field";
 
-export type InputProps = Omit<ComponentProps<"input">, "prefix"> &
+export type InputProps = Omit<ComponentProps<"input">, "prefix" | "size"> &
   FieldBaseProps & {
     /** Decorative content inside the control, before the text (e.g. a search icon). */
     prefix?: ReactNode;
     /** Content after the text (e.g. "₺" or a unit). */
     suffix?: ReactNode;
+    /** md = 36 px (web default); lg = 48 px touch target for mobile/warehouse screens. */
+    size?: "md" | "lg";
   };
 
 export function Input({
@@ -22,6 +24,7 @@ export function Input({
   id: idProp,
   className,
   required,
+  size = "md",
   ...rest
 }: InputProps) {
   const autoId = useId();
@@ -42,7 +45,8 @@ export function Input({
           aria-describedby={fieldDescribedBy(id, hint, error)}
           className={cn(
             controlClasses,
-            "h-9 px-3 read-only:bg-sunken",
+            size === "lg" ? "h-12 px-4" : "h-9 px-3",
+            "read-only:bg-sunken",
             prefix ? "pl-9" : null,
             suffix ? "pr-9" : null,
             error ? "border-danger-fg" : "border-line-strong",

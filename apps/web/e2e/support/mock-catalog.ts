@@ -397,7 +397,34 @@ export async function handleCatalog(route: Route, catalog: MockCatalog): Promise
     }
   }
 
+  // Variant reads (scanner lookup, search, by id) — used by the stock screens.
+  const allVariants = () => catalog.products.flatMap((p) => p.variants);
+  if (method === "GET" && path === "/api/v1/variants/lookup") {
+    const barcode = url.searchParams.get("barcode");
+    const found = allVariants().find((v) => v.barcode === barcode && v.status !== "archived");
+    await (found ? fulfillJson(route, 200, found, etag(found.version)) : fulfillJson(route, 404, problemBody(404, "resource.not_found")));
+    return true;
+  }
+  if (method === "GET" && path === "/api/v1/variants") {
+    const q = (url.searchParams.get("q") ?? "").toLocaleLowerCase("tr");
+    const sku = url.searchParams.get("sku");
+    const barcode = url.searchParams.get("barcode");
+    let items = allVariants().filter((v) => v.status !== "archived");
+    if (sku) items = items.filter((v) => v.sku === sku.toLocaleUpperCase("tr"));
+    if (barcode) items = items.filter((v) => v.barcode === barcode);
+    if (q) items = items.filter((v) => v.sku.toLocaleLowerCase("tr").includes(q) || v.barcode === url.searchParams.get("q") || (v.name ?? "").toLocaleLowerCase("tr").includes(q));
+    items = [...items].sort((a, b) => a.sku.localeCompare(b.sku));
+    const limit = Number(url.searchParams.get("limit") ?? 50);
+    await fulfillJson(route, 200, { items: items.slice(0, limit), page: { nextCursor: null, hasMore: items.length > limit, limit } });
+    return true;
+  }
+
   const variantMatch = path.match(/^\/api\/v1\/variants\/([^/]+)$/);
+  if (variantMatch && method === "GET") {
+    const found = allVariants().find((v) => v.id === variantMatch[1]);
+    await (found ? fulfillJson(route, 200, found, etag(found.version)) : fulfillJson(route, 404, problemBody(404, "resource.not_found")));
+    return true;
+  }
   if (variantMatch) {
     const product = catalog.products.find((p) => p.variants.some((v) => v.id === variantMatch[1]));
     const variant = product?.variants.find((v) => v.id === variantMatch[1]);
