@@ -2,7 +2,7 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowLeft, Calculator, Search, UserRound, X } from "lucide-react";
+import { ArrowLeft, Calculator, X } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { VariantScanner } from "@/components/inventory/variant-scanner";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { ApiError } from "@/lib/api/client";
-import { listCustomers, type Customer } from "@/lib/customers/api";
-import { customerErrorMessage } from "@/lib/customers/errors";
+import type { Customer } from "@/lib/customers/api";
+import { CustomerPicker } from "@/components/customers/customer-picker";
 import type { VariantRef } from "@/lib/inventory/receipt-form";
 import { PRICE_LISTS_HREF, quotePrices, type PriceQuote, type ResolvedPrice } from "@/lib/pricing/api";
 import { pricingErrorMessage, pricingFieldErrors } from "@/lib/pricing/errors";
@@ -234,99 +234,5 @@ export function SourceCell({ line, currency }: { line: ResolvedPrice; currency: 
         {tier}
       </span>
     </span>
-  );
-}
-
-/** Customer search (name/code contains, exact tax no / phone / WhatsApp); none = default list only. */
-function CustomerPicker({ value, error, onChange }: { value: Customer | null; error?: string; onChange: (c: Customer | null) => void }) {
-  const { api } = useSession();
-  const [term, setTerm] = useState("");
-  const [state, setState] = useState<{ kind: "idle" } | { kind: "searching" } | { kind: "results"; items: Customer[] } | { kind: "error"; message: string }>({ kind: "idle" });
-
-  const search = async () => {
-    const q = term.trim();
-    if (!q) return;
-    setState({ kind: "searching" });
-    try {
-      const page = await listCustomers(api, new URLSearchParams({ q, limit: "10" }).toString());
-      setState({ kind: "results", items: page.items });
-    } catch (err) {
-      setState({ kind: "error", message: customerErrorMessage(err) });
-    }
-  };
-
-  if (value) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <span className="text-body font-medium text-fg">Müşteri</span>
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-line-strong p-3">
-          <UserRound className="size-4 text-fg-muted" aria-hidden="true" />
-          <span className="font-medium text-fg">{value.name}</span>
-          <span className="font-mono text-caption text-fg-muted">{value.code}</span>
-          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => onChange(null)}>
-            Müşteriyi kaldır
-          </Button>
-        </div>
-        {error ? <p className="text-caption text-danger-fg">{error}</p> : null}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-start gap-2">
-        <Input
-          label="Müşteri (isteğe bağlı)"
-          className="flex-1"
-          type="search"
-          prefix={<Search className="size-4" />}
-          value={term}
-          error={error}
-          hint="Boş bırakılırsa yalnızca varsayılan liste kullanılır."
-          autoComplete="off"
-          onChange={(e) => setTerm(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              void search();
-            }
-          }}
-        />
-        <Button variant="secondary" className="mt-[1.625rem]" loading={state.kind === "searching"} disabled={!term.trim()} onClick={() => void search()}>
-          Müşteri ara
-        </Button>
-      </div>
-      {state.kind === "error" ? (
-        <p role="alert" className="text-body text-danger-fg">
-          {state.message}
-        </p>
-      ) : null}
-      {state.kind === "results" ? (
-        state.items.length === 0 ? (
-          <p role="status" className="text-body text-fg-muted">
-            Eşleşen müşteri yok.
-          </p>
-        ) : (
-          <ul aria-label="Bulunan müşteriler" className="flex flex-col gap-2">
-            {state.items.map((c) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChange(c);
-                    setState({ kind: "idle" });
-                    setTerm("");
-                  }}
-                  className="flex min-h-12 w-full flex-col items-start justify-center rounded-md border border-line-strong bg-card px-4 py-2 text-left hover:bg-sunken"
-                >
-                  <span className="text-body text-fg">{c.name}</span>
-                  <span className="font-mono text-caption text-fg-muted">{c.code}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )
-      ) : null}
-    </div>
   );
 }
