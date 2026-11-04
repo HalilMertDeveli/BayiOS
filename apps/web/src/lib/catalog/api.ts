@@ -32,12 +32,9 @@ export type EntityType = "product" | "variant";
 
 const MERGE_PATCH = "application/merge-patch+json";
 
-/**
- * Product detail/edit page. The id travels as a query parameter (not a dynamic segment): with Cache Components
- * the (app) shell reads the pathname, which a request-time [id] segment would turn into a prerender blocker.
- */
+/** Product detail/edit page (/urunler/[id]; the old /urunler/duzenle?id= URL redirects here). */
 export function productHref(id: string): string {
-  return `/urunler/duzenle?id=${encodeURIComponent(id)}`;
+  return `/urunler/${encodeURIComponent(id)}`;
 }
 
 /** Catalog resources carry `version`; the API's ETag is `W/"<version>"` and If-Match accepts the same form. */
