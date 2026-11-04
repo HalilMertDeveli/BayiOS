@@ -64,6 +64,38 @@ public class ImportsSecurityTests(ApiFixture fixture)
         Assert.Equal((long)valid.Length, await kit.ScalarAsync<long>("SELECT sum(length(content))::bigint FROM imports.import_files WHERE tenant_id = $1", kit.TenantId));
     }
 
+    [Fact]
+    public async Task Upload_idempotency_key_replays_the_same_file_and_rejects_a_different_one()
+    {
+        var kit = await ImportsKit.CreateAsync(fixture);
+        var file = SyntheticFiles.Csv(Headers, [["A-1", "Debriyaj Balatası", "adet", "20"]]);
+        var other = SyntheticFiles.Csv(Headers, [["A-2", "Fren Diski", "adet", "20"]]);
+        var key = Guid.NewGuid().ToString();
+
+        var first = await kit.UploadResponseAsync(file, "urunler.csv", idempotencyKey: key);
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var id = (await first.Content.ReadFromJsonAsync<ImportJobResponse>(Ct))!.Id;
+
+        // Same key + same file (bytes, name, type, form fields) → the stored response is replayed.
+        var replay = await kit.UploadResponseAsync(file, "urunler.csv", idempotencyKey: key);
+        Assert.Equal(HttpStatusCode.Created, replay.StatusCode);
+        Assert.True(replay.Headers.Contains("Idempotent-Replayed"));
+        Assert.Equal(id, (await replay.Content.ReadFromJsonAsync<ImportJobResponse>(Ct))!.Id);
+
+        // Same key + anything different about the upload → 422, never a silent replay of the first import.
+        await HttpAssert.ProblemAsync(await kit.UploadResponseAsync(other, "urunler.csv", idempotencyKey: key), HttpStatusCode.UnprocessableEntity, "idempotency.key_reused");
+        await HttpAssert.ProblemAsync(await kit.UploadResponseAsync(file, "baska-ad.csv", idempotencyKey: key), HttpStatusCode.UnprocessableEntity, "idempotency.key_reused");
+        await HttpAssert.ProblemAsync(
+            await kit.UploadResponseAsync(file, "urunler.csv", contentType: "text/plain", idempotencyKey: key), HttpStatusCode.UnprocessableEntity, "idempotency.key_reused");
+        await HttpAssert.ProblemAsync(
+            await kit.UploadResponseAsync(file, "urunler.csv", type: "prices", idempotencyKey: key), HttpStatusCode.UnprocessableEntity, "idempotency.key_reused");
+
+        Assert.Equal(1L, await kit.ScalarAsync<long>("SELECT count(*) FROM imports.import_jobs WHERE tenant_id = $1", kit.TenantId));
+
+        // A fresh key with the other file is a new import.
+        Assert.Equal(HttpStatusCode.Created, (await kit.UploadResponseAsync(other, "urunler.csv")).StatusCode);
+    }
+
     [Theory]
     [InlineData(Roles.Manager)]
     [InlineData(Roles.Sales)]

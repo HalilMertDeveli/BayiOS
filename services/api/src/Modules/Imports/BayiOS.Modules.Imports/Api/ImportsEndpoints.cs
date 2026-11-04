@@ -1,9 +1,12 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using BayiOS.Modules.Imports.Application;
 using BayiOS.Modules.Imports.Contracts;
 using BayiOS.Modules.Imports.Domain;
 using BayiOS.Modules.Imports.Parsing;
 using BayiOS.SharedKernel.Authorization;
+using BayiOS.SharedKernel.Platform.Idempotency;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -47,6 +50,7 @@ internal static class ImportsEndpoints
             .WithSummary("Dosya yükler (.xlsx/.csv, ≤ 10 MB, ≤ 10.000 satır): içerik/magic byte, makro, zip bombası ve satır/kolon limitleri doğrulanır")
             .RequirePermission(Permissions.ImportsRun)
             .RequireIdempotencyKey()
+            .WithMetadata(new UploadIdempotencyHash())
             .Accepts<UploadImportForm>("multipart/form-data")
             .ProducesProblem(StatusCodes.Status413PayloadTooLarge)
             .ProducesProblem(StatusCodes.Status415UnsupportedMediaType)
@@ -289,6 +293,47 @@ internal static class ImportsEndpoints
         await service.DeleteTemplateAsync(id, cancellationToken) is { } error ? Problem(error) : TypedResults.NoContent();
 
     // ---- Helpers ----
+
+    /// <summary>
+    /// Idempotency hash input for the multipart upload: every form field and, per file part, its name, file name,
+    /// declared content type, length and SHA-256 of the bytes. The form is parsed here with the upload limits and cached
+    /// by ASP.NET Core, so the handler reads the same form; an over-limit or broken form contributes nothing and the
+    /// handler rejects it (the error rolls back the key claim).
+    /// </summary>
+    private sealed class UploadIdempotencyHash : IIdempotencyHashContributor
+    {
+        public async ValueTask ContributeAsync(HttpContext context, IncrementalHash hash, CancellationToken cancellationToken)
+        {
+            var request = context.Request;
+            if (!request.HasFormContentType || request.ContentLength > ImportLimits.MaxFileBytes + MultipartOverheadBytes)
+            {
+                return;
+            }
+
+            IFormCollection form;
+            try
+            {
+                form = await request.ReadFormAsync(UploadFormOptions, cancellationToken);
+            }
+            catch (InvalidDataException)
+            {
+                return;
+            }
+
+            foreach (var key in form.Keys.Order(StringComparer.Ordinal))
+            {
+                hash.AppendData(Encoding.UTF8.GetBytes($"field\n{key}\n{form[key]}\n"));
+            }
+
+            foreach (var file in form.Files.OrderBy(f => f.Name, StringComparer.Ordinal))
+            {
+                hash.AppendData(Encoding.UTF8.GetBytes(
+                    $"file\n{file.Name}\n{file.FileName}\n{file.ContentType}\n{file.Length.ToString(CultureInfo.InvariantCulture)}\n"));
+                await using var stream = file.OpenReadStream();
+                hash.AppendData(await SHA256.HashDataAsync(stream, cancellationToken));
+            }
+        }
+    }
 
     /// <summary>Base name only, no control or path characters, ≤ 200 characters; the extension is kept.</summary>
     internal static string SafeFileName(string? fileName)
