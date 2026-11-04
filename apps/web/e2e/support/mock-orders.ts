@@ -70,6 +70,8 @@ export type MockOrder = {
   approvedAt: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
+  /** A picker reported a shortage (Warehouse, JOB 10). */
+  hasShortage: boolean;
   version: number;
   lines: MockOrderLine[];
   history: MockHistory[];
@@ -178,6 +180,7 @@ function orderResponse(order: MockOrder) {
     completedAt: null,
     cancelledAt: order.cancelledAt,
     cancelReason: order.cancelReason,
+    hasShortage: order.hasShortage,
     version: order.version,
   };
 }
@@ -225,6 +228,7 @@ export function makeOrder(
     customerId: string;
     status?: string;
     fulfillmentStatus?: string;
+    hasShortage?: boolean;
     source?: string;
     createdAt?: string;
     lines?: { variantId: string; quantity: number; unitPrice?: number | null }[];
@@ -247,6 +251,7 @@ export function makeOrder(
     approvedAt: null,
     cancelledAt: null,
     cancelReason: null,
+    hasShortage: options.hasShortage ?? false,
     version: 1,
     lines: [],
     history: [],

@@ -261,6 +261,19 @@ test.describe("onay, red, iptal (mock)", () => {
     await expect(page.getByRole("list", { name: "Durum geçmişi" })).toContainText("Onaylandı, stok rezerve edildi");
   });
 
+  test("depoda: kısmi sevk + eksik bildirimi salt okunur gösterilir; iptal yok (yalnızca short-close, depo ekranında)", async ({ page }) => {
+    const ctx = setup((c) =>
+      add(c, 1, { status: "picking", fulfillmentStatus: "partial", hasShortage: true, lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 2 }] }),
+    );
+    await signedIn(page, ctx);
+    await page.goto(`/siparisler/${orderId(1)}`);
+    await expect(page.getByRole("heading", { level: 1, name: "Sipariş SIP-2026-000001" })).toBeVisible();
+    await expect(page.getByText("Kısmi sevk").first()).toBeVisible();
+    await expect(page.getByText("Depoda eksik bildirildi").first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "İşlemler" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Satır bazında sevkiyat durumu" })).toContainText("MOCK-001-1");
+  });
+
   test("stok yetersiz (engelle): ya hep ya hiç mesajı ve eksik satır listesi; sipariş onay bekliyor kalır", async ({ page }) => {
     const ctx = setup((c) => {
       add(c, 1, { status: "pending_approval", lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 5 }, { variantId: variantOf(c.catalog, 2).id, quantity: 1 }] });

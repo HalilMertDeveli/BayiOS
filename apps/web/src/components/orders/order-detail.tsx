@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, CircleAlert, Lock, RotateCcw } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { NegativeStockDialog } from "@/components/inventory/negative-stock-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -271,6 +272,7 @@ function OrderView({
           <span className="flex flex-wrap items-center gap-2">
             <OrderStatus status={order.status} />
             <FulfillmentBadge status={order.fulfillmentStatus} showNone={fulfilment} />
+            {order.hasShortage ? <Badge tone="warning">Depoda eksik bildirildi</Badge> : null}
           </span>
         }
       />

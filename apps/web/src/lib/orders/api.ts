@@ -63,8 +63,8 @@ export async function updateOrder(api: ApiClient, id: string, patch: Partial<Upd
 }
 
 /**
- * Order-desk transitions built in this screen. Fulfilment transitions (start-picking, pack, shipments,
- * close-remaining) are deliberately absent: they move to the Warehouse picking/packing/shipment APIs (JOB 10).
+ * Order-desk transitions built in this screen. Fulfilment (picking tasks, packing, shipments, close-remaining) goes
+ * through the Warehouse picking-task and shipment APIs and is deliberately absent here (read-only on the detail page).
  */
 export type OrderTransition = "submit" | "withdraw" | "reject" | "approve" | "cancel";
 

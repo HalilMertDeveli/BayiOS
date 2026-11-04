@@ -63,6 +63,7 @@ export const historyActionLabels: Record<string, string> = {
   pack: "Paketlendi",
   ship: "Sevkiyat kaydedildi",
   close_remaining: "Kalan miktar kapatıldı",
+  report_shortage: "Depoda eksik bildirildi",
   complete: "Tamamlandı",
   cancel: "İptal edildi",
 };

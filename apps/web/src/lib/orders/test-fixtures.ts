@@ -63,6 +63,7 @@ export function orderDetail(lines: OrderLine[] = [orderLine()], overrides: Parti
       completedAt: null,
       cancelledAt: null,
       cancelReason: null,
+      hasShortage: false,
       version: 3,
       ...overrides,
     },

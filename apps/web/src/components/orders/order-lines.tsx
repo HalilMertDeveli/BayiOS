@@ -185,6 +185,11 @@ export function FulfilmentSection({ detail }: { detail: OrderDetail }) {
       <h2 id="order-fulfilment" className="text-h3 text-fg">
         Depo ve sevkiyat
       </h2>
+      {detail.order.hasShortage ? (
+        <FormAlert tone="warning" title="Depoda eksik bildirildi">
+          Toplama sırasında en az bir satırda eksik bildirildi. Karar (kısmi sevk, kalanı kapatma) depo/yönetici ekranlarında verilir.
+        </FormAlert>
+      ) : null}
       <Table caption="Satır bazında sevkiyat durumu" columns={columns} rows={detail.lines} getRowId={(l) => l.id} density="compact" />
       {detail.shipments.length > 0 ? (
         <ul aria-label="Sevkiyatlar" className="flex flex-col gap-2">
@@ -204,8 +209,8 @@ export function FulfilmentSection({ detail }: { detail: OrderDetail }) {
       <div role="note" className="flex gap-3 rounded-md border border-line bg-sunken px-4 py-3 text-body text-fg-secondary">
         <PackageCheck className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
         <p>
-          Toplama, paketleme, sevkiyat ve kalan miktarı kapatma işlemleri Depo modülünün görev ekranlarına taşınıyor; bu ekrandan yapılamaz. Burada yalnızca
-          durumları görürsünüz.
+          Toplama, paketleme, sevkiyat ve kalan miktarı kapatma işlemleri Depo modülünün toplama görevleri ve sevkiyat ekranlarından yapılır; bu ekrandan
+          yapılamaz. Burada yalnızca durumları görürsünüz.
         </p>
       </div>
     </section>
