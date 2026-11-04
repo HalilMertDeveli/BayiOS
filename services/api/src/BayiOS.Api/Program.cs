@@ -2,6 +2,7 @@ using BayiOS.Api.Platform;
 using BayiOS.Api.Platform.Auth;
 using BayiOS.Api.Platform.Persistence;
 using BayiOS.Api.Platform.Tenancy;
+using BayiOS.Modules.Catalog;
 using BayiOS.Modules.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,6 +26,7 @@ builder.Services.AddDatabase();
 builder.Services.AddBayiOsAuthentication();
 builder.Services.AddPermissionAuthorization();
 builder.Services.AddIdentityModule();
+builder.Services.AddCatalogModule();
 
 var app = builder.Build();
 
@@ -45,6 +47,7 @@ if (!app.Environment.IsProduction())
 app.MapPlatformEndpoints();
 app.MapReadiness();
 app.MapIdentityModule();
+app.MapCatalogModule();
 
 app.Run();
 
