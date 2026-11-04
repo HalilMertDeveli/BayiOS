@@ -1,0 +1,63 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "BayiOS.Api | v1",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost/"
+    }
+  ],
+  "paths": {
+    "/api/v1/meta": {
+      "get": {
+        "tags": [
+          "Platform"
+        ],
+        "summary": "API ad\u0131, s\u00FCr\u00FCm\u00FC ve ortam\u0131",
+        "operationId": "GetMeta",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "MetaResponse": {
+        "required": [
+          "name",
+          "version",
+          "environment"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Platform"
+    }
+  ]
+}

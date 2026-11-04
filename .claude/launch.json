@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "services/api/src/BayiOS.Api", "--launch-profile", "http"],
+      "port": 5280
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "apps/web", "run", "dev", "--", "--port", "3200"],
+      "port": 3200
+    }
+  ]
+}

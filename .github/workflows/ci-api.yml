@@ -1,0 +1,51 @@
+name: ci-api
+
+on:
+  pull_request:
+  push:
+    branches: [main, preview]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: services/api
+
+jobs:
+  build-test:
+    name: api build & test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: services/api/global.json
+
+      - name: Restore
+        run: dotnet restore BayiOS.slnx
+
+      - name: Format check
+        run: dotnet format BayiOS.slnx --verify-no-changes --no-restore
+
+      - name: Build
+        run: dotnet build BayiOS.slnx --no-restore -c Release
+
+      - name: Test (includes OpenAPI contract drift check)
+        run: dotnet test --solution BayiOS.slnx --no-build -c Release
+
+      - name: Vulnerable packages
+        run: |
+          dotnet list BayiOS.slnx package --vulnerable --include-transitive | tee vulnerable.txt
+          if grep -q -i "has the following vulnerable packages" vulnerable.txt; then
+            echo "::error::Vulnerable NuGet packages found"
+            exit 1
+          fi

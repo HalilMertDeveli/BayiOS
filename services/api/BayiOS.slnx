@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BayiOS.Api/BayiOS.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BayiOS.IntegrationTests/BayiOS.IntegrationTests.csproj" />
+    <Project Path="tests/BayiOS.UnitTests/BayiOS.UnitTests.csproj" />
+  </Folder>
+</Solution>
