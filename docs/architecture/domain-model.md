@@ -100,6 +100,8 @@ Genel kurallar:
 ### Domain servisi: `PriceResolver`
 Çözümleme sırası: müşteriye atanmış liste → bayi grubunun listesi → tenant varsayılan listesi. Geçerlilik tarihi ve kademe (en büyük `MinQuantity ≤ miktar`) uygulanır. Bulunamazsa `pricing.price_not_found` (sipariş satırı manuel fiyat izni gerektirir: `orders.override_price`).
 
+> **Uygulanan durum (#78):** `IPriceResolver.QuoteAsync(PriceQuoteRequest(customerId?, date, lines[variantId, quantity], currency?))` — çağıranın UnitOfWork'ünde yalnızca okur. Her listede kalem yoksa taban liste − yüzde kuralı denenir (`BasePriceListId`, `DiscountPercent`; tek seviye). Fiyat bulunamaması hata değil, satır sonucudur: `status = no_price`, `unitPrice = null`; bilinmeyen müşteri/varyant 422 `validation.failed`. Sonuç satırı kaynak (`customer_price_list | dealer_group_price_list | default_price_list`), kural (`item | base_discount`), liste/kalem kimlikleri, kademe, `pricesIncludeTax` ve ürünün KDV oranını taşır; bayi grubunun `DefaultDiscountPercent` değeri bilgi amaçlı döner, fiyata uygulanmaz. Event'ler henüz yayınlanmıyor (outbox #79 sonrası).
+
 ---
 
 ## 5. Customers
