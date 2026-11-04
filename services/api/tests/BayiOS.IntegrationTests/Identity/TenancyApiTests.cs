@@ -30,7 +30,7 @@ public class TenancyApiTests(ApiFixture fixture)
         var client = fixture.CreateClientFor(userId, "owner@example.test");
         var slug = NewSlug();
 
-        var response = await client.PostAsJsonAsync("/api/v1/tenants", new { name = "Demo Motor", slug, sector = "motorcycle_parts" }, Ct);
+        var response = await client.PostIdempotentAsync("/api/v1/tenants", new { name = "Demo Motor", slug, sector = "motorcycle_parts" });
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal("/api/v1/tenant", response.Headers.Location?.OriginalString);
@@ -50,7 +50,7 @@ public class TenancyApiTests(ApiFixture fixture)
     {
         var forcedId = Guid.NewGuid();
         var response = await fixture.CreateClientFor(Guid.NewGuid())
-            .PostAsJsonAsync("/api/v1/tenants", new { id = forcedId, tenantId = forcedId, name = "Body Trick", slug = NewSlug() }, Ct);
+            .PostIdempotentAsync("/api/v1/tenants", new { id = forcedId, tenantId = forcedId, name = "Body Trick", slug = NewSlug() });
 
         var tenant = await response.Content.ReadFromJsonAsync<TenantResponse>(Ct);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -61,7 +61,7 @@ public class TenancyApiTests(ApiFixture fixture)
     public async Task Create_tenant_validates_input()
     {
         var response = await fixture.CreateClientFor(Guid.NewGuid())
-            .PostAsJsonAsync("/api/v1/tenants", new { name = "x", slug = "Bad Slug!", sector = "space" }, Ct);
+            .PostIdempotentAsync("/api/v1/tenants", new { name = "x", slug = "Bad Slug!", sector = "space" });
 
         await HttpAssert.ProblemAsync(response, HttpStatusCode.UnprocessableEntity, "validation.failed");
     }
@@ -73,7 +73,7 @@ public class TenancyApiTests(ApiFixture fixture)
         await CreateTenant(fixture.CreateClientFor(Guid.NewGuid()), slug);
 
         var response = await fixture.CreateClientFor(Guid.NewGuid())
-            .PostAsJsonAsync("/api/v1/tenants", new { name = "Second", slug }, Ct);
+            .PostIdempotentAsync("/api/v1/tenants", new { name = "Second", slug });
 
         await HttpAssert.ProblemAsync(response, HttpStatusCode.Conflict, "tenant.slug_taken");
     }
@@ -209,7 +209,7 @@ public class TenancyApiTests(ApiFixture fixture)
 
     private static async Task<TenantResponse> CreateTenant(HttpClient client, string? slug = null)
     {
-        var response = await client.PostAsJsonAsync("/api/v1/tenants", new { name = "Tenant " + Guid.NewGuid().ToString("N")[..6], slug = slug ?? NewSlug() }, Ct);
+        var response = await client.PostIdempotentAsync("/api/v1/tenants", new { name = "Tenant " + Guid.NewGuid().ToString("N")[..6], slug = slug ?? NewSlug() });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<TenantResponse>(Ct))!;
     }

@@ -17,7 +17,7 @@ namespace BayiOS.Modules.Catalog.Api;
 /// <summary>
 /// Catalog API (api-strategy §12.3). Reads need <c>catalog.read</c>; products, variants and brands need
 /// <c>catalog.write</c>; units and categories need <c>catalog.fields.manage</c> (roles-permissions §3.2).
-/// TODO(#68): create endpoints must honour Idempotency-Key once the platform filter lands.
+/// Create endpoints require Idempotency-Key (#68).
 /// </summary>
 internal static class CatalogEndpoints
 {
@@ -39,7 +39,7 @@ internal static class CatalogEndpoints
         group.MapGet("/units", ListUnits).WithName("Catalog_ListUnits")
             .WithSummary("Birimler (sayfasız, ≤ 1000)").RequirePermission(Permissions.CatalogRead);
         Write(group.MapPost("/units", CreateUnit).WithName("Catalog_CreateUnit")
-            .WithSummary("Birim oluşturur").RequirePermission(Permissions.CatalogFieldsManage), conflict: true);
+            .WithSummary("Birim oluşturur").RequirePermission(Permissions.CatalogFieldsManage));
         Update(group.MapPatch("/units/{id:guid}", UpdateUnit).WithName("Catalog_UpdateUnit")
             .WithSummary("Birimi günceller (If-Match zorunlu)").RequirePermission(Permissions.CatalogFieldsManage)
             .Accepts<UpdateUnitRequest>(MergePatch, "application/json"));
@@ -50,7 +50,7 @@ internal static class CatalogEndpoints
         group.MapGet("/brands", ListBrands).WithName("Catalog_ListBrands")
             .WithSummary("Markalar (sayfasız, ≤ 1000)").RequirePermission(Permissions.CatalogRead);
         Write(group.MapPost("/brands", CreateBrand).WithName("Catalog_CreateBrand")
-            .WithSummary("Marka oluşturur").RequirePermission(Permissions.CatalogWrite), conflict: true);
+            .WithSummary("Marka oluşturur").RequirePermission(Permissions.CatalogWrite));
         Update(group.MapPatch("/brands/{id:guid}", UpdateBrand).WithName("Catalog_UpdateBrand")
             .WithSummary("Markayı günceller (If-Match zorunlu)").RequirePermission(Permissions.CatalogWrite)
             .Accepts<UpdateBrandRequest>(MergePatch, "application/json"));
@@ -61,7 +61,7 @@ internal static class CatalogEndpoints
         group.MapGet("/categories", ListCategories).WithName("Catalog_ListCategories")
             .WithSummary("Kategori ağacı, düz liste (parentId/path/depth)").RequirePermission(Permissions.CatalogRead);
         Write(group.MapPost("/categories", CreateCategory).WithName("Catalog_CreateCategory")
-            .WithSummary("Kategori oluşturur (derinlik ≤ 4)").RequirePermission(Permissions.CatalogFieldsManage), conflict: true);
+            .WithSummary("Kategori oluşturur (derinlik ≤ 4)").RequirePermission(Permissions.CatalogFieldsManage));
         Update(group.MapPatch("/categories/{id:guid}", UpdateCategory).WithName("Catalog_UpdateCategory")
             .WithSummary("Kategori adını/sırasını günceller (If-Match zorunlu)").RequirePermission(Permissions.CatalogFieldsManage)
             .Accepts<UpdateCategoryRequest>(MergePatch, "application/json"));
@@ -77,7 +77,7 @@ internal static class CatalogEndpoints
             .WithSummary("Ürün ve varyantları (ETag döner)").RequirePermission(Permissions.CatalogRead)
             .ProducesProblem(StatusCodes.Status404NotFound);
         Write(group.MapPost("/products", CreateProduct).WithName("Catalog_CreateProduct")
-            .WithSummary("Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants)").RequirePermission(Permissions.CatalogWrite), conflict: true);
+            .WithSummary("Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants)").RequirePermission(Permissions.CatalogWrite));
         Update(group.MapPatch("/products/{id:guid}", UpdateProduct).WithName("Catalog_UpdateProduct")
             .WithSummary("Ürünü günceller (JSON merge patch, If-Match zorunlu)").RequirePermission(Permissions.CatalogWrite)
             .Accepts<UpdateProductRequest>(MergePatch, "application/json"));
@@ -85,7 +85,7 @@ internal static class CatalogEndpoints
             .WithSummary("Ürünü arşivler (If-Match zorunlu)").RequirePermission(Permissions.CatalogWrite));
         Write(group.MapPost("/products/{id:guid}/variants", AddVariant).WithName("Catalog_AddVariant")
             .WithSummary("Ürüne varyant ekler").RequirePermission(Permissions.CatalogWrite)
-            .ProducesProblem(StatusCodes.Status404NotFound), conflict: true);
+            .ProducesProblem(StatusCodes.Status404NotFound));
 
         // Variants
         group.MapGet("/variants", ListVariants).WithName("Catalog_ListVariants")
@@ -106,14 +106,10 @@ internal static class CatalogEndpoints
         return app;
     }
 
-    private static void Write(RouteHandlerBuilder builder, bool conflict)
-    {
-        builder.ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity);
-        if (conflict)
-        {
-            builder.ProducesProblem(StatusCodes.Status409Conflict);
-        }
-    }
+    /// <summary>Create endpoint: Idempotency-Key required (api-strategy §7; adds 400/409/428) plus our own 422.</summary>
+    private static void Write(RouteHandlerBuilder builder) => builder
+        .RequireIdempotencyKey()
+        .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity);
 
     private static void Update(RouteHandlerBuilder builder) => builder
         .ProducesProblem(StatusCodes.Status404NotFound)

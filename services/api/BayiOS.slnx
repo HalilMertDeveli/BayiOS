@@ -10,6 +10,9 @@
   <Folder Name="/src/Modules/Identity/">
     <Project Path="src/Modules/Identity/BayiOS.Modules.Identity/BayiOS.Modules.Identity.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Platform/">
+    <Project Path="src/Modules/Platform/BayiOS.Modules.Platform/BayiOS.Modules.Platform.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BayiOS.IntegrationTests/BayiOS.IntegrationTests.csproj" />
     <Project Path="tests/BayiOS.UnitTests/BayiOS.UnitTests.csproj" />

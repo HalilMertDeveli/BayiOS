@@ -1,4 +1,5 @@
 using BayiOS.SharedKernel.Persistence;
+using BayiOS.SharedKernel.Platform.Idempotency;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,6 +33,19 @@ public static class EndpointConventionExtensions
         return builder;
     }
 
+    /// <summary>
+    /// Create / state-transition endpoint that requires an <c>Idempotency-Key</c> (api-strategy §7). The endpoint
+    /// must also use <see cref="WithUnitOfWork{TBuilder}"/> (directly or on its group) so the stored response
+    /// commits atomically with the business write.
+    /// </summary>
+    public static RouteHandlerBuilder RequireIdempotencyKey(this RouteHandlerBuilder builder) =>
+        builder
+            .WithMetadata(new IdempotencyMetadata())
+            .AddEndpointFilter(IdempotencyFilter.InvokeAsync)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status428PreconditionRequired);
+
     /// <summary>Tenant-scoped endpoint guarded by a permission from the role → permission matrix.</summary>
     public static RouteHandlerBuilder RequirePermission(this RouteHandlerBuilder builder, string permission) =>
         builder
@@ -57,7 +71,7 @@ internal static class UnitOfWorkFilter
         // Not tied to RequestAborted: once the handler finished, completing the transaction must not be half-cancelled.
         var cancellationToken = CancellationToken.None;
 
-        if (result is IStatusCodeHttpResult { StatusCode: >= 400 })
+        if (EndpointResults.StatusCodeOf(result) >= 400)
         {
             await unitOfWork.RollbackAsync(cancellationToken);
         }
@@ -68,4 +82,19 @@ internal static class UnitOfWorkFilter
 
         return result;
     }
+}
+
+/// <summary>Inspects endpoint results before they are executed.</summary>
+internal static class EndpointResults
+{
+    /// <summary>
+    /// The status code a result will write, unwrapping <c>Results&lt;…&gt;</c> unions (which do not expose a status
+    /// themselves). Values that are not status-code results are written as 200.
+    /// </summary>
+    public static int StatusCodeOf(object? result) => result switch
+    {
+        INestedHttpResult nested => StatusCodeOf(nested.Result),
+        IStatusCodeHttpResult { StatusCode: { } status } => status,
+        _ => StatusCodes.Status200OK,
+    };
 }

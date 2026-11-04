@@ -442,4 +442,43 @@ public class CatalogApiTests(ApiFixture fixture)
         Assert.Equal(9, skus.Count);
         Assert.Equal(skus.Order(StringComparer.Ordinal), skus);
     }
+
+    [Fact]
+    public async Task Create_product_is_idempotent_per_tenant_key()
+    {
+        var owner = await CatalogClient.NewTenantOwnerAsync(fixture);
+        var unit = await owner.CreateUnitAsync();
+        var body = new { name = "Buji NS200 (kutu)", defaultUnitId = unit.Id, taxRate = 20m, sku = "ELK-BUJI-NS200", barcode = "8690000000309" };
+        var key = Guid.NewGuid().ToString();
+
+        var first = await owner.PostAsync("/api/v1/products", body, key);
+        var replay = await owner.PostAsync("/api/v1/products", body, key);
+
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        Assert.False(first.Headers.Contains("Idempotent-Replayed"));
+        Assert.Equal(HttpStatusCode.Created, replay.StatusCode);
+        Assert.Equal("true", Assert.Single(replay.Headers.GetValues("Idempotent-Replayed")));
+        Assert.Equal(first.Headers.Location, replay.Headers.Location);
+        Assert.Equal(first.Headers.ETag, replay.Headers.ETag);
+        Assert.Equal(await first.Content.ReadAsStringAsync(Ct), await replay.Content.ReadAsStringAsync(Ct));
+        Assert.Single((await owner.OkAsync<PagedResponse<ProductResponse>>(await owner.GetAsync("/api/v1/products?q=ELK-BUJI"))).Items);
+
+        // A different body under the same key is rejected; a missing key is 428.
+        await HttpAssert.ProblemAsync(
+            await owner.PostAsync("/api/v1/products", new { name = "Başka", defaultUnitId = unit.Id, taxRate = 20m, sku = "OTHER-1" }, key),
+            HttpStatusCode.UnprocessableEntity, "idempotency.key_reused");
+        using var withoutKey = new HttpRequestMessage(HttpMethod.Post, "/api/v1/brands") { Content = JsonContent.Create(new { name = "Anahtarsız" }) };
+        withoutKey.Headers.Add("X-Tenant-Id", owner.TenantId.ToString());
+        await HttpAssert.ProblemAsync(
+            await fixture.CreateClientFor(owner.UserId).SendAsync(withoutKey, Ct), HttpStatusCode.PreconditionRequired, "precondition.required");
+
+        // The key is tenant-scoped: the same key in another tenant creates that tenant's own product.
+        var other = await CatalogClient.NewTenantOwnerAsync(fixture);
+        var otherUnit = await other.CreateUnitAsync();
+        var otherCreate = await other.PostAsync(
+            "/api/v1/products", new { name = "Buji NS200 (kutu)", defaultUnitId = otherUnit.Id, taxRate = 20m, sku = "ELK-BUJI-NS200" }, key);
+        Assert.Equal(HttpStatusCode.Created, otherCreate.StatusCode);
+        Assert.False(otherCreate.Headers.Contains("Idempotent-Replayed"));
+        Assert.NotEqual(first.Headers.Location, otherCreate.Headers.Location);
+    }
 }

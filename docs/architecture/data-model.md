@@ -60,7 +60,7 @@ CREATE POLICY tenant_isolation ON catalog.products
 | `identity.user_profiles` | `user_id = app.user_id` veya aynı tenant üyeleri (okuma); yazma yalnızca `user_id = app.user_id` |
 | `billing.subscription_plans` | Tenant'sız referans veri; RLS yok, `bayios_app` yalnızca `SELECT` |
 | `platform.outbox_messages`, `platform.jobs` | Çok tenant'lı dispatcher tarafından okunur. RLS **yok**; yalnızca `bayios_app` erişir; worker bir işi işlerken iş öncesi `app.tenant_id`'yi o kaydın tenant'ına ayarlar, böylece iş verisine erişim yine RLS'li olur |
-| `platform.idempotency_keys` | Standart tenant RLS |
+| `platform.idempotency_keys` | `tenant_id = app.tenant_id` **veya** (`tenant_id IS NULL` ve `user_id = app.user_id`) — tenant'sız uçların (ör. `POST /tenants`) anahtarları kullanıcıya kapsanır; yazma her zaman `user_id = app.user_id` (§5.12) |
 
 ### 2.4 EF Core tarafı (birincil zorlama)
 - Tüm `ITenantOwned` entity'lerde global query filter: `e => e.TenantId == _tenantContext.TenantId`.
@@ -457,21 +457,25 @@ Not: hacim büyüdüğünde `occurred_at` üzerinden aylık partitioning değerl
 | id **PK** · tenant_id NULL · type text · payload jsonb · status (queued, running, succeeded, failed, dead) · priority smallint · run_after timestamptz · attempts · max_attempts · locked_by text · locked_until timestamptz · last_error · dedupe_key text NULL · created_at · finished_at |
 | IX (status, priority DESC, run_after) WHERE status = 'queued' · UQ (type, dedupe_key) WHERE dedupe_key IS NOT NULL AND status IN ('queued','running') |
 
-**platform.idempotency_keys** — RLS: std
+**platform.idempotency_keys** — RLS: tenant + kullanıcı kapsamı (#68). Sahibi `PlatformDbContext` (`src/Modules/Platform/BayiOS.Modules.Platform` — yalnızca şema + migration; çalışma zamanı kodu `BayiOS.SharedKernel/Platform/Idempotency` ham SQL kullanır; migration geçmişi `platform.__ef_migrations_history`).
+Politika `idempotency_scope`: okuma `tenant_id = app.tenant_id` **veya** (`tenant_id IS NULL` ve `user_id = app.user_id`); yazma ayrıca `user_id = app.user_id` ister.
 | Kolon | Tip | Not |
 |---|---|---|
-| tenant_id | uuid NOT NULL | |
-| key | text NOT NULL | istemci üretir (UUID önerilir), ≤ 100 karakter |
+| id | uuid **PK** | |
+| tenant_id | uuid NULL | NULL = tenant'sız uç (ör. `POST /tenants`); anahtar kullanıcıya kapsanır |
+| key | text NOT NULL | istemci üretir (UUID önerilir), 1–100 karakter (CHECK) |
 | user_id | uuid NOT NULL | |
-| method, path | text | |
-| request_hash | bytea NOT NULL | SHA-256 (method + route + gövde) |
-| status | text | in_progress, completed |
-| response_status | int NULL | |
-| response_body | jsonb NULL | |
-| response_headers | jsonb NULL | Location, ETag |
+| method, path | text NOT NULL | path = gerçek istek yolu (route değerleri dahil) |
+| request_hash | bytea NOT NULL | SHA-256 (method + path + bağlanmış JSON gövde) |
+| status | text NOT NULL | in_progress, completed (CHECK) |
+| response_status | int NULL | yalnızca 2xx saklanır |
+| response_body | bytea NULL | yanıt baytları birebir (jsonb anahtar sırasını değiştirirdi) |
+| response_headers | jsonb NULL | Content-Type, Location, ETag |
 | created_at | timestamptz | |
-| expires_at | timestamptz | created_at + 24 saat; temizlik job'ı |
-| **PK / UQ** | (tenant_id, key) | |
+| expires_at | timestamptz | created_at + 24 saat; süresi dolan anahtar yeniden kullanılabilir; temizlik job'ı (henüz yok) |
+| UQ | (tenant_id, key) WHERE tenant_id IS NOT NULL | `ux_idempotency_keys_tenant_key` |
+| UQ | (user_id, key) WHERE tenant_id IS NULL | `ux_idempotency_keys_user_key` |
+| IX | (expires_at) | temizlik |
 
 ### 5.13 Phase 0 kapısında tespit edilen eksik tablolar (P0 gereksinimleri)
 

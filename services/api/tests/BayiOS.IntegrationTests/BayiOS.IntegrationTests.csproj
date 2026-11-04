@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\BayiOS.Api\BayiOS.Api.csproj" />
+    <!-- Migrations only: the platform schema is owned by this module, not referenced by the API at runtime. -->
+    <ProjectReference Include="..\..\src\Modules\Platform\BayiOS.Modules.Platform\BayiOS.Modules.Platform.csproj" />
   </ItemGroup>
 
 </Project>

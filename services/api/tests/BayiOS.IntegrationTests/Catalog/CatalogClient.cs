@@ -25,10 +25,9 @@ internal sealed class CatalogClient(HttpClient http, Guid tenantId, Guid userId)
     {
         var userId = Guid.NewGuid();
         var http = fixture.CreateClientFor(userId);
-        var response = await http.PostAsJsonAsync(
+        var response = await http.PostIdempotentAsync(
             "/api/v1/tenants",
-            new { name = "Katalog " + Guid.NewGuid().ToString("N")[..6], slug = "c-" + Guid.NewGuid().ToString("N")[..12], sector },
-            Ct);
+            new { name = "Katalog " + Guid.NewGuid().ToString("N")[..6], slug = "c-" + Guid.NewGuid().ToString("N")[..12], sector });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var tenant = (await response.Content.ReadFromJsonAsync<TenantResponse>(Ct))!;
         return new CatalogClient(http, tenant.Id, userId);
@@ -54,10 +53,16 @@ internal sealed class CatalogClient(HttpClient http, Guid tenantId, Guid userId)
     /// <summary>Same user/HTTP client, but sending another tenant id (to probe cross-tenant access).</summary>
     public CatalogClient Targeting(Guid otherTenantId) => new(http, otherTenantId, UserId);
 
-    public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, object? body = null, string? ifMatch = null, string contentType = "application/json")
+    public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, object? body = null, string? ifMatch = null, string contentType = "application/json", string? idempotencyKey = null)
     {
         using var request = new HttpRequestMessage(method, path);
         request.Headers.Add("X-Tenant-Id", TenantId.ToString());
+        if (method == HttpMethod.Post)
+        {
+            // Create endpoints require Idempotency-Key (#68); a fresh key per call unless the test pins one.
+            request.Headers.Add(IdempotentRequests.Header, idempotencyKey ?? Guid.NewGuid().ToString());
+        }
+
         if (ifMatch is not null)
         {
             request.Headers.TryAddWithoutValidation("If-Match", ifMatch);
@@ -74,7 +79,8 @@ internal sealed class CatalogClient(HttpClient http, Guid tenantId, Guid userId)
 
     public Task<HttpResponseMessage> GetAsync(string path) => SendAsync(HttpMethod.Get, path);
 
-    public Task<HttpResponseMessage> PostAsync(string path, object body) => SendAsync(HttpMethod.Post, path, body);
+    public Task<HttpResponseMessage> PostAsync(string path, object body, string? idempotencyKey = null) =>
+        SendAsync(HttpMethod.Post, path, body, idempotencyKey: idempotencyKey);
 
     public Task<HttpResponseMessage> PatchAsync(string path, object body, string? ifMatch) =>
         SendAsync(HttpMethod.Patch, path, body, ifMatch, "application/merge-patch+json");
