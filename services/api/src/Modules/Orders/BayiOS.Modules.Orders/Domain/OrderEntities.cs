@@ -59,8 +59,11 @@ internal static class OrderActions
     public const string Complete = "complete";
     public const string Cancel = "cancel";
 
+    /// <summary>Warehouse reported a picking/packing shortage: a timeline entry, the status does not change.</summary>
+    public const string ReportShortage = "report_shortage";
+
     public static readonly IReadOnlyList<string> All =
-        [Create, Submit, Withdraw, Reject, Approve, StartPicking, Pack, Ship, CloseRemaining, Complete, Cancel];
+        [Create, Submit, Withdraw, Reject, Approve, StartPicking, Pack, Ship, CloseRemaining, Complete, Cancel, ReportShortage];
 
     /// <summary>The state-machine actions (everything except <see cref="Create"/>).</summary>
     public static readonly IReadOnlyList<string> Transitions = [.. All.Where(a => a != Create)];
@@ -135,6 +138,9 @@ internal sealed class Order : ITenantOwned
     public Guid? CancelledBy { get; set; }
 
     public string? CancelReason { get; set; }
+
+    /// <summary>Warehouse reported a picking or packing shortage (WHT-06). Never cleared: it is part of the history.</summary>
+    public bool HasShortage { get; set; }
 
     public long RowVersion { get; private set; } = 1;
 
@@ -322,8 +328,10 @@ internal sealed class OrderStatusChange : ITenantOwned
 }
 
 /// <summary>
-/// orders.order_shipments: a confirmed shipment of (part of) an order — the source document of the
-/// <c>shipment_out</c> ledger movements (source_type <c>shipment</c>). Interim until Warehouse shipments (JOB 10).
+/// orders.order_shipments: the order-side record of a confirmed shipment, written only through
+/// <c>IOrderFulfillment.ShipAsync</c>. Its id is the Warehouse shipment id (<c>warehouse.shipments</c>, the
+/// operational document) and the <c>source_id</c> of the <c>shipment_out</c> movements; line ids are the Warehouse
+/// shipment line ids (<c>source_line_id</c>).
 /// </summary>
 internal sealed class OrderShipment : ITenantOwned
 {
@@ -352,9 +360,9 @@ internal sealed class OrderShipment : ITenantOwned
     public List<OrderShipmentLine> Lines { get; private init; } = [];
 
     public static OrderShipment Create(
-        Order order, string? carrier, string? trackingNumber, int? packageCount, Guid userId, DateTimeOffset now, string? correlationId) => new()
+        Guid id, Order order, string? carrier, string? trackingNumber, int? packageCount, Guid userId, DateTimeOffset now, string? correlationId) => new()
         {
-            Id = Guid.CreateVersion7(),
+            Id = id,
             TenantId = order.TenantId,
             OrderId = order.Id,
             Carrier = carrier,
@@ -387,9 +395,9 @@ internal sealed class OrderShipmentLine : ITenantOwned
 
     public decimal Quantity { get; private init; }
 
-    public static OrderShipmentLine Create(OrderShipment shipment, OrderLine line, Guid? locationId, decimal quantity) => new()
+    public static OrderShipmentLine Create(Guid id, OrderShipment shipment, OrderLine line, Guid? locationId, decimal quantity) => new()
     {
-        Id = Guid.CreateVersion7(),
+        Id = id,
         TenantId = shipment.TenantId,
         ShipmentId = shipment.Id,
         OrderLineId = line.Id,

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using BayiOS.IntegrationTests.Catalog;
 using BayiOS.IntegrationTests.Infrastructure;
+using BayiOS.IntegrationTests.Warehouse;
 using BayiOS.Modules.Customers.Contracts;
 using BayiOS.Modules.Orders.Contracts;
 using BayiOS.Modules.Pricing.Contracts;
@@ -54,10 +55,10 @@ internal sealed class OrdersKit
     }
 
     /// <summary>A variant (VAT 20 %) with an optional price on the default list.</summary>
-    public async Task<Guid> VariantAsync(decimal? price = null, string? sku = null)
+    public async Task<Guid> VariantAsync(decimal? price = null, string? sku = null, string? barcode = null)
     {
         var code = sku ?? $"LED-{Interlocked.Increment(ref _sequence):D4}";
-        var product = await Owner.CreateSimpleProductAsync(_unitId, "Sentetik LED far " + code, code);
+        var product = await Owner.CreateSimpleProductAsync(_unitId, "Sentetik LED far " + code, code, barcode);
         var variantId = Assert.Single(product.Variants).Id;
         if (price is { } p)
         {
@@ -121,14 +122,17 @@ internal sealed class OrdersKit
             ifMatch ? CatalogClient.ETag(order.Order.Version) : null,
             idempotencyKey: key);
 
-    public Task<HttpResponseMessage> ShipResponseAsync(OrderDetailResponse order, params (Guid LineId, decimal Quantity, Guid? LocationId)[] lines) =>
-        ActAsync(Owner, order, "shipments", new
-        {
-            carrier = "Sentetik Kargo",
-            trackingNumber = "TRK-0001",
-            packageCount = 1,
-            lines = lines.Select(l => new { orderLineId = l.LineId, quantity = l.Quantity, locationId = l.LocationId }),
-        });
+    /// <summary>
+    /// Ships through the Warehouse flow as the owner: picks the given quantity per order line on the active pick task
+    /// (the rest is reported short), completes the task and confirms the draft shipment. Returns the order.
+    /// </summary>
+    public async Task<OrderDetailResponse> ShipAsync(OrderDetailResponse order, params (Guid LineId, decimal Quantity)[] lines)
+    {
+        var task = await Fulfillment.ActiveTaskAsync(Owner, order.Order.Id);
+        var completed = await Fulfillment.PickAndCompleteAsync(Owner, task, lines.ToDictionary(l => l.LineId, l => l.Quantity));
+        await Fulfillment.ReadAsync<ConfirmShipmentResponse>(await Fulfillment.ConfirmAsync(Owner, completed.ShipmentId!.Value));
+        return await GetAsync(order.Order.Id);
+    }
 
     public async Task<OrderDetailResponse> GetAsync(Guid orderId) =>
         await ReadAsync(await Owner.GetAsync($"/api/v1/orders/{orderId}"));
@@ -227,6 +231,37 @@ internal sealed class OrdersKit
                 SELECT coalesce(sum(m.quantity), 0) FROM inventory.inventory_movements m
                 WHERE m.tenant_id = s.tenant_id AND m.type = 'shipment_out' AND m.source_type = 'shipment'
                   AND m.source_id = s.shipment_id AND m.source_line_id = s.id)
+            """));
+
+        // Warehouse shipments ⇔ order-side shipments: confirmed lines are recorded with the same ids and quantities;
+        // unconfirmed or cancelled shipments never issued stock.
+        Assert.Equal(0L, await CountAsync(
+            """
+            SELECT count(*) FROM warehouse.shipment_lines wl JOIN warehouse.shipments ws ON ws.tenant_id = wl.tenant_id AND ws.id = wl.shipment_id
+            WHERE wl.tenant_id = $1 AND ws.status = 'confirmed' AND wl.quantity > 0 AND NOT EXISTS (
+                SELECT 1 FROM orders.order_shipment_lines ol
+                WHERE ol.tenant_id = wl.tenant_id AND ol.id = wl.id AND ol.shipment_id = ws.id AND ol.quantity = wl.quantity)
+            """));
+        Assert.Equal(0L, await CountAsync(
+            """
+            SELECT count(*) FROM orders.order_shipment_lines ol
+            WHERE ol.tenant_id = $1 AND NOT EXISTS (
+                SELECT 1 FROM warehouse.shipments ws WHERE ws.tenant_id = ol.tenant_id AND ws.id = ol.shipment_id AND ws.status = 'confirmed')
+            """));
+        Assert.Equal(0L, await CountAsync(
+            """
+            SELECT count(*) FROM inventory.inventory_movements m JOIN warehouse.shipments ws ON ws.tenant_id = m.tenant_id AND ws.id = m.source_id
+            WHERE m.tenant_id = $1 AND ws.status <> 'confirmed'
+            """));
+
+        // Picking: what a task line picked never exceeds what it had to pick (CHECK), and shipments carry the picks.
+        Assert.Equal(0L, await CountAsync(
+            """
+            SELECT count(*) FROM warehouse.shipment_lines wl JOIN warehouse.shipments ws ON ws.tenant_id = wl.tenant_id AND ws.id = wl.shipment_id
+            WHERE wl.tenant_id = $1 AND wl.picked_quantity <> (
+                SELECT coalesce(sum(pl.qty_picked), 0) FROM warehouse.picking_task_lines pl
+                WHERE pl.tenant_id = wl.tenant_id AND pl.picking_task_id = ws.picking_task_id AND pl.order_line_id = wl.order_line_id
+                  AND pl.location_id IS NOT DISTINCT FROM wl.location_id)
             """));
 
         // I7 and terminal states hold no stock.

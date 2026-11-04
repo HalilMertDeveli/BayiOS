@@ -22,6 +22,8 @@ public static class OrdersModule
             OrdersDbContext.Configure(options, sp.GetRequiredService<UnitOfWork>().Connection));
         services.AddScoped<OrderQueries>();
         services.AddScoped<OrderService>();
+        // Warehouse drives picking/packing/shipping through this contract; it must provide IOrderFulfillmentListener.
+        services.AddScoped<IOrderFulfillment>(sp => sp.GetRequiredService<OrderService>());
         services.TryAddSingleton(TimeProvider.System);
         return services;
     }

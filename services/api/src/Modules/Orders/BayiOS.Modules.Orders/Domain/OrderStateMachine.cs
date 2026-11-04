@@ -8,8 +8,9 @@ namespace BayiOS.Modules.Orders.Domain;
 /// <item><term>submit</term><description>draft → pending_approval</description></item>
 /// <item><term>withdraw / reject</term><description>pending_approval → draft</description></item>
 /// <item><term>approve</term><description>pending_approval → approved (all-or-nothing reservation)</description></item>
-/// <item><term>start_picking</term><description>approved → picking</description></item>
-/// <item><term>pack</term><description>picking → packed</description></item>
+/// <item><term>start_picking</term><description>approved → picking (Warehouse: first scan / task start)</description></item>
+/// <item><term>pack</term><description>picking → packed (Warehouse: picking task completed)</description></item>
+/// <item><term>report_shortage</term><description>approved / picking / packed → unchanged (Warehouse shortage flag)</description></item>
 /// <item><term>ship</term><description>picking / packed → shipped when every line is fully shipped or closed, else
 /// unchanged with fulfillment <c>partial</c></description></item>
 /// <item><term>close_remaining</term><description>picking / packed with fulfillment <c>partial</c> → shipped (short-close)</description></item>
@@ -32,6 +33,7 @@ internal static class OrderStateMachine
         (OrderActions.Ship, OrderStatuses.Picking or OrderStatuses.Packed) => shipsEverything ? OrderStatuses.Shipped : status,
         (OrderActions.CloseRemaining, OrderStatuses.Picking or OrderStatuses.Packed)
             when fulfillmentStatus == FulfillmentStatuses.Partial => OrderStatuses.Shipped,
+        (OrderActions.ReportShortage, OrderStatuses.Approved or OrderStatuses.Picking or OrderStatuses.Packed) => status,
         (OrderActions.Complete, OrderStatuses.Shipped) => OrderStatuses.Completed,
         (OrderActions.Cancel, OrderStatuses.Draft or OrderStatuses.PendingApproval) => OrderStatuses.Cancelled,
         (OrderActions.Cancel, OrderStatuses.Approved or OrderStatuses.Picking or OrderStatuses.Packed)

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using BayiOS.IntegrationTests.Catalog;
 using BayiOS.IntegrationTests.Infrastructure;
+using BayiOS.IntegrationTests.Warehouse;
 using BayiOS.Modules.Customers.Contracts;
 using BayiOS.Modules.Orders.Contracts;
 using BayiOS.Modules.Pricing.Contracts;
@@ -138,7 +139,7 @@ public class OrdersApiTests(ApiFixture fixture)
         await kit.ReceiveAsync(variant, 10m);
         var draft = await kit.CreateOrderAsync(OrdersKit.Line(variant, 1m));
 
-        foreach (var action in new[] { "approve", "withdraw", "start-picking", "pack", "complete" })
+        foreach (var action in new[] { "approve", "withdraw", "complete" })
         {
             await HttpAssert.ProblemAsync(await OrdersKit.ActAsync(kit.Owner, draft, action, action == "approve" ? new { } : null), HttpStatusCode.Conflict, "order.invalid_transition");
         }
@@ -152,11 +153,10 @@ public class OrdersApiTests(ApiFixture fixture)
             HttpStatusCode.Conflict,
             "order.not_editable");
         await HttpAssert.ProblemAsync(await OrdersKit.ActAsync(kit.Owner, approved, "submit"), HttpStatusCode.Conflict, "order.invalid_transition");
-        await HttpAssert.ProblemAsync(await OrdersKit.ActAsync(kit.Owner, approved, "pack"), HttpStatusCode.Conflict, "order.invalid_transition");
 
         var cancelled = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, approved, "cancel", new { reason = "Müşteri vazgeçti" }));
         Assert.Equal("cancelled", cancelled.Order.Status);
-        foreach (var action in new[] { "submit", "approve", "start-picking", "complete" })
+        foreach (var action in new[] { "submit", "approve", "complete" })
         {
             await HttpAssert.ProblemAsync(await OrdersKit.ActAsync(kit.Owner, cancelled, action), HttpStatusCode.Conflict, "order.invalid_transition");
         }
@@ -178,10 +178,10 @@ public class OrdersApiTests(ApiFixture fixture)
         Assert.Equal("draft", backToDraft.Order.Status);
         pending = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, backToDraft, "submit"));
         var approved = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, pending, "approve"));
-        var picking = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, approved, "start-picking"));
-        var packed = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, picking, "pack"));
-        var shipped = await OrdersKit.ReadAsync(await kit.ShipResponseAsync(packed, (packed.Lines[0].Id, 4m, null)));
+        // Picking and shipping run through the Warehouse task (first scan → picking, complete → packed, confirm → shipped).
+        var shipped = await kit.ShipAsync(approved, (approved.Lines[0].Id, 4m));
         Assert.Equal(("shipped", "full"), (shipped.Order.Status, shipped.Order.FulfillmentStatus));
+        Assert.False(shipped.Order.HasShortage);
         Assert.NotNull(shipped.Order.ShippedAt);
         var completed = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, shipped, "complete"));
         Assert.Equal("completed", completed.Order.Status);
@@ -295,13 +295,10 @@ public class OrdersApiTests(ApiFixture fixture)
         await kit.ReceiveAsync(tire, 12m);
         await kit.ReceiveAsync(lamp, 5m);
         var approved = await kit.ApprovedOrderAsync(OrdersKit.Line(tire, 10m), OrdersKit.Line(lamp, 5m));
-        var picking = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, approved, "start-picking"));
-
-        await HttpAssert.ProblemAsync(
-            await kit.ShipResponseAsync(picking, (picking.Lines[0].Id, 11m, null)), HttpStatusCode.UnprocessableEntity, "order.ship_exceeds_remaining");
-
-        var partial = await OrdersKit.ReadAsync(await kit.ShipResponseAsync(picking, (picking.Lines[0].Id, 4m, null), (picking.Lines[1].Id, 5m, null)));
-        Assert.Equal(("picking", "partial"), (partial.Order.Status, partial.Order.FulfillmentStatus));
+        // 4 of 10 tires picked (6 reported short), all lamps: the shipment confirms what was picked.
+        var partial = await kit.ShipAsync(approved, (approved.Lines[0].Id, 4m), (approved.Lines[1].Id, 5m));
+        Assert.Equal(("packed", "partial"), (partial.Order.Status, partial.Order.FulfillmentStatus));
+        Assert.True(partial.Order.HasShortage);
         Assert.Equal((4m, 6m, 6m), (partial.Lines[0].ShippedQuantity, partial.Lines[0].ReservedQuantity, partial.Lines[0].OpenQuantity));
         Assert.Equal((5m, 0m, 0m), (partial.Lines[1].ShippedQuantity, partial.Lines[1].ReservedQuantity, partial.Lines[1].OpenQuantity));
         var shipment = Assert.Single(partial.Shipments);
@@ -330,7 +327,7 @@ public class OrdersApiTests(ApiFixture fixture)
     }
 
     [Fact]
-    public async Task Shipping_without_a_location_draws_from_the_reserved_locations()
+    public async Task Shipping_draws_from_the_reserved_locations()
     {
         var kit = await OrdersKit.CreateAsync(fixture);
         var warehouse = await kit.Owner.CreatedAsync<WarehouseResponse>("/api/v1/warehouses", new { code = "RAF", name = "Raflı depo", usesLocations = true });
@@ -342,9 +339,9 @@ public class OrdersApiTests(ApiFixture fixture)
         var draft = await OrdersKit.ReadAsync(await kit.CreateResponseAsync(kit.Owner, [OrdersKit.Line(variant, 6m)], warehouseId: warehouse.Id), HttpStatusCode.Created);
         var pending = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, draft, "submit"));
         var approved = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, pending, "approve"));
-        var picking = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, approved, "start-picking"));
 
-        var shipped = await OrdersKit.ReadAsync(await kit.ShipResponseAsync(picking, (picking.Lines[0].Id, 6m, null)));
+        // The pick task has one line per reserved location (A-01: 3, A-02: 3), picked shelf by shelf.
+        var shipped = await kit.ShipAsync(approved, (approved.Lines[0].Id, 6m));
 
         Assert.Equal(("shipped", "full"), (shipped.Order.Status, shipped.Order.FulfillmentStatus));
         Assert.Equal(2, Assert.Single(shipped.Shipments).Lines.Count);
@@ -419,10 +416,12 @@ public class OrdersApiTests(ApiFixture fixture)
         Assert.Equal(HttpStatusCode.Forbidden, (await OrdersKit.ActAsync(staff, pending, "approve")).StatusCode);
 
         var approved = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, pending, "approve"));
-        var picking = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(staff, approved, "start-picking"));
-        Assert.Equal(HttpStatusCode.Forbidden, (await OrdersKit.ActAsync(sales, picking, "shipments", new { lines = new[] { new { orderLineId = picking.Lines[0].Id, quantity = 1m } } })).StatusCode);
-        var shipped = await OrdersKit.ActAsync(staff, picking, "shipments", new { lines = new[] { new { orderLineId = picking.Lines[0].Id, quantity = 1m } } });
-        Assert.Equal(HttpStatusCode.OK, shipped.StatusCode);
+        // warehouse_staff picks and ships through the Warehouse task (claimed from the pool); sales may not ship.
+        var task = await Fulfillment.ActiveTaskAsync(kit.Owner, approved.Order.Id);
+        Assert.Equal(HttpStatusCode.OK, (await Fulfillment.ClaimAsync(staff, task.Task.Id)).StatusCode);
+        var completed = await Fulfillment.PickAndCompleteAsync(staff, task, new Dictionary<Guid, decimal> { [approved.Lines[0].Id] = 1m });
+        Assert.Equal(HttpStatusCode.Forbidden, (await Fulfillment.ConfirmAsync(sales, completed.ShipmentId!.Value)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Fulfillment.ConfirmAsync(staff, completed.ShipmentId!.Value)).StatusCode);
         await kit.AssertConsistentAsync();
     }
 
