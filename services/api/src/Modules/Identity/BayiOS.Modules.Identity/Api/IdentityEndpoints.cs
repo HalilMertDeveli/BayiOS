@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using BayiOS.Modules.Identity.Application;
 using BayiOS.Modules.Identity.Contracts;
 using BayiOS.SharedKernel.Authorization;
@@ -40,6 +42,17 @@ internal static class IdentityEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
+        group.MapPatch("/tenant", UpdateTenant)
+            .WithName("Identity_UpdateTenant")
+            .WithSummary("İşletme profili: ad, sektör, para birimi, logo yolu, vergi no/dairesi, telefon (JSON merge patch, If-Match zorunlu)")
+            .RequirePermission(Permissions.TenantSettingsManage)
+            .Accepts<UpdateTenantRequest>("application/merge-patch+json", "application/json")
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status412PreconditionFailed)
+            .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesProblem(StatusCodes.Status428PreconditionRequired);
+
         group.MapGet("/tenant/settings", GetSettings)
             .WithName("Identity_GetTenantSettings")
             .WithSummary("Aktif tenant'ın ayarlanabilir kuralları (ETag döner)")
@@ -78,10 +91,89 @@ internal static class IdentityEndpoints
 
     private static async Task<Results<Ok<TenantResponse>, ProblemHttpResult>> GetCurrentTenant(
         IdentityService service,
+        HttpContext http,
         CancellationToken cancellationToken)
     {
         var result = await service.GetCurrentTenantAsync(cancellationToken);
-        return result.Error is { } error ? Problem(error) : TypedResults.Ok(result.Value);
+        if (result.Error is { } error)
+        {
+            return Problem(error);
+        }
+
+        http.Response.Headers.ETag = ETag(result.Value!.Version);
+        return TypedResults.Ok(result.Value);
+    }
+
+    private static async Task<Results<Ok<TenantResponse>, ProblemHttpResult>> UpdateTenant(
+        [FromHeader(Name = "If-Match")] string? ifMatch,
+        IdentityService service,
+        HttpContext http,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(ifMatch))
+        {
+            return TypedResults.Problem(ApiProblems.Create(
+                StatusCodes.Status428PreconditionRequired, "precondition.required", "If-Match header is required"));
+        }
+
+        if (!TryParseETag(ifMatch, out var expectedVersion))
+        {
+            return TypedResults.Problem(ApiProblems.Create(
+                StatusCodes.Status412PreconditionFailed, "concurrency.version_mismatch", "If-Match does not match the current version"));
+        }
+
+        JsonObject? document;
+        try
+        {
+            document = await JsonNode.ParseAsync(http.Request.Body, cancellationToken: cancellationToken) as JsonObject;
+        }
+        catch (JsonException)
+        {
+            document = null;
+        }
+
+        if (document is null)
+        {
+            return TypedResults.Problem(ApiProblems.Create(StatusCodes.Status400BadRequest, "request.malformed", "Body must be a JSON object"));
+        }
+
+        var errors = new Dictionary<string, string[]>();
+        PatchValue Read(string name)
+        {
+            if (!document.TryGetPropertyValue(name, out var node))
+            {
+                return default;
+            }
+
+            if (node is null)
+            {
+                return new PatchValue(true, null);
+            }
+
+            if (node is JsonValue value && value.GetValueKind() == JsonValueKind.String)
+            {
+                return new PatchValue(true, value.GetValue<string>());
+            }
+
+            errors[name] = ["Must be a string or null."];
+            return default;
+        }
+
+        var patch = new TenantPatch(
+            Read("name"), Read("sector"), Read("defaultCurrency"), Read("logoObjectPath"), Read("taxNumber"), Read("taxOffice"), Read("phone"));
+        if (errors.Count > 0)
+        {
+            return TypedResults.Problem(ApiProblems.Validation(errors));
+        }
+
+        var result = await service.UpdateTenantAsync(patch, expectedVersion, cancellationToken);
+        if (result.Error is { } error)
+        {
+            return Problem(error);
+        }
+
+        http.Response.Headers.ETag = ETag(result.Value!.Version);
+        return TypedResults.Ok(result.Value);
     }
 
     private static async Task<Results<Ok<TenantSettingsResponse>, ProblemHttpResult>> GetSettings(
