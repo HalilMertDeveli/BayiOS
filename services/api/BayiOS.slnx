@@ -4,6 +4,9 @@
     <Project Path="src/BayiOS.SharedKernel/BayiOS.SharedKernel.csproj" />
   </Folder>
   <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Catalog/">
+    <Project Path="src/Modules/Catalog/BayiOS.Modules.Catalog/BayiOS.Modules.Catalog.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Identity/">
     <Project Path="src/Modules/Identity/BayiOS.Modules.Identity/BayiOS.Modules.Identity.csproj" />
   </Folder>

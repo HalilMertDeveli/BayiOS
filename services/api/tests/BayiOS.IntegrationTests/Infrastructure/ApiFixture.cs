@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using BayiOS.IntegrationTests.Infrastructure;
+using BayiOS.Modules.Catalog.Infrastructure.Persistence;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
 using BayiOS.Modules.Platform.Persistence;
 using BayiOS.SharedKernel.Tenancy;
@@ -66,6 +67,13 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         await using (var platform = new PlatformDbContext(platformOptions.Options))
         {
             await platform.Database.MigrateAsync();
+        }
+
+        var catalogOptions = new DbContextOptionsBuilder<CatalogDbContext>();
+        CatalogDbContext.Configure(catalogOptions, MigratorConnectionString);
+        await using (var catalog = new CatalogDbContext(catalogOptions.Options, new RequestContext()))
+        {
+            await catalog.Database.MigrateAsync();
         }
     }
 

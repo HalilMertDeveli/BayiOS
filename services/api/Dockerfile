@@ -26,6 +26,7 @@ COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
 COPY src/BayiOS.Api/BayiOS.Api.csproj src/BayiOS.Api/
 COPY src/BayiOS.SharedKernel/BayiOS.SharedKernel.csproj src/BayiOS.SharedKernel/
 COPY src/Modules/Identity/BayiOS.Modules.Identity/BayiOS.Modules.Identity.csproj src/Modules/Identity/BayiOS.Modules.Identity/
+COPY src/Modules/Catalog/BayiOS.Modules.Catalog/BayiOS.Modules.Catalog.csproj src/Modules/Catalog/BayiOS.Modules.Catalog/
 RUN dotnet restore src/BayiOS.Api/BayiOS.Api.csproj
 
 COPY src/ src/

@@ -165,6 +165,10 @@ Gösterim: **PK**, FK (modül içi, bileşik tenant FK), UQ = unique, IX = index
 
 ### 5.3 `catalog`
 
+> **Uygulanan durum (migration `InitialCatalog`, #16/#17):** `units`, `brands`, `categories`, `products`, `product_variants` oluşturuldu. Tüm tablolarda `tenant_id`, `UQ (tenant_id, id)`, bileşik tenant FK'leri, `row_version`, `created_at/by`, `updated_at/by`, ENABLE + FORCE RLS (std) ve EF global query filter var. `bayios_app` katalogda yalnızca `SELECT/INSERT/UPDATE` alır (**DELETE yok**: katalog satırları arşivlenir, fiziksel silinmez). `units`, `brands`, `categories` ayrıca `archived_at` taşır; `brands` ve kardeş kategori adı benzersizliği arşivlenmiş satırları dışlar (kısmi index), SKU benzersizliği arşivlenmişleri **içerir**. Kategori ebeveyni oluşturulduktan sonra değişmez (taşıma ileride). Henüz yapılmayanlar: `variant_barcodes` (çoklu barkod — şimdilik varyantta tek `barcode` kolonu, `UQ (tenant_id, barcode)`, NULL çakışmaz), `variant_aliases`, `suppliers`, `custom_field_definitions` (#19; `attributes` kolonları mevcut, `jsonb_typeof = 'object'` CHECK + GIN `jsonb_path_ops`, API şimdilik yalnızca okur), `variant_unit_conversions`, `product_compatibilities`, `purchase_price`/`weight_kg`/`low_stock_threshold`/`normalized_name` kolonları. Arama: `products.name` ve `product_variants.sku` üzerinde `pg_trgm` GIN (`ILIKE '%q%'`), barkod tam eşleşme (unique btree). `pg_trgm` yoksa migration `extensions` şemasına kurar; varsa bulunduğu şemadaki operatör sınıfını kullanır.
+>
+> **Kimlik sözleşmesi:** Stok tutulan ve satılan kimlik **`product_variants.id` (variant_id)**'dir. Inventory, Orders, Pricing ve Warehouse yalnızca `variant_id`'ye referans verir (modüller arası FK yok); ürün id'si veya SKU referans olarak kullanılmaz (SKU değiştirilebilir). Basit ürün tek varyantlıdır.
+
 **catalog.units** — RLS: std · UQ (tenant_id, code), UQ (tenant_id, id)
 | id · code text · name · allows_fraction bool |
 
