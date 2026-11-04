@@ -6,6 +6,7 @@ using BayiOS.Api.Platform.Tenancy;
 using BayiOS.Modules.Catalog;
 using BayiOS.Modules.Customers;
 using BayiOS.Modules.Identity;
+using BayiOS.Modules.Imports;
 using BayiOS.Modules.Inventory;
 using BayiOS.Modules.Pricing;
 using BayiOS.Modules.Warehouse;
@@ -39,6 +40,8 @@ builder.Services.AddPlatformRuntime();
 builder.Services.AddPricingModule();
 builder.Services.AddCustomersModule();
 builder.Services.AddPricingPorts();
+builder.Services.AddImportsModule();
+builder.Services.AddImportsPorts();
 
 var app = builder.Build();
 
@@ -65,6 +68,7 @@ app.MapWarehouseModule();
 app.MapPlatformRuntime();
 app.MapPricingModule();
 app.MapCustomersModule();
+app.MapImportsModule();
 
 app.Run();
 
