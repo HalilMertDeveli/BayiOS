@@ -72,9 +72,9 @@ preview URL'si açılır, sayfanın API'ye `/api/v1/meta` çağrısının başar
 Instant Rollback sonrası otomatik production atamaları durur; düzeltme merge edilince "Promote" ile tekrar açılır.
 
 ## 5. Migration sırası (değişmez kural)
-- Migration'ları **yalnızca** CI/deploy pipeline'ındaki ayrı migration adımı, `bayios_migrator` rolüyle (`DATABASE_MIGRATION_URL`) çalıştırır.
+- Migration'ları **yalnızca** CI/deploy pipeline'ındaki ayrı migration adımı, `bayios_migrator` rolüyle (`ConnectionStrings__Migrator`) çalıştırır.
 - API **asla** başlangıçta migration çalıştırmaz (`Database.Migrate()` yok), Fly `release_command` kullanılmaz;
-  API uygulaması `DATABASE_MIGRATION_URL`'yi hiç görmez — yalnızca `bayios_app` (`NOBYPASSRLS`) `DATABASE_URL`'si vardır.
+  API uygulaması `ConnectionStrings__Migrator`'ı hiç görmez — yalnızca `bayios_app` (`NOBYPASSRLS`) `ConnectionStrings__Default`'u vardır.
 - Sıra: **migration → API deploy → web deploy.** Migration başarısızsa deploy durur.
 - Şema değişiklikleri expand → migrate → contract: yeni sürüm eski şemayla, eski sürüm yeni şemayla çalışabilmeli; böylece API/web
   rollback DB rollback gerektirmez. Yıkıcı değişiklik iki ayrı sürümde.
