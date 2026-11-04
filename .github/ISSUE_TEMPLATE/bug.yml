@@ -1,0 +1,34 @@
+name: Hata
+description: Hata bildirimi
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Ne oldu?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Yeniden üretme adımları
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Beklenen davranış
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Ciddiyet
+      options: ["kritik (veri/güvenlik/stok)", "yüksek", "orta", "düşük"]
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Ortam
+      placeholder: local / preview / production, tarayıcı/cihaz

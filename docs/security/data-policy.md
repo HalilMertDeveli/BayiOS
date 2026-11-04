@@ -1,0 +1,123 @@
+# BayiOS — Veri Politikası (KVKK odaklı)
+
+| Alan | Değer |
+|---|---|
+| Sahip | Security Engineer |
+| Durum | Taslak v0.1 — hukuki danışmanlık değildir; canlıya çıkıştan önce KVKK uzmanı/avukat incelemesi gerekir |
+| Son güncelleme | 2026-11-04 |
+
+## 1. Roller (KVKK terminolojisi)
+- **Veri sorumlusu:** BayiOS'u kullanan işletme (tenant). Kendi müşterilerinin ve personelinin verisini sisteme girer.
+- **Veri işleyen:** BayiOS (hizmet sağlayıcı), tenant adına ve talimatıyla işler.
+- **Alt işleyenler:** bölüm 6'daki sağlayıcılar.
+- BayiOS, tenant hesabının sahibi (owner) ile ilgili iletişim/faturalama verisi için ayrıca veri sorumlusudur.
+- Gereken belgeler (canlıdan önce, ürün sahibi + hukuk): Aydınlatma metni, Veri İşleme Sözleşmesi (DPA) şablonu,
+  gizlilik politikası, VERBİS kayıt yükümlülüğünün değerlendirilmesi, yurt dışı aktarım dayanağı (bölüm 7).
+
+## 2. Veri envanteri
+
+| Kategori | Alanlar | Kaynak | Amaç | Hassasiyet | Saklama yeri |
+|---|---|---|---|---|---|
+| Personel (tenant kullanıcıları) | ad soyad, e-posta, telefon (opsiyonel), rol, son giriş zamanı | Davet / kayıt | Kimlik doğrulama, yetki, bildirim | Kişisel veri | Supabase Auth (`auth.users`) + `identity.user_profiles` + `identity.memberships` |
+| Cihaz | FCM token, platform, uygulama sürümü | Mobil uygulama | Push bildirimi | Kişisel veri (cihaz tanımlayıcı) | `notifications.device_tokens` |
+| Müşteri (bayi/alıcı) iletişim | firma adı, yetkili adı, telefon, e-posta, vergi no (firma ise) | Tenant girişi / import | Sipariş, sevkiyat, iletişim | Kişisel veri (şahıs firmasında vergi no = TCKN olabilir → **özel dikkat**) | `customers` |
+| Adres | teslimat / fatura adresi | Tenant girişi / import | Sevkiyat | Kişisel veri | `customer_addresses` |
+| WhatsApp metni | serbest metin (isim, telefon içerebilir) | Kullanıcı yapıştırır | Sipariş taslağı | Kişisel veri olabilir; güvenilmeyen veri | `ai_parse_requests` (kısa süreli) |
+| İşlem verisi | sipariş, stok hareketi, fiyat | Sistem | Ana iş | Ticari sır (kişisel değil) | İş tabloları |
+| Audit | aktör kullanıcı ID, IP hash, user agent özeti | Sistem | Güvenlik, hesap verebilirlik | Kişisel veri (dolaylı) | `audit_events` |
+| Dosyalar | import dosyaları, belge görselleri | Yükleme | Import / belge | Kişisel veri içerebilir | Supabase Storage (private) |
+| Teknik log | correlation id, rota, süre, durum kodu, tenant id | Sistem | İşletim | PII içermemeli | Log sağlayıcısı (seçilecek) |
+
+**İşlenmeyen veriler (tasarım gereği):** özel nitelikli kişisel veri (sağlık, biyometrik vb.), ödeme kartı verisi (ödeme
+eklenirse sağlayıcının barındırdığı sayfa kullanılır), TCKN için ayrı alan açılmaz — şahıs firması vergi no alanı opsiyonel
+ve maskeli gösterilir.
+
+## 3. Veri minimizasyonu
+- Telefon personel için opsiyonel; push yeterliyse SMS yok.
+- AI'ya yalnızca ayrıştırma için gerekli metin gider (katalog/fiyat verisi gönderilmez, eşleştirme sunucuda — ADR 0010); müşteri adres/telefonu gönderilmez. Metindeki
+  telefon numaraları gönderim öncesi maskelenir (`+90 5** *** ** 12`).
+- Bildirim yükünde kişi adı/fiyat yok.
+- Log ve hata izlemede gövde loglanmaz; yalnızca allowlist alanlar.
+- Preview/dev ortamlarında **yalnızca sentetik veri** (gerçek müşteri verisi kopyalanmaz, prod dump'ı alınmaz).
+
+## 4. Saklama süreleri (önerilen; ürün sahibi + hukuk onayı gerekir)
+
+| Veri | Süre | Gerekçe / not |
+|---|---|---|
+| Aktif tenant iş verisi | Abonelik süresince | Hizmet |
+| Sipariş ve stok hareketleri | Abonelik + tenant talebine göre; fatura ile ilişkili kayıtlar için ticari/vergi mevzuatı süreleri tenant sorumluluğundadır | VUK/TTK saklama yükümlülükleri tenant'ındır; BayiOS export sağlar |
+| Tenant kapanışı sonrası | 30 gün geri alma penceresi → kalıcı silme | Yanlışlıkla kapatmaya karşı |
+| Yedekler | Sağlayıcı yedek rotasyonu (Supabase planına göre) — silinen veri yedeklerden rotasyonla düşer | Plan seçiminde doğrulanacak |
+| AI ayrıştırma ham metni | 30 gün (sonra yalnızca yapılandırılmış taslak kalır) | Minimizasyon |
+| Import dosyaları | İş tamamlandıktan 30 gün sonra | Hata ayıklama |
+| Export dosyaları | 7 gün | Tek seferlik indirme |
+| Audit olayları | 2 yıl (değerlendirilecek) | Güvenlik |
+| Teknik loglar | 30 gün | İşletim |
+| FCM token | Cihaz çıkışı veya 90 gün etkisizlik | Minimizasyon |
+
+## 5. Tenant talepleri: dışa aktarma ve silme
+- **Dışa aktarma (owner):** Tüm tenant verisi CSV/JSON (zip) olarak, arka plan işiyle; indirme kısa ömürlü signed URL.
+  Bu özellik ücret duvarına konmaz (CLAUDE.md/ürün kuralı). Audit: `data_export.tenant_requested`.
+- **Tekil kişi talebi (ilgili kişi başvurusu):** Tenant (veri sorumlusu) başvuruyu alır; BayiOS araçları ile müşteri/personel
+  kaydını bulur, dışa aktarır, düzeltir veya anonimleştirir. Sipariş geçmişi bütünlüğü için silme yerine **anonimleştirme**
+  (ad → "Silinmiş müşteri #<kısa id>", iletişim alanları null).
+- **Tenant silme:** owner talebi + e-posta doğrulama → 30 gün bekleme → kalıcı silme işi (tüm tenant satırları + storage
+  önekleri) → tamamlandı audit kaydı (tenant dışı sistem audit'inde, PII'siz). Gerçek veri silme ürün sahibi onayı gerektiren
+  işlemler listesindedir; otomasyon yalnızca tenant'ın kendi talebiyle ve test edilmiş iş akışıyla çalışır.
+- Supabase Auth kullanıcısı birden fazla tenant'a üye olabilir; tenant silmede kullanıcı yalnızca başka üyeliği yoksa silinir.
+
+## 6. Alt işleyenler (sub-processors)
+
+| Sağlayıcı | Amaç | İşlenen veri | Bölge tercihi | Not / doğrulanacak |
+|---|---|---|---|---|
+| Supabase | PostgreSQL, Auth, Storage | Tüm iş verisi, kullanıcı kimlikleri, dosyalar | `eu-central-1` (Frankfurt) | DPA imzalanacak; yedek bölgesi doğrulanacak |
+| Vercel | Web uygulaması barındırma (SSR/edge) | İstek metadata'sı, SSR sırasında geçen veri; DB'ye doğrudan erişim yok | Fonksiyon bölgesi `fra1` seçilecek | Hobby planı **ticari kullanıma izin vermez** (bkz. operations/risk-register.md); DPA |
+| Anthropic | WhatsApp metni ayrıştırma (Claude API) | Maskelenmiş mesaj metni (katalog/fiyat verisi yok — ADR 0010) | ABD (varsayılan) — bölge seçeneği doğrulanacak | Ticari koşullar/veri saklama ve eğitim kullanımı koşulları resmi kaynaktan doğrulanıp DPA'ya eklenecek |
+| Google / Firebase | FCM push bildirimi | FCM cihaz token'ı, bildirim metni (PII'siz) | Küresel | FCM ücretsiz (firebase.google.com/pricing, 2026-11-04 kontrol edildi) |
+| API host (seçilecek) | ASP.NET Core API + worker | Bellek içi tüm iş verisi, loglar | Frankfurt / AB | `operations/hosting-options.md` |
+| GitHub | Kaynak kod, CI | Kod; **müşteri verisi yok** | — | Public repo kuralları (bölüm 10) |
+| Log/hata izleme (opsiyonel, seçilecek) | Gözlemlenebilirlik | PII'siz loglar | AB | Seçimde DPA |
+
+Yeni alt işleyen eklemek = bu tabloyu güncellemek + tenant'lara bildirim (DPA'da taahhüt edilecek süre).
+
+## 7. Veri yerleşimi ve yurt dışı aktarım
+- Birincil veri AB'de (Supabase Frankfurt). API host da AB'de (Frankfurt veya yakın) seçilir.
+- KVKK md. 9 kapsamında yurt dışı aktarım (AB dahil Türkiye dışı tüm aktarımlar) için 2024 değişikliğiyle getirilen
+  mekanizmalar (yeterlilik kararı / standart sözleşme vb.) hukukçu ile değerlendirilmelidir. **Bu belge hukuki dayanağı
+  belirlemez; ürün sahibi aksiyonu olarak işaretlidir.**
+- Anthropic (ABD) ve Firebase (küresel) aktarımları ayrıca değerlendirilir; AI özelliği tenant bazında açılıp kapatılabilir
+  olmalıdır (opt-in).
+
+## 8. Loglama ve PII kuralları
+1. İstek/yanıt gövdesi loglanmaz. Allowlist: method, route şablonu, durum kodu, süre, `tenant_id`, `user_id` (UUID), `correlation_id`.
+2. E-posta, telefon, adres, ad, WhatsApp metni, signed URL, JWT, `Authorization`/`Cookie` başlıkları **asla** loglanmaz.
+3. Serilog/`ILogger` için redaction enricher; unit test ile doğrulanır (`LogRedactionTests`).
+4. Hata izleme aracında `sendDefaultPii=false` ve gövde yakalama kapalı.
+5. Audit kayıtlarında IP SHA-256 + tuz ile hash'lenir.
+6. Destek amaçlı tenant verisine erişim yalnızca owner izniyle ve audit'lenerek (ileride "destek erişimi" özelliği).
+
+## 9. Sır yönetimi (ortam bazında)
+
+| Sır | Local/dev | Preview/staging | Production |
+|---|---|---|---|
+| Postgres bağlantı dizesi (app rolü) | `.env` (git-ignored), docker compose varsayılanları | API host env (preview projesi) + GitHub Environment `preview` | API host env + GitHub Environment `production` (onaylı) |
+| Postgres migration rolü | `.env` | GitHub Environment `preview` secret | GitHub Environment `production` (reviewer: owner) |
+| Supabase URL + publishable/anon key (public) | `.env` | Vercel env (Preview) / `--dart-define` | Vercel env (Production) / `--dart-define` |
+| Supabase service role / secret key | Kullanılmaz (mümkünse) | API host env | API host env |
+| JWT JWKS URL / issuer | `.env` | API host env | API host env |
+| Anthropic API anahtarı | Geliştiricinin kendi test anahtarı, `.env`; varsayılan mock | API host env (ayrı anahtar, düşük harcama limiti) | API host env (ayrı anahtar, bütçe alarmı) |
+| FCM servis hesabı JSON | `bayios-dev` projesi, `.env` dosya yolu | `bayios-dev` (API host secret) | `bayios-prod` (API host secret) |
+| Vercel token | — | GitHub secret (gerekirse; Vercel Git entegrasyonu tercih) | Aynı |
+| API host deploy token | — | GitHub Environment `preview` | GitHub Environment `production` |
+| Mobil imzalama anahtarı (Android keystore / iOS sertifika) | Debug anahtarı | — | CI secret veya Codemagic; yerelde yedek (ürün sahibi kasası) |
+
+Kurallar: her ortam ayrı anahtar; anahtar rotasyonu yılda bir veya sızıntı şüphesinde hemen; sırlar sohbet/issue/PR'a
+yazılmaz; `.env.example` yalnızca değişken adları içerir.
+
+## 10. Public repo kuralları
+- Gerçek anahtar, connection string, müşteri verisi, gerçek fiyat listesi, gerçek firma adı **asla** commit edilmez.
+- Seed ve fixture'lar sentetik (ör. "Demo Motor Yedek Parça Ltd.", `@example.com` e-postaları, `+90 555 000 00 xx`).
+- GitHub secret scanning + push protection açık; gitleaks CI'da; `.gitignore`: `.env*` (`.env.example` hariç), `*.keystore`,
+  `google-services.json` (prod), `GoogleService-Info.plist` (prod), `appsettings.*.local.json`.
+- Sızıntı olursa: anahtar **önce** iptal/rotasyon, sonra geçmiş temizliği (geçmiş temizliği tek başına yetmez; public repo forklanmış olabilir).
+- Ekran görüntüleri ve test artefaktları sentetik veriyle üretilir.

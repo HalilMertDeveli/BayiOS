@@ -1,0 +1,31 @@
+name: Özellik / Görev
+description: Yeni özellik veya geliştirme görevi
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: Kullanıcı hikâyesi / amaç
+      placeholder: Bir <rol> olarak <ihtiyaç> istiyorum, böylece <fayda>.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Kabul kriterleri
+      placeholder: "- [ ] Given ... When ... Then ..."
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Kapsam dışı
+  - type: textarea
+    id: tests
+    attributes:
+      label: Test gereksinimleri
+  - type: input
+    id: deps
+    attributes:
+      label: Bağımlılıklar
+      placeholder: "#12, #14"

@@ -1,0 +1,49 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+!apps/web/.env.development
+*.pem
+*.p12
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
+service-account*.json
+
+# .NET
+bin/
+obj/
+*.user
+TestResults/
+coverage/
+*.trx
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+playwright-report/
+test-results/
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+*.iml
+
+# Claude local
+.claude/settings.local.json
+.claude/worktrees/
