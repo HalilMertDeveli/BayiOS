@@ -53,14 +53,18 @@ internal sealed partial class IdentityService(
                 join t in db.Tenants.AsNoTracking() on m.TenantId equals t.Id
                 where m.UserId == userId
                 orderby t.Name
-                select new MembershipResponse(t.Id, t.Name, t.Slug, m.Role, m.Status))
+                select new MembershipResponse(t.Id, t.Name, t.Slug, m.Role, m.Status, t.Status))
             .ToListAsync(cancellationToken);
 
         ActiveTenantResponse? active = null;
         if (requestContext is { TenantId: { } tenantId, Role: { } role })
         {
             var permissions = await authorization.EffectivePermissionsAsync(cancellationToken);
-            active = new ActiveTenantResponse(tenantId, role, [.. permissions.Select(p => new PermissionGrantResponse(p.Permission, p.Scope, p.Condition))]);
+            active = new ActiveTenantResponse(tenantId, role, [.. permissions.Select(p => new PermissionGrantResponse(
+                p.Permission,
+                p.Scope,
+                p.Condition,
+                p.Parameters is { } parameters ? new GrantParametersResponse(parameters.MaxDiscountPercent) : null))]);
         }
 
         return new MeResponse(userId, profile?.Email ?? tokenEmail, profile?.FullName, memberships, active);
@@ -161,6 +165,12 @@ internal sealed partial class IdentityService(
             errors["defaultTaxRate"] = ["Must be a percentage between 0 and 100 with at most 2 decimals."];
         }
 
+        var prefix = request.OrderNumberPrefix?.Trim().ToUpperInvariant();
+        if (request.OrderNumberPrefix is not null && !Domain.TenantSettings.IsValidOrderNumberPrefix(prefix))
+        {
+            errors["orderNumberPrefix"] = ["Must be 1–10 characters of A–Z and 0–9, starting with a letter."];
+        }
+
         if (errors.Count > 0)
         {
             return ValidationFailed(errors);
@@ -188,6 +198,8 @@ internal sealed partial class IdentityService(
         settings.Require2fa = request.Require2fa ?? settings.Require2fa;
         settings.DefaultTaxRate = request.DefaultTaxRate ?? settings.DefaultTaxRate;
         settings.PricesIncludeTaxDisplay = request.PricesIncludeTaxDisplay ?? settings.PricesIncludeTaxDisplay;
+        settings.RequireOrderApproval = request.RequireOrderApproval ?? settings.RequireOrderApproval;
+        settings.OrderNumberPrefix = prefix ?? settings.OrderNumberPrefix;
         settings.MarkUpdated(UserId, clock.GetUtcNow());
 
         try
@@ -210,7 +222,9 @@ internal sealed partial class IdentityService(
             .Field("staffCanApproveReceipt", before.StaffCanApproveReceipt, after.StaffCanApproveReceipt)
             .Field("require2fa", before.Require2fa, after.Require2fa)
             .Field("defaultTaxRate", before.DefaultTaxRate, after.DefaultTaxRate)
-            .Field("pricesIncludeTaxDisplay", before.PricesIncludeTaxDisplay, after.PricesIncludeTaxDisplay);
+            .Field("pricesIncludeTaxDisplay", before.PricesIncludeTaxDisplay, after.PricesIncludeTaxDisplay)
+            .Field("requireOrderApproval", before.RequireOrderApproval, after.RequireOrderApproval)
+            .Field("orderNumberPrefix", before.OrderNumberPrefix, after.OrderNumberPrefix);
         if (changes.HasChanges)
         {
             await audit.RecordAsync(
@@ -356,7 +370,9 @@ internal sealed partial class IdentityService(
         s.StaffCanApproveReceipt,
         s.Require2fa,
         s.DefaultTaxRate,
-        s.PricesIncludeTaxDisplay);
+        s.PricesIncludeTaxDisplay,
+        s.RequireOrderApproval,
+        s.OrderNumberPrefix);
 
     [GeneratedRegex("^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$", RegexOptions.CultureInvariant)]
     private static partial Regex SlugPattern();

@@ -69,6 +69,26 @@ internal static class OrderActions
     public static readonly IReadOnlyList<string> Transitions = [.. All.Where(a => a != Create)];
 }
 
+/// <summary>Customer address types (customers.customer_addresses.type).</summary>
+internal static class OrderAddressTypes
+{
+    public const string Shipping = "shipping";
+    public const string Billing = "billing";
+}
+
+/// <summary>A customer address copied onto the order (stored as jsonb; the source address may later change or go).</summary>
+internal sealed record OrderAddressSnapshot(
+    Guid AddressId,
+    string? Title,
+    string Line1,
+    string? Line2,
+    string? District,
+    string City,
+    string? PostalCode,
+    string Country,
+    string? ContactName,
+    string? ContactPhone);
+
 /// <summary>
 /// orders.orders (data-model §5.8): the order header. Totals are derived from the lines on the server only
 /// (<see cref="OrderMath"/>); amounts are numeric(18,4) holding values rounded to 2 decimals (PRD ORD-04).
@@ -83,7 +103,7 @@ internal sealed class Order : ITenantOwned
 
     public Guid TenantId { get; private init; }
 
-    /// <summary>Tenant-unique, gapless per year: <c>SIP-2026-000123</c> (PRD ORD-14).</summary>
+    /// <summary>Tenant-unique, gapless per prefix and year: <c>{prefix}-2026-000123</c>, prefix from the tenant setting (PRD ORD-14).</summary>
     public string Number { get; private init; } = string.Empty;
 
     /// <summary>→ customers.customers (no cross-module FK).</summary>
@@ -141,6 +161,21 @@ internal sealed class Order : ITenantOwned
 
     /// <summary>Warehouse reported a picking or packing shortage (WHT-06). Never cleared: it is part of the history.</summary>
     public bool HasShortage { get; set; }
+
+    /// <summary>Chosen shipping address of the customer (draft choice; null = the customer's default at submit).</summary>
+    public Guid? ShippingAddressId { get; set; }
+
+    /// <summary>Chosen billing address of the customer (draft choice; null = the customer's default at submit).</summary>
+    public Guid? BillingAddressId { get; set; }
+
+    /// <summary>
+    /// Snapshot (jsonb) taken at submit — or at approval when missing — and never changed after approval (database
+    /// trigger <c>trg_orders_address_snapshot_immutable</c>).
+    /// </summary>
+    public OrderAddressSnapshot? ShippingAddress { get; set; }
+
+    /// <summary>As <see cref="ShippingAddress"/>, for billing.</summary>
+    public OrderAddressSnapshot? BillingAddress { get; set; }
 
     public long RowVersion { get; private set; } = 1;
 
@@ -407,7 +442,10 @@ internal sealed class OrderShipmentLine : ITenantOwned
     };
 }
 
-/// <summary>orders.order_number_sequences: one counter row per tenant and year (row lock → gapless numbers).</summary>
+/// <summary>
+/// orders.order_number_sequences: one counter row per tenant, number prefix and year (row lock → gapless numbers).
+/// A prefix change starts (or resumes) that prefix's own counter; numbers stay unique because the prefix is part of them.
+/// </summary>
 internal sealed class OrderNumberSequence : ITenantOwned
 {
     private OrderNumberSequence()
@@ -415,6 +453,8 @@ internal sealed class OrderNumberSequence : ITenantOwned
     }
 
     public Guid TenantId { get; private init; }
+
+    public string Prefix { get; private init; } = "SIP";
 
     public int Year { get; private init; }
 

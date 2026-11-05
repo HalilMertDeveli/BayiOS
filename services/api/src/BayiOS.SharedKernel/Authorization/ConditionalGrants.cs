@@ -32,13 +32,19 @@ public interface ITenantAccessRules
 /// through, and the application service must apply the condition through <see cref="IAuthorizationContext"/>.
 /// False when the tenant rule alone decides (the grant is then unconditional or absent).
 /// </param>
+/// <param name="Parameters">Tenant values the condition depends on (e.g. the discount limit), for <c>GET /me</c>.</param>
 public sealed record GrantCondition(
     string Role,
     string Permission,
     int? Footnote,
     string Code,
     Func<TenantAccessRules, bool>? Rule,
-    bool RecordLevel);
+    bool RecordLevel,
+    Func<TenantAccessRules, GrantParameters>? Parameters = null);
+
+/// <summary>Tenant values of a condition a client may show (e.g. "en fazla %10"); null members do not apply.</summary>
+/// <param name="MaxDiscountPercent">Footnote 10: the largest line discount, as a percentage of the line subtotal.</param>
+public sealed record GrantParameters(decimal? MaxDiscountPercent);
 
 /// <summary>
 /// Every K / O cell of <see cref="RolePermissions"/> with its condition. A cell without an entry here is denied
@@ -81,7 +87,14 @@ public static class ConditionalGrants
         new(Roles.Sales, Permissions.OrdersApprove, 9, "tenant_rule.sales_can_approve_orders", r => r.SalesCanApproveOrders, RecordLevel: false),
 
         // ¹⁰ tenant rule "sales discount limit %X": 0 = no override; otherwise discounts up to X %, no manual price.
-        new(Roles.Sales, Permissions.OrdersPriceOverride, 10, "orders.discount_within_limit", r => r.SalesMaxDiscountPercent > 0m, RecordLevel: true),
+        new(
+            Roles.Sales,
+            Permissions.OrdersPriceOverride,
+            10,
+            "orders.discount_within_limit",
+            r => r.SalesMaxDiscountPercent > 0m,
+            RecordLevel: true,
+            r => new GrantParameters(r.SalesMaxDiscountPercent)),
 
         // ¹¹ sales cancels its own draft / pending-approval orders only.
         new(Roles.Sales, Permissions.OrdersCancel, 11, "orders.own_draft_or_pending", null, RecordLevel: true),

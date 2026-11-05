@@ -1,5 +1,8 @@
 using BayiOS.SharedKernel.Tenancy;
+using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
+using Microsoft.AspNetCore.Http;
 
 namespace BayiOS.SharedKernel.Authorization;
 
@@ -19,7 +22,8 @@ public enum PermissionScope
 /// <summary>One effective permission of the caller (<c>GET /me</c>).</summary>
 /// <param name="Scope"><c>all</c>, <c>conditional</c> (K, record-level) or <c>own</c> (O).</param>
 /// <param name="Condition">The <see cref="GrantCondition.Code"/> for <c>conditional</c> / <c>own</c>.</param>
-public sealed record PermissionAccess(string Permission, string Scope, string? Condition);
+/// <param name="Parameters">The condition's tenant values (e.g. the sales discount limit); null when it has none.</param>
+public sealed record PermissionAccess(string Permission, string Scope, string? Condition, GrantParameters? Parameters = null);
 
 /// <summary>
 /// Request-scoped authorization for K / O grants (#69).
@@ -130,7 +134,9 @@ public sealed class AuthorizationContext(IRequestContext requestContext, ITenant
             }
 
             var own = RolePermissions.GetGrant(requestContext.Role, permission) == PermissionGrant.OwnRecordsOnly;
-            result.Add(new PermissionAccess(permission, own ? "own" : "conditional", ConditionalGrants.Find(requestContext.Role, permission)?.Code));
+            var condition = ConditionalGrants.Find(requestContext.Role, permission);
+            var parameters = condition?.Parameters is { } read ? read(await RulesAsync(cancellationToken)) : null;
+            result.Add(new PermissionAccess(permission, own ? "own" : "conditional", condition?.Code, parameters));
         }
 
         return result;
@@ -174,19 +180,99 @@ public sealed class AuthorizationContext(IRequestContext requestContext, ITenant
 
         return condition.RecordLevel ? PermissionScope.Restricted : PermissionScope.All;
     }
+
+    /// <summary>
+    /// The K / O cell condition that denies <paramref name="permission"/> to <paramref name="role"/> only because its
+    /// tenant rule is off (roles-permissions §4) — null when the role has no such cell or the rule is on.
+    /// </summary>
+    public static GrantCondition? SwitchedOffByTenantRule(string? role, string permission, TenantAccessRules rules) =>
+        RolePermissions.GetGrant(role, permission) is PermissionGrant.Conditional or PermissionGrant.OwnRecordsOnly
+        && ConditionalGrants.Find(role, permission) is { Rule: { } rule } condition
+        && !rule(rules)
+            ? condition
+            : null;
+}
+
+/// <summary>Stable 403 problem codes of the permission model (api-strategy §6).</summary>
+public static class AuthorizationProblems
+{
+    /// <summary>
+    /// Missing permission, or a record-level grant no service evaluated (fail-closed safety net). Title kept as is.
+    /// </summary>
+    public const string Forbidden = "auth.forbidden";
+
+    /// <summary>
+    /// The role holds the permission conditionally (K) and the tenant rule behind it is off (e.g. footnote 9 "sales may
+    /// approve orders"). The problem carries <c>permission</c> and <c>condition</c>.
+    /// </summary>
+    public const string DisabledByTenantRule = "auth.disabled_by_tenant_rule";
+}
+
+/// <summary>Why the endpoint gate failed when a tenant rule switched the caller's conditional grant off.</summary>
+public sealed class TenantRuleFailureReason(IAuthorizationHandler handler, string permission, string condition)
+    : AuthorizationFailureReason(handler, $"{permission}: switched off by tenant rule '{condition}'")
+{
+    public string Permission { get; } = permission;
+
+    public string Condition { get; } = condition;
 }
 
 /// <summary>Endpoint requirement: any of <see cref="AnyOf"/> must be granted (fully or record-level).</summary>
 public sealed record PermissionRequirement(IReadOnlyList<string> AnyOf) : IAuthorizationRequirement;
 
 /// <summary>The endpoint gate: evaluates <see cref="PermissionRequirement"/> through <see cref="IAuthorizationContext"/>.</summary>
-public sealed class PermissionAuthorizationHandler(IAuthorizationContext authorization) : AuthorizationHandler<PermissionRequirement>
+/// <remarks>
+/// When every listed permission is denied and one of them only because a tenant rule is off, the failure carries a
+/// <see cref="TenantRuleFailureReason"/> so the 403 can say so (<see cref="AuthorizationProblems.DisabledByTenantRule"/>).
+/// </remarks>
+public sealed class PermissionAuthorizationHandler(IAuthorizationContext authorization, IRequestContext requestContext)
+    : AuthorizationHandler<PermissionRequirement>
 {
     protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, PermissionRequirement requirement)
     {
         if (await authorization.GateAsync(requirement.AnyOf, CancellationToken.None) != PermissionScope.None)
         {
             context.Succeed(requirement);
+            return;
         }
+
+        if (requestContext.TenantId is null)
+        {
+            return;
+        }
+
+        var rules = await authorization.RulesAsync(CancellationToken.None);
+        foreach (var permission in requirement.AnyOf)
+        {
+            if (AuthorizationContext.SwitchedOffByTenantRule(requestContext.Role, permission, rules) is { } condition)
+            {
+                context.Fail(new TenantRuleFailureReason(this, permission, condition.Code));
+                return;
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Writes the 403 of a failed endpoint gate: <see cref="AuthorizationProblems.DisabledByTenantRule"/> when a tenant rule
+/// switched the grant off, otherwise the default behaviour (<c>auth.forbidden</c> from the JWT scheme's OnForbidden).
+/// </summary>
+public sealed class PermissionAuthorizationResultHandler : IAuthorizationMiddlewareResultHandler
+{
+    private readonly AuthorizationMiddlewareResultHandler _default = new();
+
+    public async Task HandleAsync(RequestDelegate next, HttpContext context, AuthorizationPolicy policy, PolicyAuthorizationResult authorizeResult)
+    {
+        if (authorizeResult.Forbidden
+            && authorizeResult.AuthorizationFailure?.FailureReasons.OfType<TenantRuleFailureReason>().FirstOrDefault() is { } reason)
+        {
+            var problem = ApiProblems.Create(StatusCodes.Status403Forbidden, AuthorizationProblems.DisabledByTenantRule, "Not allowed");
+            problem.Extensions["permission"] = reason.Permission;
+            problem.Extensions["condition"] = reason.Condition;
+            await ApiProblems.WriteAsync(context, problem);
+            return;
+        }
+
+        await _default.HandleAsync(next, context, policy, authorizeResult);
     }
 }

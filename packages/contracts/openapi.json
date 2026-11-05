@@ -683,7 +683,7 @@
         "tags": [
           "Identity"
         ],
-        "summary": "Aktif tenant\u0027\u0131n \u00FCyeleri (personel se\u00E7ici): g\u00F6r\u00FCnen ad, e-posta, rol, durum; rol/durum filtresi, keyset sayfalama",
+        "summary": "Aktif tenant\u0027\u0131n \u00FCyeleri (personel se\u00E7ici): g\u00F6r\u00FCnen ad, e-posta, rol, durum; rol/durum/izin filtresi, keyset sayfalama",
         "operationId": "Identity_ListMembers",
         "parameters": [
           {
@@ -709,6 +709,13 @@
           },
           {
             "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "permission",
             "in": "query",
             "schema": {
               "type": "string"
@@ -12155,6 +12162,7 @@
           "Orders"
         ],
         "summary": "Taslak sipari\u015F olu\u015Fturur; fiyatlar fiyat listesinden \u00E7\u00F6z\u00FCl\u00FCr (manuel fiyat/iskonto orders.price.override ister)",
+        "description": "403 codes (record-level, #111): \u0060orders.discount_limit_exceeded\u0060 (a line discount above the sales limit; \u0060limitPercent\u0060), \u0060orders.manual_price_not_allowed\u0060 (manual unit price while only discounts within the limit are allowed; \u0060limitPercent\u0060), \u0060auth.disabled_by_tenant_rule\u0060 (sales discount limit is 0 %; \u0060permission\u0060, \u0060condition\u0060), \u0060auth.forbidden\u0060 (permission missing).",
         "operationId": "Orders_Create",
         "parameters": [
           {
@@ -12361,6 +12369,7 @@
           "Orders"
         ],
         "summary": "Tasla\u011F\u0131 g\u00FCnceller (merge patch; lines verilirse t\u00FCm sat\u0131rlar de\u011Fi\u015Fir ve yeniden fiyatlan\u0131r) \u2014 If-Match zorunlu",
+        "description": "403 codes (record-level, #111): \u0060orders.discount_limit_exceeded\u0060 (a line discount above the sales limit; \u0060limitPercent\u0060), \u0060orders.manual_price_not_allowed\u0060 (manual unit price while only discounts within the limit are allowed; \u0060limitPercent\u0060), \u0060auth.disabled_by_tenant_rule\u0060 (sales discount limit is 0 %; \u0060permission\u0060, \u0060condition\u0060), \u0060auth.forbidden\u0060 (permission missing). \u0060orders.not_owner\u0060: sales edits only drafts it created (O).",
         "operationId": "Orders_Update",
         "parameters": [
           {
@@ -12519,7 +12528,8 @@
         "tags": [
           "Orders"
         ],
-        "summary": "Taslak \u2192 Onay bekliyor (en az bir sat\u0131r, fiyats\u0131z sat\u0131r yok)",
+        "summary": "Taslak \u2192 Onay bekliyor (en az bir sat\u0131r, fiyats\u0131z sat\u0131r yok); onay gerekmeyen tenant\u0027ta onaylama yetkisi olan i\u00E7in do\u011Frudan Onayland\u0131 \u002B rezervasyon",
+        "description": "Copies the shipping / billing address snapshot (422 when a chosen address was removed). When the tenant setting requireOrderApproval is false, the source is not whatsapp_ai and the caller holds orders.approve under the active rules, the order is approved in the same transaction exactly as by approve (all-or-nothing reservation: a shortage answers 409 inventory.insufficient_stock and the order stays a draft; confirmNegativeStock as on approve). Otherwise it goes to pending_approval.",
         "operationId": "Orders_Submit",
         "parameters": [
           {
@@ -12560,6 +12570,22 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SubmitOrderRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "400": {
             "description": "Bad Request",
@@ -12615,7 +12641,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/StockProblemDetails"
                 }
               }
             }
@@ -12655,7 +12681,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                  "$ref": "#/components/schemas/StockProblemDetails"
                 }
               }
             }
@@ -12830,6 +12856,7 @@
           "Orders"
         ],
         "summary": "Onay bekliyor \u2192 Taslak (sebep zorunlu)",
+        "description": "403 \u0060auth.disabled_by_tenant_rule\u0060 (with \u0060permission\u0060 and \u0060condition\u0060) when the tenant rule \u0027sales may approve orders\u0027 (footnote 9) is off for a sales caller.",
         "operationId": "Orders_Reject",
         "parameters": [
           {
@@ -12995,6 +13022,7 @@
           "Orders"
         ],
         "summary": "Onay bekliyor \u2192 Onayland\u0131: fiyat kontrol\u00FC ve t\u00FCm sat\u0131rlar\u0131n tek transaction\u0027da rezervasyonu (ya hep ya hi\u00E7) \u2014 If-Match zorunlu",
+        "description": "403 \u0060auth.disabled_by_tenant_rule\u0060 (with \u0060permission\u0060 and \u0060condition\u0060) when the tenant rule \u0027sales may approve orders\u0027 (footnote 9) is off for a sales caller.",
         "operationId": "Orders_Approve",
         "parameters": [
           {
@@ -13166,6 +13194,7 @@
           "Orders"
         ],
         "summary": "K\u0131smi sevk sonras\u0131 kalan\u0131 kapat\u0131r, kalan rezervasyonu serbest b\u0131rak\u0131r \u2192 Sevk edildi (sebep zorunlu)",
+        "description": "403 \u0060auth.disabled_by_tenant_rule\u0060 (with \u0060permission\u0060 and \u0060condition\u0060) when the tenant rule \u0027sales may approve orders\u0027 (footnote 9) is off for a sales caller.",
         "operationId": "Orders_CloseRemaining",
         "parameters": [
           {
@@ -13486,6 +13515,7 @@
           "Orders"
         ],
         "summary": "\u0130ptal (sebep zorunlu); onayl\u0131 sipari\u015Fte rezervasyon serbest b\u0131rak\u0131l\u0131r. K\u0131smi sevk sonras\u0131 iptal yok",
+        "description": "403 codes: \u0060orders.not_owner\u0060 (sales cancels only orders it created, footnote 11), \u0060orders.cancel_not_allowed_in_status\u0060 (sales cancels its own orders only while draft or pending_approval).",
         "operationId": "Orders_Cancel",
         "parameters": [
           {
@@ -14861,6 +14891,20 @@
             "items": {
               "$ref": "#/components/schemas/OrderLineInput"
             }
+          },
+          "shippingAddressId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "billingAddressId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -15634,6 +15678,23 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "GrantParametersResponse": {
+        "required": [
+          "maxDiscountPercent"
+        ],
+        "type": "object",
+        "properties": {
+          "maxDiscountPercent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -16589,7 +16650,8 @@
           "tenantName",
           "tenantSlug",
           "role",
-          "status"
+          "status",
+          "tenantStatus"
         ],
         "type": "object",
         "properties": {
@@ -16607,6 +16669,9 @@
             "type": "string"
           },
           "status": {
+            "type": "string"
+          },
+          "tenantStatus": {
             "type": "string"
           }
         }
@@ -16812,6 +16877,72 @@
             "items": {
               "$ref": "#/components/schemas/PickingTaskSummaryResponse"
             }
+          }
+        }
+      },
+      "OrderAddressResponse": {
+        "required": [
+          "addressId",
+          "title",
+          "line1",
+          "line2",
+          "district",
+          "city",
+          "postalCode",
+          "country",
+          "contactName",
+          "contactPhone"
+        ],
+        "type": "object",
+        "properties": {
+          "addressId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "line1": {
+            "type": "string"
+          },
+          "line2": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "district": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "city": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "country": {
+            "type": "string"
+          },
+          "contactName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "contactPhone": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -17231,7 +17362,12 @@
           "cancelledAt",
           "cancelReason",
           "hasShortage",
-          "version"
+          "version",
+          "shippingAddressId",
+          "billingAddressId",
+          "shippingAddress",
+          "billingAddress",
+          "addressesAreSnapshot"
         ],
         "type": "object",
         "properties": {
@@ -17389,6 +17525,43 @@
               "string"
             ],
             "format": "int64"
+          },
+          "shippingAddressId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "billingAddressId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "shippingAddress": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OrderAddressResponse"
+              }
+            ]
+          },
+          "billingAddress": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OrderAddressResponse"
+              }
+            ]
+          },
+          "addressesAreSnapshot": {
+            "type": "boolean"
           }
         }
       },
@@ -17783,7 +17956,8 @@
         "required": [
           "permission",
           "scope",
-          "condition"
+          "condition",
+          "parameters"
         ],
         "type": "object",
         "properties": {
@@ -17802,6 +17976,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "parameters": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GrantParametersResponse"
+              }
             ]
           }
         }
@@ -19548,6 +19732,20 @@
           }
         }
       },
+      "SubmitOrderRequest": {
+        "required": [
+          "confirmNegativeStock"
+        ],
+        "type": "object",
+        "properties": {
+          "confirmNegativeStock": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
       "TaxBreakdownResponse": {
         "required": [
           "rate",
@@ -19683,7 +19881,9 @@
           "staffCanApproveReceipt",
           "require2fa",
           "defaultTaxRate",
-          "pricesIncludeTaxDisplay"
+          "pricesIncludeTaxDisplay",
+          "requireOrderApproval",
+          "orderNumberPrefix"
         ],
         "type": "object",
         "properties": {
@@ -19726,6 +19926,12 @@
           },
           "pricesIncludeTaxDisplay": {
             "type": "boolean"
+          },
+          "requireOrderApproval": {
+            "type": "boolean"
+          },
+          "orderNumberPrefix": {
+            "type": "string"
           }
         }
       },
@@ -20208,6 +20414,20 @@
             "items": {
               "$ref": "#/components/schemas/OrderLineInput"
             }
+          },
+          "shippingAddressId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "billingAddressId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -20481,6 +20701,18 @@
             "type": [
               "null",
               "boolean"
+            ]
+          },
+          "requireOrderApproval": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "orderNumberPrefix": {
+            "type": [
+              "null",
+              "string"
             ]
           }
         }

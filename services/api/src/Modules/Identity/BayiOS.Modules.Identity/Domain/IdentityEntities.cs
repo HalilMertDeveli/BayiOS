@@ -159,9 +159,21 @@ internal sealed class UserProfile
 /// <summary>identity.tenant_settings — standard tenant RLS; holds the adjustable rules of roles-permissions §4.</summary>
 internal sealed class TenantSettings : ITenantOwned
 {
+    public const string DefaultOrderNumberPrefix = "SIP";
+    public const int MaxOrderNumberPrefixLength = 10;
+
+    /// <summary>The database CHECK of <see cref="OrderNumberPrefix"/> (same rule).</summary>
+    public const string OrderNumberPrefixPattern = "^[A-Z][A-Z0-9]{0,9}$";
+
     private TenantSettings()
     {
     }
+
+    /// <summary>1–10 of A–Z and 0–9, starting with a letter (ASCII only: the number goes into documents and file names).</summary>
+    public static bool IsValidOrderNumberPrefix(string? prefix) =>
+        prefix is { Length: > 0 and <= MaxOrderNumberPrefixLength }
+        && char.IsAsciiLetterUpper(prefix[0])
+        && prefix.All(c => char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c));
 
     public Guid TenantId { get; private set; }
 
@@ -186,6 +198,15 @@ internal sealed class TenantSettings : ITenantOwned
 
     /// <summary>Show prices VAT-inclusive (PRD TEN-05, AQ-09: default exclusive).</summary>
     public bool PricesIncludeTaxDisplay { get; set; }
+
+    /// <summary>
+    /// inventory-and-orders §3.1 #1a: false = submit approves (and reserves) at once when the submitter may approve
+    /// and the order is not an AI draft; true (default) = every order waits in pending_approval.
+    /// </summary>
+    public bool RequireOrderApproval { get; set; } = true;
+
+    /// <summary>Prefix of new order numbers (PRD ORD-14), <see cref="IsValidOrderNumberPrefix"/>; existing numbers never change.</summary>
+    public string OrderNumberPrefix { get; set; } = DefaultOrderNumberPrefix;
 
     public long RowVersion { get; private set; } = 1;
 

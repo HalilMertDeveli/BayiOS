@@ -115,7 +115,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Aktif tenant'ın üyeleri (personel seçici): görünen ad, e-posta, rol, durum; rol/durum filtresi, keyset sayfalama */
+        /** Aktif tenant'ın üyeleri (personel seçici): görünen ad, e-posta, rol, durum; rol/durum/izin filtresi, keyset sayfalama */
         get: operations["Identity_ListMembers"];
         put?: never;
         post?: never;
@@ -1275,7 +1275,10 @@ export interface paths {
         /** Sipariş listesi: yeniden eskiye keyset sayfalama; durum, müşteri, kaynak, tarih aralığı filtresi, sipariş no araması */
         get: operations["Orders_List"];
         put?: never;
-        /** Taslak sipariş oluşturur; fiyatlar fiyat listesinden çözülür (manuel fiyat/iskonto orders.price.override ister) */
+        /**
+         * Taslak sipariş oluşturur; fiyatlar fiyat listesinden çözülür (manuel fiyat/iskonto orders.price.override ister)
+         * @description 403 codes (record-level, #111): `orders.discount_limit_exceeded` (a line discount above the sales limit; `limitPercent`), `orders.manual_price_not_allowed` (manual unit price while only discounts within the limit are allowed; `limitPercent`), `auth.disabled_by_tenant_rule` (sales discount limit is 0 %; `permission`, `condition`), `auth.forbidden` (permission missing).
+         */
         post: operations["Orders_Create"];
         delete?: never;
         options?: never;
@@ -1297,7 +1300,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Taslağı günceller (merge patch; lines verilirse tüm satırlar değişir ve yeniden fiyatlanır) — If-Match zorunlu */
+        /**
+         * Taslağı günceller (merge patch; lines verilirse tüm satırlar değişir ve yeniden fiyatlanır) — If-Match zorunlu
+         * @description 403 codes (record-level, #111): `orders.discount_limit_exceeded` (a line discount above the sales limit; `limitPercent`), `orders.manual_price_not_allowed` (manual unit price while only discounts within the limit are allowed; `limitPercent`), `auth.disabled_by_tenant_rule` (sales discount limit is 0 %; `permission`, `condition`), `auth.forbidden` (permission missing). `orders.not_owner`: sales edits only drafts it created (O).
+         */
         patch: operations["Orders_Update"];
         trace?: never;
     };
@@ -1310,7 +1316,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Taslak → Onay bekliyor (en az bir satır, fiyatsız satır yok) */
+        /**
+         * Taslak → Onay bekliyor (en az bir satır, fiyatsız satır yok); onay gerekmeyen tenant'ta onaylama yetkisi olan için doğrudan Onaylandı + rezervasyon
+         * @description Copies the shipping / billing address snapshot (422 when a chosen address was removed). When the tenant setting requireOrderApproval is false, the source is not whatsapp_ai and the caller holds orders.approve under the active rules, the order is approved in the same transaction exactly as by approve (all-or-nothing reservation: a shortage answers 409 inventory.insufficient_stock and the order stays a draft; confirmNegativeStock as on approve). Otherwise it goes to pending_approval.
+         */
         post: operations["Orders_Submit"];
         delete?: never;
         options?: never;
@@ -1344,7 +1353,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Onay bekliyor → Taslak (sebep zorunlu) */
+        /**
+         * Onay bekliyor → Taslak (sebep zorunlu)
+         * @description 403 `auth.disabled_by_tenant_rule` (with `permission` and `condition`) when the tenant rule 'sales may approve orders' (footnote 9) is off for a sales caller.
+         */
         post: operations["Orders_Reject"];
         delete?: never;
         options?: never;
@@ -1361,7 +1373,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Onay bekliyor → Onaylandı: fiyat kontrolü ve tüm satırların tek transaction'da rezervasyonu (ya hep ya hiç) — If-Match zorunlu */
+        /**
+         * Onay bekliyor → Onaylandı: fiyat kontrolü ve tüm satırların tek transaction'da rezervasyonu (ya hep ya hiç) — If-Match zorunlu
+         * @description 403 `auth.disabled_by_tenant_rule` (with `permission` and `condition`) when the tenant rule 'sales may approve orders' (footnote 9) is off for a sales caller.
+         */
         post: operations["Orders_Approve"];
         delete?: never;
         options?: never;
@@ -1378,7 +1393,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Kısmi sevk sonrası kalanı kapatır, kalan rezervasyonu serbest bırakır → Sevk edildi (sebep zorunlu) */
+        /**
+         * Kısmi sevk sonrası kalanı kapatır, kalan rezervasyonu serbest bırakır → Sevk edildi (sebep zorunlu)
+         * @description 403 `auth.disabled_by_tenant_rule` (with `permission` and `condition`) when the tenant rule 'sales may approve orders' (footnote 9) is off for a sales caller.
+         */
         post: operations["Orders_CloseRemaining"];
         delete?: never;
         options?: never;
@@ -1412,7 +1430,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** İptal (sebep zorunlu); onaylı siparişte rezervasyon serbest bırakılır. Kısmi sevk sonrası iptal yok */
+        /**
+         * İptal (sebep zorunlu); onaylı siparişte rezervasyon serbest bırakılır. Kısmi sevk sonrası iptal yok
+         * @description 403 codes: `orders.not_owner` (sales cancels only orders it created, footnote 11), `orders.cancel_not_allowed_in_status` (sales cancels its own orders only while draft or pending_approval).
+         */
         post: operations["Orders_Cancel"];
         delete?: never;
         options?: never;
@@ -1689,6 +1710,10 @@ export interface components {
             requestedDeliveryDate: null | string;
             notes: null | string;
             lines: null | components["schemas"]["OrderLineInput"][];
+            /** Format: uuid */
+            shippingAddressId?: null | string;
+            /** Format: uuid */
+            billingAddressId?: null | string;
         };
         CreatePickingTaskRequest: {
             /** Format: uuid */
@@ -1852,6 +1877,10 @@ export interface components {
             hasMore: boolean;
             /** Format: int32 */
             limit: number | string;
+        };
+        GrantParametersResponse: {
+            /** Format: double */
+            maxDiscountPercent: null | number | string;
         };
         HttpValidationProblemDetails: {
             type?: null | string;
@@ -2081,6 +2110,7 @@ export interface components {
             tenantSlug: string;
             role: string;
             status: string;
+            tenantStatus: string;
         };
         MeResponse: {
             /** Format: uuid */
@@ -2129,6 +2159,19 @@ export interface components {
         };
         MyPickingTasksResponse: {
             items: components["schemas"]["PickingTaskSummaryResponse"][];
+        };
+        OrderAddressResponse: {
+            /** Format: uuid */
+            addressId: string;
+            title: null | string;
+            line1: string;
+            line2: null | string;
+            district: null | string;
+            city: string;
+            postalCode: null | string;
+            country: string;
+            contactName: null | string;
+            contactPhone: null | string;
         };
         OrderDetailResponse: {
             order: components["schemas"]["OrderResponse"];
@@ -2261,6 +2304,13 @@ export interface components {
             hasShortage: boolean;
             /** Format: int64 */
             version: number | string;
+            /** Format: uuid */
+            shippingAddressId: null | string;
+            /** Format: uuid */
+            billingAddressId: null | string;
+            shippingAddress: null | components["schemas"]["OrderAddressResponse"];
+            billingAddress: null | components["schemas"]["OrderAddressResponse"];
+            addressesAreSnapshot: boolean;
         };
         OrderShipmentLineResponse: {
             /** Format: uuid */
@@ -2358,6 +2408,7 @@ export interface components {
             /** @enum {string} */
             scope: "all" | "conditional" | "own";
             condition: null | string;
+            parameters: null | components["schemas"]["GrantParametersResponse"];
         };
         PickingTaskLineResponse: {
             /** Format: uuid */
@@ -2782,6 +2833,9 @@ export interface components {
             requested?: number;
             available?: number;
         };
+        SubmitOrderRequest: {
+            confirmNegativeStock: null | boolean;
+        };
         TaxBreakdownResponse: {
             /** Format: double */
             rate: number | string;
@@ -2823,6 +2877,8 @@ export interface components {
             /** Format: double */
             defaultTaxRate: number | string;
             pricesIncludeTaxDisplay: boolean;
+            requireOrderApproval: boolean;
+            orderNumberPrefix: string;
         };
         UnitResponse: {
             /** Format: uuid */
@@ -2914,6 +2970,10 @@ export interface components {
             requestedDeliveryDate: null | string;
             notes: null | string;
             lines: null | components["schemas"]["OrderLineInput"][];
+            /** Format: uuid */
+            shippingAddressId?: null | string;
+            /** Format: uuid */
+            billingAddressId?: null | string;
         };
         UpdatePriceListRequest: {
             name: null | string;
@@ -2965,6 +3025,8 @@ export interface components {
             /** Format: double */
             defaultTaxRate?: null | number | string;
             pricesIncludeTaxDisplay?: null | boolean;
+            requireOrderApproval?: null | boolean;
+            orderNumberPrefix?: null | string;
         };
         UpdateUnitRequest: {
             name: null | string;
@@ -3522,6 +3584,7 @@ export interface operations {
                 status?: string;
                 limit?: string;
                 cursor?: string;
+                permission?: string;
             };
             header: {
                 /** @description Active tenant; must be one of the caller's active memberships. */
@@ -11448,7 +11511,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["SubmitOrderRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
@@ -11503,7 +11570,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
                 };
             };
             /** @description Precondition Failed */
@@ -11521,7 +11588,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
                 };
             };
             /** @description Precondition Required */

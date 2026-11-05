@@ -9,7 +9,12 @@
  */
 
 export type FixtureRole = "owner" | "admin" | "manager" | "sales" | "warehouse_staff" | "viewer";
-export type FixtureGrant = { permission: string; scope: "all" | "conditional" | "own"; condition: string | null };
+export type FixtureGrant = {
+  permission: string;
+  scope: "all" | "conditional" | "own";
+  condition: string | null;
+  parameters: { maxDiscountPercent: number | null } | null;
+};
 
 /** Tenant rules (roles-permissions §4) that switch conditional grants on or off. Defaults = the API's defaults. */
 export type FixtureRules = {
@@ -122,17 +127,19 @@ export function grantsFor(role: FixtureRole, rules: Partial<FixtureRules> = {}):
   for (const [permission, row] of MATRIX) {
     const cell = row[column];
     if (cell === "Y") {
-      result.push({ permission, scope: "all", condition: null });
+      result.push({ permission, scope: "all", condition: null, parameters: null });
       continue;
     }
     if (cell === "-") continue;
     const condition = CONDITIONS[`${role}|${permission}`];
     if (!condition || (condition.rule && !condition.rule(effective))) continue;
     if (!condition.recordLevel) {
-      result.push({ permission, scope: "all", condition: null });
+      result.push({ permission, scope: "all", condition: null, parameters: null });
       continue;
     }
-    result.push({ permission, scope: cell === "O" ? "own" : "conditional", condition: condition.code });
+    // The API sends the discount limit with footnote 10 (#111); every other condition has no parameters.
+    const parameters = condition.code === "orders.discount_within_limit" ? { maxDiscountPercent: effective.salesMaxDiscountPercent } : null;
+    result.push({ permission, scope: cell === "O" ? "own" : "conditional", condition: condition.code, parameters });
   }
   return result;
 }

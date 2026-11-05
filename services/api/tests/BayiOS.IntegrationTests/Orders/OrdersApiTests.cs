@@ -397,10 +397,12 @@ public class OrdersApiTests(ApiFixture fixture)
         var staff = await kit.Owner.AddMemberAsync(fixture, Roles.WarehouseStaff);
         var viewer = await kit.Owner.AddMemberAsync(fixture, Roles.Viewer);
 
-        // sales: creates with list prices; a manual price or discount needs orders.price.override (K → denied).
+        // sales: creates with list prices; a manual price or discount needs orders.price.override (K¹⁰, limit 0 % → rule off).
         var salesOrder = await OrdersKit.ReadAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m)]), HttpStatusCode.Created);
-        await HttpAssert.ProblemAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, unitPrice: 1m)]), HttpStatusCode.Forbidden, "auth.forbidden");
-        await HttpAssert.ProblemAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, discountPercent: 50m)]), HttpStatusCode.Forbidden, "auth.forbidden");
+        await HttpAssert.ProblemAsync(
+            await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, unitPrice: 1m)]), HttpStatusCode.Forbidden, "auth.disabled_by_tenant_rule");
+        await HttpAssert.ProblemAsync(
+            await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, discountPercent: 50m)]), HttpStatusCode.Forbidden, "auth.disabled_by_tenant_rule");
         // orders.edit.draft is "own records" (O) for sales: its own draft is editable (other cases: ConditionalPermissionsTests).
         salesOrder = await OrdersKit.ReadAsync(await sales.PatchAsync($"/api/v1/orders/{salesOrder.Order.Id}", new { notes = "x" }, CatalogClient.ETag(salesOrder.Order.Version)));
         var pending = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(sales, salesOrder, "submit"));

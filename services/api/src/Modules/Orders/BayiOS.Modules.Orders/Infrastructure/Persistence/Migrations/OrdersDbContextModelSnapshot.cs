@@ -37,6 +37,14 @@ namespace BayiOS.Modules.Orders.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("approved_by");
 
+                    b.Property<string>("BillingAddress")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("billing_address");
+
+                    b.Property<Guid?>("BillingAddressId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("billing_address_id");
+
                     b.Property<string>("CancelReason")
                         .HasColumnType("text")
                         .HasColumnName("cancel_reason");
@@ -118,6 +126,14 @@ namespace BayiOS.Modules.Orders.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ShippedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("shipped_at");
+
+                    b.Property<string>("ShippingAddress")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("shipping_address");
+
+                    b.Property<Guid?>("ShippingAddressId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("shipping_address_id");
 
                     b.Property<string>("Source")
                         .IsRequired()
@@ -361,6 +377,11 @@ namespace BayiOS.Modules.Orders.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
+                    b.Property<string>("Prefix")
+                        .HasColumnType("text")
+                        .HasDefaultValue("SIP")
+                        .HasColumnName("prefix");
+
                     b.Property<int>("Year")
                         .HasColumnType("integer")
                         .HasColumnName("year");
@@ -369,12 +390,14 @@ namespace BayiOS.Modules.Orders.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("next_value");
 
-                    b.HasKey("TenantId", "Year")
+                    b.HasKey("TenantId", "Prefix", "Year")
                         .HasName("pk_order_number_sequences");
 
                     b.ToTable("order_number_sequences", "orders", t =>
                         {
                             t.HasCheckConstraint("ck_order_number_sequences_next_value", "next_value > 0");
+
+                            t.HasCheckConstraint("ck_order_number_sequences_prefix", "prefix ~ '^[A-Z][A-Z0-9]{0,9}$'");
                         });
                 });
 

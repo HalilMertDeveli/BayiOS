@@ -122,7 +122,12 @@ Gösterim: **✓** izinli · **–** izin yok · **K** koşullu (dipnot) · **O*
 - Dipnot 8: kullanıcıya atanmış (iptal hariç her durumda) veya havuzdaki aktif görevlerin siparişleri; liste ve detayda tüm fiyat alanları boş (`totals`, `grandTotal`, satır fiyat/iskonto/tutarları `null`).
 - Dipnot 10: sınır > %0 iken sales yalnızca iskonto (yüzde veya tutar; satır iskontosu ≤ satır ara toplamının %X'i) uygulayabilir, manuel birim fiyat giremez.
 - Dipnot 12: sales, oluşturduğu siparişlerin görevlerini ve sevkiyatlarını görür. `tasks.read.all` veya `tasks.read.own` sahibi görev detayı ve sevkiyat okuma uçlarına erişir (biri yeterli).
-- Görünürlük koşulu dışındaki kayıt 404 (varlık ipucu yok); görünür ama koşul dışı işlem 403 `auth.forbidden`.
+- Görünürlük koşulu dışındaki kayıt 404 (varlık ipucu yok); görünür ama koşul dışı işlem 403 — #111'den beri ayrı kodlarla: kendi kaydı değil `orders.not_owner`, dipnot 11 durum sınırı `orders.cancel_not_allowed_in_status`, dipnot 10 `orders.discount_limit_exceeded` / `orders.manual_price_not_allowed` (`limitPercent` ile), kuralı kapalı K (dipnot 2, 6, 9, 10 %0) `auth.disabled_by_tenant_rule`. İzin hiç yoksa ve fail-closed güvenlik ağında `auth.forbidden` kalır (api-strategy §6).
+
+**Uygulama yorumu (#92 / #111, matris değişikliği değildir):**
+- Onaysız tenant (`require_order_approval = false`, §3.1 #1a): submit ancak gönderen `orders.approve`'u aktif kurallarla koşulsuz taşıyorsa siparişi onaylar; sales için dipnot 9 kapalıysa sipariş `pending_approval`'da bekler (hata değil). AI kaynaklı taslak her zaman insan onayı bekler.
+- `GET /me` dipnot 10 koşulunu `parameters.maxDiscountPercent` ile verir (istemci "en fazla %X" gösterebilir).
+- `GET /members?permission=…` aynı matris + tenant kuralı değerlendirmesini kullanır (kayıt düzeyi K/O dahil, kuralı kapalı K hariç); ayrı bir izin değildir, `members.read` ister.
 
 **Uygulama yorumu (#86, matris değişikliği değildir):**
 - Üye listesi (`GET /members`, personel seçici dahil) `members.read` ister; ayrı bir "seçici" izni yoktur (owner/admin/manager — `tasks.assign` ile aynı küme).

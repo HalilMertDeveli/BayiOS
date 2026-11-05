@@ -124,6 +124,34 @@ public class ConditionalGrantsTests
         Assert.Equal(1, rules.Reads);
     }
 
+    [Theory]
+    // K cells behind a tenant rule that is off → that condition; ✓, –, record-level K without a rule, or rule on → null.
+    [InlineData(Roles.Sales, Permissions.OrdersApprove, "tenant_rule.sales_can_approve_orders", null)]
+    [InlineData(Roles.Sales, Permissions.OrdersPriceOverride, "orders.discount_within_limit", null)]
+    [InlineData(Roles.WarehouseStaff, Permissions.CatalogBarcodeAssign, "tenant_rule.staff_can_assign_barcode", null)]
+    [InlineData(Roles.Manager, Permissions.PricesReadCost, "tenant_rule.show_cost_to_manager", null)]
+    [InlineData(Roles.Sales, Permissions.OrdersCancel, null, null)]
+    [InlineData(Roles.Owner, Permissions.OrdersApprove, null, null)]
+    [InlineData(Roles.Viewer, Permissions.OrdersApprove, null, null)]
+    public void Switched_off_by_tenant_rule_names_the_condition_only_when_the_rule_is_off(
+        string role, string permission, string? whenOff, string? whenOn)
+    {
+        Assert.Equal(whenOff, AuthorizationContext.SwitchedOffByTenantRule(role, permission, AllOff)?.Code);
+        Assert.Equal(whenOn, AuthorizationContext.SwitchedOffByTenantRule(role, permission, AllOn)?.Code);
+    }
+
+    [Fact]
+    public async Task Effective_permissions_carry_the_discount_limit_as_a_parameter()
+    {
+        var context = new AuthorizationContext(
+            new RequestContext { UserId = Guid.NewGuid(), TenantId = Guid.NewGuid(), Role = Roles.Sales }, new FixedRules(AllOn with { SalesMaxDiscountPercent = 7.5m }));
+        var permissions = (await context.EffectivePermissionsAsync(Ct)).ToDictionary(p => p.Permission);
+
+        Assert.Equal(new GrantParameters(7.5m), permissions[Permissions.OrdersPriceOverride].Parameters);
+        Assert.All(permissions.Values.Where(p => p.Permission != Permissions.OrdersPriceOverride), p => Assert.Null(p.Parameters));
+        Assert.All(ConditionalGrants.All.Where(c => c.Parameters is not null), c => Assert.Equal(10, c.Footnote));
+    }
+
     private static AuthorizationContext Context(string role) =>
         new(new RequestContext { UserId = Guid.NewGuid(), TenantId = Guid.NewGuid(), Role = role }, new FixedRules(TenantAccessRules.Defaults));
 

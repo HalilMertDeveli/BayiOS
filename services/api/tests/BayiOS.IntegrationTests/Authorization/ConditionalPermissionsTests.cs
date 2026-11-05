@@ -38,10 +38,13 @@ public sealed class ConditionalPermissionsTests(ApiFixture fixture)
 
         var edited = await OrdersKit.ReadAsync(await sales.PatchAsync($"/api/v1/orders/{own.Order.Id}", new { notes = "kendi" }, CatalogClient.ETag(own.Order.Version)));
         Assert.Equal("kendi", edited.Order.Notes);
-        await HttpAssert.ProblemAsync(
+        var notOwner = await HttpAssert.ProblemJsonAsync(
             await sales.PatchAsync($"/api/v1/orders/{others.Order.Id}", new { notes = "başkası" }, CatalogClient.ETag(others.Order.Version)),
             HttpStatusCode.Forbidden,
-            "auth.forbidden");
+            "orders.not_owner");
+        // #111: the title the current web matches stays as it was.
+        Assert.Equal("orders.edit.draft: Only drafts you created can be edited", notOwner.GetProperty("title").GetString());
+        Assert.Equal(Permissions.OrdersEditDraft, notOwner.GetProperty("permission").GetString());
         Assert.Equal("Test siparişi", (await kit.GetAsync(others.Order.Id)).Order.Notes);
 
         // Unconditional holders edit anyone's draft.
@@ -68,12 +71,17 @@ public sealed class ConditionalPermissionsTests(ApiFixture fixture)
         Assert.Equal("cancelled", (await OrdersKit.ReadAsync(await OrdersKit.ActAsync(sales, ownPending, "cancel", reason))).Order.Status);
 
         var othersDraft = await kit.CreateOrderAsync(OrdersKit.Line(variant, 1m));
-        await HttpAssert.ProblemAsync(await OrdersKit.ActAsync(sales, othersDraft, "cancel", reason), HttpStatusCode.Forbidden, "auth.forbidden");
+        var notOwner = await HttpAssert.ProblemJsonAsync(
+            await OrdersKit.ActAsync(sales, othersDraft, "cancel", reason), HttpStatusCode.Forbidden, "orders.not_owner");
+        Assert.Equal("orders.cancel: Only your own draft or pending-approval orders can be cancelled", notOwner.GetProperty("title").GetString());
 
         var ownApproved = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(
             sales, await OrdersKit.ReadAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m)]), HttpStatusCode.Created), "submit"));
         ownApproved = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, ownApproved, "approve"));
-        await HttpAssert.ProblemAsync(await OrdersKit.ActAsync(sales, ownApproved, "cancel", reason), HttpStatusCode.Forbidden, "auth.forbidden");
+        var tooLate = await HttpAssert.ProblemJsonAsync(
+            await OrdersKit.ActAsync(sales, ownApproved, "cancel", reason), HttpStatusCode.Forbidden, "orders.cancel_not_allowed_in_status");
+        Assert.Equal("orders.cancel: Only your own draft or pending-approval orders can be cancelled", tooLate.GetProperty("title").GetString());
+        Assert.Equal("approved", tooLate.GetProperty("orderStatus").GetString());
         Assert.Equal("approved", (await kit.GetAsync(ownApproved.Order.Id)).Order.Status);
         Assert.Equal((10m, 1m), await kit.BalanceAsync(variant));
         await kit.AssertConsistentAsync();
@@ -94,9 +102,18 @@ public sealed class ConditionalPermissionsTests(ApiFixture fixture)
 
         await SetRulesAsync(kit.Owner, new { salesCanApproveOrders = false });
         var second = await kit.SubmittedOrderAsync(OrdersKit.Line(variant, 1m));
-        await HttpAssert.ProblemAsync(await OrdersKit.ActAsync(sales, second, "approve"), HttpStatusCode.Forbidden, "auth.forbidden");
-        await HttpAssert.ProblemAsync(await OrdersKit.ActAsync(sales, second, "reject", new { reason = "x" }), HttpStatusCode.Forbidden, "auth.forbidden");
+        var disabled = await HttpAssert.ProblemJsonAsync(
+            await OrdersKit.ActAsync(sales, second, "approve"), HttpStatusCode.Forbidden, "auth.disabled_by_tenant_rule");
+        Assert.Equal("Not allowed", disabled.GetProperty("title").GetString());
+        Assert.Equal(Permissions.OrdersApprove, disabled.GetProperty("permission").GetString());
+        Assert.Equal("tenant_rule.sales_can_approve_orders", disabled.GetProperty("condition").GetString());
+        await HttpAssert.ProblemAsync(
+            await OrdersKit.ActAsync(sales, second, "reject", new { reason = "x" }), HttpStatusCode.Forbidden, "auth.disabled_by_tenant_rule");
         Assert.Equal("pending_approval", (await kit.GetAsync(second.Order.Id)).Order.Status);
+
+        // A role that never holds the permission still gets the plain auth.forbidden from the gate.
+        var viewer = await kit.Owner.AddMemberAsync(fixture, Roles.Viewer);
+        await HttpAssert.ProblemAsync(await OrdersKit.ActAsync(viewer, second, "approve"), HttpStatusCode.Forbidden, "auth.forbidden");
     }
 
     // ---- K¹⁰: orders.price.override (sales discount limit) ----
@@ -108,16 +125,27 @@ public sealed class ConditionalPermissionsTests(ApiFixture fixture)
         var variant = await kit.VariantAsync(100m);
         var sales = await kit.Owner.AddMemberAsync(fixture, Roles.Sales);
 
-        // Default limit 0 %: no override at all.
-        await HttpAssert.ProblemAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, discountPercent: 5m)]), HttpStatusCode.Forbidden, "auth.forbidden");
+        // Default limit 0 %: no override at all (the K¹⁰ rule is off).
+        var off = await HttpAssert.ProblemJsonAsync(
+            await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, discountPercent: 5m)]), HttpStatusCode.Forbidden, "auth.disabled_by_tenant_rule");
+        Assert.Equal("Missing permission: orders.price.override", off.GetProperty("title").GetString());
+        Assert.Equal("orders.discount_within_limit", off.GetProperty("condition").GetString());
 
         await SetRulesAsync(kit.Owner, new { salesMaxDiscountPercent = 10m });
         var within = await OrdersKit.ReadAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 2m, discountPercent: 10m)]), HttpStatusCode.Created);
         Assert.Equal(20m, within.Lines[0].LineDiscount);
         await OrdersKit.ReadAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 2m, discountAmount: 15m)]), HttpStatusCode.Created);
-        await HttpAssert.ProblemAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, discountPercent: 10.5m)]), HttpStatusCode.Forbidden, "auth.forbidden");
-        await HttpAssert.ProblemAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, discountAmount: 11m)]), HttpStatusCode.Forbidden, "auth.forbidden");
-        await HttpAssert.ProblemAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, unitPrice: 99m)]), HttpStatusCode.Forbidden, "auth.forbidden");
+        var exceeded = await HttpAssert.ProblemJsonAsync(
+            await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, discountPercent: 10.5m)]), HttpStatusCode.Forbidden, "orders.discount_limit_exceeded");
+        Assert.Equal(10m, exceeded.GetProperty("limitPercent").GetDecimal());
+        Assert.Equal("orders.price.override: The discount exceeds the sales limit of 10.00 %", exceeded.GetProperty("title").GetString());
+        await HttpAssert.ProblemAsync(
+            await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, discountAmount: 11m)]), HttpStatusCode.Forbidden, "orders.discount_limit_exceeded");
+        var manual = await HttpAssert.ProblemJsonAsync(
+            await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, unitPrice: 99m)]), HttpStatusCode.Forbidden, "orders.manual_price_not_allowed");
+        Assert.Equal(10m, manual.GetProperty("limitPercent").GetDecimal());
+        Assert.Equal(
+            "orders.price.override: A manual unit price is not allowed; only a discount within the sales limit", manual.GetProperty("title").GetString());
 
         // Unconditional holders are not limited.
         await OrdersKit.ReadAsync(await kit.CreateResponseAsync(kit.Owner, [OrdersKit.Line(variant, 1m, unitPrice: 50m, discountPercent: 40m)]), HttpStatusCode.Created);
@@ -359,7 +387,15 @@ public sealed class ConditionalPermissionsTests(ApiFixture fixture)
         Assert.Equal("all", (await MeAsync(manager, owner.TenantId)).ActiveTenant!.Permissions.Single(p => p.Permission == Permissions.PricesReadCost).Scope);
         var salesPermissions = (await MeAsync(sales, owner.TenantId)).ActiveTenant!.Permissions.ToDictionary(p => p.Permission);
         Assert.Equal(("conditional", "orders.discount_within_limit"), (salesPermissions[Permissions.OrdersPriceOverride].Scope, salesPermissions[Permissions.OrdersPriceOverride].Condition));
+        // #111: the condition's tenant value, so the UI can say "en fazla %5".
+        Assert.Equal(5m, salesPermissions[Permissions.OrdersPriceOverride].Parameters!.MaxDiscountPercent);
+        Assert.All(salesPermissions.Values.Where(p => p.Permission != Permissions.OrdersPriceOverride), p => Assert.Null(p.Parameters));
         Assert.False(salesPermissions.ContainsKey(Permissions.OrdersApprove));
+
+        await SetRulesAsync(owner, new { salesMaxDiscountPercent = 12.5m });
+        Assert.Equal(
+            12.5m,
+            (await MeAsync(sales, owner.TenantId)).ActiveTenant!.Permissions.Single(p => p.Permission == Permissions.OrdersPriceOverride).Parameters!.MaxDiscountPercent);
 
         var stranger = await CatalogClient.NewTenantOwnerAsync(fixture);
         Assert.Null((await MeAsync(stranger, owner.TenantId)).ActiveTenant);
@@ -386,12 +422,13 @@ public sealed class ConditionalPermissionsTests(ApiFixture fixture)
         await HttpAssert.ProblemAsync(await owner.PostAsync("/api/v1/units", new { code = "kutu", name = "Kutu" }), HttpStatusCode.Forbidden, "tenant.inactive");
         // A non-member learns nothing about the status.
         await HttpAssert.ProblemAsync(await stranger.Targeting(owner.TenantId).GetAsync("/api/v1/tenant"), HttpStatusCode.Forbidden, "tenant.access_denied");
-        // /me still answers; the inactive tenant is listed but not selected.
+        // /me still answers; the inactive tenant is listed (with its status, #111) but not selected.
         var me = await MeAsync(owner, owner.TenantId);
         Assert.Null(me.ActiveTenant);
-        Assert.Contains(me.Memberships, m => m.TenantId == owner.TenantId);
+        Assert.Equal(status, Assert.Single(me.Memberships, m => m.TenantId == owner.TenantId).TenantStatus);
 
         await SetTenantStatusAsync(owner.TenantId, "active");
+        Assert.Equal("active", Assert.Single((await MeAsync(owner, null)).Memberships, m => m.TenantId == owner.TenantId).TenantStatus);
         Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync("/api/v1/tenant")).StatusCode);
     }
 

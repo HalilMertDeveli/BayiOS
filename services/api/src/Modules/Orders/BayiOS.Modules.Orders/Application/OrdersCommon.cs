@@ -2,17 +2,20 @@ using System.Buffers.Text;
 using System.Globalization;
 using System.Text.Json;
 using BayiOS.Modules.Inventory.Contracts;
+using BayiOS.SharedKernel.Authorization;
 
 namespace BayiOS.Modules.Orders.Application;
 
 /// <summary>A stable Problem Details code (api-strategy §6) plus order/inventory extensions.</summary>
+/// <param name="Extensions">Extra problem members (e.g. <c>limitPercent</c>), written as is.</param>
 internal sealed record AppError(
     int Status,
     string Code,
     string Title,
     IDictionary<string, string[]>? Errors = null,
     IReadOnlyList<StockShortage>? Shortages = null,
-    bool ConfirmationRequired = false)
+    bool ConfirmationRequired = false,
+    IReadOnlyDictionary<string, object>? Extensions = null)
 {
     public static AppError NotFound() => new(404, "resource.not_found", "Resource not found");
 
@@ -35,14 +38,68 @@ internal sealed record AppError(
 
     /// <summary>A field-level permission is missing (the endpoint permission alone is not enough).</summary>
     public static AppError Forbidden(string permission) =>
-        new(403, "auth.forbidden", $"Missing permission: {permission}");
+        new(403, AuthorizationProblems.Forbidden, $"Missing permission: {permission}");
 
-    /// <summary>A conditional / own-records grant (roles-permissions §3 footnotes) does not cover this record.</summary>
-    public static AppError NotPermitted(string permission, string reason) =>
-        new(403, "auth.forbidden", $"{permission}: {reason}");
+    /// <summary>
+    /// A field-level permission the role holds conditionally (K) is switched off by its tenant rule (e.g. footnote 10
+    /// with a 0 % sales discount limit). Same title as <see cref="Forbidden"/>.
+    /// </summary>
+    public static AppError DisabledByTenantRule(string permission, string condition) =>
+        new(403, AuthorizationProblems.DisabledByTenantRule, $"Missing permission: {permission}", Extensions: new Dictionary<string, object>
+        {
+            ["permission"] = permission,
+            ["condition"] = condition,
+        });
+
+    // Record-level refusals of K / O grants (roles-permissions §3 footnotes, #111). 403 with a dedicated code each;
+    // the titles are the ones clients matched before the codes existed and stay unchanged.
+
+    /// <summary>O / footnote 11: the record was created by someone else.</summary>
+    public static AppError NotOwner(string permission, string reason) =>
+        new(403, OrderProblems.NotOwner, $"{permission}: {reason}", Extensions: new Dictionary<string, object> { ["permission"] = permission });
+
+    /// <summary>Footnote 11: sales cancels its own orders only while draft / pending approval.</summary>
+    public static AppError CancelNotAllowedInStatus(string status) =>
+        new(
+            403,
+            OrderProblems.CancelNotAllowedInStatus,
+            $"{Permissions.OrdersCancel}: Only your own draft or pending-approval orders can be cancelled",
+            Extensions: new Dictionary<string, object> { ["permission"] = Permissions.OrdersCancel, ["orderStatus"] = status });
+
+    /// <summary>Footnote 10: a line discount above the sales limit (<c>limitPercent</c>).</summary>
+    public static AppError DiscountLimitExceeded(decimal limit) =>
+        new(
+            403,
+            OrderProblems.DiscountLimitExceeded,
+            $"{Permissions.OrdersPriceOverride}: The discount exceeds the sales limit of {limit} %",
+            Extensions: new Dictionary<string, object> { ["permission"] = Permissions.OrdersPriceOverride, ["limitPercent"] = limit });
+
+    /// <summary>Footnote 10: under a discount limit no manual unit price is allowed (<c>limitPercent</c>).</summary>
+    public static AppError ManualPriceNotAllowed(decimal limit) =>
+        new(
+            403,
+            OrderProblems.ManualPriceNotAllowed,
+            $"{Permissions.OrdersPriceOverride}: A manual unit price is not allowed; only a discount within the sales limit",
+            Extensions: new Dictionary<string, object> { ["permission"] = Permissions.OrdersPriceOverride, ["limitPercent"] = limit });
 
     public static AppError FromInventory(InventoryError error) =>
         new(error.Status, error.Code, error.Title, error.Errors, error.Shortages, error.ConfirmationRequired);
+}
+
+/// <summary>Order-specific 403 codes for record-level refusals (api-strategy §6, #111).</summary>
+public static class OrderProblems
+{
+    /// <summary>Editing (O) or cancelling (footnote 11) an order someone else created.</summary>
+    public const string NotOwner = "orders.not_owner";
+
+    /// <summary>Footnote 11: cancelling one's own order after it left draft / pending approval.</summary>
+    public const string CancelNotAllowedInStatus = "orders.cancel_not_allowed_in_status";
+
+    /// <summary>Footnote 10: a line discount above the tenant's sales limit; the problem carries <c>limitPercent</c>.</summary>
+    public const string DiscountLimitExceeded = "orders.discount_limit_exceeded";
+
+    /// <summary>Footnote 10: a manual unit price while only discounts within the limit are allowed; carries <c>limitPercent</c>.</summary>
+    public const string ManualPriceNotAllowed = "orders.manual_price_not_allowed";
 }
 
 internal sealed record AppResult<T>(T? Value, AppError? Error)

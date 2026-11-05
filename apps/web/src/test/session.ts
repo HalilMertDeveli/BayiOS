@@ -13,7 +13,7 @@ export function accessFor(role: FixtureRole, rules: Partial<FixtureRules> = {}):
 export const TEST_USER = { id: "u-1", email: "ayse@example.test", fullName: "Ayşe Yılmaz" };
 
 export function membership(role: FixtureRole, overrides: Partial<Membership> = {}): Membership {
-  return { tenantId: "t-1", tenantName: "Örnek Motor", tenantSlug: "ornek-motor", role, status: "active", ...overrides };
+  return { tenantId: "t-1", tenantName: "Örnek Motor", tenantSlug: "ornek-motor", role, status: "active", tenantStatus: "active", ...overrides };
 }
 
 /** A ready session as the provider builds it from GET /me (MOCK: fixtures, not the real API). */

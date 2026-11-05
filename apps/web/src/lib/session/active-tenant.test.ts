@@ -15,6 +15,7 @@ const m = (tenantId: string, role = "owner", status = "active"): Membership => (
   tenantSlug: tenantId,
   role,
   status,
+  tenantStatus: "active",
 });
 
 beforeEach(() => window.localStorage.clear());

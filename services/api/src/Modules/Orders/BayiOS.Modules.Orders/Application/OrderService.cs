@@ -34,12 +34,13 @@ internal sealed class OrderService(
     IWarehouseDirectory warehouses,
     IInventoryService inventory,
     IOrderFulfillmentListener fulfillment,
+    IOrderSettingsProvider orderSettings,
+    IOrderCustomerAddresses customerAddresses,
     IAuditLog audit,
     IOutbox outbox,
     TimeProvider clock) : IOrderFulfillment
 {
     public const int MaxLines = 500;
-    public const string NumberPrefix = "SIP";
 
     /// <summary>numeric(18,3): 15 integer digits.</summary>
     public const decimal MaxQuantity = 999_999_999_999_999m;
@@ -94,15 +95,23 @@ internal sealed class OrderService(
             return warehouseError;
         }
 
-        currency ??= customer!.Currency ?? await tenantCurrency.GetDefaultCurrencyAsync(cancellationToken);
+        if (await CheckAddressChoiceAsync(customer!.CustomerId, request.ShippingAddressId, request.BillingAddressId, cancellationToken) is { } addressError)
+        {
+            return addressError;
+        }
+
+        currency ??= customer.Currency ?? await tenantCurrency.GetDefaultCurrencyAsync(cancellationToken);
         var now = clock.GetUtcNow();
         var today = Today(now);
         await db.JoinTransactionAsync(cancellationToken);
-        var number = await NextNumberAsync(today.Year, cancellationToken);
+        var prefix = (await orderSettings.GetAsync(cancellationToken)).NumberPrefix;
+        var number = await NextNumberAsync(prefix, today.Year, cancellationToken);
         var order = Order.Create(
-            TenantId, number, customer!.CustomerId, warehouse!.Id, source, request.SourceReferenceId, currency, today, UserId, now);
+            TenantId, number, customer.CustomerId, warehouse!.Id, source, request.SourceReferenceId, currency, today, UserId, now);
         order.Notes = OrderText.Clean(request.Notes);
         order.RequestedDeliveryDate = request.RequestedDeliveryDate;
+        order.ShippingAddressId = request.ShippingAddressId;
+        order.BillingAddressId = request.BillingAddressId;
         db.Orders.Add(order);
 
         if (await ApplyLinesAsync(order, request.Lines ?? [], request.PricesIncludeTax, isNew: true, now, cancellationToken) is { } lineError)
@@ -154,7 +163,7 @@ internal sealed class OrderService(
             // orders.edit.draft is "own records" (O) for sales: only drafts the caller created.
             if (!await authorization.CanAsync(Permissions.OrdersEditDraft, order.CreatedBy == UserId, cancellationToken))
             {
-                return AppError.NotPermitted(Permissions.OrdersEditDraft, "Only drafts you created can be edited");
+                return AppError.NotOwner(Permissions.OrdersEditDraft, "Only drafts you created can be edited");
             }
 
             if (!OrderStateMachine.IsEditable(order.Status))
@@ -173,6 +182,20 @@ internal sealed class OrderService(
 
                 order.CustomerId = customer!.CustomerId;
                 reprice = true;
+            }
+
+            // A new customer without explicit choices falls back to that customer's defaults.
+            if (reprice || patch.Has("shippingAddressId") || patch.Has("billingAddressId"))
+            {
+                var shipping = patch.Has("shippingAddressId") ? values.ShippingAddressId : reprice ? null : order.ShippingAddressId;
+                var billing = patch.Has("billingAddressId") ? values.BillingAddressId : reprice ? null : order.BillingAddressId;
+                if (await CheckAddressChoiceAsync(order.CustomerId, shipping, billing, cancellationToken) is { } addressError)
+                {
+                    return addressError;
+                }
+
+                order.ShippingAddressId = shipping;
+                order.BillingAddressId = billing;
             }
 
             if (patch.Has("warehouseId") && values.WarehouseId != order.WarehouseId)
@@ -219,16 +242,48 @@ internal sealed class OrderService(
 
     // ---- Transitions (§3.1) ----
 
-    public Task<AppResult<OrderDetailResponse>> SubmitAsync(Guid id, long? expectedVersion, string? correlationId, CancellationToken cancellationToken) =>
-        TransitionAsync(id, expectedVersion, OrderActions.Submit, null, correlationId, async order =>
+    /// <summary>
+    /// §3.1 #1: draft → pending_approval, with the address snapshot. #1a: when the tenant does not require approval
+    /// (<c>require_order_approval = false</c>), the source is not <c>whatsapp_ai</c> (ADR 0010: a human approves AI
+    /// drafts) and the submitter holds <c>orders.approve</c> under the active rules, the same transaction continues
+    /// with <see cref="ApproveEffectAsync"/> — the approve path itself, all-or-nothing reservation included. A shortage
+    /// then fails the whole submit (the order stays a draft, nothing reserved). Otherwise the order waits for approval.
+    /// </summary>
+    public Task<AppResult<OrderDetailResponse>> SubmitAsync(
+        Guid id, long? expectedVersion, bool confirmNegativeStock, string? correlationId, CancellationToken cancellationToken) =>
+        WithLockedOrderAsync(id, expectedVersion, async order =>
         {
-            if (order.Lines.Count == 0)
+            var submitted = await ApplyTransitionAsync(order, OrderActions.Submit, null, correlationId, async o =>
             {
-                return AppError.Validation("lines", "An order needs at least one line.");
+                if (o.Lines.Count == 0)
+                {
+                    return AppError.Validation("lines", "An order needs at least one line.");
+                }
+
+                return CheckPriced(o)
+                    ?? CheckCustomer(await customers.FindAsync(o.CustomerId, cancellationToken))
+                    ?? await SnapshotAddressesAsync(o, strict: true, cancellationToken);
+            }, false, cancellationToken);
+            if (submitted is not null || !await ApprovesOnSubmitAsync(order, cancellationToken))
+            {
+                return submitted;
             }
 
-            return CheckPriced(order) ?? CheckCustomer(await customers.FindAsync(order.CustomerId, cancellationToken));
+            return await ApplyTransitionAsync(
+                order,
+                OrderActions.Approve,
+                null,
+                correlationId,
+                o => ApproveEffectAsync(o, confirmNegativeStock, correlationId, onSubmit: true, cancellationToken),
+                false,
+                cancellationToken);
         }, cancellationToken);
+
+    /// <summary>§3.1 #1a conditions (see <see cref="SubmitAsync"/>). A record-level approve grant is not enough.</summary>
+    private async Task<bool> ApprovesOnSubmitAsync(Order order, CancellationToken cancellationToken) =>
+        order.Source != OrderSources.WhatsappAi
+        && !(await orderSettings.GetAsync(cancellationToken)).RequireApproval
+        && await authorization.ScopeAsync(Permissions.OrdersApprove, cancellationToken) == PermissionScope.All;
 
     public Task<AppResult<OrderDetailResponse>> WithdrawAsync(Guid id, long? expectedVersion, string? correlationId, CancellationToken cancellationToken) =>
         TransitionAsync(id, expectedVersion, OrderActions.Withdraw, null, correlationId, _ => Task.FromResult<AppError?>(null), cancellationToken);
@@ -245,52 +300,74 @@ internal sealed class OrderService(
     /// </summary>
     public Task<AppResult<OrderDetailResponse>> ApproveAsync(
         Guid id, long expectedVersion, bool confirmNegativeStock, string? correlationId, CancellationToken cancellationToken) =>
-        TransitionAsync(id, expectedVersion, OrderActions.Approve, null, correlationId, async order =>
+        TransitionAsync(
+            id,
+            expectedVersion,
+            OrderActions.Approve,
+            null,
+            correlationId,
+            order => ApproveEffectAsync(order, confirmNegativeStock, correlationId, onSubmit: false, cancellationToken),
+            cancellationToken);
+
+    /// <summary>
+    /// The approve effect (§3.1 #3, §4.3), shared by <c>approve</c> and the approve-on-submit path (#1a): price and
+    /// customer checks, the address snapshot when the order has none yet, one all-or-nothing reservation call,
+    /// audit, outbox and the picking task. The order is locked and still pending_approval.
+    /// </summary>
+    private async Task<AppError?> ApproveEffectAsync(
+        Order order, bool confirmNegativeStock, string? correlationId, bool onSubmit, CancellationToken cancellationToken)
+    {
+        if ((CheckPriced(order) ?? CheckCustomer(await customers.FindAsync(order.CustomerId, cancellationToken))) is { } error)
         {
-            if ((CheckPriced(order) ?? CheckCustomer(await customers.FindAsync(order.CustomerId, cancellationToken))) is { } error)
-            {
-                return error;
-            }
+            return error;
+        }
 
-            var lines = order.Lines.OrderBy(l => l.LineNo).ToList();
-            var reserved = await inventory.ReserveAsync(
-                new ReserveStock(
-                    order.Id,
-                    order.WarehouseId,
-                    [.. lines.Select(l => new ReserveLine(l.Id, l.VariantId, l.Quantity))],
-                    confirmNegativeStock,
-                    correlationId),
-                cancellationToken);
-            if (reserved.Error is { } stockError)
-            {
-                return AppError.FromInventory(stockError);
-            }
+        // Orders submitted before addresses were snapshotted get theirs now; never changed after this point.
+        if (order.ShippingAddress is null && order.BillingAddress is null)
+        {
+            await SnapshotAddressesAsync(order, strict: false, cancellationToken);
+        }
 
-            foreach (var allocation in reserved.Value!.Reservations)
-            {
-                lines.Single(l => l.Id == allocation.OrderLineId).QtyReserved += allocation.Quantity;
-            }
+        var lines = order.Lines.OrderBy(l => l.LineNo).ToList();
+        var reserved = await inventory.ReserveAsync(
+            new ReserveStock(
+                order.Id,
+                order.WarehouseId,
+                [.. lines.Select(l => new ReserveLine(l.Id, l.VariantId, l.Quantity))],
+                confirmNegativeStock,
+                correlationId),
+            cancellationToken);
+        if (reserved.Error is { } stockError)
+        {
+            return AppError.FromInventory(stockError);
+        }
 
-            var now = clock.GetUtcNow();
-            order.ApprovedAt = now;
-            order.ApprovedBy = UserId;
-            await audit.RecordAsync(
-                new AuditEvent(OrderAuditActions.Approved, OrderAuditActions.EntityType, order.Id, new AuditChanges()
-                    .Field("status", OrderStatuses.PendingApproval, OrderStatuses.Approved)
-                    .Value("grandTotal", order.GrandTotal)
-                    .Value("reservations", reserved.Value.Reservations.Count)
-                    .ToDictionary()),
-                cancellationToken);
-            await outbox.PublishAsync(
-                OrderEvents.Approved,
-                new { orderId = order.Id, number = order.Number, customerId = order.CustomerId, warehouseId = order.WarehouseId },
-                cancellationToken);
+        foreach (var allocation in reserved.Value!.Reservations)
+        {
+            lines.Single(l => l.Id == allocation.OrderLineId).QtyReserved += allocation.Quantity;
+        }
 
-            // OrderApproved → Warehouse picking task from the reservations just made (same transaction, WHT-01).
-            await fulfillment.OnApprovedAsync(
-                new OrderApprovedNotice(order.Id, order.Number, order.WarehouseId, [.. lines.Select(ToFulfillment)]), cancellationToken);
-            return null;
-        }, cancellationToken);
+        var now = clock.GetUtcNow();
+        order.ApprovedAt = now;
+        order.ApprovedBy = UserId;
+        await audit.RecordAsync(
+            new AuditEvent(OrderAuditActions.Approved, OrderAuditActions.EntityType, order.Id, new AuditChanges()
+                .Field("status", OrderStatuses.PendingApproval, OrderStatuses.Approved)
+                .Value("grandTotal", order.GrandTotal)
+                .Value("reservations", reserved.Value.Reservations.Count)
+                .Value("approvedOnSubmit", onSubmit)
+                .ToDictionary()),
+            cancellationToken);
+        await outbox.PublishAsync(
+            OrderEvents.Approved,
+            new { orderId = order.Id, number = order.Number, customerId = order.CustomerId, warehouseId = order.WarehouseId },
+            cancellationToken);
+
+        // OrderApproved → Warehouse picking task from the reservations just made (same transaction, WHT-01).
+        await fulfillment.OnApprovedAsync(
+            new OrderApprovedNotice(order.Id, order.Number, order.WarehouseId, [.. lines.Select(ToFulfillment)]), cancellationToken);
+        return null;
+    }
 
     public Task<AppResult<OrderDetailResponse>> CompleteAsync(Guid id, long? expectedVersion, string? correlationId, CancellationToken cancellationToken) =>
         TransitionAsync(id, expectedVersion, OrderActions.Complete, null, correlationId, order =>
@@ -309,10 +386,13 @@ internal sealed class OrderService(
                 var from = order.Status;
 
                 // Footnote 11: sales cancels only its own draft / pending-approval orders.
-                var ownOpen = order.CreatedBy == UserId && from is OrderStatuses.Draft or OrderStatuses.PendingApproval;
+                var own = order.CreatedBy == UserId;
+                var ownOpen = own && from is OrderStatuses.Draft or OrderStatuses.PendingApproval;
                 if (!await authorization.CanAsync(Permissions.OrdersCancel, ownOpen, cancellationToken))
                 {
-                    return AppError.NotPermitted(Permissions.OrdersCancel, "Only your own draft or pending-approval orders can be cancelled");
+                    return own
+                        ? AppError.CancelNotAllowedInStatus(from)
+                        : AppError.NotOwner(Permissions.OrdersCancel, "Only your own draft or pending-approval orders can be cancelled");
                 }
 
                 decimal released = 0;
@@ -815,12 +895,15 @@ internal sealed class OrderService(
                 && !(prior is not null && prior.DiscountPercent == percent && prior.DiscountAmount == amount);
             if ((priceOverride || discountOverride) && overrideScope == PermissionScope.None)
             {
-                return AppError.Forbidden(Permissions.OrdersPriceOverride);
+                return AuthorizationContext.SwitchedOffByTenantRule(
+                        requestContext.Role, Permissions.OrdersPriceOverride, await authorization.RulesAsync(cancellationToken)) is { } rule
+                    ? AppError.DisabledByTenantRule(Permissions.OrdersPriceOverride, rule.Code)
+                    : AppError.Forbidden(Permissions.OrdersPriceOverride);
             }
 
-            if (priceOverride && discountLimit is not null)
+            if (priceOverride && discountLimit is { } manualLimit)
             {
-                return AppError.NotPermitted(Permissions.OrdersPriceOverride, "A manual unit price is not allowed; only a discount within the sales limit");
+                return AppError.ManualPriceNotAllowed(manualLimit);
             }
 
             var line = prior ?? OrderLine.Create(order.TenantId, order.Id, UserId, now);
@@ -867,7 +950,7 @@ internal sealed class OrderService(
 
                 if (discountOverride && discountLimit is { } limit && amounts.Discount * 100m > amounts.Subtotal * limit)
                 {
-                    return AppError.NotPermitted(Permissions.OrdersPriceOverride, $"The discount exceeds the sales limit of {limit} %");
+                    return AppError.DiscountLimitExceeded(limit);
                 }
 
                 line.LineSubtotal = amounts.Subtotal;
@@ -946,20 +1029,86 @@ internal sealed class OrderService(
         return await command.ExecuteScalarAsync(cancellationToken) is not null;
     }
 
-    /// <summary>Gapless per tenant and year: the counter row is locked until the creating transaction ends.</summary>
-    private async Task<string> NextNumberAsync(int year, CancellationToken cancellationToken)
+    /// <summary>
+    /// Gapless per tenant, prefix and year (PRD ORD-14): the counter row is locked until the creating transaction
+    /// ends, so a rolled-back create consumes no number. The prefix is the tenant setting at creation time.
+    /// </summary>
+    private async Task<string> NextNumberAsync(string prefix, int year, CancellationToken cancellationToken)
     {
         await using var command = Command(
             """
-            INSERT INTO orders.order_number_sequences (tenant_id, year, next_value) VALUES (@tenant, @year, 1)
-            ON CONFLICT (tenant_id, year) DO UPDATE SET next_value = order_number_sequences.next_value + 1
+            INSERT INTO orders.order_number_sequences (tenant_id, prefix, year, next_value) VALUES (@tenant, @prefix, @year, 1)
+            ON CONFLICT (tenant_id, prefix, year) DO UPDATE SET next_value = order_number_sequences.next_value + 1
             RETURNING next_value;
             """);
         command.Parameters.Add(new NpgsqlParameter<Guid>("tenant", TenantId));
+        command.Parameters.Add(new NpgsqlParameter<string>("prefix", prefix));
         command.Parameters.Add(new NpgsqlParameter<int>("year", year));
         var value = (long)(await command.ExecuteScalarAsync(cancellationToken))!;
-        return $"{NumberPrefix}-{year:D4}-{value:D6}";
+        return $"{prefix}-{year:D4}-{value:D6}";
     }
+
+    /// <summary>Draft choice: each given address must be the customer's and of the right type (422 otherwise).</summary>
+    private async Task<AppError?> CheckAddressChoiceAsync(Guid customerId, Guid? shippingId, Guid? billingId, CancellationToken cancellationToken)
+    {
+        if (shippingId is null && billingId is null)
+        {
+            return null;
+        }
+
+        var addresses = await customerAddresses.ListAsync(customerId, cancellationToken);
+        var errors = new Dictionary<string, string[]>();
+        if (shippingId is { } shipping && !addresses.Any(a => a.Id == shipping && a.Type == OrderAddressTypes.Shipping))
+        {
+            errors["shippingAddressId"] = ["Not a shipping address of this customer."];
+        }
+
+        if (billingId is { } billing && !addresses.Any(a => a.Id == billing && a.Type == OrderAddressTypes.Billing))
+        {
+            errors["billingAddressId"] = ["Not a billing address of this customer."];
+        }
+
+        return errors.Count > 0 ? AppError.Validation(errors) : null;
+    }
+
+    /// <summary>
+    /// Copies the chosen (else the default) shipping and billing address onto the order. <paramref name="strict"/>
+    /// (submit): a chosen address that no longer exists is a 422; otherwise (approval fallback) it is left empty.
+    /// </summary>
+    private async Task<AppError?> SnapshotAddressesAsync(Order order, bool strict, CancellationToken cancellationToken)
+    {
+        var addresses = await customerAddresses.ListAsync(order.CustomerId, cancellationToken);
+        var errors = new Dictionary<string, string[]>();
+        var shipping = Pick(OrderAddressTypes.Shipping, order.ShippingAddressId, "shippingAddressId");
+        var billing = Pick(OrderAddressTypes.Billing, order.BillingAddressId, "billingAddressId");
+        if (strict && errors.Count > 0)
+        {
+            return AppError.Validation(errors);
+        }
+
+        order.ShippingAddress = shipping is null ? null : Snapshot(shipping);
+        order.BillingAddress = billing is null ? null : Snapshot(billing);
+        return null;
+
+        OrderCustomerAddress? Pick(string type, Guid? chosen, string field)
+        {
+            if (chosen is not { } id)
+            {
+                return addresses.FirstOrDefault(a => a.Type == type && a.IsDefault);
+            }
+
+            var found = addresses.FirstOrDefault(a => a.Id == id && a.Type == type);
+            if (found is null)
+            {
+                errors[field] = ["The chosen address no longer exists for this customer; choose another one."];
+            }
+
+            return found;
+        }
+    }
+
+    private static OrderAddressSnapshot Snapshot(OrderCustomerAddress a) =>
+        new(a.Id, a.Title, a.Line1, a.Line2, a.District, a.City, a.PostalCode, a.Country, a.ContactName, a.ContactPhone);
 
     private DbCommand Command(string sql)
     {

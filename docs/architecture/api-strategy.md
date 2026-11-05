@@ -107,7 +107,20 @@
 
 Uzantılar (OpenAPI şemaları, #86): `StockProblemDetails` — `shortages[]` (variantId, sku, warehouseId, locationId, requested, available) ve `confirmationRequired` (negatif stok politikası `warn`: aynı isteği onay bayrağıyla tekrarla); `CodeConflictProblemDetails` — `409 catalog.sku_taken` / `catalog.barcode_taken` için `conflict` {field: sku | barcode, value, variantId, productId, sku} (yalnızca eşzamanlı bir yazımı veritabanı indeksi yakaladığında yoktur). Para alanları şimdilik JSON sayısı (`number`) olarak yayınlanır; istemci para hesabı yapmaz, toplamlar API'den gelir (karar #86).
 
-**Koşullu (K) / kendi kayıtları (O) izinleri (#69):** uç izin(ler)ini bildirir (`x-permission`; birden çoğu yeterliyse `x-permission-any-of`). Koşulsuz izin olduğu gibi geçer; tenant kuralına bağlı K (dipnot 2, 3, 6, 9) kural açıksa koşulsuz, kapalıysa `403 auth.forbidden`; kayıt düzeyi K/O (dipnot 1, 4, 5, 7, 8, 10, 11, 12, O) kapıdan geçer ve uygulama servisi `IAuthorizationContext` ile koşulu uygular. Hiçbir servis koşulu değerlendirmezse başarılı yanıt `403 auth.forbidden`'a çevrilir ve transaction geri alınır (fail-closed). Görünürlük koşulunun dışındaki kayıt `404`, görünür ama işleme kapalı kayıt `403` döner.
+**Koşullu (K) / kendi kayıtları (O) izinleri (#69):** uç izin(ler)ini bildirir (`x-permission`; birden çoğu yeterliyse `x-permission-any-of`). Koşulsuz izin olduğu gibi geçer; tenant kuralına bağlı K (dipnot 2, 3, 6, 9) kural açıksa koşulsuz, kapalıysa `403 auth.disabled_by_tenant_rule` (#111); kayıt düzeyi K/O (dipnot 1, 4, 5, 7, 8, 10, 11, 12, O) kapıdan geçer ve uygulama servisi `IAuthorizationContext` ile koşulu uygular. Hiçbir servis koşulu değerlendirmezse başarılı yanıt `403 auth.forbidden`'a çevrilir ve transaction geri alınır (fail-closed; bu güvenlik ağı bilerek genel kodda kalır). Görünürlük koşulunun dışındaki kayıt `404`, görünür ama işleme kapalı kayıt `403` döner.
+
+**403 kod kataloğu (#111).** Hepsi `403`; istemci `code`'a göre mesaj seçer, `title` geliştirici yardımıdır (#111 öncesi başlıklar değişmedi — eski istemciler başlığı ayrıştırmaya devam edebilir).
+
+| `code` | Ne zaman | Uzantılar |
+|---|---|---|
+| `auth.forbidden` | Rolde izin hiç yok (matris "–"); alan düzeyi izin eksik; fail-closed güvenlik ağı | — |
+| `auth.disabled_by_tenant_rule` | Rol izni K olarak taşıyor ama bağlı tenant kuralı kapalı: uç kapısında (ör. sales `approve`/`reject`/`close-remaining`, "Satış personeli sipariş onaylayabilir" kapalı — dipnot 9; depo personeli barkod/mal kabul onayı — dipnot 2, 6) ve alan düzeyinde (sales iskonto sınırı %0 iken manuel fiyat/iskonto — dipnot 10). Başlık eskisiyle aynı (`Not allowed` / `Missing permission: …`) | `permission`, `condition` (koşul kodu) |
+| `orders.not_owner` | sales başkasının taslağını düzenler (O) veya başkasının siparişini iptal eder (dipnot 11) | `permission` |
+| `orders.cancel_not_allowed_in_status` | sales kendi siparişini Taslak / Onay bekliyor dışındaki bir durumda iptal eder (dipnot 11) | `permission`, `orderStatus` |
+| `orders.discount_limit_exceeded` | Satır iskontosu satış iskonto sınırını aşıyor (dipnot 10) | `permission`, `limitPercent` |
+| `orders.manual_price_not_allowed` | İskonto sınırı altındaki sales manuel birim fiyat giriyor (dipnot 10) | `permission`, `limitPercent` |
+
+OpenAPI: ilgili sipariş uçlarının `description` alanı bu kodları listeler.
 
 ## 7. Idempotency
 
@@ -176,13 +189,13 @@ flowchart LR
 ### 12.1 Identity & Tenancy
 | Metot | Yol | İzin | Not |
 |---|---|---|---|
-| GET | `/me` | (kimlik) | Profil + üyelikler (tenant listesi); `X-Tenant-Id` gerekmez. Başlık aktif tenant'taki aktif bir üyeliği gösterirse `activeTenant`: rol + etkin izinler (`scope`: `all` / `conditional` / `own`, `condition` kodu; §4 tenant kuralları uygulanmış). Aksi hâlde `activeTenant: null` (hata değil) |
+| GET | `/me` | (kimlik) | Profil + üyelikler (tenant listesi; her üyelikte `status` = üyelik durumu, `tenantStatus` = tenant durumu `active`/`suspended`/`closed` — #111, seçici askıdaki/kapalı işletmeyi pasif gösterir); `X-Tenant-Id` gerekmez. Başlık aktif tenant'taki aktif bir üyeliği gösterirse `activeTenant`: rol + etkin izinler (`scope`: `all` / `conditional` / `own`, `condition` kodu, `parameters` — koşulun tenant değeri, şimdilik yalnızca `orders.discount_within_limit` için `maxDiscountPercent`; diğerlerinde `null`; §4 tenant kuralları uygulanmış). Aksi hâlde `activeTenant: null` (hata değil) |
 | GET | `/me/permissions` | (üyelik) | Etkin rol, izinler, entitlement'lar |
 | PATCH | `/me` | (kimlik) | Profil |
 | POST | `/tenants` | (kimlik) | Yeni tenant (İ); çağıran owner olur, deneme planı |
 | GET/PATCH | `/tenant` | `tenant.manage` (PATCH, M) | Aktif tenant bilgisi |
-| GET/PATCH | `/tenant/settings` | `tenant.manage` (M) | |
-| GET | `/members` (role, status, limit, cursor) | `members.read` | Uygulandı (#86): aktif tenant üyeleri (userId, displayName, fullName, email, role, status), membership id keyset; personel seçici. Okuma matristeki `members.read` ile (owner/admin/manager = `tasks.assign` sahipleriyle aynı küme) |
+| GET/PATCH | `/tenant/settings` | `tenant.manage` (M) | Uygulanan izin `tenant.settings.manage` (owner/admin), ETag/If-Match. #92 ile `requireOrderApproval` (varsayılan `true`) ve `orderNumberPrefix` (varsayılan `SIP`; 1–10 karakter A–Z/0–9, harfle başlar, küçük harf büyütülür) |
+| GET | `/members` (role, status, permission, limit, cursor) | `members.read` | Uygulandı (#86): aktif tenant üyeleri (userId, displayName, fullName, email, role, status), membership id keyset; personel seçici. Okuma matristeki `members.read` ile (owner/admin/manager = `tasks.assign` sahipleriyle aynı küme). `permission` (#111, virgüllü = hepsi): rolü bu izinleri aktif tenant kurallarıyla taşıyan üyeler (kayıt düzeyi K/O sayılır, kuralı kapalı K sayılmaz); `role` ile kesişir; bilinmeyen izin kimliği `400 request.malformed` |
 | PATCH | `/members/{id}` | `members.manage` (M) | Rol/durum |
 | POST | `/invitations` | `members.manage` (İ) | |
 | DELETE | `/invitations/{id}` | `members.manage` | |
@@ -252,7 +265,7 @@ flowchart LR
 | GET | `/orders/{id}` (include=lines,history,shipments) | `orders.read` | |
 | PATCH | `/orders/{id}` (M) | `orders.write` | Yalnızca Draft |
 | PUT | `/orders/{id}/lines` (M) | `orders.write` | Satırları toptan değiştir (Draft) |
-| POST | `/orders/{id}/submit` (İ, M) | `orders.submit` | |
+| POST | `/orders/{id}/submit` (İ, M) | `orders.submit` | Adres snapshot'ı; `requireOrderApproval = false` ise onay yetkisi olan için aynı transaction'da onay + rezervasyon (#92, inventory-and-orders §7) |
 | POST | `/orders/{id}/withdraw` (İ) | `orders.submit` | |
 | POST | `/orders/{id}/reject` (İ) | `orders.approve` | |
 | POST | `/orders/{id}/approve` (İ, M) | `orders.approve` | Rezervasyon |

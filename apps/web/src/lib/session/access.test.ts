@@ -4,9 +4,9 @@ import { CONDITIONS, NO_ACCESS, createAccess } from "./access";
 
 describe("createAccess — GET /me activeTenant.permissions", () => {
   const access = createAccess([
-    { permission: "orders.read", scope: "all", condition: null },
-    { permission: "orders.edit.draft", scope: "own", condition: "orders.own" },
-    { permission: "orders.cancel", scope: "conditional", condition: "orders.own_draft_or_pending" },
+    { permission: "orders.read", scope: "all", condition: null, parameters: null },
+    { permission: "orders.edit.draft", scope: "own", condition: "orders.own", parameters: null },
+    { permission: "orders.cancel", scope: "conditional", condition: "orders.own_draft_or_pending", parameters: null },
   ]);
 
   it("can() is true only for unconditional grants", () => {
