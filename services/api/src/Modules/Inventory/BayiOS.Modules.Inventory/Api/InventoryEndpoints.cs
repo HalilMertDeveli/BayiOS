@@ -32,8 +32,9 @@ internal static class InventoryEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapGet("/balances", ListBalances).WithName("Inventory_ListBalances")
-            .WithSummary("Stok bakiyeleri (fiziksel, rezerve, satılabilir): keyset sayfalama; variantId/warehouseId/locationId filtresi")
-            .RequirePermission(Permissions.InventoryRead);
+            .WithSummary("Stok bakiyeleri (fiziksel, rezerve, satılabilir): keyset sayfalama; variantId/warehouseId/locationId filtresi, q = SKU/ad metin araması veya tam barkod")
+            .RequirePermission(Permissions.InventoryRead)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
         group.MapGet("/movements", ListMovements).WithName("Inventory_ListMovements")
             .WithSummary("Stok hareket geçmişi (stok kartı), yeniden eskiye; variantId/warehouseId/type/sourceId filtresi")
             .RequirePermission(Permissions.InventoryMovementsRead);
@@ -58,17 +59,19 @@ internal static class InventoryEndpoints
         return app;
     }
 
+    /// <param name="q">SKU, varyant adı veya ürün adı içinde geçen metin ya da tam barkod (en çok 100 karakter).</param>
     private static async Task<Results<Ok<BalancePageResponse>, ProblemHttpResult>> ListBalances(
         HttpRequest http,
         InventoryQueries queries,
         string? variantId,
         string? warehouseId,
         string? locationId,
+        string? q,
         string? limit,
         string? cursor,
         CancellationToken cancellationToken)
     {
-        if (RejectUnknownQuery(http, "variantId", "warehouseId", "locationId", "limit", "cursor") is { } unknown)
+        if (RejectUnknownQuery(http, "variantId", "warehouseId", "locationId", "q", "limit", "cursor") is { } unknown)
         {
             return unknown;
         }
@@ -78,13 +81,26 @@ internal static class InventoryEndpoints
             return Malformed("variantId, warehouseId and locationId must be UUIDs");
         }
 
+        var term = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
+        if (term is { Length: > MaxSearchLength })
+        {
+            return Malformed($"q must be at most {MaxSearchLength} characters");
+        }
+
         if (ParsePaging(limit, cursor, InventoryQueries.BalanceSort, out var pageSize, out var keyset) is { } pagingProblem)
         {
             return pagingProblem;
         }
 
-        return TypedResults.Ok(await queries.ListBalancesAsync(new BalanceQuery(variant, warehouse, location, pageSize, keyset?.Id), cancellationToken));
+        return await queries.ListBalancesAsync(new BalanceQuery(variant, warehouse, location, pageSize, keyset?.Id, term), cancellationToken) is { } page
+            ? TypedResults.Ok(page)
+            : TypedResults.Problem(ApiProblems.Create(
+                StatusCodes.Status422UnprocessableEntity,
+                "inventory.search_too_broad",
+                $"The search matches more than {InventoryQueries.MaxSearchMatches} products; use a longer term"));
     }
+
+    private const int MaxSearchLength = 100;
 
     /// <param name="type">Hareket tipi (receipt, adjustment_in, adjustment_out, shipment_out, …).</param>
     /// <param name="sourceId">Kaynak belge (ör. mal kabul) kimliği.</param>

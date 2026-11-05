@@ -8,6 +8,7 @@ namespace BayiOS.Modules.Warehouse.Contracts;
 public sealed record FulfillmentPageInfo(string? NextCursor, bool HasMore, int Limit);
 
 /// <param name="AssignedTo">null = in the shared pool (claimable).</param>
+/// <param name="AssigneeName">Display name of <paramref name="AssignedTo"/> (full name, else e-mail local part).</param>
 /// <param name="QuantityToPick">Σ over the lines (base units).</param>
 public sealed record PickingTaskSummaryResponse(
     Guid Id,
@@ -17,6 +18,7 @@ public sealed record PickingTaskSummaryResponse(
     string OrderNumber,
     Guid WarehouseId,
     Guid? AssignedTo,
+    string? AssigneeName,
     int LineCount,
     decimal QuantityToPick,
     decimal QuantityPicked,
@@ -96,6 +98,14 @@ public sealed record PackItemInput(string? Code, Guid? ShipmentLineId, decimal? 
 /// <param name="PackageCount">Default: the number of packages recorded by the pack check.</param>
 public sealed record ConfirmShipmentRequest(string? Carrier, string? TrackingNumber, int? PackageCount);
 
+/// <summary>Cancels an unconfirmed (draft or packed) shipment; the picked goods go back to the shelf via a putaway task.</summary>
+/// <param name="Reason">Required, at most 500 characters (audit).</param>
+public sealed record CancelShipmentRequest(string? Reason);
+
+/// <param name="PutawayTaskId">The putaway task that returns the picked goods to the shelf; null when nothing was on the shipment.</param>
+public sealed record CancelShipmentResponse(ShipmentResponse Shipment, Guid? PutawayTaskId);
+
+/// <param name="Barcode">Current Catalog barcode of the variant (pack-check scan target), if any.</param>
 /// <param name="Quantity">What ships: picked quantity minus shortages found while packing.</param>
 public sealed record ShipmentLineResponse(
     Guid Id,
@@ -104,6 +114,7 @@ public sealed record ShipmentLineResponse(
     string Sku,
     string Name,
     string Unit,
+    string? Barcode,
     Guid? LocationId,
     string? LocationCode,
     decimal PickedQuantity,
@@ -176,4 +187,7 @@ public interface IFulfillmentCatalog
 public interface ITaskAssigneeDirectory
 {
     Task<string?> FindActiveRoleAsync(Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>Display names (full name, else e-mail local part) of members of the current tenant; one batch query.</summary>
+    Task<IReadOnlyDictionary<Guid, string>> DisplayNamesAsync(IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken);
 }

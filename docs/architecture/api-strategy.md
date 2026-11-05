@@ -182,7 +182,7 @@ flowchart LR
 | POST | `/tenants` | (kimlik) | Yeni tenant (İ); çağıran owner olur, deneme planı |
 | GET/PATCH | `/tenant` | `tenant.manage` (PATCH, M) | Aktif tenant bilgisi |
 | GET/PATCH | `/tenant/settings` | `tenant.manage` (M) | |
-| GET | `/members` | `members.manage` | |
+| GET | `/members` (role, status, limit, cursor) | `members.read` | Uygulandı (#86): aktif tenant üyeleri (userId, displayName, fullName, email, role, status), membership id keyset; personel seçici. Okuma matristeki `members.read` ile (owner/admin/manager = `tasks.assign` sahipleriyle aynı küme) |
 | PATCH | `/members/{id}` | `members.manage` (M) | Rol/durum |
 | POST | `/invitations` | `members.manage` (İ) | |
 | DELETE | `/invitations/{id}` | `members.manage` | |
@@ -233,7 +233,7 @@ flowchart LR
 | GET/PATCH | `/warehouses/{id}` (M) | | |
 | GET/POST | `/warehouses/{id}/locations` | | |
 | PATCH | `/locations/{id}` (M) | `tenant.manage` | |
-| GET | `/inventory/balances` (variantId, warehouseId, locationId, q, belowThreshold) | `inventory.read` | on_hand, reserved, available |
+| GET | `/inventory/balances` (variantId, warehouseId, locationId, q, belowThreshold) | `inventory.read` | on_hand, reserved, available. `q` uygulandı (#86, inventory-and-orders §6); `belowThreshold` henüz yok |
 | GET | `/inventory/availability?variantIds=…&warehouseId=` | `inventory.read` | Sipariş ekranı |
 | GET | `/inventory/movements` (variantId, warehouseId, type, from, to) | `inventory.read` | Stok kartı, keyset |
 | POST | `/inventory/receipts` (İ) | `inventory.receive` | §4.1 |
@@ -272,6 +272,7 @@ flowchart LR
 | GET | `/shipments/{id}` · `/shipments?orderId=` | `orders.read` | |
 | PATCH | `/shipments/{id}` (M) | `fulfillment.ship` | Taşıyıcı, takip no, satırlar (draft) |
 | POST | `/shipments/{id}/confirm` (İ) | `fulfillment.ship` | §4.6 |
+| POST | `/shipments/{id}/cancel` (İ) | `tasks.assign` | Uygulandı (#86): onaylanmamış sevkiyat iptali; stok/rezervasyon değişmez, putaway görevi (inventory-and-orders §8) |
 
 ### 12.9 Imports
 | POST | `/import-jobs` (multipart, İ) | `imports.run` | `202` |

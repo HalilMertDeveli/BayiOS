@@ -31,3 +31,17 @@ public interface IOrderOwnership
 {
     Task<IReadOnlyList<Guid>> OrdersCreatedByAsync(Guid userId, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Display names for order responses, implemented by the host over Customers, Warehouse and Identity. Each call is one
+/// batch query for every id of a response (no N+1); unknown or foreign ids are simply absent.
+/// </summary>
+public interface IOrderReferenceNames
+{
+    Task<IReadOnlyDictionary<Guid, string>> CustomerNamesAsync(IReadOnlyCollection<Guid> customerIds, CancellationToken cancellationToken);
+
+    Task<IReadOnlyDictionary<Guid, string>> WarehouseNamesAsync(IReadOnlyCollection<Guid> warehouseIds, CancellationToken cancellationToken);
+
+    /// <summary>Identity's display-name rule (full name, else the e-mail local part).</summary>
+    Task<IReadOnlyDictionary<Guid, string>> UserNamesAsync(IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken);
+}

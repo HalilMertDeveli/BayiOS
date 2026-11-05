@@ -52,9 +52,12 @@ internal sealed class CatalogFulfillmentCatalog(CatalogDbContext catalog) : IFul
     }
 }
 
-/// <summary>Assignees must hold an active membership in the request's tenant.</summary>
-internal sealed class MembershipTaskAssigneeDirectory(IMembershipLookup memberships, IRequestContext requestContext) : ITaskAssigneeDirectory
+/// <summary>Assignees must hold an active membership in the request's tenant; names follow Identity's display-name rule.</summary>
+internal sealed class MembershipTaskAssigneeDirectory(IMembershipLookup memberships, IUserDirectory users, IRequestContext requestContext) : ITaskAssigneeDirectory
 {
     public Task<string?> FindActiveRoleAsync(Guid userId, CancellationToken cancellationToken) =>
         memberships.FindActiveRoleAsync(userId, requestContext.TenantId ?? throw new InvalidOperationException("No tenant resolved."), cancellationToken);
+
+    public Task<IReadOnlyDictionary<Guid, string>> DisplayNamesAsync(IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken) =>
+        users.DisplayNamesAsync(userIds, cancellationToken);
 }

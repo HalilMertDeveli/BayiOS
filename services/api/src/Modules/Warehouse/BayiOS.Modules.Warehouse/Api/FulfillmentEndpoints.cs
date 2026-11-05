@@ -86,6 +86,9 @@ internal static class FulfillmentEndpoints
             .WithSummary("Sevkiyat onayı: rezerve stoktan tek seferlik çıkış (shipment_out), sipariş Sevk edildi veya kısmi sevk")
             .RequirePermission(Permissions.OrdersShip)
             .ProducesStockProblems());
+        Command(shipments.MapPost("/{id:guid}/cancel", CancelShipment).WithName("Shipments_Cancel")
+            .WithSummary("Onaylanmamış (taslak/paketlenmiş) sevkiyatı iptal eder: stok hareketi yok, rezervasyon ve sipariş durumu değişmez, toplananlar için yerine koyma (putaway) görevi")
+            .RequirePermission(Permissions.TasksAssign));
 
         return app;
     }
@@ -273,6 +276,10 @@ internal static class FulfillmentEndpoints
         Guid id, ConfirmShipmentRequest? request, [FromHeader(Name = "If-Match")] string? ifMatch, ShipmentService service, HttpContext http, CancellationToken cancellationToken) =>
         IfMatch(ifMatch, out var version)
         ?? Ok(http, await service.ConfirmAsync(id, version, request ?? new ConfirmShipmentRequest(null, null, null), http.TraceIdentifier, cancellationToken), c => c.Shipment.Version);
+
+    private static async Task<Results<Ok<CancelShipmentResponse>, ProblemHttpResult>> CancelShipment(
+        Guid id, CancelShipmentRequest request, [FromHeader(Name = "If-Match")] string? ifMatch, ShipmentService service, HttpContext http, CancellationToken cancellationToken) =>
+        IfMatch(ifMatch, out var version) ?? Ok(http, await service.CancelAsync(id, version, request, cancellationToken), c => c.Shipment.Version);
 
     // ---- Helpers ----
 

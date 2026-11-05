@@ -328,6 +328,61 @@ internal sealed class ShipmentService(
         }, cancellationToken);
     }
 
+    /// <summary>
+    /// Cancels an unconfirmed (draft or packed) shipment — a supervisor decision (<c>tasks.assign</c>). Consequences:
+    /// no ledger movement and no stock change (nothing was issued; on_hand never changed); the order's reservations
+    /// stay active and its status is unchanged (the order still needs the goods — re-pick with <c>POST /picking-tasks</c>,
+    /// short-close or cancel the order); what the shipment would have shipped goes back to the shelf through a putaway
+    /// task (same as ORD-07). Locks: order header, then the shipment (serialises with confirm).
+    /// </summary>
+    public async Task<AppResult<CancelShipmentResponse>> CancelAsync(
+        Guid id, long? expectedVersion, CancelShipmentRequest request, CancellationToken cancellationToken)
+    {
+        var reason = FulfillmentText.Clean(request.Reason);
+        if (reason is null || reason.Length > FulfillmentText.MaxReasonLength)
+        {
+            return FulfillmentErrors.Validation("reason", $"Required, at most {FulfillmentText.MaxReasonLength} characters.");
+        }
+
+        return await OnShipmentAsync<CancelShipmentResponse>(id, expectedVersion, lockOrder: true, async (shipment, _) =>
+        {
+            if (FulfillmentStateMachine.NextShipment(FulfillmentActions.Cancel, shipment.Status) is not { } next)
+            {
+                return FulfillmentErrors.ShipmentTransition(FulfillmentActions.Cancel, shipment.Status);
+            }
+
+            var now = clock.GetUtcNow();
+            var back = shipment.Lines.Where(l => l.Quantity > 0)
+                .Select(l => (l.OrderLineId, l.VariantId, l.Sku, l.Name, l.Unit, l.LocationId, l.Quantity))
+                .ToList();
+            shipment.Status = next;
+            shipment.CancelledAt = now;
+            var putaway = back.Count > 0
+                ? await Putaways.CreateAsync(
+                    db, outbox, access.TenantId, shipment.OrderId, shipment.OrderNumber, shipment.WarehouseId, access.UserId, now, back, cancellationToken)
+                : null;
+            await audit.RecordAsync(
+                new AuditEvent(AuditActions.ShipmentCancelled, FulfillmentAuditActions.ShipmentEntityType, shipment.Id, new AuditChanges()
+                    .Value("orderId", shipment.OrderId)
+                    .Value("reason", reason)
+                    .Value("quantity", back.Sum(b => b.Quantity))
+                    .Value("putawayTaskId", putaway?.Id)
+                    .ToDictionary()),
+                cancellationToken);
+            await outbox.PublishAsync(
+                FulfillmentEvents.ShipmentCancelled,
+                new { shipmentId = shipment.Id, orderId = shipment.OrderId, putawayTaskId = putaway?.Id },
+                cancellationToken);
+            var detail = await SaveAndDetailAsync(shipment, cancellationToken);
+            if (detail.Error is { } detailError)
+            {
+                return detailError;
+            }
+
+            return new CancelShipmentResponse(detail.Value!, putaway?.Id);
+        }, cancellationToken);
+    }
+
     private static Dictionary<string, string[]> Mismatches(IEnumerable<ShipmentLine> lines, Dictionary<Guid, decimal> packed) =>
         lines.ToDictionary(l => l.Id.ToString(), l => new[] { $"{l.Sku}: ships {l.Quantity}, packed {packed[l.Id]}." });
 

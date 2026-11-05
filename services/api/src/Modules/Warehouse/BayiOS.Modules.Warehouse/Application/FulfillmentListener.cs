@@ -17,6 +17,7 @@ internal static class FulfillmentEvents
     public const string PickingCompleted = "warehouse.picking_completed.v1";
     public const string ShortageReported = "warehouse.shortage_reported.v1";
     public const string ShipmentConfirmed = "warehouse.shipment_confirmed.v1";
+    public const string ShipmentCancelled = "warehouse.shipment_cancelled.v1";
     public const string PutawayCreated = "warehouse.putaway_created.v1";
 }
 
@@ -156,21 +157,45 @@ internal sealed class FulfillmentListener(
         if (back.Count > 0)
         {
             var first = (IHasOrder?)tasks.FirstOrDefault() ?? shipments.First();
-            var putaway = PickingTask.Create(
-                requestContext.TenantId ?? throw new InvalidOperationException("No tenant resolved."),
-                PickingTaskTypes.Putaway, orderId, first.OrderNumber, first.WarehouseId, userId, now);
-            var sequence = 0;
-            foreach (var item in back.OrderBy(b => b.LocationId).ThenBy(b => b.Sku, StringComparer.Ordinal))
-            {
-                putaway.Lines.Add(PickingTaskLine.Create(
-                    putaway, ++sequence, item.OrderLineId, item.VariantId, item.Sku, item.Name, item.Unit, item.LocationId, item.Quantity));
-            }
-
-            db.PickingTasks.Add(putaway);
-            await outbox.PublishAsync(
-                FulfillmentEvents.PutawayCreated, new { taskId = putaway.Id, orderId, warehouseId = putaway.WarehouseId }, cancellationToken);
+            await Putaways.CreateAsync(
+                db, outbox, requestContext.TenantId ?? throw new InvalidOperationException("No tenant resolved."),
+                orderId, first.OrderNumber, first.WarehouseId, userId, now, back, cancellationToken);
         }
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+}
+
+/// <summary>
+/// Picked-but-not-shipped goods go back to the shelf (PRD ORD-07): a putaway task, no ledger movement — the stock never
+/// left on_hand, and reservations are the caller's business (released by Orders on cancel / short-close; kept when
+/// only a shipment is cancelled).
+/// </summary>
+internal static class Putaways
+{
+    public static async Task<PickingTask> CreateAsync(
+        WarehouseDbContext db,
+        IOutbox outbox,
+        Guid tenantId,
+        Guid orderId,
+        string orderNumber,
+        Guid warehouseId,
+        Guid userId,
+        DateTimeOffset now,
+        IReadOnlyList<(Guid OrderLineId, Guid VariantId, string Sku, string Name, string Unit, Guid? LocationId, decimal Quantity)> items,
+        CancellationToken cancellationToken)
+    {
+        var putaway = PickingTask.Create(tenantId, PickingTaskTypes.Putaway, orderId, orderNumber, warehouseId, userId, now);
+        var sequence = 0;
+        foreach (var item in items.OrderBy(b => b.LocationId).ThenBy(b => b.Sku, StringComparer.Ordinal))
+        {
+            putaway.Lines.Add(PickingTaskLine.Create(
+                putaway, ++sequence, item.OrderLineId, item.VariantId, item.Sku, item.Name, item.Unit, item.LocationId, item.Quantity));
+        }
+
+        db.PickingTasks.Add(putaway);
+        await outbox.PublishAsync(
+            FulfillmentEvents.PutawayCreated, new { taskId = putaway.Id, orderId, warehouseId = putaway.WarehouseId }, cancellationToken);
+        return putaway;
     }
 }

@@ -10,7 +10,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BayiOS.Modules.Inventory.Application;
 
-internal sealed record BalanceQuery(Guid? VariantId, Guid? WarehouseId, Guid? LocationId, int Limit, Guid? After);
+/// <param name="Term">Text search (SKU / name contains, barcode equals), resolved through Catalog; null = no search.</param>
+internal sealed record BalanceQuery(Guid? VariantId, Guid? WarehouseId, Guid? LocationId, int Limit, Guid? After, string? Term = null);
 
 internal sealed record MovementQuery(Guid? VariantId, Guid? WarehouseId, string? Type, Guid? SourceId, int Limit, InventoryCursor? After);
 
@@ -19,15 +20,36 @@ internal sealed class InventoryQueries(
     InventoryDbContext db,
     IAuthorizationContext authorization,
     IRequestContext requestContext,
-    ITaskContextVariants taskVariants) : IStockQueries
+    ITaskContextVariants taskVariants,
+    IVariantDirectory variants) : IStockQueries
 {
     public const string BalanceSort = "id";
     public const string MovementSort = "-occurredAt";
 
+    /// <summary>
+    /// Most variants a balance text search may match. The variants come from Catalog through a port (no cross-schema
+    /// join, ADR 0005) and filter the balances as one array parameter; a broader term is refused
+    /// (<c>422 inventory.search_too_broad</c>) rather than silently truncated.
+    /// </summary>
+    public const int MaxSearchMatches = 10_000;
+
     /// <summary>Balances ordered by id (UUIDv7 ≈ creation order); keyset on id.</summary>
-    public async Task<BalancePageResponse> ListBalancesAsync(BalanceQuery query, CancellationToken cancellationToken)
+    /// <returns>Null when <see cref="BalanceQuery.Term"/> matches more than <see cref="MaxSearchMatches"/> variants.</returns>
+    public async Task<BalancePageResponse?> ListBalancesAsync(BalanceQuery query, CancellationToken cancellationToken)
     {
         var balances = db.Balances.AsNoTracking();
+        if (query.Term is { } term)
+        {
+            var matches = await variants.SearchVariantIdsAsync(term, MaxSearchMatches + 1, cancellationToken);
+            if (matches.Count > MaxSearchMatches)
+            {
+                return null;
+            }
+
+            var ids = matches.ToArray();
+            balances = balances.Where(b => ids.Contains(b.VariantId));
+        }
+
         if (query.VariantId is { } variantId)
         {
             balances = balances.Where(b => b.VariantId == variantId);

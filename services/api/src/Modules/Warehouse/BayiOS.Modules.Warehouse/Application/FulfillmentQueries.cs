@@ -32,7 +32,8 @@ internal sealed class FulfillmentQueries(
     FulfillmentAccess access,
     IFulfillmentCatalog catalog,
     IAuthorizationContext authorization,
-    IOrderOwnership ownership)
+    IOrderOwnership ownership,
+    ITaskAssigneeDirectory assignees)
 {
     public const int DefaultPageSize = 50;
     public const int MaxPageSize = 200;
@@ -74,7 +75,7 @@ internal sealed class FulfillmentQueries(
 
         var rows = await Summaries(tasks.OrderBy(t => t.CreatedAt).ThenBy(t => t.Id).Take(query.Limit + 1)).ToListAsync(cancellationToken);
         var hasMore = rows.Count > query.Limit;
-        var items = rows.Take(query.Limit).ToList();
+        var items = await WithAssigneeNamesAsync([.. rows.Take(query.Limit)], cancellationToken);
         var next = hasMore ? new FulfillmentCursor(items[^1].CreatedAt, items[^1].Id).Encode() : null;
         return new PickingTaskPageResponse(items, new FulfillmentPageInfo(next, hasMore, query.Limit));
     }
@@ -102,18 +103,20 @@ internal sealed class FulfillmentQueries(
                 .ThenBy(t => t.Id)
                 .Take(limit))
             .ToListAsync(cancellationToken);
-        return new MyPickingTasksResponse(rows);
+        return new MyPickingTasksResponse(await WithAssigneeNamesAsync(rows, cancellationToken));
     }
 
     /// <returns>Null when the task does not exist or the caller may not see it.</returns>
     public async Task<PickingTaskResponse?> TaskAsync(Guid id, CancellationToken cancellationToken)
     {
         var visible = Visible(db.PickingTasks.AsNoTracking(), await ReadVisibilityAsync(cancellationToken));
-        var summary = await Summaries(visible.Where(t => t.Id == id)).SingleOrDefaultAsync(cancellationToken);
-        if (summary is null)
+        var row = await Summaries(visible.Where(t => t.Id == id)).SingleOrDefaultAsync(cancellationToken);
+        if (row is null)
         {
             return null;
         }
+
+        var summary = (await WithAssigneeNamesAsync([row], cancellationToken))[0];
 
         var lines = await (from line in db.PickingTaskLines.AsNoTracking()
                            where line.PickingTaskId == id
@@ -197,6 +200,7 @@ internal sealed class FulfillmentQueries(
 
         var locationIds = shipment.Lines.Where(l => l.LocationId is not null).Select(l => l.LocationId!.Value).Distinct().ToList();
         var codes = await db.Locations.AsNoTracking().Where(l => locationIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.Code, cancellationToken);
+        var variants = await catalog.FindVariantsAsync([.. shipment.Lines.Select(l => l.VariantId).Distinct()], cancellationToken);
         return new ShipmentResponse(
             shipment.Id,
             shipment.Number,
@@ -220,6 +224,7 @@ internal sealed class FulfillmentQueries(
                 l.Sku,
                 l.Name,
                 l.Unit,
+                variants.GetValueOrDefault(l.VariantId)?.Barcode,
                 l.LocationId,
                 l.LocationId is { } locationId ? codes.GetValueOrDefault(locationId) : null,
                 l.PickedQuantity,
@@ -280,6 +285,19 @@ internal sealed class FulfillmentQueries(
 
     private sealed record ReadVisibility(bool All, Guid UserId, List<Guid> OwnOrders, bool OwnTasks);
 
+    /// <summary>Fills <see cref="PickingTaskSummaryResponse.AssigneeName"/> with one batch lookup for the whole list.</summary>
+    private async Task<List<PickingTaskSummaryResponse>> WithAssigneeNamesAsync(IReadOnlyList<PickingTaskSummaryResponse> rows, CancellationToken cancellationToken)
+    {
+        var ids = rows.Select(r => r.AssignedTo).OfType<Guid>().Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return [.. rows];
+        }
+
+        var names = await assignees.DisplayNamesAsync(ids, cancellationToken);
+        return [.. rows.Select(r => r.AssignedTo is { } assignee ? r with { AssigneeName = names.GetValueOrDefault(assignee) } : r)];
+    }
+
     private static IQueryable<PickingTaskSummaryResponse> Summaries(IQueryable<PickingTask> tasks) =>
         tasks.Select(t => new PickingTaskSummaryResponse(
             t.Id,
@@ -289,6 +307,7 @@ internal sealed class FulfillmentQueries(
             t.OrderNumber,
             t.WarehouseId,
             t.AssignedTo,
+            null,
             t.Lines.Count,
             t.Lines.Sum(l => l.QtyToPick),
             t.Lines.Sum(l => l.QtyPicked),
