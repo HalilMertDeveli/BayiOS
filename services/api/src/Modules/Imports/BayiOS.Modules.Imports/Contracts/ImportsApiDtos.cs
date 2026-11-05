@@ -49,7 +49,24 @@ public sealed record ImportJobResponse(
     DateTimeOffset? ValidatedAt,
     DateTimeOffset? StartedAt,
     Guid? StartedBy,
-    DateTimeOffset? FinishedAt);
+    DateTimeOffset? FinishedAt,
+    DateTimeOffset? FilePurgedAt,
+    DateTimeOffset? RollbackDeadline,
+    ImportRollbackInfo? Rollback);
+
+/// <summary>Rollback progress and result (PRD IMP-12); null until a rollback was requested.</summary>
+/// <param name="Planned">Imported rows the rollback handles (created + updated).</param>
+/// <param name="Conflicts">Rows left untouched because the record changed after the import (or a value is taken).</param>
+/// <param name="Skipped">Rows with nothing left to undo (record gone, product already archived, price already removed).</param>
+public sealed record ImportRollbackInfo(
+    DateTimeOffset RequestedAt,
+    Guid? RequestedBy,
+    DateTimeOffset? FinishedAt,
+    int Planned,
+    int RolledBack,
+    int Conflicts,
+    int Failed,
+    int Skipped);
 
 public sealed record ImportPageInfo(string? NextCursor, bool HasMore, int Limit);
 
@@ -57,7 +74,9 @@ public sealed record ImportJobPageResponse(IReadOnlyList<ImportJobResponse> Item
 
 /// <summary>
 /// Explicit column mapping (PRD IMP-03). <c>columns</c>: field → source header exactly as in <c>headers</c>.
-/// Product fields: sku, barcode, name, description, unit, taxRate, brand, category, status, price. Price fields: sku,
+/// Product fields: sku, barcode, name, description, unit, taxRate, brand, category, status, price, and
+/// <c>attr.&lt;key&gt;</c> for any non-archived custom field of the tenant (values checked by the Catalog custom-field
+/// validator; multi-select cells separated by <c>;</c>, <c>,</c> or <c>|</c>, ranges as <c>min-max</c>). Price fields: sku,
 /// barcode, price, minQuantity. <c>matchKey</c>: sku (default) | barcode; <c>mode</c>: upsert (default) |
 /// create_only | update_only. <c>priceListId</c> is required for price imports and when a product import maps
 /// <c>price</c>. <c>saveAsTemplate</c> stores the mapping under that name for the next upload (replacing a
@@ -86,6 +105,8 @@ public sealed record ImportRowError(string? Field, string? Column, string Code, 
 /// <param name="Action">Validation decision: create | update | skip | error.</param>
 /// <param name="Status">valid | invalid | skipped | imported | failed.</param>
 /// <param name="Outcome">Execution result: created | updated | unchanged | skipped | failed.</param>
+/// <param name="Values">Normalised values; <c>attr.&lt;key&gt;</c> custom field values are JSON text.</param>
+/// <param name="RollbackStatus">rolled_back | conflict | failed | skipped; null until a rollback handled the row.</param>
 public sealed record ImportRowResponse(
     int RowNumber,
     string Action,
@@ -95,7 +116,8 @@ public sealed record ImportRowResponse(
     IReadOnlyDictionary<string, string?> Values,
     IReadOnlyList<ImportRowError> Errors,
     Guid? MatchedVariantId,
-    Guid? TargetId);
+    Guid? TargetId,
+    string? RollbackStatus);
 
 public sealed record ImportRowPageResponse(IReadOnlyList<ImportRowResponse> Items, ImportPageInfo Page);
 

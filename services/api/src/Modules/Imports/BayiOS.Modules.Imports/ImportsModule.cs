@@ -15,7 +15,8 @@ public static class ImportsModule
 {
     /// <summary>
     /// Registers bulk import (uploads, mapping, dry run, chunked execution jobs). The host must provide the ports
-    /// <see cref="IImportCatalogGateway"/>, <see cref="IImportPriceGateway"/> and <see cref="IImportActorDirectory"/>.
+    /// <see cref="IImportCatalogGateway"/>, <see cref="IImportPriceGateway"/>, <see cref="IImportActorDirectory"/> and
+    /// <see cref="IImportSystemJobs"/> (maintenance: raw file purge, stalled import sweep).
     /// </summary>
     public static IServiceCollection AddImportsModule(this IServiceCollection services)
     {
@@ -30,6 +31,11 @@ public static class ImportsModule
         services.TryAddScoped<IColumnSuggestionProvider, HeaderSynonymSuggestionProvider>();
         services.AddJobHandler<ValidateImportJob>(ValidateImportJob.Type);
         services.AddJobHandler<ExecuteImportJob>(ExecuteImportJob.Type);
+        services.AddScoped<ImportRollbackProcessor>();
+        services.AddJobHandler<RollbackImportJob>(RollbackImportJob.Type);
+        services.AddJobHandler<SweepStalledImportJob>(SweepStalledImportJob.Type);
+        services.AddJobHandler<ImportsMaintenanceJob>(ImportsMaintenanceJob.Type);
+        services.AddHostedService<ImportsMaintenanceScheduler>();
         services.TryAddSingleton(TimeProvider.System);
         return services;
     }

@@ -110,7 +110,38 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         ["platform.idempotency_keys"] = "tenant_id = app.tenant_id OR (tenant_id IS NULL AND user_id = app.user_id); migrator purge policies",
     };
 
+    /// <summary>
+    /// Tables with documented <c>bayios_migrator</c> policies: a tenant-less maintenance job calls a SECURITY DEFINER
+    /// function that runs as the owner, and FORCE RLS still limits the owner to rows past retention.
+    /// </summary>
+    private static readonly HashSet<string> MigratorPurgePolicyTables =
+        ["platform.idempotency_keys", "imports.import_files", "imports.import_jobs"];
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task Migrator_purge_policies_never_reach_live_rows()
+    {
+        // Every migrator policy keeps a time floor, so even the owner (through the purge functions) cannot touch a
+        // row that is still in use.
+        var rows = await RowsAsync(
+            $"""
+            SELECT quote_ident(p.schemaname) || '.' || quote_ident(p.tablename), p.policyname, coalesce(p.qual, '') || ' ' || coalesce(p.with_check, '')
+            FROM pg_policies p
+            WHERE p.schemaname IN ({DatabaseCatalog.BusinessSchemasSql}) AND p.roles::text[] = ARRAY['bayios_migrator']
+            ORDER BY 1, 2
+            """);
+        Assert.Contains(rows, r => (string)r[0] == "imports.import_files");
+        foreach (var row in rows)
+        {
+            var (table, name, expression) = ((string)row[0], (string)row[1], (string)row[2]);
+            Assert.True(MigratorPurgePolicyTables.Contains(table), $"{table}.{name}: undocumented migrator policy");
+            Assert.True(expression.Contains("now()", StringComparison.Ordinal) || expression.Contains("file_purged_at IS NOT NULL", StringComparison.Ordinal), $"{table}.{name}: no time floor: {expression}");
+        }
+
+        // The import purge function is the only way in for the runtime role.
+        Assert.True(await ScalarAsync<bool>($"SELECT has_function_privilege('{App}', 'imports.purge_expired_files(interval, integer)', 'EXECUTE')"));
+    }
 
     [Fact]
     public async Task Business_schemas_are_the_known_modules_and_nothing_lives_in_public()
@@ -192,8 +223,9 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
 
             if (!roles.Contains(App))
             {
-                // Only the documented migrator purge policies on idempotency keys may target another role.
-                if (!(table == "platform.idempotency_keys" && roles.SequenceEqual(["bayios_migrator"])))
+                // Only the documented migrator purge policies (used by SECURITY DEFINER purge functions) may target
+                // another role: expired idempotency keys, and import raw files past retention (imports.purge_expired_files).
+                if (!(MigratorPurgePolicyTables.Contains(table) && roles.SequenceEqual(["bayios_migrator"])))
                 {
                     violations.Add($"{table}.{name}: policy for unexpected role(s) {string.Join(',', roles)}");
                 }

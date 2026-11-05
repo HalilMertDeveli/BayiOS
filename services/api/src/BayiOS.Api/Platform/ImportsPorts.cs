@@ -1,8 +1,13 @@
 using System.Globalization;
+using System.Linq.Expressions;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using BayiOS.Api.Platform.Jobs;
 using BayiOS.Modules.Catalog.Application;
 using BayiOS.Modules.Catalog.Contracts;
+using BayiOS.Modules.Catalog.Domain;
 using BayiOS.Modules.Catalog.Infrastructure.Persistence;
 using BayiOS.Modules.Identity.Contracts;
 using BayiOS.Modules.Imports.Contracts;
@@ -10,7 +15,11 @@ using BayiOS.Modules.Imports.Parsing;
 using BayiOS.Modules.Pricing.Application;
 using BayiOS.Modules.Pricing.Contracts;
 using BayiOS.Modules.Pricing.Infrastructure.Persistence;
+using BayiOS.SharedKernel.Persistence;
+using BayiOS.SharedKernel.Platform.Jobs;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace BayiOS.Api.Platform;
 
@@ -27,6 +36,7 @@ internal static class ImportsPorts
         services.AddScoped<IImportCatalogGateway, CatalogImportGateway>();
         services.AddScoped<IImportPriceGateway, PricingImportGateway>();
         services.AddScoped<IImportActorDirectory, MembershipImportActorDirectory>();
+        services.AddScoped<IImportSystemJobs, ImportSystemJobs>();
         return services;
     }
 }
@@ -34,6 +44,11 @@ internal static class ImportsPorts
 internal sealed class CatalogImportGateway(CatalogDbContext catalog, ProductService products) : IImportCatalogGateway
 {
     private const string Archived = "archived";
+
+    /// <summary>Readable JSON for stored previous/applied values (the outer API serializer escapes again).</summary>
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    private Dictionary<string, CustomFieldDefinition>? _fields;
 
     public async Task<IReadOnlyList<CatalogVariantSnapshot>> FindVariantsAsync(
         IReadOnlyCollection<string> skus, IReadOnlyCollection<string> barcodes, CancellationToken cancellationToken)
@@ -45,25 +60,18 @@ internal sealed class CatalogImportGateway(CatalogDbContext catalog, ProductServ
 
         var skuList = skus.ToList();
         var barcodeList = barcodes.ToList();
-        return await (from variant in catalog.Variants.AsNoTracking()
-                      join product in catalog.Products.AsNoTracking() on variant.ProductId equals product.Id
-                      where skuList.Contains(variant.Sku) || (variant.Barcode != null && barcodeList.Contains(variant.Barcode))
-                      select new CatalogVariantSnapshot(
-                          variant.Id,
-                          product.Id,
-                          variant.Sku,
-                          variant.Barcode,
-                          variant.UnitId,
-                          variant.Status,
-                          variant.RowVersion,
-                          product.Name,
-                          product.Description,
-                          product.TaxRate,
-                          product.BrandId,
-                          product.CategoryId,
-                          product.Status,
-                          product.RowVersion))
-            .ToListAsync(cancellationToken);
+        return await SnapshotsAsync(v => skuList.Contains(v.Sku) || (v.Barcode != null && barcodeList.Contains(v.Barcode)), cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CatalogVariantSnapshot>> FindVariantsByIdAsync(IReadOnlyCollection<Guid> variantIds, CancellationToken cancellationToken)
+    {
+        if (variantIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = variantIds.Distinct().ToList();
+        return await SnapshotsAsync(v => ids.Contains(v.Id), cancellationToken);
     }
 
     public async Task<IReadOnlyDictionary<string, Guid>> FindUnitsAsync(CancellationToken cancellationToken) =>
@@ -79,11 +87,26 @@ internal sealed class CatalogImportGateway(CatalogDbContext catalog, ProductServ
         .GroupBy(c => ImportValues.Fold(c.Name), StringComparer.Ordinal)
         .ToDictionary(g => g.Key, g => new CatalogCategoryMatch(g.First().Id, g.Count() > 1), StringComparer.Ordinal);
 
+    public async Task<IImportAttributeNormalizer> LoadAttributesAsync(CancellationToken cancellationToken) =>
+        new AttributeNormalizer(await FieldsAsync(cancellationToken));
+
     public async Task<CatalogWriteResult> CreateProductAsync(ImportProductValues values, CancellationToken cancellationToken)
     {
+        var (productAttributes, variantAttributes) = await SplitAttributesAsync(values.Attributes, cancellationToken);
         var result = await products.CreateProductAsync(
             new CreateProductRequest(
-                values.Name, values.Description, values.CategoryId, values.BrandId, values.UnitId, values.TaxRate, values.Status, values.Sku, values.Barcode, null),
+                values.Name,
+                values.Description,
+                values.CategoryId,
+                values.BrandId,
+                values.UnitId,
+                values.TaxRate,
+                values.Status,
+                values.Sku,
+                values.Barcode,
+                null,
+                productAttributes,
+                variantAttributes),
             cancellationToken);
         // Each row is its own command: a rejected row must not leave entities behind for the next SaveChanges.
         catalog.ChangeTracker.Clear();
@@ -98,56 +121,139 @@ internal sealed class CatalogImportGateway(CatalogDbContext catalog, ProductServ
 
     public async Task<CatalogWriteResult> UpdateProductAsync(CatalogVariantSnapshot current, ImportProductValues values, CancellationToken cancellationToken)
     {
-        var previous = new Dictionary<string, object?>(StringComparer.Ordinal);
-        Optional<T> Change<T>(string name, T? next, T currentValue)
+        var before = ImportCatalogFields.Read(current);
+        var next = new JsonObject
         {
-            if (next is null || EqualityComparer<T>.Default.Equals(next, currentValue))
-            {
-                return default;
-            }
-
-            previous[name] = currentValue;
-            return new Optional<T>(true, next);
+            ["name"] = values.Name,
+            ["description"] = values.Description,
+            ["taxRate"] = values.TaxRate,
+            ["brandId"] = values.BrandId?.ToString(),
+            ["categoryId"] = values.CategoryId?.ToString(),
+            ["status"] = values.Status,
+            ["sku"] = values.Sku,
+            ["barcode"] = values.Barcode,
+            ["unitId"] = values.UnitId?.ToString(),
+        };
+        foreach (var (key, json) in values.Attributes ?? new Dictionary<string, string>())
+        {
+            next[ImportCatalogFields.AttributePrefix + key] = JsonNode.Parse(json);
         }
 
-        var name = Change("name", values.Name, current.ProductName);
-        var description = Change<string?>("description", values.Description, current.Description);
-        var taxRate = values.TaxRate is { } rate && rate != current.TaxRate ? Record(previous, "taxRate", current.TaxRate, (decimal?)rate) : default;
-        var brand = values.BrandId is { } brandId && brandId != current.BrandId ? Record(previous, "brandId", current.BrandId, (Guid?)brandId) : default;
-        var category = values.CategoryId is { } categoryId && categoryId != current.CategoryId ? Record(previous, "categoryId", current.CategoryId, (Guid?)categoryId) : default;
-        var status = Change<string?>("status", values.Status, current.ProductStatus);
-        var productChanged = name.IsSet || description.IsSet || taxRate.IsSet || brand.IsSet || category.IsSet || status.IsSet;
+        // Null = "not in the file": only present values that differ from the current record are written.
+        var changed = new JsonObject();
+        var previous = new JsonObject();
+        foreach (var (key, value) in next)
+        {
+            if (value is not null && !ImportCatalogFields.Same(before[key], value))
+            {
+                changed[key] = value.DeepClone();
+                previous[key] = before[key]?.DeepClone();
+            }
+        }
 
-        var sku = Change<string?>("sku", values.Sku, current.Sku);
-        var barcode = Change<string?>("barcode", values.Barcode, current.Barcode);
-        var unit = values.UnitId is { } unitId && unitId != current.UnitId ? Record(previous, "unitId", current.UnitId, (Guid?)unitId) : default;
-        var variantChanged = sku.IsSet || barcode.IsSet || unit.IsSet;
+        if (changed.Count == 0)
+        {
+            return new CatalogWriteResult("unchanged", current.VariantId, current.ProductId, null, null);
+        }
 
-        if (!productChanged && !variantChanged)
+        if (await WriteAsync(current, changed, cancellationToken) is { } failed)
+        {
+            return failed;
+        }
+
+        // What Catalog actually stored (it cleans text): the rollback compares the live record with this.
+        var after = (await FindVariantsByIdAsync([current.VariantId], cancellationToken)).Single();
+        var stored = ImportCatalogFields.Read(after);
+        var applied = new JsonObject();
+        foreach (var (key, _) in previous)
+        {
+            applied[key] = stored[key]?.DeepClone();
+        }
+
+        return new CatalogWriteResult(
+            "updated", current.VariantId, current.ProductId, previous.ToJsonString(Json), null, AppliedValuesJson: applied.ToJsonString(Json));
+    }
+
+    public async Task<CatalogWriteResult> ArchiveProductAsync(CatalogVariantSnapshot current, CancellationToken cancellationToken)
+    {
+        if (current.ProductStatus == Archived)
         {
             return new CatalogWriteResult("unchanged", current.VariantId, current.ProductId, null, null);
         }
 
         try
         {
-            if (productChanged)
+            return await products.ArchiveProductAsync(current.ProductId, current.ProductVersion, cancellationToken) is { } error
+                ? Failed(error)
+                : new CatalogWriteResult("archived", current.VariantId, current.ProductId, null, null);
+        }
+        finally
+        {
+            catalog.ChangeTracker.Clear();
+        }
+    }
+
+    public async Task<CatalogWriteResult> RestoreProductAsync(CatalogVariantSnapshot current, string previousValuesJson, CancellationToken cancellationToken)
+    {
+        var previous = JsonNode.Parse(previousValuesJson) as JsonObject ?? [];
+        return await WriteAsync(current, previous, cancellationToken)
+            ?? new CatalogWriteResult("updated", current.VariantId, current.ProductId, null, null);
+    }
+
+    /// <summary>
+    /// Writes <paramref name="values"/> (<see cref="ImportCatalogFields"/> keys; a JSON null clears the field or removes
+    /// the attribute) through the product and variant commands, with the snapshot's versions as the concurrency check.
+    /// </summary>
+    private async Task<CatalogWriteResult?> WriteAsync(CatalogVariantSnapshot current, JsonObject values, CancellationToken cancellationToken)
+    {
+        var fields = await FieldsAsync(cancellationToken);
+        bool Has(string key, out JsonNode? value) => values.TryGetPropertyValue(key, out value);
+        Optional<string?> Text(string key) => Has(key, out var v) ? new Optional<string?>(true, v?.GetValue<string>()) : default;
+        Optional<Guid?> Id(string key) => Has(key, out var v) ? new Optional<Guid?>(true, v is null ? null : Guid.Parse(v.GetValue<string>(), CultureInfo.InvariantCulture)) : default;
+
+        var productAttributes = new JsonObject();
+        var variantAttributes = new JsonObject();
+        foreach (var (key, value) in values.Where(p => p.Key.StartsWith(ImportCatalogFields.AttributePrefix, StringComparison.Ordinal)))
+        {
+            var name = key[ImportCatalogFields.AttributePrefix.Length..];
+            var target = fields.TryGetValue(name, out var field) && field.EntityType == CustomFieldEntityTypes.Variant ? variantAttributes : productAttributes;
+            target[name] = value?.DeepClone();
+        }
+
+        var taxRate = Has("taxRate", out var tax) ? new Optional<decimal?>(true, tax?.GetValue<decimal>()) : default;
+        var productPatch = new ProductPatch(
+            Text("name"),
+            Text("description"),
+            Id("categoryId"),
+            Id("brandId"),
+            default,
+            taxRate,
+            Text("status"),
+            productAttributes.Count > 0 ? new Optional<JsonObject?>(true, productAttributes) : default);
+        var variantPatch = new VariantPatch(
+            Text("sku"),
+            Text("barcode"),
+            default,
+            default,
+            Id("unitId"),
+            default,
+            variantAttributes.Count > 0 ? new Optional<JsonObject?>(true, variantAttributes) : default);
+
+        try
+        {
+            if (productPatch.Name.IsSet || productPatch.Description.IsSet || productPatch.CategoryId.IsSet || productPatch.BrandId.IsSet
+                || productPatch.TaxRate.IsSet || productPatch.Status.IsSet || productPatch.Attributes.IsSet)
             {
-                var result = await products.UpdateProductAsync(
-                    current.ProductId,
-                    new ProductPatch(
-                        new Optional<string?>(name.IsSet, name.Value), description, category, brand, default, taxRate, status, default),
-                    current.ProductVersion,
-                    cancellationToken);
+                var result = await products.UpdateProductAsync(current.ProductId, productPatch, current.ProductVersion, cancellationToken);
                 if (result.Error is { } error)
                 {
                     return Failed(error);
                 }
             }
 
-            if (variantChanged)
+            if (variantPatch.Sku.IsSet || variantPatch.Barcode.IsSet || variantPatch.UnitId.IsSet || variantPatch.Attributes.IsSet)
             {
-                var result = await products.UpdateVariantAsync(
-                    current.VariantId, new VariantPatch(sku, barcode, default, default, unit, default, default), current.VariantVersion, cancellationToken);
+                var result = await products.UpdateVariantAsync(current.VariantId, variantPatch, current.VariantVersion, cancellationToken);
                 if (result.Error is { } error)
                 {
                     return Failed(error);
@@ -159,18 +265,81 @@ internal sealed class CatalogImportGateway(CatalogDbContext catalog, ProductServ
             catalog.ChangeTracker.Clear();
         }
 
-        return new CatalogWriteResult("updated", current.VariantId, current.ProductId, JsonSerializer.Serialize(previous, JsonSerializerOptions.Web), null);
+        return null;
     }
 
-    private static Optional<T?> Record<T>(Dictionary<string, object?> previous, string name, T? currentValue, T? next)
-        where T : struct
+    private async Task<(IReadOnlyDictionary<string, JsonElement>? Product, IReadOnlyDictionary<string, JsonElement>? Variant)> SplitAttributesAsync(
+        IReadOnlyDictionary<string, string>? attributes, CancellationToken cancellationToken)
     {
-        previous[name] = currentValue;
-        return new Optional<T?>(true, next);
+        if (attributes is null || attributes.Count == 0)
+        {
+            return (null, null);
+        }
+
+        var fields = await FieldsAsync(cancellationToken);
+        var product = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        var variant = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var (key, json) in attributes)
+        {
+            using var document = JsonDocument.Parse(json);
+            var target = fields.TryGetValue(key, out var field) && field.EntityType == CustomFieldEntityTypes.Variant ? variant : product;
+            target[key] = document.RootElement.Clone();
+        }
+
+        return (product.Count > 0 ? product : null, variant.Count > 0 ? variant : null);
     }
+
+    private async Task<Dictionary<string, CustomFieldDefinition>> FieldsAsync(CancellationToken cancellationToken) =>
+        _fields ??= (await catalog.CustomFields.AsNoTracking().ToListAsync(cancellationToken)).ToDictionary(f => f.Key, StringComparer.Ordinal);
+
+    private async Task<List<CatalogVariantSnapshot>> SnapshotsAsync(Expression<Func<ProductVariant, bool>> filter, CancellationToken cancellationToken) =>
+        await catalog.Variants.AsNoTracking()
+            .Where(filter)
+            .Join(
+                catalog.Products.AsNoTracking(),
+                variant => variant.ProductId,
+                product => product.Id,
+                (variant, product) => new CatalogVariantSnapshot(
+                    variant.Id,
+                    product.Id,
+                    variant.Sku,
+                    variant.Barcode,
+                    variant.UnitId,
+                    variant.Status,
+                    variant.RowVersion,
+                    product.Name,
+                    product.Description,
+                    product.TaxRate,
+                    product.BrandId,
+                    product.CategoryId,
+                    product.Status,
+                    product.RowVersion,
+                    product.Attributes,
+                    variant.Attributes))
+            .ToListAsync(cancellationToken);
 
     private static CatalogWriteResult Failed(BayiOS.Modules.Catalog.Application.AppError error) =>
         new("failed", null, null, null, error.Errors is { } errors ? errors.ToDictionary() : new Dictionary<string, string[]> { [string.Empty] = [error.Title] }, error.Code);
+
+    /// <summary>Catalog's <see cref="CustomFieldValidator"/> over the tenant's definitions (loaded once).</summary>
+    private sealed class AttributeNormalizer(Dictionary<string, CustomFieldDefinition> definitions) : IImportAttributeNormalizer
+    {
+        public IReadOnlyDictionary<string, ImportAttributeField> Fields { get; } = definitions.Values.ToDictionary(
+            d => d.Key,
+            d => new ImportAttributeField(d.Key, d.Label, d.EntityType, d.DataType, d.Required, d.ArchivedAt is not null, FieldSet.ReadOptions(d.Options)),
+            StringComparer.Ordinal);
+
+        public string? Normalize(string key, JsonNode? value, out string? error)
+        {
+            if (!definitions.TryGetValue(key, out var definition) || definition.ArchivedAt is not null)
+            {
+                error = "Unknown or archived custom field.";
+                return null;
+            }
+
+            return CustomFieldValidator.Normalize(definition, value, out error)?.ToJsonString(Json);
+        }
+    }
 }
 
 internal sealed partial class PricingImportGateway(IPriceListDirectory directory, PriceListService service, PricingDbContext pricing) : IImportPriceGateway
@@ -179,19 +348,30 @@ internal sealed partial class PricingImportGateway(IPriceListDirectory directory
         await directory.FindAsync(priceListId, cancellationToken) is { } list ? new ImportPriceListInfo(list.Id, list.Name, list.Kind, list.Currency, list.Status) : null;
 
     public async Task<IReadOnlyDictionary<(Guid VariantId, decimal MinQuantity), decimal>> FindPricesAsync(
+        Guid priceListId, IReadOnlyCollection<Guid> variantIds, CancellationToken cancellationToken) =>
+        (await FindPriceItemsAsync(priceListId, variantIds, cancellationToken)).ToDictionary(i => i.Key, i => i.Value.UnitPrice);
+
+    public async Task<IReadOnlyDictionary<(Guid VariantId, decimal MinQuantity), ImportPriceItemInfo>> FindPriceItemsAsync(
         Guid priceListId, IReadOnlyCollection<Guid> variantIds, CancellationToken cancellationToken)
     {
         if (variantIds.Count == 0)
         {
-            return new Dictionary<(Guid, decimal), decimal>();
+            return new Dictionary<(Guid, decimal), ImportPriceItemInfo>();
         }
 
         var ids = variantIds.ToList();
         return (await pricing.Items.AsNoTracking()
                 .Where(i => i.PriceListId == priceListId && ids.Contains(i.VariantId))
-                .Select(i => new { i.VariantId, i.MinQuantity, i.UnitPrice })
+                .Select(i => new { i.Id, i.VariantId, i.MinQuantity, i.UnitPrice })
                 .ToListAsync(cancellationToken))
-            .ToDictionary(i => (i.VariantId, i.MinQuantity), i => i.UnitPrice);
+            .ToDictionary(i => (i.VariantId, i.MinQuantity), i => new ImportPriceItemInfo(i.Id, i.UnitPrice));
+    }
+
+    public async Task<string?> DeletePriceItemAsync(Guid priceListId, Guid itemId, CancellationToken cancellationToken)
+    {
+        var result = await service.DeleteItemAsync(priceListId, itemId, cancellationToken);
+        pricing.ChangeTracker.Clear();
+        return result.Error?.Title;
     }
 
     /// <summary>
@@ -260,4 +440,75 @@ internal sealed class MembershipImportActorDirectory(IMembershipLookup membershi
 {
     public Task<string?> FindActiveRoleAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) =>
         memberships.FindActiveRoleAsync(userId, tenantId, cancellationToken);
+}
+
+/// <summary>
+/// Tenant-less job primitives for the Imports maintenance over <see cref="JobStore"/> (no change to the platform job
+/// API): a scheduler tick, the dead-job scan of <c>platform.jobs</c> (no RLS, data-model §2.3) and per-tenant fan-out
+/// on the maintenance job's own transaction.
+/// </summary>
+internal sealed class ImportSystemJobs(IServiceProvider services, UnitOfWork unitOfWork) : IImportSystemJobs
+{
+    public bool WorkerEnabled
+    {
+        get
+        {
+            try
+            {
+                return services.GetRequiredService<IOptions<JobsOptions>>().Value.Enabled;
+            }
+            catch (OptionsValidationException)
+            {
+                return false; // unconfigured instance: no background work (same as the platform worker)
+            }
+        }
+    }
+
+    public async Task EnqueueSystemAsync(string type, string dedupeKey, CancellationToken cancellationToken) =>
+        await services.GetRequiredService<JobStore>().InsertAsync(new NewJob(null, type, "{}", null, -1, 3, dedupeKey, null), cancellationToken);
+
+    public async Task<IReadOnlyList<DeadImportJob>> FindDeadJobsAsync(
+        IReadOnlyCollection<string> types, TimeSpan lookback, int limit, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT DISTINCT ON (d.payload->>'importId', d.payload->>'runId')
+                   d.tenant_id, d.type, (d.payload->>'importId')::uuid, (d.payload->>'runId')::uuid
+            FROM platform.jobs d
+            WHERE d.type = ANY(@types) AND d.status = 'dead' AND d.tenant_id IS NOT NULL
+              AND d.finished_at > now() - @lookback
+              AND d.payload ? 'importId' AND d.payload ? 'runId'
+              AND NOT EXISTS (
+                  SELECT 1 FROM platform.jobs l
+                  WHERE l.type = d.type AND l.status IN ('queued', 'running')
+                    AND l.payload->>'importId' = d.payload->>'importId' AND l.payload->>'runId' = d.payload->>'runId')
+            ORDER BY d.payload->>'importId', d.payload->>'runId', d.finished_at
+            LIMIT @limit
+            """,
+            unitOfWork.Connection,
+            unitOfWork.Transaction);
+        command.Parameters.Add(new NpgsqlParameter<string[]>("types", [.. types]));
+        command.Parameters.Add(new NpgsqlParameter<TimeSpan>("lookback", lookback));
+        command.Parameters.Add(new NpgsqlParameter<int>("limit", limit));
+        var found = new List<DeadImportJob>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            found.Add(new DeadImportJob(reader.GetGuid(0), reader.GetString(1), reader.GetGuid(2), reader.GetGuid(3)));
+        }
+
+        return found;
+    }
+
+    public async Task EnqueueForTenantAsync(Guid tenantId, JobRequest job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        var transaction = unitOfWork.Transaction
+            ?? throw new InvalidOperationException("Jobs are enqueued inside the unit of work transaction.");
+        await JobStore.InsertAsync(
+            unitOfWork.Connection,
+            transaction,
+            new NewJob(tenantId, job.Type, JobStore.Serialize(job.Payload), job.RunAfter, job.Priority, job.MaxAttempts, job.DedupeKey, null),
+            cancellationToken);
+    }
 }

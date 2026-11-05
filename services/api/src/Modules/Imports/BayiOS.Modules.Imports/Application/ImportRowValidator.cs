@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Nodes;
 using BayiOS.Modules.Imports.Contracts;
 using BayiOS.Modules.Imports.Domain;
 using BayiOS.Modules.Imports.Parsing;
@@ -54,9 +55,62 @@ internal sealed class ImportRowValidator(IImportCatalogGateway catalog, IImportP
         }
 
         var plans = table.Rows.Select(row => Normalize(job, row, columns)).ToList();
-        return job.Type == ImportTypes.Prices
-            ? await PlanPricesAsync(job, plans, columns, cancellationToken)
-            : await PlanProductsAsync(job, plans, columns, cancellationToken);
+        if (job.Type == ImportTypes.Prices)
+        {
+            return await PlanPricesAsync(job, plans, columns, cancellationToken);
+        }
+
+        var attributes = await catalog.LoadAttributesAsync(cancellationToken);
+        var attributeColumns = columns.Where(c => c.Key.StartsWith(ImportCatalogFields.AttributePrefix, StringComparison.Ordinal)).ToList();
+        if (attributeColumns.Count > 0)
+        {
+            foreach (var plan in plans)
+            {
+                NormalizeAttributes(plan, attributeColumns, attributes);
+            }
+        }
+
+        return await PlanProductsAsync(job, plans, columns, attributes, cancellationToken);
+    }
+
+    /// <summary>
+    /// <c>attr.&lt;key&gt;</c> cells: read as the field's data type (<see cref="ImportAttributeCells"/>), then checked and
+    /// normalised by Catalog's custom-field validator through the port; the stored value is the normalised JSON.
+    /// An empty cell means "not in the file" (the attribute is left as it is).
+    /// </summary>
+    private static void NormalizeAttributes(
+        RowPlan plan, List<KeyValuePair<string, (int Index, string Header)>> attributeColumns, IImportAttributeNormalizer attributes)
+    {
+        foreach (var (field, (index, header)) in attributeColumns)
+        {
+            var cell = index < plan.Raw.Length ? plan.Raw[index] : null;
+            if (string.IsNullOrWhiteSpace(cell))
+            {
+                continue;
+            }
+
+            if (ImportValues.LooksLikeFormula(cell))
+            {
+                plan.Errors.Add(new ImportRowError(field, header, "value.formula_not_allowed", "Formül gibi başlayan değer (= veya @) kabul edilmez."));
+                continue;
+            }
+
+            var key = field[ImportCatalogFields.AttributePrefix.Length..];
+            if (!attributes.Fields.TryGetValue(key, out var definition))
+            {
+                plan.Errors.Add(new ImportRowError(field, header, "attribute.unknown", "Özel alan bulunamadı veya arşivlenmiş."));
+                continue;
+            }
+
+            if (attributes.Normalize(key, ImportAttributeCells.ToJson(definition.DataType, cell), out var error) is { } json)
+            {
+                plan.Values[field] = json;
+            }
+            else
+            {
+                plan.Errors.Add(new ImportRowError(field, header, "attribute.invalid", error ?? "Geçersiz değer."));
+            }
+        }
     }
 
     // ---------------------------------------------------------------- normalisation
@@ -180,7 +234,11 @@ internal sealed class ImportRowValidator(IImportCatalogGateway catalog, IImportP
     // ---------------------------------------------------------------- products
 
     private async Task<List<RowPlan>> PlanProductsAsync(
-        ImportJob job, List<RowPlan> rows, Dictionary<string, (int Index, string Header)> columns, CancellationToken cancellationToken)
+        ImportJob job,
+        List<RowPlan> rows,
+        Dictionary<string, (int Index, string Header)> columns,
+        IImportAttributeNormalizer attributes,
+        CancellationToken cancellationToken)
     {
         var (bySku, byBarcode) = await LookupAsync(rows, cancellationToken);
         var units = await catalog.FindUnitsAsync(cancellationToken);
@@ -309,6 +367,15 @@ internal sealed class ImportRowValidator(IImportCatalogGateway catalog, IImportP
                         }
                     }
 
+                    // Catalog rejects a new product without its required custom fields; say so in the preview.
+                    foreach (var field in attributes.Fields.Values.Where(f => f.Required && !f.Archived))
+                    {
+                        if (v.GetValueOrDefault(ImportCatalogFields.AttributePrefix + field.Key) is null)
+                        {
+                            Error(ImportCatalogFields.AttributePrefix + field.Key, "value.required", $"'{field.Label}' özel alanı yeni ürün için zorunludur.");
+                        }
+                    }
+
                     action = errors.Count > 0 ? RowActions.Error : RowActions.Create;
                 }
             }
@@ -320,7 +387,8 @@ internal sealed class ImportRowValidator(IImportCatalogGateway catalog, IImportP
     }
 
     private static bool HasProductChanges(CatalogVariantSnapshot current, Dictionary<string, string?> v) =>
-        Differs(v, ImportFields.Name, current.ProductName)
+        HasAttributeChanges(current, v)
+        || Differs(v, ImportFields.Name, current.ProductName)
         || Differs(v, ImportFields.Description, current.Description)
         || Differs(v, ImportFields.Barcode, current.Barcode)
         || Differs(v, ImportFields.Sku, current.Sku)
@@ -329,6 +397,18 @@ internal sealed class ImportRowValidator(IImportCatalogGateway catalog, IImportP
         || Differs(v, ResolvedKeys.BrandId, current.BrandId?.ToString())
         || Differs(v, ResolvedKeys.CategoryId, current.CategoryId?.ToString())
         || (v.GetValueOrDefault(ImportFields.TaxRate) is { } tax && decimal.Parse(tax, CultureInfo.InvariantCulture) != current.TaxRate);
+
+    private static bool HasAttributeChanges(CatalogVariantSnapshot current, Dictionary<string, string?> v)
+    {
+        var attributes = v.Where(p => p.Key.StartsWith(ImportCatalogFields.AttributePrefix, StringComparison.Ordinal) && p.Value is not null).ToList();
+        if (attributes.Count == 0)
+        {
+            return false;
+        }
+
+        var live = ImportCatalogFields.Read(current);
+        return attributes.Any(p => !ImportCatalogFields.Same(live[p.Key], JsonNode.Parse(p.Value!)));
+    }
 
     private static bool HasPriceChange(ImportJob job, Guid variantId, Dictionary<string, string?> v, Dictionary<(Guid, decimal), decimal> current) =>
         job.PriceListId is not null

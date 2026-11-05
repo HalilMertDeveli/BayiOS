@@ -11,6 +11,7 @@ using BayiOS.SharedKernel.Platform.Audit;
 using BayiOS.SharedKernel.Platform.Jobs;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace BayiOS.Modules.Imports.Application;
@@ -29,8 +30,10 @@ internal sealed class ImportService(
     IBackgroundJobs jobs,
     IAuditLog audit,
     IImportPriceGateway priceGateway,
+    IImportCatalogGateway catalogGateway,
     IColumnSuggestionProvider suggestions,
     IRequestContext requestContext,
+    IOptions<ImportsOptions> options,
     TimeProvider clock)
 {
     public const int DefaultPageSize = 50;
@@ -54,6 +57,11 @@ internal sealed class ImportService(
         if (PermissionFor(type, mapsPrice: type == ImportTypes.Prices) is { } denied)
         {
             return denied;
+        }
+
+        if (await CheckUploadRateAsync(cancellationToken) is { } limited)
+        {
+            return limited;
         }
 
         var table = TabularFileReader.Read(content, fileName, contentType, cancellationToken);
@@ -85,6 +93,44 @@ internal sealed class ImportService(
         await db.SaveChangesAsync(cancellationToken);
         await files.SaveAsync(TenantId, job.Id, content, cancellationToken);
         return ToResponse(job);
+    }
+
+    /// <summary>
+    /// Per-tenant upload limit (threat-model §6.5: 10/hour, sliding window). The count is the tenant's own
+    /// <c>import_jobs</c> rows in the database, so every API instance shares it; a transaction-scoped advisory lock per
+    /// tenant serialises concurrent uploads so two instances cannot both take the last slot. Rejected (invalid) files
+    /// create no row and do not count.
+    /// </summary>
+    private async Task<AppError?> CheckUploadRateAsync(CancellationToken cancellationToken)
+    {
+        var settings = options.Value;
+        if (settings.UploadLimit <= 0)
+        {
+            return null;
+        }
+
+        await db.JoinTransactionAsync(cancellationToken);
+        var lockKey = $"imports.upload:{TenantId:N}";
+        await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0))", cancellationToken);
+
+        var now = ImportClock.Now(clock);
+        var since = now - settings.UploadWindow;
+        var recent = await db.Jobs.AsNoTracking()
+            .Where(j => j.CreatedAt > since)
+            .OrderByDescending(j => j.CreatedAt)
+            .Select(j => j.CreatedAt)
+            .Take(settings.UploadLimit)
+            .ToListAsync(cancellationToken);
+        if (recent.Count < settings.UploadLimit)
+        {
+            return null;
+        }
+
+        // A slot frees up when the oldest of the last <limit> uploads leaves the window.
+        var retryAfter = (int)Math.Ceiling((recent[^1] + settings.UploadWindow - now).TotalSeconds);
+        return AppError.RateLimited(
+            $"Upload limit reached: {settings.UploadLimit.ToString(CultureInfo.InvariantCulture)} files per {settings.UploadWindow.TotalMinutes.ToString(CultureInfo.InvariantCulture)} minutes for this tenant",
+            Math.Max(1, retryAfter));
     }
 
     // ---- Queries ----
@@ -139,16 +185,37 @@ internal sealed class ImportService(
             .Select(ToResponse)
             .ToList();
 
+        // Custom fields (attr.<key>): offered as targets; a header equal to the field's label or key is suggested.
+        var attributeFields = job.Type == ImportTypes.Products ? await ActiveAttributesAsync(cancellationToken) : [];
+        var usedHeaders = valid.Select(s => s.Header).ToHashSet(StringComparer.Ordinal);
+        foreach (var field in attributeFields)
+        {
+            var header = headers.FirstOrDefault(h => !usedHeaders.Contains(h)
+                && (ImportValues.Fold(h) == ImportValues.Fold(field.Label) || ImportValues.Fold(h) == ImportValues.Fold(field.Key)));
+            if (header is not null)
+            {
+                usedHeaders.Add(header);
+                valid.Add(new ColumnSuggestion(ImportCatalogFields.AttributePrefix + field.Key, header, 0.9m, "synonym"));
+            }
+        }
+
         return new MappingSuggestionsResponse(
             job.Type,
             headers,
-            [.. fields.Select(f => new ImportFieldResponse(f.Key, f.Label, f.RequiredForCreate, f.RequiredAlways))],
+            [
+                .. fields.Select(f => new ImportFieldResponse(f.Key, f.Label, f.RequiredForCreate, f.RequiredAlways)),
+                .. attributeFields.Select(f => new ImportFieldResponse(ImportCatalogFields.AttributePrefix + f.Key, f.Label, f.Required, false)),
+            ],
             valid,
             templates);
     }
 
+    /// <summary>Non-archived custom fields of the tenant (product and variant) that an import column can target.</summary>
+    private async Task<List<ImportAttributeField>> ActiveAttributesAsync(CancellationToken cancellationToken) =>
+        [.. (await catalogGateway.LoadAttributesAsync(cancellationToken)).Fields.Values.Where(f => !f.Archived).OrderBy(f => f.Key, StringComparer.Ordinal)];
+
     public async Task<AppResult<ImportRowPageResponse>> ListRowsAsync(
-        Guid id, string? status, string? action, int limit, int afterRow, CancellationToken cancellationToken)
+        Guid id, string? status, string? action, string? rollbackStatus, int limit, int afterRow, CancellationToken cancellationToken)
     {
         var errors = new Dictionary<string, string[]>();
         if (status is not null && status != "error" && !RowStatuses.All.Contains(status))
@@ -159,6 +226,11 @@ internal sealed class ImportService(
         if (action is not null && !RowActions.All.Contains(action))
         {
             errors["action"] = [$"Must be one of: {string.Join(", ", RowActions.All)}."];
+        }
+
+        if (rollbackStatus is not null && !RowRollbackStatuses.All.Contains(rollbackStatus))
+        {
+            errors["rollbackStatus"] = [$"Must be one of: {string.Join(", ", RowRollbackStatuses.All)}."];
         }
 
         if (errors.Count > 0)
@@ -184,6 +256,11 @@ internal sealed class ImportService(
         if (action is not null)
         {
             query = query.Where(r => r.Action == action);
+        }
+
+        if (rollbackStatus is not null)
+        {
+            query = query.Where(r => r.RollbackStatus == rollbackStatus);
         }
 
         var page = await query.OrderBy(r => r.RowNumber).Take(limit + 1).ToListAsync(cancellationToken);
@@ -258,7 +335,8 @@ internal sealed class ImportService(
         var errors = new Dictionary<string, string[]>();
         var matchKey = request.MatchKey ?? MatchKeys.Sku;
         var mode = request.Mode ?? ImportModes.Upsert;
-        var columns = ValidateColumns(job.Type, request.Columns, matchKey, mode, ImportJson.ReadStrings(job.Headers), errors);
+        var columns = ValidateColumns(
+            job.Type, request.Columns, matchKey, mode, ImportJson.ReadStrings(job.Headers), await AttributeTargetsAsync(job.Type, request.Columns, cancellationToken), errors);
         var mapsPrice = columns.ContainsKey(ImportFields.Price);
         if (job.Type == ImportTypes.Prices && request.PriceListId is null)
         {
@@ -344,6 +422,11 @@ internal sealed class ImportService(
             return denied;
         }
 
+        if (job.FilePurgedAt is not null)
+        {
+            return AppError.Conflict("imports.file_purged", "The uploaded file was deleted after the retention period; upload it again");
+        }
+
         job.Status = ImportStatuses.Validating;
         job.RunId = Guid.CreateVersion7();
         job.ResetPreview();
@@ -401,7 +484,8 @@ internal sealed class ImportService(
             return AppError.NotFound();
         }
 
-        if (job.Status is ImportStatuses.Completed or ImportStatuses.Failed or ImportStatuses.Cancelled)
+        // Only an import that has not finished; a rollback is never cancelled half-way (it resumes instead).
+        if (job.Status is not (ImportStatuses.Uploaded or ImportStatuses.Mapped or ImportStatuses.Validating or ImportStatuses.Validated or ImportStatuses.Running))
         {
             return AppError.InvalidState(job.Status, "cancelled");
         }
@@ -424,6 +508,62 @@ internal sealed class ImportService(
         return ToResponse(job);
     }
 
+    /// <summary>
+    /// Requests the rollback of a completed import (PRD IMP-12) — within <see cref="ImportsOptions.RollbackWindow"/> of
+    /// its completion, once: <c>completed → rolling_back</c>, then <c>imports.rollback</c> chunks undo the imported rows
+    /// (see <see cref="ImportRollbackProcessor"/>). A rollback that ended in <c>rollback_failed</c> (stalled, or the
+    /// requester lost a permission) can be requested again and resumes after the rows already handled.
+    /// </summary>
+    public async Task<AppResult<ImportJobResponse>> RollbackAsync(Guid id, long expectedVersion, CancellationToken cancellationToken)
+    {
+        if (await LockAsync(id, cancellationToken) is not { } job)
+        {
+            return AppError.NotFound();
+        }
+
+        if (job.Status is not (ImportStatuses.Completed or ImportStatuses.RollbackFailed))
+        {
+            return job.Status is ImportStatuses.RollingBack or ImportStatuses.RolledBack or ImportStatuses.PartiallyRolledBack
+                ? AppError.Conflict("imports.already_rolled_back", "This import is already being or has been rolled back")
+                : AppError.InvalidState(job.Status, "rolled back");
+        }
+
+        if (ImportPermissions.RollbackDenied(job, requestContext.Role) is { } denied)
+        {
+            return denied;
+        }
+
+        if (job.RowVersion != expectedVersion)
+        {
+            return AppError.VersionMismatch();
+        }
+
+        var now = ImportClock.Now(clock);
+        if (job.Status == ImportStatuses.Completed && job.FinishedAt + options.Value.RollbackWindow < now)
+        {
+            return AppError.Conflict("imports.rollback_window_expired", "The rollback period of this import has ended");
+        }
+
+        var resumed = job.Status == ImportStatuses.RollbackFailed;
+        job.Status = ImportStatuses.RollingBack;
+        job.RunId = Guid.CreateVersion7();
+        job.RollbackRequestedAt ??= now;
+        job.RollbackRequestedBy = UserId;
+        job.RollbackFinishedAt = null;
+        job.FailureCode = job.FailureMessage = null;
+        job.Touch(UserId, now);
+        await db.SaveChangesAsync(cancellationToken);
+        await jobs.EnqueueAsync(RollbackImportJob.Request(job.Id, job.RunId.Value, job.RollbackProcessedRows), cancellationToken);
+        await audit.RecordAsync(
+            new AuditEvent(ImportAuditActions.RollbackRequested, "import_job", job.Id, new AuditChanges()
+                .Value("type", job.Type)
+                .Value("importedRows", job.CreatedRows + job.UpdatedRows)
+                .Value("resumedAfterRows", resumed ? job.RollbackProcessedRows : 0)
+                .ToDictionary()),
+            cancellationToken);
+        return ToResponse(job);
+    }
+
     // ---- Templates ----
 
     public async Task<IReadOnlyList<MappingTemplateResponse>> ListTemplatesAsync(string? type, CancellationToken cancellationToken) =>
@@ -440,7 +580,7 @@ internal sealed class ImportService(
 
     public async Task<AppResult<MappingTemplateResponse>> CreateTemplateAsync(SaveMappingTemplateRequest request, CancellationToken cancellationToken)
     {
-        var (name, type, columns, matchKey, mode, errors) = ValidateTemplate(request);
+        var (name, type, columns, matchKey, mode, errors) = ValidateTemplate(request, await AttributeTargetsAsync(request.Type, request.Columns, cancellationToken));
         if (errors.Count > 0)
         {
             return AppError.Validation(errors);
@@ -459,7 +599,8 @@ internal sealed class ImportService(
             return AppError.NotFound();
         }
 
-        var (name, type, columns, matchKey, mode, errors) = ValidateTemplate(request with { Type = request.Type ?? template.Type });
+        var typed = request with { Type = request.Type ?? template.Type };
+        var (name, type, columns, matchKey, mode, errors) = ValidateTemplate(typed, await AttributeTargetsAsync(typed.Type, typed.Columns, cancellationToken));
         if (type != template.Type)
         {
             errors["type"] = ["The type of a template cannot change."];
@@ -518,18 +659,17 @@ internal sealed class ImportService(
     /// Defence in depth on top of <c>imports.run</c>: a product import writes the catalog (<c>catalog.write</c>), any
     /// price column writes a price list (<c>prices.write</c>).
     /// </summary>
-    private AppError? PermissionFor(string type, bool mapsPrice)
-    {
-        var role = requestContext.Role;
-        if (type == ImportTypes.Products && !RolePermissions.IsGranted(role, Permissions.CatalogWrite))
-        {
-            return AppError.Forbidden("Product imports need the catalog.write permission");
-        }
+    private AppError? PermissionFor(string type, bool mapsPrice) => ImportPermissions.RunDenied(requestContext.Role, type, mapsPrice);
 
-        return (type == ImportTypes.Prices || mapsPrice) && !RolePermissions.IsGranted(role, Permissions.PricesWrite)
-            ? AppError.Forbidden("Price imports need the prices.write permission")
+    /// <summary>
+    /// The tenant's custom fields when the request maps any <c>attr.&lt;key&gt;</c> column of a product import (one
+    /// Catalog read); null otherwise.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, ImportAttributeField>?> AttributeTargetsAsync(
+        string? type, IReadOnlyDictionary<string, string>? columns, CancellationToken cancellationToken) =>
+        type == ImportTypes.Products && columns?.Keys.Any(k => k.StartsWith(ImportCatalogFields.AttributePrefix, StringComparison.Ordinal)) == true
+            ? (await catalogGateway.LoadAttributesAsync(cancellationToken)).Fields
             : null;
-    }
 
     private async Task<AppError?> CheckPriceListAsync(Guid priceListId, CancellationToken cancellationToken)
     {
@@ -549,6 +689,7 @@ internal sealed class ImportService(
         string matchKey,
         string mode,
         IReadOnlyList<string>? headers,
+        IReadOnlyDictionary<string, ImportAttributeField>? attributes,
         Dictionary<string, string[]> errors)
     {
         var fields = ImportFields.For(type);
@@ -572,11 +713,28 @@ internal sealed class ImportService(
         var usedHeaders = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (field, header) in requested)
         {
-            if (!fields.Any(f => f.Key == field))
+            if (field.StartsWith(ImportCatalogFields.AttributePrefix, StringComparison.Ordinal))
             {
-                errors[$"columns.{field}"] = [$"Unknown field. Fields: {string.Join(", ", fields.Select(f => f.Key))}."];
+                var key = field[ImportCatalogFields.AttributePrefix.Length..];
+                if (type != ImportTypes.Products)
+                {
+                    errors[$"columns.{field}"] = ["Custom field columns are only allowed in product imports."];
+                    continue;
+                }
+
+                if (attributes is null || !attributes.TryGetValue(key, out var attribute) || attribute.Archived)
+                {
+                    errors[$"columns.{field}"] = ["Unknown or archived custom field."];
+                    continue;
+                }
             }
-            else if (string.IsNullOrEmpty(header) || (headers is not null && !headers.Contains(header, StringComparer.Ordinal)))
+            else if (!fields.Any(f => f.Key == field))
+            {
+                errors[$"columns.{field}"] = [$"Unknown field. Fields: {string.Join(", ", fields.Select(f => f.Key))}, attr.<custom field key>."];
+                continue;
+            }
+
+            if (string.IsNullOrEmpty(header) || (headers is not null && !headers.Contains(header, StringComparer.Ordinal)))
             {
                 errors[$"columns.{field}"] = ["Must be one of the file's headers."];
             }
@@ -607,7 +765,7 @@ internal sealed class ImportService(
     }
 
     private static (string? Name, string? Type, Dictionary<string, string> Columns, string MatchKey, string Mode, Dictionary<string, string[]> Errors)
-        ValidateTemplate(SaveMappingTemplateRequest request)
+        ValidateTemplate(SaveMappingTemplateRequest request, IReadOnlyDictionary<string, ImportAttributeField>? attributes)
     {
         var errors = new Dictionary<string, string[]>();
         var name = request.Name?.Trim();
@@ -625,7 +783,7 @@ internal sealed class ImportService(
 
         var matchKey = request.MatchKey ?? MatchKeys.Sku;
         var mode = request.Mode ?? ImportModes.Upsert;
-        var columns = ValidateColumns(type, request.Columns, matchKey, mode, null, errors);
+        var columns = ValidateColumns(type, request.Columns, matchKey, mode, null, attributes, errors);
         return (name, type, columns, matchKey, mode, errors);
     }
 
@@ -647,7 +805,9 @@ internal sealed class ImportService(
         return ToResponse(template);
     }
 
-    internal static ImportJobResponse ToResponse(ImportJob j)
+    private ImportJobResponse ToResponse(ImportJob j) => ToResponse(j, options.Value.RollbackWindow);
+
+    internal static ImportJobResponse ToResponse(ImportJob j, TimeSpan rollbackWindow)
     {
         var planned = j.PlannedRows;
         var percent = j.Status == ImportStatuses.Completed ? 100 : planned == 0 ? 0 : (int)Math.Min(100, j.ProcessedRows * 100L / planned);
@@ -679,7 +839,20 @@ internal sealed class ImportService(
             j.ValidatedAt,
             j.StartedAt,
             j.StartedBy,
-            j.FinishedAt);
+            j.FinishedAt,
+            j.FilePurgedAt,
+            j.Status == ImportStatuses.Completed ? j.FinishedAt + rollbackWindow : null,
+            j.RollbackRequestedAt is { } requestedAt
+                ? new ImportRollbackInfo(
+                    requestedAt,
+                    j.RollbackRequestedBy,
+                    j.RollbackFinishedAt,
+                    j.CreatedRows + j.UpdatedRows,
+                    j.RolledBackRows,
+                    j.RollbackConflictRows,
+                    j.RollbackFailedRows,
+                    j.RollbackSkippedRows)
+                : null);
     }
 
     private static ImportRowResponse ToResponse(ImportRow r) => new(
@@ -691,7 +864,8 @@ internal sealed class ImportService(
         ImportJson.ReadValues(r.Normalized),
         ImportJson.ReadErrors(r.Errors),
         r.MatchedVariantId,
-        r.TargetId);
+        r.TargetId,
+        r.RollbackStatus);
 
     private static MappingTemplateResponse ToResponse(MappingTemplate t) =>
         new(t.Id, t.Name, t.Type, ImportJson.ReadMap(t.Mapping), t.MatchKey, t.Mode, t.RowVersion, t.CreatedAt, t.UpdatedAt);

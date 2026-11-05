@@ -14,6 +14,8 @@ internal static class ImportTypes
 /// <summary>
 /// Lifecycle: <c>uploaded → mapped → validating → validated → running → completed</c>; <c>failed</c> and
 /// <c>cancelled</c> are terminal for a run but a validated import can be started again (resume from its checkpoint).
+/// Rollback (PRD IMP-12): <c>completed → rolling_back → rolled_back | partially_rolled_back</c>; a rollback that
+/// stalls or loses its permissions ends in <c>rollback_failed</c> and can be resumed (rows already handled are kept).
 /// </summary>
 internal static class ImportStatuses
 {
@@ -25,8 +27,16 @@ internal static class ImportStatuses
     public const string Completed = "completed";
     public const string Failed = "failed";
     public const string Cancelled = "cancelled";
+    public const string RollingBack = "rolling_back";
+    public const string RolledBack = "rolled_back";
+    public const string PartiallyRolledBack = "partially_rolled_back";
+    public const string RollbackFailed = "rollback_failed";
 
-    public static readonly IReadOnlyList<string> All = [Uploaded, Mapped, Validating, Validated, Running, Completed, Failed, Cancelled];
+    public static readonly IReadOnlyList<string> All =
+        [Uploaded, Mapped, Validating, Validated, Running, Completed, Failed, Cancelled, RollingBack, RolledBack, PartiallyRolledBack, RollbackFailed];
+
+    /// <summary>States in which a background job owns the import (its raw file is never purged meanwhile).</summary>
+    public static readonly IReadOnlyList<string> Active = [Validating, Running, RollingBack];
 }
 
 /// <summary>PRD IMP-06: what happens to rows that match / do not match an existing record.</summary>
@@ -73,6 +83,20 @@ internal static class RowStatuses
     public const string Failed = "failed";
 
     public static readonly IReadOnlyList<string> All = [Valid, Invalid, Skipped, Imported, Failed];
+}
+
+/// <summary>
+/// What the rollback did to an imported row (PRD IMP-12). <c>conflict</c>: the record changed after the import (or a
+/// value to restore is now used elsewhere), so the row was left untouched; <c>skipped</c>: nothing left to undo.
+/// </summary>
+internal static class RowRollbackStatuses
+{
+    public const string RolledBack = "rolled_back";
+    public const string Conflict = "conflict";
+    public const string Failed = "failed";
+    public const string Skipped = "skipped";
+
+    public static readonly IReadOnlyList<string> All = [RolledBack, Conflict, Failed, Skipped];
 }
 
 /// <summary>What execution actually did to a row.</summary>
@@ -200,7 +224,27 @@ internal sealed class ImportJob : ImportsEntity
 
     public DateTimeOffset? FinishedAt { get; set; }
 
+    /// <summary>When the raw file bytes were deleted after the retention window (data-policy §4); metadata stays.</summary>
+    public DateTimeOffset? FilePurgedAt { get; private init; }
+
+    public DateTimeOffset? RollbackRequestedAt { get; set; }
+
+    /// <summary>The user whose permissions the rollback runs with (re-checked on every chunk).</summary>
+    public Guid? RollbackRequestedBy { get; set; }
+
+    public DateTimeOffset? RollbackFinishedAt { get; set; }
+
+    public int RolledBackRows { get; set; }
+
+    public int RollbackConflictRows { get; set; }
+
+    public int RollbackFailedRows { get; set; }
+
+    public int RollbackSkippedRows { get; set; }
+
     public int PlannedRows => PreviewCreate + PreviewUpdate;
+
+    public int RollbackProcessedRows => RolledBackRows + RollbackConflictRows + RollbackFailedRows + RollbackSkippedRows;
 
     public static ImportJob Create(
         Guid tenantId,
@@ -312,7 +356,18 @@ internal sealed class ImportRow : ITenantOwned
     /// <summary>jsonb: previous values of the fields execution changed (for a later rollback, PRD IMP-12).</summary>
     public string? PreviousValues { get; set; }
 
+    /// <summary>
+    /// jsonb: the catalog values of the same fields as stored right after execution. Rollback restores
+    /// <see cref="PreviousValues"/> only while the record still holds exactly these values.
+    /// </summary>
+    public string? AppliedValues { get; set; }
+
     public DateTimeOffset? ProcessedAt { get; set; }
+
+    /// <summary><see cref="RowRollbackStatuses"/>; null until the rollback handled the row (rollback checkpoint).</summary>
+    public string? RollbackStatus { get; set; }
+
+    public DateTimeOffset? RolledBackAt { get; set; }
 
     public static ImportRow Create(
         Guid tenantId, Guid importJobId, int rowNumber, string rawJson, string normalizedJson, string action, string status, string errorsJson, Guid? matchedVariantId) => new()
