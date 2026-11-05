@@ -18,6 +18,29 @@ public sealed record PermissionGrantResponse(string Permission, string Scope, st
 
 public sealed record MembershipResponse(Guid TenantId, string TenantName, string TenantSlug, string Role, string Status);
 
+/// <summary>A member of the active tenant (<c>GET /members</c>, permission <c>members.read</c>).</summary>
+/// <param name="DisplayName">Full name, else the e-mail local part (<see cref="UserDisplayName"/>); null when neither is known.</param>
+/// <param name="FullName">As entered in the profile; usually null right after sign-up.</param>
+/// <param name="Email">
+/// Not masked: only members.read holders (owner, admin, manager) see the list, and they administer the team
+/// (data-policy §2: staff e-mail is processed for authentication, authorization and notification).
+/// </param>
+/// <param name="Role">owner, admin, manager, sales, warehouse_staff or viewer.</param>
+/// <param name="Status">invited, active or disabled.</param>
+/// <param name="CreatedAt">When the membership was created.</param>
+public sealed record MemberResponse(
+    Guid UserId,
+    string? DisplayName,
+    string? FullName,
+    string? Email,
+    string Role,
+    string Status,
+    DateTimeOffset CreatedAt);
+
+public sealed record MemberPageInfo(string? NextCursor, bool HasMore, int Limit);
+
+public sealed record MemberPageResponse(IReadOnlyList<MemberResponse> Items, MemberPageInfo Page);
+
 /// <summary>Create a tenant. The caller becomes its owner. No tenant id is accepted from the client.</summary>
 public sealed record CreateTenantRequest(string? Name, string? Slug, string? Sector);
 

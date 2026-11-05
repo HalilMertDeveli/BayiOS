@@ -124,6 +124,11 @@ Gösterim: **✓** izinli · **–** izin yok · **K** koşullu (dipnot) · **O*
 - Dipnot 12: sales, oluşturduğu siparişlerin görevlerini ve sevkiyatlarını görür. `tasks.read.all` veya `tasks.read.own` sahibi görev detayı ve sevkiyat okuma uçlarına erişir (biri yeterli).
 - Görünürlük koşulu dışındaki kayıt 404 (varlık ipucu yok); görünür ama koşul dışı işlem 403 `auth.forbidden`.
 
+**Uygulama yorumu (#86, matris değişikliği değildir):**
+- Üye listesi (`GET /members`, personel seçici dahil) `members.read` ister; ayrı bir "seçici" izni yoktur (owner/admin/manager — `tasks.assign` ile aynı küme).
+- Sipariş yanıtlarındaki müşteri adı müşteri verisidir: yalnızca `customers.read` sahiplerine dolu; warehouse_staff (dipnot 8) için boş. Kayıtlardaki kişi görünen adları (oluşturan, onaylayan, zaman çizelgesi, görev atanan) kaydı okuyabilen herkese gösterilir; e-posta yalnızca üye listesinde (`members.read`).
+- Onaylanmamış sevkiyat iptali `tasks.assign` ister (yönetici kararı); `orders.ship` sahibi warehouse_staff iptal edemez.
+
 ## 4. Ayarlanabilir kurallar (tenant düzeyi)
 | Kural | Varsayılan | Etkilediği izin |
 |---|---|---|

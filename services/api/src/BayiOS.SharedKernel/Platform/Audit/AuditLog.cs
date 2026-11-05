@@ -53,6 +53,9 @@ public static class AuditActions
 
     /// <summary>Stock left the building: shipment_out movements were written for the shipment.</summary>
     public const string ShipmentConfirmed = "shipment.confirmed";
+
+    /// <summary>An unconfirmed shipment was cancelled; its picked goods go back to the shelf (putaway), no stock moved.</summary>
+    public const string ShipmentCancelled = "shipment.cancelled";
 }
 
 /// <summary>

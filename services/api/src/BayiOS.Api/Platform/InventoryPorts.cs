@@ -1,3 +1,4 @@
+using BayiOS.Modules.Catalog.Application;
 using BayiOS.Modules.Catalog.Infrastructure.Persistence;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
 using BayiOS.Modules.Inventory.Contracts;
@@ -31,6 +32,21 @@ internal sealed class CatalogVariantDirectory(CatalogDbContext catalog) : IVaria
                where variantIds.Contains(variant.Id)
                select new VariantInfo(variant.Id, variant.Sku, variant.Status == ActiveStatus, unit.AllowsFraction))
             .ToDictionaryAsync(v => v.Id, cancellationToken);
+
+    /// <summary>Same matching as Catalog's own search (pg_trgm GIN indexes on SKU and product name; exact barcode).</summary>
+    public async Task<IReadOnlyList<Guid>> SearchVariantIdsAsync(string term, int max, CancellationToken cancellationToken)
+    {
+        var pattern = CatalogText.ContainsPattern(term);
+        return await (from variant in catalog.Variants.AsNoTracking()
+                      join product in catalog.Products.AsNoTracking() on variant.ProductId equals product.Id
+                      where EF.Functions.ILike(variant.Sku, pattern, "\\")
+                          || variant.Barcode == term
+                          || (variant.Name != null && EF.Functions.ILike(variant.Name, pattern, "\\"))
+                          || EF.Functions.ILike(product.Name, pattern, "\\")
+                      select variant.Id)
+            .Take(max)
+            .ToListAsync(cancellationToken);
+    }
 }
 
 /// <summary>Tenant setting <c>negative_stock_policy</c> (PRD TEN-12); <c>block</c> when the tenant has no settings row.</summary>

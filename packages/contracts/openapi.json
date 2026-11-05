@@ -678,6 +678,103 @@
         "x-permission": "tenant.settings.manage"
       }
     },
+    "/api/v1/members": {
+      "get": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Aktif tenant\u0027\u0131n \u00FCyeleri (personel se\u00E7ici): g\u00F6r\u00FCnen ad, e-posta, rol, durum; rol/durum filtresi, keyset sayfalama",
+        "operationId": "Identity_ListMembers",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberPageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "members.read"
+      }
+    },
     "/api/v1/units": {
       "get": {
         "tags": [
@@ -4168,7 +4265,7 @@
         "tags": [
           "Inventory"
         ],
-        "summary": "Stok bakiyeleri (fiziksel, rezerve, sat\u0131labilir): keyset sayfalama; variantId/warehouseId/locationId filtresi",
+        "summary": "Stok bakiyeleri (fiziksel, rezerve, sat\u0131labilir): keyset sayfalama; variantId/warehouseId/locationId filtresi, q = SKU/ad metin aramas\u0131 veya tam barkod",
         "operationId": "Inventory_ListBalances",
         "parameters": [
           {
@@ -4187,6 +4284,13 @@
           },
           {
             "name": "locationId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
             "in": "query",
             "schema": {
               "type": "string"
@@ -4254,6 +4358,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BalancePageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -7808,6 +7922,171 @@
           }
         ],
         "x-permission": "orders.ship"
+      }
+    },
+    "/api/v1/shipments/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Shipments"
+        ],
+        "summary": "Onaylanmam\u0131\u015F (taslak/paketlenmi\u015F) sevkiyat\u0131 iptal eder: stok hareketi yok, rezervasyon ve sipari\u015F durumu de\u011Fi\u015Fmez, toplananlar i\u00E7in yerine koyma (putaway) g\u00F6revi",
+        "operationId": "Shipments_Cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours.",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelShipmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelShipmentResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Precondition Failed",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "tasks.assign"
       }
     },
     "/api/v1/price-lists": {
@@ -13825,6 +14104,39 @@
           }
         }
       },
+      "CancelShipmentRequest": {
+        "required": [
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CancelShipmentResponse": {
+        "required": [
+          "shipment",
+          "putawayTaskId"
+        ],
+        "type": "object",
+        "properties": {
+          "shipment": {
+            "$ref": "#/components/schemas/ShipmentResponse"
+          },
+          "putawayTaskId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "CategoryResponse": {
         "required": [
           "id",
@@ -16180,6 +16492,97 @@
           }
         }
       },
+      "MemberPageInfo": {
+        "required": [
+          "nextCursor",
+          "hasMore",
+          "limit"
+        ],
+        "type": "object",
+        "properties": {
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "limit": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "MemberPageResponse": {
+        "required": [
+          "items",
+          "page"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberResponse"
+            }
+          },
+          "page": {
+            "$ref": "#/components/schemas/MemberPageInfo"
+          }
+        }
+      },
+      "MemberResponse": {
+        "required": [
+          "userId",
+          "displayName",
+          "fullName",
+          "email",
+          "role",
+          "status",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fullName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "role": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "MembershipResponse": {
         "required": [
           "tenantId",
@@ -16453,6 +16856,7 @@
           "fulfillmentStatus",
           "reason",
           "changedBy",
+          "changedByName",
           "changedAt"
         ],
         "type": "object",
@@ -16488,6 +16892,12 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "changedByName": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "changedAt": {
             "type": "string",
@@ -16797,7 +17207,9 @@
           "id",
           "number",
           "customerId",
+          "customerName",
           "warehouseId",
+          "warehouseName",
           "status",
           "fulfillmentStatus",
           "source",
@@ -16809,9 +17221,11 @@
           "totals",
           "createdAt",
           "createdBy",
+          "createdByName",
           "submittedAt",
           "approvedAt",
           "approvedBy",
+          "approvedByName",
           "shippedAt",
           "completedAt",
           "cancelledAt",
@@ -16832,9 +17246,21 @@
             "type": "string",
             "format": "uuid"
           },
+          "customerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "warehouseId": {
             "type": "string",
             "format": "uuid"
+          },
+          "warehouseName": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "status": {
             "type": "string"
@@ -16893,6 +17319,12 @@
             ],
             "format": "uuid"
           },
+          "createdByName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "submittedAt": {
             "type": [
               "null",
@@ -16913,6 +17345,12 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "approvedByName": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "shippedAt": {
             "type": [
@@ -17001,6 +17439,7 @@
           "packageCount",
           "shippedAt",
           "shippedBy",
+          "shippedByName",
           "lines"
         ],
         "type": "object",
@@ -17041,6 +17480,12 @@
             ],
             "format": "uuid"
           },
+          "shippedByName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "lines": {
             "type": "array",
             "items": {
@@ -17054,7 +17499,9 @@
           "id",
           "number",
           "customerId",
+          "customerName",
           "warehouseId",
+          "warehouseName",
           "status",
           "fulfillmentStatus",
           "source",
@@ -17077,9 +17524,21 @@
             "type": "string",
             "format": "uuid"
           },
+          "customerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "warehouseId": {
             "type": "string",
             "format": "uuid"
+          },
+          "warehouseName": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "status": {
             "type": "string"
@@ -17515,6 +17974,7 @@
           "orderNumber",
           "warehouseId",
           "assignedTo",
+          "assigneeName",
           "lineCount",
           "quantityToPick",
           "quantityPicked",
@@ -17553,6 +18013,12 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "assigneeName": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "lineCount": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -18677,6 +19143,7 @@
           "sku",
           "name",
           "unit",
+          "barcode",
           "locationId",
           "locationCode",
           "pickedQuantity",
@@ -18707,6 +19174,12 @@
           },
           "unit": {
             "type": "string"
+          },
+          "barcode": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "locationId": {
             "type": [

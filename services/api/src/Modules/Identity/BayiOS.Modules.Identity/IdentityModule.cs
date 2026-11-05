@@ -20,6 +20,8 @@ public static class IdentityModule
             IdentityDbContext.Configure(options, sp.GetRequiredService<UnitOfWork>().Connection));
         services.AddScoped<IMembershipLookup, MembershipLookup>();
         services.AddScoped<IdentityService>();
+        services.AddScoped<MemberQueries>();
+        services.AddScoped<IUserDirectory, UserDirectory>();
         services.TryAddSingleton(TimeProvider.System);
         return services;
     }

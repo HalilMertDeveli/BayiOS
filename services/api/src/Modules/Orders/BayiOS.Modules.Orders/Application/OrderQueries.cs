@@ -31,7 +31,8 @@ internal sealed class OrderQueries(
     OrdersDbContext db,
     IAuthorizationContext authorization,
     IRequestContext requestContext,
-    IOrderTaskVisibility taskVisibility)
+    IOrderTaskVisibility taskVisibility,
+    IOrderReferenceNames names)
 {
     public const int DefaultPageSize = 50;
     public const int MaxPageSize = 200;
@@ -94,11 +95,22 @@ internal sealed class OrderQueries(
             .ThenByDescending(o => o.Id)
             .Take(query.Limit + 1)
             .Select(o => new OrderSummaryResponse(
-                o.Id, o.Number, o.CustomerId, o.WarehouseId, o.Status, o.FulfillmentStatus, o.Source, o.Currency, (decimal?)o.GrandTotal,
+                o.Id, o.Number, o.CustomerId, null, o.WarehouseId, null, o.Status, o.FulfillmentStatus, o.Source, o.Currency, (decimal?)o.GrandTotal,
                 o.Lines.Count, o.CreatedAt, o.RowVersion))
             .ToListAsync(cancellationToken);
         var hasMore = rows.Count > query.Limit;
-        var items = rows.Take(query.Limit).Select(r => restricted ? r with { GrandTotal = null } : r).ToList();
+        var page = rows.Take(query.Limit).ToList();
+
+        // One batch per directory for the whole page (no N+1).
+        var customers = await CustomerNamesAsync([.. page.Select(r => r.CustomerId)], cancellationToken);
+        var warehouses = await names.WarehouseNamesAsync([.. page.Select(r => r.WarehouseId).Distinct()], cancellationToken);
+        var items = page.Select(r => r with
+        {
+            CustomerName = customers.GetValueOrDefault(r.CustomerId),
+            WarehouseName = warehouses.GetValueOrDefault(r.WarehouseId),
+            GrandTotal = restricted ? null : r.GrandTotal,
+        })
+            .ToList();
         var next = hasMore ? new OrderCursor(items[^1].CreatedAt, items[^1].Id).Encode() : null;
         return new OrderPageResponse(items, new OrderPageInfo(next, hasMore, query.Limit));
     }
@@ -147,7 +159,7 @@ internal sealed class OrderQueries(
         var history = await db.History.AsNoTracking()
             .Where(h => h.OrderId == id)
             .OrderBy(h => h.ChangedAt).ThenBy(h => h.Id)
-            .Select(h => new OrderHistoryResponse(h.Id, h.Action, h.FromStatus, h.ToStatus, h.FulfillmentStatus, h.Reason, h.ChangedBy, h.ChangedAt))
+            .Select(h => new OrderHistoryResponse(h.Id, h.Action, h.FromStatus, h.ToStatus, h.FulfillmentStatus, h.Reason, h.ChangedBy, null, h.ChangedAt))
             .ToListAsync(cancellationToken);
         var shipments = await db.Shipments.AsNoTracking()
             .Include(s => s.Lines)
@@ -155,28 +167,47 @@ internal sealed class OrderQueries(
             .OrderBy(s => s.ShippedAt).ThenBy(s => s.Id)
             .ToListAsync(cancellationToken);
 
+        // One batch per directory for the whole response (no N+1).
         var lines = order.Lines.OrderBy(l => l.LineNo).ToList();
+        var customer = (await CustomerNamesAsync([order.CustomerId], cancellationToken)).GetValueOrDefault(order.CustomerId);
+        var warehouse = (await names.WarehouseNamesAsync([order.WarehouseId], cancellationToken)).GetValueOrDefault(order.WarehouseId);
+        Guid?[] actors = [order.CreatedBy, order.ApprovedBy, .. history.Select(h => h.ChangedBy), .. shipments.Select(s => s.ShippedBy)];
+        var users = await names.UserNamesAsync([.. actors.OfType<Guid>().Distinct()], cancellationToken);
+        string? UserName(Guid? id) => id is { } userId ? users.GetValueOrDefault(userId) : null;
+
         return new OrderDetailResponse(
-            ToResponse(order, lines),
+            ToResponse(order, lines, customer, warehouse, UserName(order.CreatedBy), UserName(order.ApprovedBy)),
             [.. lines.Select(ToResponse)],
-            history,
+            [.. history.Select(h => h with { ChangedByName = UserName(h.ChangedBy) })],
             [.. shipments.Select(s => new OrderShipmentResponse(
-                s.Id, s.Carrier, s.TrackingNumber, s.PackageCount, s.ShippedAt, s.ShippedBy,
+                s.Id, s.Carrier, s.TrackingNumber, s.PackageCount, s.ShippedAt, s.ShippedBy, UserName(s.ShippedBy),
                 [.. s.Lines.OrderBy(l => l.Id).Select(l => new OrderShipmentLineResponse(l.Id, l.OrderLineId, l.VariantId, l.LocationId, l.Quantity))]))]);
     }
+
+    /// <summary>
+    /// Customer names only for callers holding <c>customers.read</c> (roles-permissions §3.5): warehouse_staff reads
+    /// orders under footnote 8 but no customer data, so the name stays null for them.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, string>> CustomerNamesAsync(IReadOnlyCollection<Guid> customerIds, CancellationToken cancellationToken) =>
+        customerIds.Count == 0 || await authorization.ScopeAsync(Permissions.CustomersRead, cancellationToken) == PermissionScope.None
+            ? new Dictionary<Guid, string>()
+            : await names.CustomerNamesAsync([.. customerIds.Distinct()], cancellationToken);
 
     private async Task<HashSet<Guid>> VisibleToStaffAsync(CancellationToken cancellationToken) =>
         [.. await taskVisibility.OrdersVisibleToStaffAsync(
             requestContext.UserId ?? throw new InvalidOperationException("No authenticated user."), cancellationToken)];
 
-    private static OrderResponse ToResponse(Order o, IReadOnlyList<OrderLine> lines)
+    private static OrderResponse ToResponse(
+        Order o, IReadOnlyList<OrderLine> lines, string? customerName, string? warehouseName, string? createdByName, string? approvedByName)
     {
         var totals = OrderMath.Totals(lines, o.PricesIncludeTax);
         return new OrderResponse(
             o.Id,
             o.Number,
             o.CustomerId,
+            customerName,
             o.WarehouseId,
+            warehouseName,
             o.Status,
             o.FulfillmentStatus,
             o.Source,
@@ -196,9 +227,11 @@ internal sealed class OrderQueries(
                 lines.Any(l => l.UnitPrice is null)),
             o.CreatedAt,
             o.CreatedBy,
+            createdByName,
             o.SubmittedAt,
             o.ApprovedAt,
             o.ApprovedBy,
+            approvedByName,
             o.ShippedAt,
             o.CompletedAt,
             o.CancelledAt,

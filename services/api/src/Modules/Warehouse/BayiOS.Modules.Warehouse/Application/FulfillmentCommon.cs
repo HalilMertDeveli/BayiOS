@@ -126,6 +126,7 @@ internal static class FulfillmentText
 {
     public const int MaxCodeLength = 128;
     public const int MaxShortTextLength = 200;
+    public const int MaxReasonLength = 500;
     public const int MaxLines = 500;
     public const int MaxPackages = 200;
 

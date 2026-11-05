@@ -218,6 +218,13 @@ public sealed record VariantInfo(Guid Id, string Sku, bool IsActive, bool Allows
 public interface IVariantDirectory
 {
     Task<IReadOnlyDictionary<Guid, VariantInfo>> FindVariantsAsync(IReadOnlyCollection<Guid> variantIds, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Text search for stock screens: variants (any status) whose SKU, variant name or product name contains
+    /// <paramref name="term"/> (case-insensitive) or whose barcode equals it. Returns at most <paramref name="max"/> ids
+    /// (callers pass their limit + 1 to detect an over-broad term).
+    /// </summary>
+    Task<IReadOnlyList<Guid>> SearchVariantIdsAsync(string term, int max, CancellationToken cancellationToken);
 }
 
 /// <summary>Implemented over the tenant settings (Identity). Returns one of <see cref="NegativeStockPolicies"/>.</summary>
