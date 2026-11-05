@@ -6,12 +6,23 @@ using NpgsqlTypes;
 
 namespace BayiOS.Api.Platform.Jobs;
 
-/// <summary><see cref="IBackgroundJobs"/> on the request/job UnitOfWork transaction; tenant = current tenant.</summary>
-internal sealed class BackgroundJobs(UnitOfWork unitOfWork, IRequestContext requestContext) : IBackgroundJobs
+/// <summary>
+/// <see cref="IBackgroundJobs"/> on the request/job UnitOfWork transaction; tenant = current tenant. A type without a
+/// registered handler is rejected here (#89), inside the caller's transaction, so the business change rolls back
+/// instead of leaving a job that no worker will ever claim. Every module registers its handlers in this same
+/// composition root (also when <c>Jobs:Enabled=false</c>), so the API process knows every type a worker can run.
+/// </summary>
+internal sealed class BackgroundJobs(UnitOfWork unitOfWork, IRequestContext requestContext, JobHandlerRegistry registry) : IBackgroundJobs
 {
     public Task<Guid?> EnqueueAsync(JobRequest job, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(job);
+        ArgumentException.ThrowIfNullOrWhiteSpace(job.Type);
+        if (!registry.IsRegistered(job.Type))
+        {
+            throw new UnknownJobTypeException(job.Type);
+        }
+
         var transaction = unitOfWork.Transaction
             ?? throw new InvalidOperationException("Jobs are enqueued inside the unit of work transaction.");
         return JobStore.InsertAsync(

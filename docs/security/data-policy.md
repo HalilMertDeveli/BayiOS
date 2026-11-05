@@ -51,7 +51,9 @@ ve maskeli gösterilir.
 | AI ayrıştırma ham metni | 30 gün (sonra yalnızca yapılandırılmış taslak kalır) | Minimizasyon |
 | Import dosyaları | İş tamamlandıktan 30 gün sonra | Hata ayıklama |
 | Export dosyaları | 7 gün | Tek seferlik indirme |
-| Audit olayları | 2 yıl (değerlendirilecek) | Güvenlik |
+| Audit olayları | 2 yıl (değerlendirilecek) — uygulanan: veritabanı tabanı 2 yıl, `Audit:Retention` (varsayılan/en az 730 gün) ile uzatılabilir; saatlik `platform.audit_retention` job'ı siler | Güvenlik. Append-only kuralının tek istisnası; tasarım: data-model §5.11, threat-model §7 |
+| Arka plan işleri (`platform.jobs`) | Başarılı: 7 gün, `dead`: 30 gün (`Jobs:SucceededRetention` / `Jobs:DeadRetention`) | İşletim; yük yalnızca kimlik içerir, `last_error` temizlenmiş (ADR 0006) |
+| Outbox mesajları | İşlendikten 7 gün sonra (`Jobs:OutboxRetention`) | İşletim; teslim job'ları ayrı saklanır |
 | Teknik loglar | 30 gün | İşletim |
 | FCM token | Cihaz çıkışı veya 90 gün etkisizlik | Minimizasyon |
 
@@ -93,8 +95,9 @@ Yeni alt işleyen eklemek = bu tabloyu güncellemek + tenant'lara bildirim (DPA'
 2. E-posta, telefon, adres, ad, WhatsApp metni, signed URL, JWT, `Authorization`/`Cookie` başlıkları **asla** loglanmaz.
 3. Serilog/`ILogger` için redaction enricher; unit test ile doğrulanır (`LogRedactionTests`).
 4. Hata izleme aracında `sendDefaultPii=false` ve gövde yakalama kapalı.
-5. Audit kayıtlarında IP SHA-256 + tuz ile hash'lenir.
+5. Audit kayıtlarında IP, sunucu tarafı gizli anahtarla HMAC-SHA-256 ile hash'lenir (`Audit:IpHashKey`, en az 32 bayt; ortam başına ayrı, secret store'da). Anahtar yoksa **IP hash'i hiç yazılmaz** (`ip_hash = NULL`; anahtarsız SHA-256 IPv4 için geri çevrilebilir). 32 bayttan kısa anahtar başlangıçta reddedilir (API açılmaz). Anahtar değişirse eski hash'ler yeni olanlarla karşılaştırılamaz.
 6. Destek amaçlı tenant verisine erişim yalnızca owner izniyle ve audit'lenerek (ileride "destek erişimi" özelliği).
+7. Job/outbox `last_error` alanına yalnızca temizlenmiş hata yazılır (istisna tipi + değerleri ayıklanmış mesaj; SQL parametresi/`Detail` yok) — ADR 0006, `JobErrorSanitizerTests`.
 
 ## 9. Sır yönetimi (ortam bazında)
 
@@ -105,6 +108,7 @@ Yeni alt işleyen eklemek = bu tabloyu güncellemek + tenant'lara bildirim (DPA'
 | Supabase URL + publishable/anon key (public) | `.env` | Vercel env (Preview) / `--dart-define` | Vercel env (Production) / `--dart-define` |
 | Supabase service role / secret key | Kullanılmaz (mümkünse) | API host env | API host env |
 | JWT JWKS URL / issuer | `.env` | API host env | API host env |
+| Audit IP HMAC anahtarı (`Audit__IpHashKey`, ≥ 32 bayt) | Boş bırakılabilir (IP hash yok) | API host env (ayrı anahtar) | API host env (ayrı anahtar) |
 | Anthropic API anahtarı | Geliştiricinin kendi test anahtarı, `.env`; varsayılan mock | API host env (ayrı anahtar, düşük harcama limiti) | API host env (ayrı anahtar, bütçe alarmı) |
 | FCM servis hesabı JSON | `bayios-dev` projesi, `.env` dosya yolu | `bayios-dev` (API host secret) | `bayios-prod` (API host secret) |
 | Vercel token | — | GitHub secret (gerekirse; Vercel Git entegrasyonu tercih) | Aynı |

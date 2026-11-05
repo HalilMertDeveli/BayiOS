@@ -26,8 +26,17 @@ internal sealed class JobsOptions
 
     public TimeSpan BackoffMax { get; set; } = TimeSpan.FromHours(1);
 
-    /// <summary>How often the scheduler enqueues maintenance jobs (expired idempotency keys).</summary>
+    /// <summary>How often the scheduler enqueues maintenance jobs (idempotency keys, queue cleanup, audit retention).</summary>
     public TimeSpan MaintenanceInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>Succeeded jobs are deleted this long after they finished (<c>platform.queue_cleanup</c>, #89).</summary>
+    public TimeSpan SucceededRetention { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>Dead jobs are kept longer for investigation, then deleted.</summary>
+    public TimeSpan DeadRetention { get; set; } = TimeSpan.FromDays(30);
+
+    /// <summary>Processed outbox messages are deleted this long after dispatch (their deliveries are jobs of their own).</summary>
+    public TimeSpan OutboxRetention { get; set; } = TimeSpan.FromDays(7);
 
     public TimeSpan Backoff(int attempt)
     {
@@ -70,6 +79,9 @@ internal sealed class JobHandlerRegistry
 
     /// <summary>The types this worker claims; jobs of other types stay queued for a worker that knows them.</summary>
     public IReadOnlyList<string> JobTypes { get; }
+
+    /// <summary>True when a handler is registered for <paramref name="type"/>; the reserved delivery type is not.</summary>
+    public bool IsRegistered(string type) => Jobs.ContainsKey(type);
 
     public static JobHandlerRegistry FromRegistrations(
         IEnumerable<JobHandlerRegistration> jobs, IEnumerable<OutboxHandlerRegistration> outbox)

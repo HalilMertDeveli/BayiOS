@@ -78,6 +78,9 @@ namespace BayiOS.Modules.Platform.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_audit_events");
 
+                    b.HasIndex("OccurredAt")
+                        .HasDatabaseName("ix_audit_events_occurred_at");
+
                     b.HasIndex("TenantId", "OccurredAt", "Id")
                         .IsDescending(false, true, true)
                         .HasDatabaseName("ix_audit_events_tenant_occurred");
