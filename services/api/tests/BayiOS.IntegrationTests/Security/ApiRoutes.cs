@@ -13,6 +13,9 @@ internal sealed record ApiRoute(
     IReadOnlyList<string> QueryParameters,
     IReadOnlyList<string> RequestContentTypes)
 {
+    /// <summary>Every permission that opens the endpoint (<c>x-permission-any-of</c>, else just <see cref="Permission"/>).</summary>
+    public IReadOnlyList<string> AnyOf { get; init; } = Permission is null ? [] : [Permission];
+
     public string Key => $"{Method} {Template}";
 
     /// <summary>Tenant-scoped (needs <c>X-Tenant-Id</c> + a membership): every such endpoint declares a permission.</summary>
@@ -50,7 +53,13 @@ internal static partial class ApiRoutes
 
                 // Path parameters come from the template too (some generators omit them from "parameters").
                 var fromTemplate = PathParameter().Matches(path.Name).Select(m => m.Groups[1].Value).ToArray();
-                routes.Add(new ApiRoute(operation.Name.ToUpperInvariant(), path.Name, permission, fromTemplate, In("query"), contentTypes));
+                var route = new ApiRoute(operation.Name.ToUpperInvariant(), path.Name, permission, fromTemplate, In("query"), contentTypes);
+                if (operation.Value.TryGetProperty("x-permission-any-of", out var anyOf))
+                {
+                    route = route with { AnyOf = [.. anyOf.EnumerateArray().Select(a => a.GetString()!)] };
+                }
+
+                routes.Add(route);
             }
         }
 

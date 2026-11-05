@@ -9,8 +9,14 @@ using Npgsql;
 
 namespace BayiOS.Modules.Catalog.Application;
 
-internal sealed record AppError(int Status, string Code, string Title, IDictionary<string, string[]>? Errors = null)
+/// <param name="Taken">For 409 SKU / barcode conflicts: the existing record that holds the value (problem member <c>conflict</c>).</param>
+internal sealed record AppError(int Status, string Code, string Title, IDictionary<string, string[]>? Errors = null, CodeConflict? Taken = null)
 {
+    /// <summary>409 <c>catalog.sku_taken</c> / <c>catalog.barcode_taken</c> naming the variant that already has the value.</summary>
+    public static AppError CodeTaken(CodeConflict conflict) => conflict.Field == "sku"
+        ? new(409, "catalog.sku_taken", "SKU is already used in this tenant", Taken: conflict)
+        : new(409, "catalog.barcode_taken", "Barcode is already used in this tenant", Taken: conflict);
+
     public static AppError NotFound() => new(404, "resource.not_found", "Resource not found");
 
     public static AppError VersionMismatch() =>
@@ -38,6 +44,9 @@ internal sealed record AppError(int Status, string Code, string Title, IDictiona
             }
             : null;
 }
+
+/// <summary>The clashing record of a unique SKU / barcode: <c>field</c> is <c>sku</c> or <c>barcode</c>.</summary>
+internal sealed record CodeConflict(string Field, string Value, Guid VariantId, Guid ProductId, string Sku);
 
 internal sealed record AppResult<T>(T? Value, AppError? Error)
 {

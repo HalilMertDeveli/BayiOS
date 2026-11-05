@@ -37,6 +37,7 @@ internal sealed partial class IdentityService(
     IRequestContext requestContext,
     UnitOfWork unitOfWork,
     IAuditLog audit,
+    IAuthorizationContext authorization,
     TimeProvider clock)
 {
     private Guid UserId => requestContext.UserId ?? throw new InvalidOperationException("No authenticated user.");
@@ -55,7 +56,14 @@ internal sealed partial class IdentityService(
                 select new MembershipResponse(t.Id, t.Name, t.Slug, m.Role, m.Status))
             .ToListAsync(cancellationToken);
 
-        return new MeResponse(userId, profile?.Email ?? tokenEmail, profile?.FullName, memberships);
+        ActiveTenantResponse? active = null;
+        if (requestContext is { TenantId: { } tenantId, Role: { } role })
+        {
+            var permissions = await authorization.EffectivePermissionsAsync(cancellationToken);
+            active = new ActiveTenantResponse(tenantId, role, [.. permissions.Select(p => new PermissionGrantResponse(p.Permission, p.Scope, p.Condition))]);
+        }
+
+        return new MeResponse(userId, profile?.Email ?? tokenEmail, profile?.FullName, memberships, active);
     }
 
     public async Task<AppResult<TenantResponse>> CreateTenantAsync(CreateTenantRequest request, string? tokenEmail, CancellationToken cancellationToken)

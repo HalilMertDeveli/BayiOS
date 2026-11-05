@@ -161,8 +161,19 @@
         "tags": [
           "Identity"
         ],
-        "summary": "Oturumdaki kullan\u0131c\u0131n\u0131n profili ve tenant \u00FCyelikleri",
+        "summary": "Oturumdaki kullan\u0131c\u0131n\u0131n profili ve tenant \u00FCyelikleri; X-Tenant-Id verilirse o tenant\u0027taki etkin izinler (activeTenant)",
         "operationId": "Identity_GetMe",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Optional active tenant. When it names one of the caller\u0027s active memberships in an active tenant, the response includes that tenant\u0027s effective permissions; otherwise it is ignored.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "401": {
             "description": "Unauthorized",
@@ -2090,6 +2101,7 @@
           "Catalog"
         ],
         "summary": "\u00DCr\u00FCn listesi: keyset sayfalama, arama (ad/SKU/barkod), filtre (kategori/marka/durum/attr.\u003Ckey\u003E)",
+        "description": "Query \u0060attr.{key}\u0060: Custom-field filter on a filterable field (at most 10 attr.* filters): text/enum/date equality, multi_enum contains, boolean true/false, number equality, range: value inside the range. Variant fields match products with a non-archived matching variant.\nQuery \u0060attr.{key}.min\u0060: Lower bound (inclusive) for a number / integer field.\nQuery \u0060attr.{key}.max\u0060: Upper bound (inclusive) for a number / integer field.",
         "operationId": "Catalog_ListProducts",
         "parameters": [
           {
@@ -2199,7 +2211,21 @@
             "Bearer": []
           }
         ],
-        "x-permission": "catalog.read"
+        "x-permission": "catalog.read",
+        "x-query-parameter-patterns": [
+          {
+            "pattern": "attr.{key}",
+            "description": "Custom-field filter on a filterable field (at most 10 attr.* filters): text/enum/date equality, multi_enum contains, boolean true/false, number equality, range: value inside the range. Variant fields match products with a non-archived matching variant."
+          },
+          {
+            "pattern": "attr.{key}.min",
+            "description": "Lower bound (inclusive) for a number / integer field."
+          },
+          {
+            "pattern": "attr.{key}.max",
+            "description": "Upper bound (inclusive) for a number / integer field."
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -2286,7 +2312,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/CodeConflictProblemDetails"
                 }
               }
             }
@@ -2787,7 +2813,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/CodeConflictProblemDetails"
                 }
               }
             }
@@ -2926,6 +2952,82 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PagedResponseOfVariantResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "catalog.read"
+      }
+    },
+    "/api/v1/variants/batch": {
+      "get": {
+        "tags": [
+          "Catalog"
+        ],
+        "summary": "Toplu varyant okuma: ids (virg\u00FClle, \u2264 100) \u2192 SKU, ad, \u00FCr\u00FCn ad\u0131, barkod; bulunmayan / ba\u015Fka tenant\u0027a ait id\u0027ler sonu\u00E7ta yer almaz",
+        "operationId": "Catalog_BatchVariants",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseOfVariantSummaryResponse"
                 }
               }
             }
@@ -3217,7 +3319,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/CodeConflictProblemDetails"
                 }
               }
             }
@@ -4446,7 +4548,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -4566,11 +4677,20 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/StockProblemDetails"
                 }
               }
             }
@@ -4590,7 +4710,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                  "$ref": "#/components/schemas/StockProblemDetails"
                 }
               }
             }
@@ -5614,7 +5734,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -5847,7 +5976,11 @@
             "Bearer": []
           }
         ],
-        "x-permission": "tasks.read.own"
+        "x-permission": "tasks.read.own",
+        "x-permission-any-of": [
+          "tasks.read.own",
+          "tasks.read.all"
+        ]
       }
     },
     "/api/v1/picking-tasks/{id}/assign": {
@@ -5948,7 +6081,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -6094,7 +6236,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -6240,7 +6391,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -6386,7 +6546,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -6542,7 +6711,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -6707,7 +6885,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -6853,7 +7040,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -7005,7 +7201,11 @@
             "Bearer": []
           }
         ],
-        "x-permission": "tasks.read.own"
+        "x-permission": "tasks.read.own",
+        "x-permission-any-of": [
+          "tasks.read.own",
+          "tasks.read.all"
+        ]
       }
     },
     "/api/v1/shipments/{id}": {
@@ -7093,7 +7293,11 @@
             "Bearer": []
           }
         ],
-        "x-permission": "tasks.read.own"
+        "x-permission": "tasks.read.own",
+        "x-permission-any-of": [
+          "tasks.read.own",
+          "tasks.read.all"
+        ]
       }
     },
     "/api/v1/shipments/{id}/pack": {
@@ -7194,7 +7398,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -7359,7 +7572,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -7521,11 +7743,20 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/StockProblemDetails"
                 }
               }
             }
@@ -7565,7 +7796,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                  "$ref": "#/components/schemas/StockProblemDetails"
                 }
               }
             }
@@ -11936,8 +12167,17 @@
               }
             }
           },
-          "404": {
-            "description": "Not Found",
+          "409": {
+            "description": "Conflict. Transient lock conflicts (order.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts order.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -11946,8 +12186,8 @@
               }
             }
           },
-          "409": {
-            "description": "Conflict",
+          "404": {
+            "description": "Not Found",
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -12083,7 +12323,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -12229,7 +12478,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -12385,7 +12643,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -12547,11 +12814,20 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/StockProblemDetails"
                 }
               }
             }
@@ -12591,7 +12867,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                  "$ref": "#/components/schemas/StockProblemDetails"
                 }
               }
             }
@@ -12703,7 +12979,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -12849,7 +13134,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -13005,7 +13299,16 @@
             }
           },
           "409": {
-            "description": "Conflict",
+            "description": "Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -13066,6 +13369,29 @@
   },
   "components": {
     "schemas": {
+      "ActiveTenantResponse": {
+        "required": [
+          "tenantId",
+          "role",
+          "permissions"
+        ],
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionGrantResponse"
+            }
+          }
+        }
+      },
       "AddressListResponse": {
         "required": [
           "items"
@@ -13570,6 +13896,51 @@
             "format": "date-time"
           }
         }
+      },
+      "CodeConflict": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "enum": [
+              "sku",
+              "barcode"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "variantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sku": {
+            "type": "string"
+          }
+        }
+      },
+      "CodeConflictProblemDetails": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProblemDetails"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "conflict": {
+                "$ref": "#/components/schemas/CodeConflict"
+              }
+            }
+          }
+        ],
+        "description": "409 catalog.sku_taken / catalog.barcode_taken: conflict names the existing variant holding the value (absent when only the database index caught a concurrent write)."
       },
       "ColumnSuggestion": {
         "required": [
@@ -14778,6 +15149,10 @@
             "format": "uuid"
           },
           "entityType": {
+            "enum": [
+              "product",
+              "variant"
+            ],
             "type": "string"
           },
           "key": {
@@ -14787,6 +15162,16 @@
             "type": "string"
           },
           "dataType": {
+            "enum": [
+              "text",
+              "number",
+              "integer",
+              "boolean",
+              "enum",
+              "multi_enum",
+              "range",
+              "date"
+            ],
             "type": "string"
           },
           "unit": {
@@ -15594,6 +15979,20 @@
           }
         }
       },
+      "ListResponseOfVariantSummaryResponse": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariantSummaryResponse"
+            }
+          }
+        }
+      },
       "LocationListResponse": {
         "required": [
           "items"
@@ -15814,7 +16213,8 @@
           "userId",
           "email",
           "fullName",
-          "memberships"
+          "memberships",
+          "activeTenant"
         ],
         "type": "object",
         "properties": {
@@ -15839,6 +16239,16 @@
             "items": {
               "$ref": "#/components/schemas/MembershipResponse"
             }
+          },
+          "activeTenant": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ActiveTenantResponse"
+              }
+            ]
           }
         }
       },
@@ -16463,7 +16873,14 @@
             ]
           },
           "totals": {
-            "$ref": "#/components/schemas/OrderTotalsResponse"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OrderTotalsResponse"
+              }
+            ]
           },
           "createdAt": {
             "type": "string",
@@ -16679,6 +17096,7 @@
           "grandTotal": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
             "type": [
+              "null",
               "number",
               "string"
             ],
@@ -16899,6 +17317,33 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "PermissionGrantResponse": {
+        "required": [
+          "permission",
+          "scope",
+          "condition"
+        ],
+        "type": "object",
+        "properties": {
+          "permission": {
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "all",
+              "conditional",
+              "own"
+            ],
+            "type": "string"
+          },
+          "condition": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -18576,6 +19021,60 @@
           }
         }
       },
+      "StockProblemDetails": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProblemDetails"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "shortages": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StockShortage"
+                }
+              },
+              "confirmationRequired": {
+                "type": "boolean"
+              }
+            }
+          }
+        ],
+        "description": "Stock problem: shortages per line (insufficient stock) and confirmationRequired (negative-stock policy \u0027warn\u0027 \u2014 retry with the confirmation flag)."
+      },
+      "StockShortage": {
+        "type": "object",
+        "properties": {
+          "variantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "locationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "requested": {
+            "type": "number"
+          },
+          "available": {
+            "type": "number"
+          }
+        }
+      },
       "TaxBreakdownResponse": {
         "required": [
           "rate",
@@ -19782,6 +20281,49 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "VariantSummaryResponse": {
+        "required": [
+          "id",
+          "productId",
+          "sku",
+          "name",
+          "productName",
+          "barcode",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "productName": {
+            "type": "string"
+          },
+          "barcode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
           }
         }
       },

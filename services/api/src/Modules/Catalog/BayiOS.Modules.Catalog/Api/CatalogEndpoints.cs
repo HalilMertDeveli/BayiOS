@@ -74,12 +74,17 @@ internal static class CatalogEndpoints
         // Products
         group.MapGet("/products", ListProducts).WithName("Catalog_ListProducts")
             .WithSummary("Ürün listesi: keyset sayfalama, arama (ad/SKU/barkod), filtre (kategori/marka/durum/attr.<key>)")
-            .RequirePermission(Permissions.CatalogRead);
+            .RequirePermission(Permissions.CatalogRead)
+            .WithMetadata(
+                new QueryPatternMetadata("attr.{key}", "Custom-field filter on a filterable field (at most 10 attr.* filters): text/enum/date equality, multi_enum contains, boolean true/false, number equality, range: value inside the range. Variant fields match products with a non-archived matching variant."),
+                new QueryPatternMetadata("attr.{key}.min", "Lower bound (inclusive) for a number / integer field."),
+                new QueryPatternMetadata("attr.{key}.max", "Upper bound (inclusive) for a number / integer field."));
         group.MapGet("/products/{id:guid}", GetProduct).WithName("Catalog_GetProduct")
             .WithSummary("Ürün ve varyantları (ETag döner)").RequirePermission(Permissions.CatalogRead)
             .ProducesProblem(StatusCodes.Status404NotFound);
         Write(group.MapPost("/products", CreateProduct).WithName("Catalog_CreateProduct")
-            .WithSummary("Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants)").RequirePermission(Permissions.CatalogWrite));
+            .WithSummary("Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants)").RequirePermission(Permissions.CatalogWrite)
+            .WithMetadata(new ConflictDetailMetadata()));
         Update(group.MapPatch("/products/{id:guid}", UpdateProduct).WithName("Catalog_UpdateProduct")
             .WithSummary("Ürünü günceller (JSON merge patch, If-Match zorunlu)").RequirePermission(Permissions.CatalogWrite)
             .Accepts<UpdateProductRequest>(MergePatch, "application/json"));
@@ -87,11 +92,15 @@ internal static class CatalogEndpoints
             .WithSummary("Ürünü arşivler (If-Match zorunlu)").RequirePermission(Permissions.CatalogWrite));
         Write(group.MapPost("/products/{id:guid}/variants", AddVariant).WithName("Catalog_AddVariant")
             .WithSummary("Ürüne varyant ekler").RequirePermission(Permissions.CatalogWrite)
-            .ProducesProblem(StatusCodes.Status404NotFound));
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .WithMetadata(new ConflictDetailMetadata()));
 
         // Variants
         group.MapGet("/variants", ListVariants).WithName("Catalog_ListVariants")
             .WithSummary("Varyant listesi: keyset sayfalama (SKU sırası), arama ve sku/barcode/productId filtresi")
+            .RequirePermission(Permissions.CatalogRead);
+        group.MapGet("/variants/batch", BatchVariants).WithName("Catalog_BatchVariants")
+            .WithSummary("Toplu varyant okuma: ids (virgülle, ≤ 100) → SKU, ad, ürün adı, barkod; bulunmayan / başka tenant'a ait id'ler sonuçta yer almaz")
             .RequirePermission(Permissions.CatalogRead);
         group.MapGet("/variants/lookup", LookupVariant).WithName("Catalog_LookupVariant")
             .WithSummary("Barkod okutma: tek varyant veya 404").RequirePermission(Permissions.CatalogRead)
@@ -101,7 +110,8 @@ internal static class CatalogEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
         Update(group.MapPatch("/variants/{id:guid}", UpdateVariant).WithName("Catalog_UpdateVariant")
             .WithSummary("Varyantı günceller (JSON merge patch, If-Match zorunlu)").RequirePermission(Permissions.CatalogWrite)
-            .Accepts<UpdateVariantRequest>(MergePatch, "application/json"));
+            .Accepts<UpdateVariantRequest>(MergePatch, "application/json")
+            .WithMetadata(new ConflictDetailMetadata()));
         Update(group.MapDelete("/variants/{id:guid}", ArchiveVariant).WithName("Catalog_ArchiveVariant")
             .WithSummary("Varyantı arşivler (If-Match zorunlu; son varyant arşivlenemez)").RequirePermission(Permissions.CatalogWrite));
 
@@ -391,6 +401,35 @@ internal static class CatalogEndpoints
         return TypedResults.Ok(await service.ListVariantsAsync(query, cancellationToken));
     }
 
+    /// <param name="ids">Virgülle ayrılmış varyant UUID'leri (1–100; tekrarlar tekilleştirilir).</param>
+    private static async Task<Results<Ok<ListResponse<VariantSummaryResponse>>, ProblemHttpResult>> BatchVariants(
+        HttpRequest http, string? ids, ProductService service, CancellationToken cancellationToken)
+    {
+        if (RejectUnknownQuery(http, "ids") is { } unknown)
+        {
+            return unknown;
+        }
+
+        var parts = (ids ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var parsed = new HashSet<Guid>();
+        foreach (var part in parts)
+        {
+            if (!Guid.TryParse(part, out var id))
+            {
+                return Malformed("ids must be comma-separated UUIDs");
+            }
+
+            parsed.Add(id);
+        }
+
+        if (parsed.Count is 0 or > ProductService.MaxBatchVariants)
+        {
+            return Malformed($"ids must name 1 to {ProductService.MaxBatchVariants} variants");
+        }
+
+        return TypedResults.Ok(new ListResponse<VariantSummaryResponse>(await service.BatchVariantsAsync(parsed, cancellationToken)));
+    }
+
     private static async Task<Results<Ok<VariantResponse>, ProblemHttpResult>> LookupVariant(
         HttpRequest http, string? barcode, ProductService service, HttpContext context, CancellationToken cancellationToken)
     {
@@ -543,10 +582,25 @@ internal static class CatalogEndpoints
     private static Results<NoContent, ProblemHttpResult> NoContent(AppError? error) =>
         error is null ? TypedResults.NoContent() : Problem(error);
 
-    private static ProblemHttpResult Problem(AppError error) => TypedResults.Problem(
-        error.Errors is null
+    private static ProblemHttpResult Problem(AppError error)
+    {
+        var problem = error.Errors is null
             ? ApiProblems.Create(error.Status, error.Code, error.Title)
-            : ApiProblems.Validation(error.Errors));
+            : ApiProblems.Validation(error.Errors);
+        if (error.Taken is { } conflict)
+        {
+            problem.Extensions["conflict"] = new
+            {
+                field = conflict.Field,
+                value = conflict.Value,
+                variantId = conflict.VariantId,
+                productId = conflict.ProductId,
+                sku = conflict.Sku,
+            };
+        }
+
+        return TypedResults.Problem(problem);
+    }
 
     private static ProblemHttpResult Malformed(string title) =>
         TypedResults.Problem(ApiProblems.Create(StatusCodes.Status400BadRequest, "request.malformed", title));

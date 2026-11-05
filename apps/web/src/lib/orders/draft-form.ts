@@ -58,7 +58,7 @@ export function draftValuesFromDetail(detail: OrderDetail, customer?: { name: st
   return {
     customer: { id: order.customerId, name: customer?.name ?? null, code: customer?.code ?? null },
     warehouseId: order.warehouseId,
-    taxMode: order.totals.pricesIncludeTax ? "included" : "excluded",
+    taxMode: order.totals?.pricesIncludeTax ? "included" : "excluded",
     requestedDeliveryDate: order.requestedDeliveryDate ?? "",
     notes: order.notes ?? "",
     lines: detail.lines.map((l) => {

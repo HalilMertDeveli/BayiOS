@@ -44,7 +44,7 @@
 | `Accept-Language` | İstek | `tr-TR` varsayılan (yalnızca sunucu tarafı metinler için) |
 | `ETag` | Yanıt | `W/"<row_version>"` |
 | `Location` | Yanıt | `201` oluşturmada |
-| `Retry-After` | Yanıt | `429`, `409 inventory.busy`, `503` |
+| `Retry-After` | Yanıt | `429`, `409 inventory.busy` / `order.busy` / `picking.busy` / `idempotency.in_progress`, `503`; CORS ile tarayıcıya açılır (OpenAPI'de ilgili 409 yanıtlarında belgeli) |
 | `RateLimit-*` | Yanıt | Kalan kota bilgisi |
 | `Idempotent-Replayed: true` | Yanıt | Kayıtlı yanıt tekrar döndüyse |
 
@@ -94,7 +94,7 @@
 |---|---|---|
 | 400 | Biçim/şema hatası, bilinmeyen filtre | `request.malformed` |
 | 401 | Token yok/geçersiz/süresi dolmuş | `auth.invalid_token` |
-| 403 | İzin yok, üyelik yok, entitlement yok | `auth.forbidden`, `tenant.access_denied`, `entitlement.required`, `entitlement.limit_exceeded` |
+| 403 | İzin yok, üyelik yok, tenant aktif değil (`suspended`/`closed`), entitlement yok | `auth.forbidden`, `tenant.access_denied`, `tenant.inactive`, `entitlement.required`, `entitlement.limit_exceeded` |
 | 404 | Kaynak yok (tenant içinde) | `resource.not_found` |
 | 409 | İş kuralı / durum çakışması | `order.invalid_transition`, `inventory.insufficient_stock`, `inventory.busy`, `idempotency.in_progress` |
 | 412 | `If-Match` uyuşmazlığı | `concurrency.version_mismatch` |
@@ -104,6 +104,10 @@
 | 500/503 | Beklenmeyen / bakım | `server.error` (detay sızdırılmaz) |
 
 `code` alanı istemcilerin yerelleştirme anahtarıdır; `title/detail` yalnızca geliştirici yardımıdır.
+
+Uzantılar (OpenAPI şemaları, #86): `StockProblemDetails` — `shortages[]` (variantId, sku, warehouseId, locationId, requested, available) ve `confirmationRequired` (negatif stok politikası `warn`: aynı isteği onay bayrağıyla tekrarla); `CodeConflictProblemDetails` — `409 catalog.sku_taken` / `catalog.barcode_taken` için `conflict` {field: sku | barcode, value, variantId, productId, sku} (yalnızca eşzamanlı bir yazımı veritabanı indeksi yakaladığında yoktur). Para alanları şimdilik JSON sayısı (`number`) olarak yayınlanır; istemci para hesabı yapmaz, toplamlar API'den gelir (karar #86).
+
+**Koşullu (K) / kendi kayıtları (O) izinleri (#69):** uç izin(ler)ini bildirir (`x-permission`; birden çoğu yeterliyse `x-permission-any-of`). Koşulsuz izin olduğu gibi geçer; tenant kuralına bağlı K (dipnot 2, 3, 6, 9) kural açıksa koşulsuz, kapalıysa `403 auth.forbidden`; kayıt düzeyi K/O (dipnot 1, 4, 5, 7, 8, 10, 11, 12, O) kapıdan geçer ve uygulama servisi `IAuthorizationContext` ile koşulu uygular. Hiçbir servis koşulu değerlendirmezse başarılı yanıt `403 auth.forbidden`'a çevrilir ve transaction geri alınır (fail-closed). Görünürlük koşulunun dışındaki kayıt `404`, görünür ama işleme kapalı kayıt `403` döner.
 
 ## 7. Idempotency
 
@@ -172,7 +176,7 @@ flowchart LR
 ### 12.1 Identity & Tenancy
 | Metot | Yol | İzin | Not |
 |---|---|---|---|
-| GET | `/me` | (kimlik) | Profil + üyelikler (tenant listesi); `X-Tenant-Id` gerekmez |
+| GET | `/me` | (kimlik) | Profil + üyelikler (tenant listesi); `X-Tenant-Id` gerekmez. Başlık aktif tenant'taki aktif bir üyeliği gösterirse `activeTenant`: rol + etkin izinler (`scope`: `all` / `conditional` / `own`, `condition` kodu; §4 tenant kuralları uygulanmış). Aksi hâlde `activeTenant: null` (hata değil) |
 | GET | `/me/permissions` | (üyelik) | Etkin rol, izinler, entitlement'lar |
 | PATCH | `/me` | (kimlik) | Profil |
 | POST | `/tenants` | (kimlik) | Yeni tenant (İ); çağıran owner olur, deneme planı |
@@ -199,7 +203,8 @@ flowchart LR
 | DELETE | `/products/{id}` (arşiv, M) | `catalog.write` |
 | POST | `/products/{id}/variants` (İ) | `catalog.write` |
 | PATCH/DELETE | `/variants/{id}` (M) | `catalog.write` |
-| GET | `/variants` (q, sku, barcode, ids) | `catalog.read` |
+| GET | `/variants` (q, sku, barcode, productId, status) | `catalog.read` |
+| GET | `/variants/batch?ids=` | `catalog.read` | Toplu görüntüleme okuması: 1–100 id (virgülle; tekrarlar tekilleşir) → id, productId, sku, name, productName, barcode, status (SKU sırasıyla). Bulunmayan / başka tenant'a ait id'ler sonuçta yer almaz (404 yok, ipucu yok); sayfasız ayrı yanıt şekli olduğu için listeye `ids` parametresi yerine ayrı uç |
 | GET | `/variants/lookup?barcode=` | `catalog.read` | Mobil okutma; tek sonuç veya 404 |
 | POST/DELETE | `/variants/{id}/barcodes` · `/variants/{id}/barcodes/{barcodeId}` | `catalog.write` |
 | POST/DELETE | `/variants/{id}/aliases` · `/variants/{id}/aliases/{aliasId}` | `catalog.write` |

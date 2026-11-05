@@ -26,7 +26,8 @@ internal static class IdentityEndpoints
 
         group.MapGet("/me", GetMe)
             .WithName("Identity_GetMe")
-            .WithSummary("Oturumdaki kullanıcının profili ve tenant üyelikleri");
+            .WithSummary("Oturumdaki kullanıcının profili ve tenant üyelikleri; X-Tenant-Id verilirse o tenant'taki etkin izinler (activeTenant)")
+            .WithMetadata(new TenantOptionalMetadata());
 
         group.MapPost("/tenants", CreateTenant)
             .WithName("Identity_CreateTenant")

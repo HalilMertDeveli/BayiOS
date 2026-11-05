@@ -38,7 +38,7 @@ internal static class FulfillmentEndpoints
             .RequirePermission(Permissions.TasksReadOwn);
         tasks.MapGet("/{id:guid}", GetTask).WithName("Picking_Get")
             .WithSummary("Görev ve raf sırasına göre satırlar (lokasyon, barkod, istenen/toplanan/eksik; ETag döner)")
-            .RequirePermission(Permissions.TasksReadOwn)
+            .RequirePermission(Permissions.TasksReadOwn, Permissions.TasksReadAll)
             .ProducesProblem(StatusCodes.Status404NotFound);
         Command(tasks.MapPost("", CreateTask).WithName("Picking_Create")
             .WithSummary("Siparişin açık rezervasyonlarından toplama görevi (onayda otomatik oluşur; kalan için yeniden)")
@@ -71,10 +71,10 @@ internal static class FulfillmentEndpoints
 
         shipments.MapGet("", ListShipments).WithName("Shipments_List")
             .WithSummary("Sevkiyatlar: eskiden yeniye keyset; durum ve sipariş filtresi (personel yalnızca kendi görevlerininkini görür)")
-            .RequirePermission(Permissions.TasksReadOwn);
+            .RequirePermission(Permissions.TasksReadOwn, Permissions.TasksReadAll);
         shipments.MapGet("/{id:guid}", GetShipment).WithName("Shipments_Get")
             .WithSummary("Sevkiyat: satırlar, koliler (ETag döner); stok hareketleri: GET /inventory/movements?sourceId={id}")
-            .RequirePermission(Permissions.TasksReadOwn)
+            .RequirePermission(Permissions.TasksReadOwn, Permissions.TasksReadAll)
             .ProducesProblem(StatusCodes.Status404NotFound);
         Command(shipments.MapPost("/{id:guid}/pack", Pack).WithName("Shipments_Pack")
             .WithSummary("Paket kontrolü: ürünler kolilere tekrar okutulur; toplanan = paketlenen olmalı (koli sayısı kaydedilir)")
@@ -84,13 +84,15 @@ internal static class FulfillmentEndpoints
             .RequirePermission(Permissions.TasksReportShortage));
         Command(shipments.MapPost("/{id:guid}/confirm", Confirm).WithName("Shipments_Confirm")
             .WithSummary("Sevkiyat onayı: rezerve stoktan tek seferlik çıkış (shipment_out), sipariş Sevk edildi veya kısmi sevk")
-            .RequirePermission(Permissions.OrdersShip));
+            .RequirePermission(Permissions.OrdersShip)
+            .ProducesStockProblems());
 
         return app;
     }
 
     private static void Command(RouteHandlerBuilder builder) => builder
         .RequireIdempotencyKey()
+        .ProducesRetryableConflict("picking.busy", "order.busy", "inventory.busy")
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict)
         .ProducesProblem(StatusCodes.Status412PreconditionFailed)

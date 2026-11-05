@@ -29,6 +29,9 @@ public static class WarehouseModule
         services.AddScoped<PickingService>();
         services.AddScoped<ShipmentService>();
         services.AddScoped<IOrderFulfillmentListener, FulfillmentListener>();
+        services.AddScoped<TaskVisibility>();
+        services.AddScoped<IOrderTaskVisibility>(sp => sp.GetRequiredService<TaskVisibility>());
+        services.AddScoped<ITaskContextVariants>(sp => sp.GetRequiredService<TaskVisibility>());
         services.TryAddSingleton(TimeProvider.System);
         return services;
     }

@@ -62,6 +62,7 @@ public sealed record OrderTotalsResponse(
     IReadOnlyList<TaxBreakdownResponse> TaxBreakdown,
     bool HasUnpricedLines);
 
+/// <param name="Totals">Null when the caller may not see prices (warehouse_staff, roles-permissions footnote 8).</param>
 public sealed record OrderResponse(
     Guid Id,
     string Number,
@@ -75,7 +76,7 @@ public sealed record OrderResponse(
     DateOnly PriceDate,
     DateOnly? RequestedDeliveryDate,
     string? Notes,
-    OrderTotalsResponse Totals,
+    OrderTotalsResponse? Totals,
     DateTimeOffset CreatedAt,
     Guid? CreatedBy,
     DateTimeOffset? SubmittedAt,
@@ -141,6 +142,7 @@ public sealed record OrderDetailResponse(
     IReadOnlyList<OrderHistoryResponse> History,
     IReadOnlyList<OrderShipmentResponse> Shipments);
 
+/// <param name="GrandTotal">Null when the caller may not see prices (warehouse_staff, roles-permissions footnote 8).</param>
 public sealed record OrderSummaryResponse(
     Guid Id,
     string Number,
@@ -150,7 +152,7 @@ public sealed record OrderSummaryResponse(
     string FulfillmentStatus,
     string Source,
     string Currency,
-    decimal GrandTotal,
+    decimal? GrandTotal,
     int LineCount,
     DateTimeOffset CreatedAt,
     long Version);

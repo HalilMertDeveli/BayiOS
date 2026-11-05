@@ -35,4 +35,11 @@ internal sealed class MembershipLookup(IdentityDbContext db) : IMembershipLookup
             .Where(m => m.UserId == userId && m.TenantId == tenantId && m.Status == MembershipStatuses.Active)
             .Select(m => m.Role)
             .SingleOrDefaultAsync(cancellationToken);
+
+    public Task<TenantAccess?> FindAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) =>
+        (from m in db.Memberships.AsNoTracking()
+         join t in db.Tenants.AsNoTracking() on m.TenantId equals t.Id
+         where m.UserId == userId && m.TenantId == tenantId && m.Status == MembershipStatuses.Active
+         select new TenantAccess(m.Role, t.Status))
+        .SingleOrDefaultAsync(cancellationToken);
 }

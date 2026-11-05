@@ -180,7 +180,7 @@ function OrderView({
         ? "Önce taslaktaki değişiklikleri kaydedin."
         : loaded.detail.lines.length === 0
           ? "Onaya göndermek için en az bir satır ekleyin."
-          : order.totals.hasUnpricedLines
+          : order.totals?.hasUnpricedLines
             ? "Fiyatı olmayan satırlar var; fiyatlanmadan onaya gönderilemez."
             : null;
 
@@ -378,7 +378,7 @@ function OrderView({
         </section>
       )}
 
-      <OrderTotalsPanel totals={order.totals} currency={order.currency} />
+      {order.totals ? <OrderTotalsPanel totals={order.totals} currency={order.currency} /> : null}
 
       {fulfilment ? <FulfilmentSection detail={loaded.detail} /> : null}
 

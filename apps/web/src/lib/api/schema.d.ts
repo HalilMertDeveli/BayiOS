@@ -45,7 +45,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Oturumdaki kullanıcının profili ve tenant üyelikleri */
+        /** Oturumdaki kullanıcının profili ve tenant üyelikleri; X-Tenant-Id verilirse o tenant'taki etkin izinler (activeTenant) */
         get: operations["Identity_GetMe"];
         put?: never;
         post?: never;
@@ -223,7 +223,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Ürün listesi: keyset sayfalama, arama (ad/SKU/barkod), filtre (kategori/marka/durum/attr.<key>) */
+        /**
+         * Ürün listesi: keyset sayfalama, arama (ad/SKU/barkod), filtre (kategori/marka/durum/attr.<key>)
+         * @description Query `attr.{key}`: Custom-field filter on a filterable field (at most 10 attr.* filters): text/enum/date equality, multi_enum contains, boolean true/false, number equality, range: value inside the range. Variant fields match products with a non-archived matching variant.
+         *     Query `attr.{key}.min`: Lower bound (inclusive) for a number / integer field.
+         *     Query `attr.{key}.max`: Upper bound (inclusive) for a number / integer field.
+         */
         get: operations["Catalog_ListProducts"];
         put?: never;
         /** Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants) */
@@ -279,6 +284,23 @@ export interface paths {
         };
         /** Varyant listesi: keyset sayfalama (SKU sırası), arama ve sku/barcode/productId filtresi */
         get: operations["Catalog_ListVariants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/variants/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Toplu varyant okuma: ids (virgülle, ≤ 100) → SKU, ad, ürün adı, barkod; bulunmayan / başka tenant'a ait id'ler sonuçta yer almaz */
+        get: operations["Catalog_BatchVariants"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1368,6 +1390,12 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ActiveTenantResponse: {
+            /** Format: uuid */
+            tenantId: string;
+            role: string;
+            permissions: components["schemas"]["PermissionGrantResponse"][];
+        };
         AddressListResponse: {
             items: components["schemas"]["AddressResponse"][];
         };
@@ -1489,6 +1517,21 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: null | string;
+        };
+        CodeConflict: {
+            /** @enum {string} */
+            field?: "sku" | "barcode";
+            value?: string;
+            /** Format: uuid */
+            variantId?: string;
+            /** Format: uuid */
+            productId?: string;
+            sku?: string;
+        };
+        /** @description 409 catalog.sku_taken / catalog.barcode_taken: conflict names the existing variant holding the value (absent when only the database index caught a concurrent write). */
+        CodeConflictProblemDetails: components["schemas"]["ProblemDetails"] & {
+            code?: string;
+            conflict?: components["schemas"]["CodeConflict"];
         };
         ColumnSuggestion: {
             field: string;
@@ -1723,10 +1766,12 @@ export interface components {
         CustomFieldResponse: {
             /** Format: uuid */
             id: string;
-            entityType: string;
+            /** @enum {string} */
+            entityType: "product" | "variant";
             key: string;
             label: string;
-            dataType: string;
+            /** @enum {string} */
+            dataType: "text" | "number" | "integer" | "boolean" | "enum" | "multi_enum" | "range" | "date";
             unit: null | string;
             options: string[];
             required: boolean;
@@ -1916,6 +1961,9 @@ export interface components {
         ListResponseOfUnitResponse: {
             items: components["schemas"]["UnitResponse"][];
         };
+        ListResponseOfVariantSummaryResponse: {
+            items: components["schemas"]["VariantSummaryResponse"][];
+        };
         LocationListResponse: {
             items: components["schemas"]["LocationResponse"][];
         };
@@ -1977,6 +2025,7 @@ export interface components {
             email: null | string;
             fullName: null | string;
             memberships: components["schemas"]["MembershipResponse"][];
+            activeTenant: null | components["schemas"]["ActiveTenantResponse"];
         };
         MetaResponse: {
             name: string;
@@ -2123,7 +2172,7 @@ export interface components {
             /** Format: date */
             requestedDeliveryDate: null | string;
             notes: null | string;
-            totals: components["schemas"]["OrderTotalsResponse"];
+            totals: null | components["schemas"]["OrderTotalsResponse"];
             /** Format: date-time */
             createdAt: string;
             /** Format: uuid */
@@ -2183,7 +2232,7 @@ export interface components {
             source: string;
             currency: string;
             /** Format: double */
-            grandTotal: number | string;
+            grandTotal: null | number | string;
             /** Format: int32 */
             lineCount: number | string;
             /** Format: date-time */
@@ -2232,6 +2281,12 @@ export interface components {
             hasMore: boolean;
             /** Format: int32 */
             limit: number | string;
+        };
+        PermissionGrantResponse: {
+            permission: string;
+            /** @enum {string} */
+            scope: "all" | "conditional" | "own";
+            condition: null | string;
         };
         PickingTaskLineResponse: {
             /** Format: uuid */
@@ -2637,6 +2692,23 @@ export interface components {
             /** Format: int64 */
             version: number | string;
         };
+        /** @description Stock problem: shortages per line (insufficient stock) and confirmationRequired (negative-stock policy 'warn' — retry with the confirmation flag). */
+        StockProblemDetails: components["schemas"]["ProblemDetails"] & {
+            code?: string;
+            shortages?: components["schemas"]["StockShortage"][];
+            confirmationRequired?: boolean;
+        };
+        StockShortage: {
+            /** Format: uuid */
+            variantId?: string;
+            sku?: string;
+            /** Format: uuid */
+            warehouseId?: string;
+            /** Format: uuid */
+            locationId?: null | string;
+            requested?: number;
+            available?: number;
+        };
         TaxBreakdownResponse: {
             /** Format: double */
             rate: number | string;
@@ -2883,6 +2955,17 @@ export interface components {
             /** Format: uuid */
             updatedBy: null | string;
         };
+        VariantSummaryResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            productId: string;
+            sku: string;
+            name: null | string;
+            productName: string;
+            barcode: null | string;
+            status: string;
+        };
         WarehouseListResponse: {
             items: components["schemas"]["WarehouseResponse"][];
         };
@@ -2992,7 +3075,10 @@ export interface operations {
     Identity_GetMe: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional active tenant. When it names one of the caller's active memberships in an active tenant, the response includes that tenant's effective permissions; otherwise it is ignored. */
+                "X-Tenant-Id"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4477,7 +4563,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["CodeConflictProblemDetails"];
                 };
             };
             /** @description Unprocessable Entity */
@@ -4831,7 +4917,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["CodeConflictProblemDetails"];
                 };
             };
             /** @description Unprocessable Entity */
@@ -4881,6 +4967,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PagedResponseOfVariantResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Catalog_BatchVariants: {
+        parameters: {
+            query?: {
+                ids?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListResponseOfVariantSummaryResponse"];
                 };
             };
             /** @description Bad Request */
@@ -5201,7 +5339,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["CodeConflictProblemDetails"];
                 };
             };
             /** @description Precondition Failed */
@@ -5936,9 +6074,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -6019,13 +6159,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
                 };
             };
             /** @description Unprocessable Entity */
@@ -6034,7 +6176,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
                 };
             };
             /** @description Precondition Required */
@@ -6728,9 +6870,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -6947,9 +7091,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7047,9 +7193,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7147,9 +7295,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7247,9 +7397,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7351,9 +7503,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7456,9 +7610,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7556,9 +7712,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7776,9 +7934,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7881,9 +8041,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -7985,13 +8147,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
                 };
             };
             /** @description Precondition Failed */
@@ -8009,7 +8173,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
                 };
             };
             /** @description Precondition Required */
@@ -10985,9 +11149,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (order.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts order.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -11085,9 +11251,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -11185,9 +11353,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -11289,9 +11459,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -11393,13 +11565,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
                 };
             };
             /** @description Precondition Failed */
@@ -11417,7 +11591,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
                 };
             };
             /** @description Precondition Required */
@@ -11497,9 +11671,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -11597,9 +11773,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -11701,9 +11879,11 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Conflict */
+            /** @description Conflict. Transient lock conflicts (order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
             409: {
                 headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts order.busy, inventory.busy. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
