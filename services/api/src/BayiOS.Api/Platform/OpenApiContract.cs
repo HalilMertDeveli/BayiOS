@@ -3,6 +3,8 @@ using BayiOS.Api.Platform.Tenancy;
 using BayiOS.Modules.Catalog.Contracts;
 using BayiOS.Modules.Catalog.Domain;
 using BayiOS.Modules.Identity.Contracts;
+using BayiOS.Modules.Reports.Contracts;
+using BayiOS.Modules.Reports.Domain;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
@@ -30,6 +32,7 @@ internal static class OpenApiContract
             ["dataType"] = CustomFieldDataTypes.All,
         },
         [typeof(PermissionGrantResponse)] = new() { ["scope"] = ["all", "conditional", "own"] },
+        [typeof(ReportExportRequest)] = new() { ["format"] = ExportFormats.All },
     };
 
     public static OpenApiOptions AddBayiOsContract(this OpenApiOptions options)

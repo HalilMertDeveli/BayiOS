@@ -11,6 +11,7 @@ using BayiOS.Modules.Integrations;
 using BayiOS.Modules.Inventory;
 using BayiOS.Modules.Orders;
 using BayiOS.Modules.Pricing;
+using BayiOS.Modules.Reports;
 using BayiOS.Modules.Warehouse;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -49,6 +50,8 @@ builder.Services.AddOrdersPorts();
 builder.Services.AddFulfillmentPorts();
 builder.Services.AddIntegrationsModule();
 builder.Services.AddIntegrationsPorts();
+builder.Services.AddReportsModule();
+builder.Services.AddReportsPorts();
 
 var app = builder.Build();
 
@@ -78,6 +81,7 @@ app.MapCustomersModule();
 app.MapImportsModule();
 app.MapOrdersModule();
 app.MapIntegrationsModule();
+app.MapReportsModule();
 
 app.Run();
 

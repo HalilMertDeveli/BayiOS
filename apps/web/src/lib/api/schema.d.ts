@@ -1550,6 +1550,228 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports/critical-stock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Kritik stok: kullanılabilir (eldeki − rezerve) ≤ eşik olan aktif varyantlar, SKU sırasıyla keyset sayfalama */
+        get: operations["Reports_CriticalStock"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sipariş raporu: oluşturma gününe ve güncel duruma göre adet ve genel toplam (tutar yalnızca prices.read.sell ile) */
+        get: operations["Reports_Orders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/top-products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** En çok sipariş edilen ürünler: onaylanmış ve sonrası siparişlerde miktar, sipariş sayısı (tutar yalnızca prices.read.sell ile) */
+        get: operations["Reports_TopProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/stock-movements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stok hareket özeti: gün ve hareket tipine göre adet, giriş ve çıkış miktarı (maliyet yok) */
+        get: operations["Reports_StockMovements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/picking-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Toplama görevi raporu: gün bazında oluşturulan, tamamlanan, eksikle tamamlanan, iptal ve ortalama toplama süresi */
+        get: operations["Reports_PickingTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/ai-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** AI asistan kullanımı: gün bazında ayrıştırma, AI çağrısı, hata, kural tabanlı geri dönüş ve token sayıları (owner, admin) */
+        get: operations["Reports_AiUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/critical-stock/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Kritik stok raporunu CSV/XLSX olarak dışa aktarır
+         * @description CSV: UTF-8 with BOM, ';' delimiter, Turkish decimal comma, ISO dates. XLSX: one sheet. Every text cell starting with = + - @ TAB or CR is prefixed with an apostrophe (formula injection). At most 20,000 rows (422 reports.export_too_large). 10 exports per hour per tenant (429 rate_limit.exceeded with Retry-After). Filters the report does not take → 422.
+         */
+        post: operations["Reports_ExportCriticalStock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/orders/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sipariş raporunu CSV/XLSX olarak dışa aktarır
+         * @description CSV: UTF-8 with BOM, ';' delimiter, Turkish decimal comma, ISO dates. XLSX: one sheet. Every text cell starting with = + - @ TAB or CR is prefixed with an apostrophe (formula injection). At most 20,000 rows (422 reports.export_too_large). 10 exports per hour per tenant (429 rate_limit.exceeded with Retry-After). Filters the report does not take → 422.
+         */
+        post: operations["Reports_ExportOrders"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/top-products/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * En çok sipariş edilen ürünleri CSV/XLSX olarak dışa aktarır
+         * @description CSV: UTF-8 with BOM, ';' delimiter, Turkish decimal comma, ISO dates. XLSX: one sheet. Every text cell starting with = + - @ TAB or CR is prefixed with an apostrophe (formula injection). At most 20,000 rows (422 reports.export_too_large). 10 exports per hour per tenant (429 rate_limit.exceeded with Retry-After). Filters the report does not take → 422.
+         */
+        post: operations["Reports_ExportTopProducts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/stock-movements/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stok hareket özetini CSV/XLSX olarak dışa aktarır
+         * @description CSV: UTF-8 with BOM, ';' delimiter, Turkish decimal comma, ISO dates. XLSX: one sheet. Every text cell starting with = + - @ TAB or CR is prefixed with an apostrophe (formula injection). At most 20,000 rows (422 reports.export_too_large). 10 exports per hour per tenant (429 rate_limit.exceeded with Retry-After). Filters the report does not take → 422.
+         */
+        post: operations["Reports_ExportStockMovements"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/picking-tasks/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Toplama görevi raporunu CSV/XLSX olarak dışa aktarır
+         * @description CSV: UTF-8 with BOM, ';' delimiter, Turkish decimal comma, ISO dates. XLSX: one sheet. Every text cell starting with = + - @ TAB or CR is prefixed with an apostrophe (formula injection). At most 20,000 rows (422 reports.export_too_large). 10 exports per hour per tenant (429 rate_limit.exceeded with Retry-After). Filters the report does not take → 422.
+         */
+        post: operations["Reports_ExportPickingTasks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/ai-usage/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * AI kullanım raporunu CSV/XLSX olarak dışa aktarır (owner, admin)
+         * @description CSV: UTF-8 with BOM, ';' delimiter, Turkish decimal comma, ISO dates. XLSX: one sheet. Every text cell starting with = + - @ TAB or CR is prefixed with an apostrophe (formula injection). At most 20,000 rows (422 reports.export_too_large). 10 exports per hour per tenant (429 rate_limit.exceeded with Retry-After). Filters the report does not take → 422.
+         */
+        post: operations["Reports_ExportAiUsage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1586,6 +1808,34 @@ export interface components {
             /** Format: date-time */
             updatedAt: null | string;
         };
+        AiUsageDayTotal: {
+            /** Format: date */
+            day: string;
+            /** Format: int64 */
+            parseRequests: number | string;
+            /** Format: int64 */
+            aiCalls: number | string;
+            /** Format: int64 */
+            aiFailures: number | string;
+            /** Format: int64 */
+            fallbacks: number | string;
+            /** Format: int64 */
+            inputTokens: number | string;
+            /** Format: int64 */
+            outputTokens: number | string;
+            /** Format: int64 */
+            cacheReadTokens: number | string;
+            /** Format: int64 */
+            cacheWriteTokens: number | string;
+        };
+        AiUsageReportResponse: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            totals: components["schemas"]["AiUsageTotals"];
+            days: components["schemas"]["AiUsageDayTotal"][];
+        };
         AiUsageResponse: {
             /** Format: date */
             day: string;
@@ -1606,6 +1856,24 @@ export interface components {
             /** Format: int32 */
             aiFailures: number | string;
             /** Format: int32 */
+            fallbacks: number | string;
+            /** Format: int64 */
+            inputTokens: number | string;
+            /** Format: int64 */
+            outputTokens: number | string;
+            /** Format: int64 */
+            cacheReadTokens: number | string;
+            /** Format: int64 */
+            cacheWriteTokens: number | string;
+        };
+        AiUsageTotals: {
+            /** Format: int64 */
+            parseRequests: number | string;
+            /** Format: int64 */
+            aiCalls: number | string;
+            /** Format: int64 */
+            aiFailures: number | string;
+            /** Format: int64 */
             fallbacks: number | string;
             /** Format: int64 */
             inputTokens: number | string;
@@ -1940,6 +2208,29 @@ export interface components {
             code: null | string;
             name: null | string;
             usesLocations: null | boolean;
+        };
+        CriticalStockItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            productId: string;
+            sku: string;
+            name: string;
+            unit: string;
+            /** Format: double */
+            onHand: number | string;
+            /** Format: double */
+            reserved: number | string;
+            /** Format: double */
+            available: number | string;
+        };
+        CriticalStockReportResponse: {
+            /** Format: double */
+            threshold: number | string;
+            /** Format: uuid */
+            warehouseId: null | string;
+            items: components["schemas"]["CriticalStockItem"][];
+            page: components["schemas"]["ReportPageInfo"];
         };
         CustomerDetailResponse: {
             customer: components["schemas"]["CustomerResponse"];
@@ -2303,6 +2594,17 @@ export interface components {
             version: string;
             environment: string;
         };
+        MovementDayTotal: {
+            /** Format: date */
+            day: string;
+            type: string;
+            /** Format: int64 */
+            movementCount: number | string;
+            /** Format: double */
+            quantityIn: number | string;
+            /** Format: double */
+            quantityOut: number | string;
+        };
         MovementPageResponse: {
             items: components["schemas"]["MovementResult"][];
             page: components["schemas"]["InventoryPageInfo"];
@@ -2335,6 +2637,15 @@ export interface components {
             /** Format: uuid */
             createdBy: null | string;
         };
+        MovementTypeTotal: {
+            type: string;
+            /** Format: int64 */
+            movementCount: number | string;
+            /** Format: double */
+            quantityIn: number | string;
+            /** Format: double */
+            quantityOut: number | string;
+        };
         MyPickingTasksResponse: {
             items: components["schemas"]["PickingTaskSummaryResponse"][];
         };
@@ -2350,6 +2661,16 @@ export interface components {
             country: string;
             contactName: null | string;
             contactPhone: null | string;
+        };
+        OrderDayTotal: {
+            /** Format: date */
+            day: string;
+            status: string;
+            currency: string;
+            /** Format: int64 */
+            orderCount: number | string;
+            /** Format: double */
+            grandTotal: null | number | string;
         };
         OrderDetailResponse: {
             order: components["schemas"]["OrderResponse"];
@@ -2615,6 +2936,23 @@ export interface components {
             shippedByName: null | string;
             lines: components["schemas"]["OrderShipmentLineResponse"][];
         };
+        OrdersReportResponse: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            amountsVisible: boolean;
+            byStatus: components["schemas"]["OrderStatusTotal"][];
+            days: components["schemas"]["OrderDayTotal"][];
+        };
+        OrderStatusTotal: {
+            status: string;
+            currency: string;
+            /** Format: int64 */
+            orderCount: number | string;
+            /** Format: double */
+            grandTotal: null | number | string;
+        };
         OrderSummaryResponse: {
             /** Format: uuid */
             id: string;
@@ -2687,6 +3025,20 @@ export interface components {
             condition: null | string;
             parameters: null | components["schemas"]["GrantParametersResponse"];
         };
+        PickingTaskDayTotal: {
+            /** Format: date */
+            day: string;
+            /** Format: int64 */
+            created: number | string;
+            /** Format: int64 */
+            completed: number | string;
+            /** Format: int64 */
+            completedWithShortage: number | string;
+            /** Format: int64 */
+            cancelled: number | string;
+            /** Format: double */
+            averagePickMinutes: null | number | string;
+        };
         PickingTaskLineResponse: {
             /** Format: uuid */
             id: string;
@@ -2724,6 +3076,16 @@ export interface components {
             /** Format: uuid */
             shipmentId: null | string;
         };
+        PickingTasksReportResponse: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /** Format: uuid */
+            warehouseId: null | string;
+            totals: components["schemas"]["PickingTaskTotals"];
+            days: components["schemas"]["PickingTaskDayTotal"][];
+        };
         PickingTaskSummaryResponse: {
             /** Format: uuid */
             id: string;
@@ -2753,6 +3115,18 @@ export interface components {
             completedAt: null | string;
             /** Format: int64 */
             version: number | string;
+        };
+        PickingTaskTotals: {
+            /** Format: int64 */
+            created: number | string;
+            /** Format: int64 */
+            completed: number | string;
+            /** Format: int64 */
+            completedWithShortage: number | string;
+            /** Format: int64 */
+            cancelled: number | string;
+            /** Format: double */
+            averagePickMinutes: null | number | string;
         };
         PickLineProgress: {
             /** Format: uuid */
@@ -2928,6 +3302,27 @@ export interface components {
             warehouseId: string;
             movements: components["schemas"]["MovementResult"][];
         };
+        ReportExportRequest: {
+            /** @enum {null|string} */
+            format?: "csv" | "xlsx" | null;
+            /** Format: date */
+            from?: null | string;
+            /** Format: date */
+            to?: null | string;
+            /** Format: uuid */
+            warehouseId?: null | string;
+            /** Format: double */
+            threshold?: null | number | string;
+            statuses?: null | string[];
+            /** Format: int32 */
+            limit?: null | number | string;
+        };
+        ReportPageInfo: {
+            nextCursor: null | string;
+            hasMore: boolean;
+            /** Format: int32 */
+            limit: number | string;
+        };
         ReportShortageRequest: {
             /** Format: double */
             quantity: null | number | string;
@@ -3093,6 +3488,16 @@ export interface components {
             /** Format: int64 */
             version: number | string;
         };
+        StockMovementsReportResponse: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /** Format: uuid */
+            warehouseId: null | string;
+            totals: components["schemas"]["MovementTypeTotal"][];
+            days: components["schemas"]["MovementDayTotal"][];
+        };
         /** @description Stock problem: shortages per line (insufficient stock) and confirmationRequired (negative-stock policy 'warn' — retry with the confirmation flag). */
         StockProblemDetails: components["schemas"]["ProblemDetails"] & {
             code?: string;
@@ -3161,6 +3566,30 @@ export interface components {
             pricesIncludeTaxDisplay: boolean;
             requireOrderApproval: boolean;
             orderNumberPrefix: string;
+        };
+        TopProductItem: {
+            /** Format: int32 */
+            rank: number | string;
+            /** Format: uuid */
+            id: string;
+            sku: string;
+            name: string;
+            unit: string;
+            currency: string;
+            /** Format: double */
+            quantity: number | string;
+            /** Format: int64 */
+            orderCount: number | string;
+            /** Format: double */
+            revenue: null | number | string;
+        };
+        TopProductsReportResponse: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            amountsVisible: boolean;
+            items: components["schemas"]["TopProductItem"][];
         };
         UnitResponse: {
             /** Format: uuid */
@@ -13064,6 +13493,1005 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Reports_CriticalStock: {
+        parameters: {
+            query?: {
+                threshold?: string;
+                warehouseId?: string;
+                limit?: string;
+                cursor?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriticalStockReportResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+        };
+    };
+    Reports_Orders: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                status?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrdersReportResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+        };
+    };
+    Reports_TopProducts: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                limit?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopProductsReportResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+        };
+    };
+    Reports_StockMovements: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                warehouseId?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockMovementsReportResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+        };
+    };
+    Reports_PickingTasks: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                warehouseId?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickingTasksReportResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+        };
+    };
+    Reports_AiUsage: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiUsageReportResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+        };
+    };
+    Reports_ExportCriticalStock: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["ReportExportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Reports_ExportOrders: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["ReportExportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Reports_ExportTopProducts: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["ReportExportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Reports_ExportStockMovements: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["ReportExportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Reports_ExportPickingTasks: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["ReportExportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Reports_ExportAiUsage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["ReportExportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

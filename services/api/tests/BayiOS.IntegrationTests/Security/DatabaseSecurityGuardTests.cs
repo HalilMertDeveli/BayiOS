@@ -76,6 +76,9 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         ["pricing.price_list_items"] = Full,
         ["pricing.price_lists"] = ArchiveOnly,
 
+        // Export log behind the hourly export limit (#53): never updated; each export deletes the tenant's rows > 1 day.
+        ["reports.export_requests"] = [Select, Insert, Delete],
+
         // Tasks and shipments are cancelled, never deleted; packages are written once by the pack check (#36–#39).
         ["warehouse.picking_task_lines"] = ArchiveOnly,
         ["warehouse.picking_tasks"] = ArchiveOnly,
@@ -168,7 +171,7 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
     {
         var schemas = await StringsAsync(DatabaseCatalog.BusinessSchemasSql + " ORDER BY 1");
         Assert.Superset(
-            new HashSet<string> { "audit", "catalog", "customers", "identity", "imports", "integrations", "inventory", "orders", "platform", "pricing", "warehouse" },
+            new HashSet<string> { "audit", "catalog", "customers", "identity", "imports", "integrations", "inventory", "orders", "platform", "pricing", "reports", "warehouse" },
             schemas.ToHashSet());
 
         Assert.Empty(await StringsAsync(

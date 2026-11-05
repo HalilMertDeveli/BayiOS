@@ -314,6 +314,6 @@ Dağıtım akışı:
 - Problem `type` URI alan adı.
 - OTel/log toplama hedefi.
 - SignalR backplane (yalnızca çoklu instance'ta).
-- Raporlama ve tam veri dışa aktarma (PRD REP-01…09) için modül sınırı: çapraz şema okuma modeli (ayrı Reporting modülü / modül Contracts sorguları) — W11 öncesi ADR.
+- Raporlama ve tam veri dışa aktarma (PRD REP-01…09) için modül sınırı: çapraz şema okuma modeli (ayrı Reporting modülü / modül Contracts sorguları) — W11 öncesi ADR. Uygulanan (#53): ayrı salt okunur **Reports** modülü; veri, composition root'taki port adaptörleriyle (`Platform/ReportsPorts.cs`) her biri yalnız sahibi modülün DbContext'i üzerinden okunur, iki modülün tablosunu birleştiren sorgu yok (api-strategy §12.13). ADR henüz yazılmadı; tam veri dışa aktarma (REP-09) ve gösterge paneli (REP-01) açık.
 - Platform yöneticisi (PRD SUB-08): kimlik, tenant'lar arası yetki yolu (RLS dışı işlem), audit — W11 öncesi ADR.
 - Davet kabulü ve tenant oluşturma gibi tenant bağlamı olmadan başlayan uçların RLS ile çalışma yolu (§2.3 istisnaları) — W3 Gün 12'de netleşir.

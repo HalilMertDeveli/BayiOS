@@ -80,6 +80,8 @@ internal static class SecurityProbes
                 customerId = own.Id("customer"),
                 lines = new[] { new { lineNo = 1, include = true, variantId = own.Id("variant"), quantity = 1m } },
             },
+            _ when route.Method == "POST" && route.Template.StartsWith("/api/v1/reports/", StringComparison.Ordinal) && route.Template.EndsWith("/export", StringComparison.Ordinal)
+                => new { format = "csv" },
             _ when route.RequestContentTypes.Count == 0 && route.Method == "POST" => new { },
             _ when route.RequestContentTypes.Count == 0 => null,
             "POST /api/v1/orders/{id}/approve" or "POST /api/v1/orders/{id}/submit" => new { },

@@ -16,6 +16,21 @@ public sealed class RolePermissionSweepTests(ApiFixture fixture)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>
+    /// Record-level K cells whose condition is about the endpoint itself rather than a record, so no probe id can
+    /// make them pass: the gate lets the role through and the service answers 403 with the condition's own code.
+    /// Footnote 4 (#53): sales holds reports.read / reports.export only for order and customer reports.
+    /// </summary>
+    private static readonly Dictionary<(string Route, string Role), string> ConditionDenials = new()
+    {
+        [("GET /api/v1/reports/critical-stock", Roles.Sales)] = "reports.orders_and_customers_only",
+        [("GET /api/v1/reports/stock-movements", Roles.Sales)] = "reports.orders_and_customers_only",
+        [("GET /api/v1/reports/picking-tasks", Roles.Sales)] = "reports.orders_and_customers_only",
+        [("POST /api/v1/reports/critical-stock/export", Roles.Sales)] = "reports.orders_and_customers_only",
+        [("POST /api/v1/reports/stock-movements/export", Roles.Sales)] = "reports.orders_and_customers_only",
+        [("POST /api/v1/reports/picking-tasks/export", Roles.Sales)] = "reports.orders_and_customers_only",
+    };
+
     public static TheoryData<string> AllRoles() => [.. Roles.All];
 
     [Fact]
@@ -47,7 +62,15 @@ public sealed class RolePermissionSweepTests(ApiFixture fixture)
             var response = await SecurityProbes.SendAsync(fixture, member, route, path, body, CatalogClient.ETag(1));
             var code = await SecurityProbes.CodeAsync(response);
 
-            if (allowed)
+            if (allowed && ConditionDenials.TryGetValue((route.Key, role), out var conditionCode))
+            {
+                granted++;
+                if (response.StatusCode != HttpStatusCode.Forbidden || code != conditionCode)
+                {
+                    failures.Add($"{route} [{route.Permission}]: {role} passes the gate only conditionally, expected 403 {conditionCode} but got {(int)response.StatusCode} {code}");
+                }
+            }
+            else if (allowed)
             {
                 granted++;
                 if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden || (int)response.StatusCode >= 500)
@@ -65,6 +88,9 @@ public sealed class RolePermissionSweepTests(ApiFixture fixture)
             }
         }
 
+        failures.AddRange(ConditionDenials.Keys
+            .Where(k => k.Role == role && routes.All(r => r.Key != k.Route))
+            .Select(k => $"{k.Route}: listed in ConditionDenials but no longer exists — remove it"));
         SecurityProbes.AssertNone(failures);
         Assert.Equal(routes.Count, granted + denied);
         TestContext.Current.TestOutputHelper?.WriteLine($"{role}: {granted} endpoints granted, {denied} denied.");
