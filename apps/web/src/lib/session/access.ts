@@ -48,7 +48,8 @@ export type Permission =
   | "tasks.claim"
   | "tasks.pick"
   | "tasks.pack"
-  | "tasks.report_shortage";
+  | "tasks.report_shortage"
+  | "whatsapp.parse";
 
 /**
  * Condition codes the UI refines its display with (ConditionalGrants on the API). An unknown code is never a reason to

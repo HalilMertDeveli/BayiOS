@@ -10,6 +10,7 @@
  * The real end-to-end run (local Supabase + API, no mocks) lives in e2e-local/ — see apps/web/README.md.
  */
 import type { BrowserContext, Page, Route } from "@playwright/test";
+import { createMockAssistant, handleAssistant, type MockAssistant } from "./mock-assistant";
 import { createMockCatalog, handleCatalog, type MockCatalog } from "./mock-catalog";
 import { createMockCommerce, handleCommerce, type MockCommerce } from "./mock-commerce";
 import { createMockFulfilment, handleFulfilment, type MockFulfilment } from "./mock-fulfilment";
@@ -138,6 +139,8 @@ export type ApiMockOptions = {
   orders?: MockOrders | null;
   /** In-memory Warehouse fulfilment API (mock-fulfilment.ts): picking tasks + shipments. Defaults to none; null disables it. */
   fulfilment?: MockFulfilment | null;
+  /** In-memory WhatsApp order assistant (mock-assistant.ts, scripted parser, no AI). Defaults to no parses; null disables it. */
+  assistant?: MockAssistant | null;
   /**
    * Tenant rules behind the conditional grants in GET /me (and the orders mock gates). Default: the API defaults, except
    * "sales may approve orders" off (as in `defaultSettings`).
@@ -159,6 +162,7 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
   const commerce = options.commerce === undefined ? createMockCommerce(catalog) : options.commerce;
   const orders = options.orders === undefined ? createMockOrders() : options.orders;
   const fulfilment = options.fulfilment === undefined ? createMockFulfilment() : options.fulfilment;
+  const assistant = options.assistant === undefined ? createMockAssistant() : options.assistant;
   const state = {
     memberships: options.memberships ?? [TENANT_A],
     rules: { ...MOCK_RULES, ...options.rules },
@@ -170,6 +174,7 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
     commerce,
     orders,
     fulfilment,
+    assistant,
     requests: [] as { method: string; path: string; search: string; headers: Record<string, string>; body: unknown }[],
   };
 
@@ -272,6 +277,10 @@ if (path === "/api/v1/tenant/settings" && (method === "GET" || method === "PATCH
       state.settings = { ...state.settings, ...body };
       state.settingsVersion += 1;
       return json(route, 200, state.settings, { ETag: etag() });
+    }
+    if (assistant) {
+      const role = state.memberships.find((m) => m.tenantId === tenantHeader)?.role ?? "viewer";
+      if (await handleAssistant(route, assistant, { catalog, commerce, orders, rules: state.rules }, role)) return;
     }
     if (orders) {
       const role = state.memberships.find((m) => m.tenantId === request.headers()["x-tenant-id"])?.role ?? "viewer";
