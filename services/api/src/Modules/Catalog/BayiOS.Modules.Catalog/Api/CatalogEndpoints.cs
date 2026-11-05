@@ -74,12 +74,17 @@ internal static class CatalogEndpoints
         // Products
         group.MapGet("/products", ListProducts).WithName("Catalog_ListProducts")
             .WithSummary("Ürün listesi: keyset sayfalama, arama (ad/SKU/barkod), filtre (kategori/marka/durum/attr.<key>)")
-            .RequirePermission(Permissions.CatalogRead);
+            .RequirePermission(Permissions.CatalogRead)
+            .WithMetadata(
+                new QueryPatternMetadata("attr.{key}", "Custom-field filter on a filterable field (at most 10 attr.* filters): text/enum/date equality, multi_enum contains, boolean true/false, number equality, range: value inside the range. Variant fields match products with a non-archived matching variant."),
+                new QueryPatternMetadata("attr.{key}.min", "Lower bound (inclusive) for a number / integer field."),
+                new QueryPatternMetadata("attr.{key}.max", "Upper bound (inclusive) for a number / integer field."));
         group.MapGet("/products/{id:guid}", GetProduct).WithName("Catalog_GetProduct")
             .WithSummary("Ürün ve varyantları (ETag döner)").RequirePermission(Permissions.CatalogRead)
             .ProducesProblem(StatusCodes.Status404NotFound);
         Write(group.MapPost("/products", CreateProduct).WithName("Catalog_CreateProduct")
-            .WithSummary("Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants)").RequirePermission(Permissions.CatalogWrite));
+            .WithSummary("Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants)").RequirePermission(Permissions.CatalogWrite)
+            .WithMetadata(new ConflictDetailMetadata()));
         Update(group.MapPatch("/products/{id:guid}", UpdateProduct).WithName("Catalog_UpdateProduct")
             .WithSummary("Ürünü günceller (JSON merge patch, If-Match zorunlu)").RequirePermission(Permissions.CatalogWrite)
             .Accepts<UpdateProductRequest>(MergePatch, "application/json"));
@@ -87,7 +92,8 @@ internal static class CatalogEndpoints
             .WithSummary("Ürünü arşivler (If-Match zorunlu)").RequirePermission(Permissions.CatalogWrite));
         Write(group.MapPost("/products/{id:guid}/variants", AddVariant).WithName("Catalog_AddVariant")
             .WithSummary("Ürüne varyant ekler").RequirePermission(Permissions.CatalogWrite)
-            .ProducesProblem(StatusCodes.Status404NotFound));
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .WithMetadata(new ConflictDetailMetadata()));
 
         // Variants
         group.MapGet("/variants", ListVariants).WithName("Catalog_ListVariants")
@@ -104,7 +110,8 @@ internal static class CatalogEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
         Update(group.MapPatch("/variants/{id:guid}", UpdateVariant).WithName("Catalog_UpdateVariant")
             .WithSummary("Varyantı günceller (JSON merge patch, If-Match zorunlu)").RequirePermission(Permissions.CatalogWrite)
-            .Accepts<UpdateVariantRequest>(MergePatch, "application/json"));
+            .Accepts<UpdateVariantRequest>(MergePatch, "application/json")
+            .WithMetadata(new ConflictDetailMetadata()));
         Update(group.MapDelete("/variants/{id:guid}", ArchiveVariant).WithName("Catalog_ArchiveVariant")
             .WithSummary("Varyantı arşivler (If-Match zorunlu; son varyant arşivlenemez)").RequirePermission(Permissions.CatalogWrite));
 

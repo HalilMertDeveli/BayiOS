@@ -143,6 +143,12 @@ internal sealed class OrdersKit
         return (await response.Content.ReadFromJsonAsync<OrderDetailResponse>(Ct))!;
     }
 
+    public static async Task<OrderPageResponse> ReadListAsync(HttpResponseMessage response)
+    {
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"{(int)response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
+        return (await response.Content.ReadFromJsonAsync<OrderPageResponse>(Ct))!;
+    }
+
     /// <summary>(on_hand, reserved) of one balance row, read as superuser; (0, 0) when the row does not exist.</summary>
     public async Task<(decimal OnHand, decimal Reserved)> BalanceAsync(Guid variantId, Guid? warehouseId = null, Guid? locationId = null)
     {

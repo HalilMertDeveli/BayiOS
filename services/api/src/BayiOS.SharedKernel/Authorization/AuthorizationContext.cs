@@ -64,6 +64,9 @@ public sealed class AuthorizationContext(IRequestContext requestContext, ITenant
     private readonly HashSet<string> _checked = new(StringComparer.Ordinal);
     private TenantAccessRules? _rules;
 
+    /// <summary>The caller's role in the active tenant (null without one).</summary>
+    public string? Role => requestContext.Role;
+
     public IReadOnlyList<string> UncheckedRestrictedGrants =>
         [.. _gatePasses.Where(group => !group.Any(_checked.Contains)).SelectMany(group => group)];
 
@@ -140,18 +143,31 @@ public sealed class AuthorizationContext(IRequestContext requestContext, ITenant
             return PermissionScope.None;
         }
 
-        var grant = RolePermissions.GetGrant(requestContext.Role, permission);
+        // Tenant rules are loaded only when a conditional cell actually depends on one.
+        var needsRules = ConditionalGrants.Find(requestContext.Role, permission)?.Rule is not null
+            && RolePermissions.GetGrant(requestContext.Role, permission) is not (PermissionGrant.None or PermissionGrant.Allowed);
+        var rules = needsRules ? await RulesAsync(cancellationToken) : TenantAccessRules.Defaults;
+        return Evaluate(requestContext.Role, permission, rules);
+    }
+
+    /// <summary>
+    /// The scope a role has for a permission under the given tenant rules: ✓ → All; – → None; K / O → None when the
+    /// cell has no condition or its tenant rule is off, otherwise Restricted (record-level) or All (rule only).
+    /// </summary>
+    public static PermissionScope Evaluate(string? role, string permission, TenantAccessRules rules)
+    {
+        var grant = RolePermissions.GetGrant(role, permission);
         if (grant == PermissionGrant.Allowed)
         {
             return PermissionScope.All;
         }
 
-        if (grant == PermissionGrant.None || ConditionalGrants.Find(requestContext.Role, permission) is not { } condition)
+        if (grant == PermissionGrant.None || ConditionalGrants.Find(role, permission) is not { } condition)
         {
             return PermissionScope.None;
         }
 
-        if (condition.Rule is { } rule && !rule(await RulesAsync(cancellationToken)))
+        if (condition.Rule is { } rule && !rule(rules))
         {
             return PermissionScope.None;
         }

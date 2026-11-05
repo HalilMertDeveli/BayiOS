@@ -279,9 +279,15 @@ public class InventoryApiTests(ApiFixture fixture)
             Assert.Equal((5m, 0m), await kit.BalanceAsync(variant, warehouse.Id));
         }
 
-        // Movement history: sales has none; warehouse staff only "own records" (fail-closed until evaluated).
+        // Movement history: sales has none; warehouse staff only "own records" (O⁵): the receipt they posted, not the owner's.
         var history = await member.GetAsync("/api/v1/inventory/movements");
-        Assert.Equal(role == Roles.Viewer ? HttpStatusCode.OK : HttpStatusCode.Forbidden, history.StatusCode);
+        Assert.Equal(role == Roles.Sales ? HttpStatusCode.Forbidden : HttpStatusCode.OK, history.StatusCode);
+        if (role == Roles.WarehouseStaff)
+        {
+            var own = await member.OkAsync<MovementPageResponse>(history);
+            Assert.All(own.Items, m => Assert.Equal(member.UserId, m.CreatedBy));
+            Assert.Single(own.Items);
+        }
     }
 
     [Fact]

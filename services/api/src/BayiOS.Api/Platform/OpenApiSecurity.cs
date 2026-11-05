@@ -73,6 +73,11 @@ internal static class OpenApiSecurity
             {
                 operation.Extensions ??= new Dictionary<string, IOpenApiExtension>();
                 operation.Extensions["x-permission"] = new JsonNodeExtension(JsonValue.Create(permission.Permission));
+                if (permission.AnyOf.Count > 1)
+                {
+                    // Any one of these suffices (x-permission is the first, kept for single-permission consumers).
+                    operation.Extensions["x-permission-any-of"] = new JsonNodeExtension(new JsonArray([.. permission.AnyOf.Select(p => (JsonNode)JsonValue.Create(p))]));
+                }
             }
 
             return Task.CompletedTask;

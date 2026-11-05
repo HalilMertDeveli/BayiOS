@@ -14,7 +14,7 @@ using BayiOS.Modules.Warehouse;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddOpenApi("v1", options => options.AddBayiOsSecurity());
+builder.Services.AddOpenApi("v1", options => options.AddBayiOsSecurity().AddBayiOsContract());
 builder.Services.AddProblemDetails(options =>
 {
     options.CustomizeProblemDetails = context =>

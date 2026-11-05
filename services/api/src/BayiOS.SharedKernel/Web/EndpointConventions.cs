@@ -39,6 +39,9 @@ public sealed class StockProblemMetadata;
 /// <summary>409 problems of the endpoint may carry a <c>conflict</c> member naming the clashing record (OpenAPI).</summary>
 public sealed class ConflictDetailMetadata;
 
+/// <summary>A family of dynamic query parameters (e.g. <c>attr.&lt;key&gt;</c>) that OpenAPI cannot list by name.</summary>
+public sealed record QueryPatternMetadata(string Pattern, string Description);
+
 public static class EndpointConventionExtensions
 {
     /// <summary>Authenticated endpoints that read/write the database through the shared unit of work.</summary>

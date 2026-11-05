@@ -49,6 +49,7 @@ internal static class OrdersEndpoints
         group.MapPatch("/{id:guid}", Update).WithName("Orders_Update")
             .WithSummary("Taslağı günceller (merge patch; lines verilirse tüm satırlar değişir ve yeniden fiyatlanır) — If-Match zorunlu")
             .RequirePermission(Permissions.OrdersEditDraft)
+            .ProducesRetryableConflict("order.busy")
             .Accepts<UpdateOrderRequest>(MergePatch, "application/json")
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
@@ -64,7 +65,8 @@ internal static class OrdersEndpoints
             .WithSummary("Onay bekliyor → Taslak (sebep zorunlu)").RequirePermission(Permissions.OrdersApprove));
         Transition(group.MapPost("/{id:guid}/approve", Approve).WithName("Orders_Approve")
             .WithSummary("Onay bekliyor → Onaylandı: fiyat kontrolü ve tüm satırların tek transaction'da rezervasyonu (ya hep ya hiç) — If-Match zorunlu")
-            .RequirePermission(Permissions.OrdersApprove));
+            .RequirePermission(Permissions.OrdersApprove)
+            .ProducesStockProblems());
         // Picking (approved → picking → packed) and shipping are Warehouse operations: /picking-tasks and /shipments
         // drive the order through IOrderFulfillment (OrderStateMachine stays the single place deciding transitions).
         Transition(group.MapPost("/{id:guid}/close-remaining", CloseRemaining).WithName("Orders_CloseRemaining")
@@ -81,6 +83,7 @@ internal static class OrdersEndpoints
 
     private static void Transition(RouteHandlerBuilder builder) => builder
         .RequireIdempotencyKey()
+        .ProducesRetryableConflict("order.busy", "inventory.busy")
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict)
         .ProducesProblem(StatusCodes.Status412PreconditionFailed)

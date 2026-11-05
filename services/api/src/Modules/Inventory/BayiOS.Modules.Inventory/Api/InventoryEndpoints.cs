@@ -45,12 +45,15 @@ internal static class InventoryEndpoints
             .WithSummary("Mal kabul: her satır için receipt hareketi (depo verilmezse varsayılan depo)")
             .RequirePermission(Permissions.InventoryReceive)
             .RequireIdempotencyKey()
-            .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity);
+            .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesRetryableConflict("inventory.busy");
         group.MapPost("/adjustments", CreateAdjustment).WithName("Inventory_CreateAdjustment")
             .WithSummary("Manuel stok düzeltme (sebep zorunlu); rezerve stok düşülemez, negatif stok politikası uygulanır")
             .RequirePermission(Permissions.InventoryAdjust)
             .RequireIdempotencyKey()
-            .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity);
+            .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesRetryableConflict("inventory.busy")
+            .ProducesStockProblems();
 
         return app;
     }

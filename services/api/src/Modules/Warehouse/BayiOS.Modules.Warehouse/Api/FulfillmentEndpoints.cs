@@ -84,13 +84,15 @@ internal static class FulfillmentEndpoints
             .RequirePermission(Permissions.TasksReportShortage));
         Command(shipments.MapPost("/{id:guid}/confirm", Confirm).WithName("Shipments_Confirm")
             .WithSummary("Sevkiyat onayı: rezerve stoktan tek seferlik çıkış (shipment_out), sipariş Sevk edildi veya kısmi sevk")
-            .RequirePermission(Permissions.OrdersShip));
+            .RequirePermission(Permissions.OrdersShip)
+            .ProducesStockProblems());
 
         return app;
     }
 
     private static void Command(RouteHandlerBuilder builder) => builder
         .RequireIdempotencyKey()
+        .ProducesRetryableConflict("picking.busy", "order.busy", "inventory.busy")
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status409Conflict)
         .ProducesProblem(StatusCodes.Status412PreconditionFailed)

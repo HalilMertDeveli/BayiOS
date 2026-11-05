@@ -30,6 +30,7 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
         ["brandId"] = "brand",
         ["productId"] = "product",
         ["variantId"] = "variant",
+        ["ids"] = "variant",
         ["warehouseId"] = "warehouse",
         ["locationId"] = "location",
         ["customerId"] = "customer",

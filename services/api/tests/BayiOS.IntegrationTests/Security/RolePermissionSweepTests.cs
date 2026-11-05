@@ -22,8 +22,8 @@ public sealed class RolePermissionSweepTests(ApiFixture fixture)
     public async Task Every_endpoint_permission_is_a_known_matrix_permission()
     {
         var routes = await ApiRoutes.LoadAsync(fixture);
-        var unknown = routes.Where(r => r.Permission is not null && !RolePermissions.AllPermissions.Contains(r.Permission))
-            .Select(r => $"{r}: x-permission '{r.Permission}' is not in RolePermissions");
+        var unknown = routes.SelectMany(r => r.AnyOf.Where(p => !RolePermissions.AllPermissions.Contains(p))
+            .Select(p => $"{r}: permission '{p}' is not in RolePermissions"));
         SecurityProbes.AssertNone([.. unknown]);
     }
 
@@ -39,7 +39,9 @@ public sealed class RolePermissionSweepTests(ApiFixture fixture)
         int granted = 0, denied = 0;
         foreach (var route in routes)
         {
-            var allowed = RolePermissions.IsGranted(role, route.Permission!);
+            // Gate semantics (#69): any listed permission opens the endpoint; K cells follow the default tenant rules
+            // (roles-permissions §4) and record-level K / O cells pass the gate (the service then narrows the records).
+            var allowed = route.AnyOf.Any(p => AuthorizationContext.Evaluate(role, p, TenantAccessRules.Defaults) != PermissionScope.None);
             var path = ApiRoutes.Fill(route.Template, (segment, _) => segment == "sector-templates" ? "zz-yok" : Guid.NewGuid().ToString());
             object? body = route.Method is "GET" or "DELETE" ? null : route.RequestContentTypes.Contains("multipart/form-data") ? "multipart" : new { };
             var response = await SecurityProbes.SendAsync(fixture, member, route, path, body, CatalogClient.ETag(1));

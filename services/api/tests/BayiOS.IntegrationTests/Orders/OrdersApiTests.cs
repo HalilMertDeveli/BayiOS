@@ -401,18 +401,16 @@ public class OrdersApiTests(ApiFixture fixture)
         var salesOrder = await OrdersKit.ReadAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m)]), HttpStatusCode.Created);
         await HttpAssert.ProblemAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, unitPrice: 1m)]), HttpStatusCode.Forbidden, "auth.forbidden");
         await HttpAssert.ProblemAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m, discountPercent: 50m)]), HttpStatusCode.Forbidden, "auth.forbidden");
-        // orders.edit.draft is "own records" (O) for sales — fail-closed until #69.
-        Assert.Equal(HttpStatusCode.Forbidden, (await sales.PatchAsync($"/api/v1/orders/{salesOrder.Order.Id}", new { notes = "x" }, CatalogClient.ETag(1))).StatusCode);
+        // orders.edit.draft is "own records" (O) for sales: its own draft is editable (other cases: ConditionalPermissionsTests).
+        salesOrder = await OrdersKit.ReadAsync(await sales.PatchAsync($"/api/v1/orders/{salesOrder.Order.Id}", new { notes = "x" }, CatalogClient.ETag(salesOrder.Order.Version)));
         var pending = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(sales, salesOrder, "submit"));
-        // orders.approve and orders.cancel are conditional (K) for sales — denied at the endpoint.
-        Assert.Equal(HttpStatusCode.Forbidden, (await OrdersKit.ActAsync(sales, pending, "approve")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await OrdersKit.ActAsync(sales, pending, "cancel", new { reason = "x" })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await sales.GetAsync($"/api/v1/orders/{pending.Order.Id}")).StatusCode);
 
-        // viewer reads only; warehouse_staff may ship but not read orders (K⁸).
+        // viewer reads only; warehouse_staff may ship and reads only orders behind its tasks (K⁸) — none yet.
         Assert.Equal(HttpStatusCode.OK, (await viewer.GetAsync("/api/v1/orders")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await kit.CreateResponseAsync(viewer, [OrdersKit.Line(variant, 1m)])).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync("/api/v1/orders")).StatusCode);
+        Assert.Empty((await OrdersKit.ReadListAsync(await staff.GetAsync("/api/v1/orders"))).Items);
+        Assert.Equal(HttpStatusCode.NotFound, (await staff.GetAsync($"/api/v1/orders/{pending.Order.Id}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await OrdersKit.ActAsync(staff, pending, "approve")).StatusCode);
 
         var approved = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, pending, "approve"));
