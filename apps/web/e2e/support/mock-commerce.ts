@@ -315,7 +315,8 @@ export async function handleCommerce(route: Route, mock: MockCommerce, catalog: 
     const c = mock.customers.find((x) => x.id === anonymizeMatch[1]);
     if (!c) return done(json(route, 404, problemBody(404, "resource.not_found")));
     if (!ownerAdmin) return done(json(route, 403, problemBody(403, "auth.forbidden")));
-    if (c.anonymizedAt) return done(json(route, 409, problemBody(409, "customers.anonymized")));
+    // Repeat anonymize (#115): 200 with the unchanged customer.
+    if (c.anonymizedAt) return succeed(200, { customer: c, addresses: [] }, etag(c.version));
     Object.assign(c, {
       name: `Silinmiş müşteri #${c.id.slice(-6)}`,
       contactName: null,

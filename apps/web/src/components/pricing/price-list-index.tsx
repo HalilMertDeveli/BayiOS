@@ -21,6 +21,7 @@ import { formatPercent } from "@/lib/pricing/money";
 import { pricingPermissions } from "@/lib/pricing/permissions";
 import { buildCreatePriceList, newPriceListValues, validatePriceList, type PriceListFormValues } from "@/lib/pricing/price-list-form";
 import { useSession } from "@/lib/session/session-context";
+import { useResetAfterCreate } from "@/lib/use-reset-after-create";
 import { PriceListFields } from "./price-list-fields";
 
 type Loadable = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; data: PriceList[] };
@@ -61,7 +62,11 @@ export function PriceListIndex() {
   const permissions = pricingPermissions(access);
   const [showArchived, setShowArchived] = useState(false);
   const { state, reload } = usePriceLists(showArchived);
-  const [creating, setCreating] = useState(false);
+  // The dialog belongs to one page "generation": after a list is created and the page is left, it is closed and empty on return (#96).
+  const { generation, markCreated } = useResetAfterCreate();
+  const [creatingIn, setCreatingIn] = useState<number | null>(null);
+  const creating = creatingIn === generation;
+  const setCreating = (open: boolean) => setCreatingIn(open ? generation : null);
   const lists = useMemo(() => (state.status === "ready" ? state.data : []), [state]);
   const names = useMemo(() => new Map(lists.map((l) => [l.id, l.name])), [lists]);
 
@@ -182,12 +187,24 @@ export function PriceListIndex() {
         )}
       </section>
 
-      {creating ? <CreatePriceListDialog lists={lists} canChooseKind={permissions.readCost} onClose={() => setCreating(false)} /> : null}
+      {creating ? (
+        <CreatePriceListDialog lists={lists} canChooseKind={permissions.readCost} onClose={() => setCreating(false)} onCreated={markCreated} />
+      ) : null}
     </>
   );
 }
 
-function CreatePriceListDialog({ lists, canChooseKind, onClose }: { lists: PriceList[]; canChooseKind: boolean; onClose: () => void }) {
+function CreatePriceListDialog({
+  lists,
+  canChooseKind,
+  onClose,
+  onCreated,
+}: {
+  lists: PriceList[];
+  canChooseKind: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
   const { api } = useSession();
   const { toast } = useToast();
   const router = useRouter();
@@ -208,6 +225,7 @@ function CreatePriceListDialog({ lists, canChooseKind, onClose }: { lists: Price
     try {
       const body = buildCreatePriceList(values);
       const created = await createPriceList(api, body, keys.keyFor(body));
+      onCreated();
       toast({ tone: "success", title: "Fiyat listesi oluşturuldu", description: created.isDefault ? `${created.name} — ${created.currency} için varsayılan.` : created.name });
       router.push(priceListHref(created.id));
     } catch (error) {

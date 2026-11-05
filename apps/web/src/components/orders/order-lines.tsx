@@ -149,17 +149,30 @@ function FragmentRow({ label, value }: { label: string; value: string }) {
  * Approval refused for lack of stock: nothing was reserved (all or nothing). Lists each short line with what was
  * requested and what is available, so the approver can decide (wait for goods, edit the draft after reject, …).
  */
-export function ShortagesPanel({ shortages, lines, onDismiss }: { shortages: readonly Shortage[]; lines: readonly OrderLine[]; onDismiss: () => void }) {
+export function ShortagesPanel({
+  shortages,
+  lines,
+  onDismiss,
+  action = "approve",
+}: {
+  shortages: readonly Shortage[];
+  lines: readonly OrderLine[];
+  onDismiss: () => void;
+  /** submit: the tenant needs no approval, the submit tried to approve at once and the order stayed a draft (#92). */
+  action?: "approve" | "submit";
+}) {
+  const submit = action === "submit";
   const lineOf = (variantId: string) => lines.find((l) => l.variantId === variantId);
   return (
     <section aria-labelledby="order-shortages" className="flex flex-col gap-3 rounded-lg border border-danger-border bg-danger-bg p-4 text-danger-fg">
       <h2 id="order-shortages" tabIndex={-1} className="flex items-center gap-2 text-h3">
         <TriangleAlert className="size-5" aria-hidden="true" />
-        Onaylanamadı: stok yetersiz
+        {submit ? "Gönderilemedi: stok yetersiz" : "Onaylanamadı: stok yetersiz"}
       </h2>
       <p className="text-body">
-        Sipariş ya hep ya hiç onaylanır: aşağıdaki satırlar için satılabilir stok yetmediği için <strong>hiçbir satıra stok ayrılmadı</strong> ve sipariş
-        onay bekliyor durumunda kaldı.
+        {submit ? "İşletmenizde sipariş onayı zorunlu olmadığından sipariş gönderilince hemen onaylanır ve stok ayrılır. " : ""}
+        Sipariş ya hep ya hiç onaylanır: aşağıdaki satırlar için satılabilir stok yetmediği için <strong>hiçbir satıra stok ayrılmadı</strong> ve sipariş{" "}
+        {submit ? "taslak olarak kaldı" : "onay bekliyor durumunda kaldı"}.
       </p>
       <ul aria-label="Stoğu yetmeyen satırlar" className="flex flex-col gap-1 text-body">
         {shortages.map((s, i) => {
@@ -172,7 +185,11 @@ export function ShortagesPanel({ shortages, lines, onDismiss }: { shortages: rea
           );
         })}
       </ul>
-      <p className="text-caption">Mal kabulü yapın veya siparişi reddedip miktarları düzenleyin; ardından tekrar onaylayın.</p>
+      <p className="text-caption">
+        {submit
+          ? "Mal kabulü yapın veya taslaktaki miktarları düzenleyin; ardından tekrar gönderin."
+          : "Mal kabulü yapın veya siparişi reddedip miktarları düzenleyin; ardından tekrar onaylayın."}
+      </p>
       <div>
         <button type="button" onClick={onDismiss} className="min-h-11 text-body underline underline-offset-2">
           Bu uyarıyı kapat

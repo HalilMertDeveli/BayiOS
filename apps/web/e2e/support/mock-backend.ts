@@ -22,7 +22,15 @@ export const SUPABASE_URL = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54
 export const API_URL = process.env.E2E_API_URL ?? "http://localhost:5280";
 const APP_ORIGIN = `http://localhost:${process.env.E2E_PORT ?? 3200}`;
 
-export type MockMembership = { tenantId: string; tenantName: string; tenantSlug: string; role: string; status: string };
+export type MockMembership = {
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  role: string;
+  status: string;
+  /** Status of the business (#111). Defaults to "active", or "suspended" for `inactiveTenants`. */
+  tenantStatus?: string;
+};
 
 export const USER = { id: "00000000-0000-4000-8000-000000000001", email: "mock.kullanici@example.test", fullName: "Mock Kullanıcı" };
 
@@ -137,6 +145,8 @@ export type ApiMockOptions = {
   rules?: Partial<FixtureRules>;
   /** Tenants that are suspended/closed: /me returns no activeTenant for them and every tenant-scoped call gets 403 tenant.inactive. */
   inactiveTenants?: string[];
+  /** Initial tenant settings (GET/PATCH /tenant/settings, ETag/If-Match → 412); defaults to `defaultSettings`. */
+  settings?: Partial<MockSettings>;
 };
 
 /** MOCK default tenant rules for /me (see ApiMockOptions.rules). */
@@ -153,6 +163,8 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
     memberships: options.memberships ?? [TENANT_A],
     rules: { ...MOCK_RULES, ...options.rules },
     inactiveTenants: options.inactiveTenants ?? [],
+    settings: { ...defaultSettings, ...options.settings } as MockSettings,
+    settingsVersion: 0,
     catalog,
     inventory,
     commerce,
@@ -188,7 +200,12 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
         m && !state.inactiveTenants.includes(m.tenantId)
           ? { tenantId: m.tenantId, role: m.role, permissions: grantsForRoleName(m.role, state.rules) }
           : null;
-      return json(route, 200, { userId: USER.id, email: USER.email, fullName: USER.fullName, memberships: state.memberships, activeTenant });
+      // MembershipResponse.tenantStatus (#111): the picker greys suspended/closed businesses out.
+      const memberships = state.memberships.map((x) => ({
+        ...x,
+        tenantStatus: x.tenantStatus ?? (state.inactiveTenants.includes(x.tenantId) ? "suspended" : "active"),
+      }));
+      return json(route, 200, { userId: USER.id, email: USER.email, fullName: USER.fullName, memberships, activeTenant });
     }
     if (tenantHeader && state.inactiveTenants.includes(tenantHeader)) {
       return json(route, 403, problem(403, "tenant.inactive", { title: "This tenant is not active" }));
@@ -208,11 +225,15 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
         status: "active",
         createdAt: "2026-11-01T00:00:00Z",
       });
-      const items = [
+      const all = [
         member("00000000-0000-4000-8000-7c0000000001", "Deniz Depocu (mock)", "warehouse_staff"),
         member(USER.id, USER.fullName, role),
         member("00000000-0000-4000-8000-7c0000000002", "Ali Toplayıcı (mock)", "warehouse_staff"),
+        member("00000000-0000-4000-8000-7c0000000003", "Selin Satış (mock)", "sales"),
       ];
+      // ?permission=a,b (#111): members whose role holds every listed permission (any scope) under the tenant rules.
+      const wanted = (url.searchParams.get("permission") ?? "").split(",").filter(Boolean);
+      const items = all.filter((x) => wanted.every((p) => grantsForRoleName(x.role, state.rules).some((g) => g.permission === p)));
       return json(route, 200, { items, page: { nextCursor: null, hasMore: false, limit: 200 } });
     }
     if (path === "/api/v1/tenants" && method === "POST") {
@@ -231,16 +252,32 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
       const m = state.memberships.find((x) => x.tenantId === request.headers()["x-tenant-id"]);
       return json(route, 200, { ...tenantBody(m), ...(request.postDataJSON() as object), version: 1 }, { ETag: 'W/"1"' });
     }
-    if (path === "/api/v1/tenant/settings" && method === "GET") {
-      return json(route, 200, defaultSettings, { ETag: 'W/"0"' });
-    }
-    if (path === "/api/v1/tenant/settings" && method === "PATCH") {
-      return json(route, 200, { ...defaultSettings, ...(request.postDataJSON() as object) }, { ETag: 'W/"1"' });
+if (path === "/api/v1/tenant/settings" && (method === "GET" || method === "PATCH")) {
+      const role = state.memberships.find((m) => m.tenantId === tenantHeader)?.role ?? "viewer";
+      if (!grantsForRoleName(role, state.rules).some((g) => g.permission === "tenant.settings.manage")) {
+        return json(route, 403, problem(403, "auth.forbidden", { title: "Missing permission: tenant.settings.manage" }));
+      }
+      const etag = () => `W/"${state.settingsVersion}"`;
+      if (method === "GET") return json(route, 200, state.settings, { ETag: etag() });
+      const ifMatch = request.headers()["if-match"];
+      if (!ifMatch) return json(route, 428, problem(428, "precondition.required"));
+      if (ifMatch !== etag()) return json(route, 412, problem(412, "concurrency.version_mismatch"));
+      const body = (request.postDataJSON() ?? {}) as Partial<MockSettings>;
+      if (typeof body.orderNumberPrefix === "string") {
+        body.orderNumberPrefix = body.orderNumberPrefix.trim().toUpperCase();
+        if (!/^[A-Z][A-Z0-9]{0,9}$/.test(body.orderNumberPrefix)) {
+          return json(route, 422, problem(422, "validation.failed", { errors: { orderNumberPrefix: ["Must be 1–10 characters of A–Z and 0–9, starting with a letter."] } }));
+        }
+      }
+      state.settings = { ...state.settings, ...body };
+      state.settingsVersion += 1;
+      return json(route, 200, state.settings, { ETag: etag() });
     }
     if (orders) {
       const role = state.memberships.find((m) => m.tenantId === request.headers()["x-tenant-id"])?.role ?? "viewer";
       const taskOrderIds = () => (fulfilment ? fulfilment.tasks.map((t) => t.orderId) : []);
-      if (await handleOrders(route, orders, { catalog, commerce, taskOrderIds, rules: state.rules }, role)) return;
+      const settings = () => state.settings;
+      if (await handleOrders(route, orders, { catalog, commerce, taskOrderIds, rules: state.rules, settings }, role)) return;
     }
     if (fulfilment) {
       const role = state.memberships.find((m) => m.tenantId === request.headers()["x-tenant-id"])?.role ?? "viewer";
@@ -275,6 +312,8 @@ function tenantBody(m: MockMembership | undefined) {
   };
 }
 
+export type MockSettings = typeof defaultSettings;
+
 export const defaultSettings = {
   negativeStockPolicy: "block",
   salesCanApproveOrders: false,
@@ -286,6 +325,8 @@ export const defaultSettings = {
   require2fa: false,
   defaultTaxRate: 20,
   pricesIncludeTaxDisplay: false,
+  requireOrderApproval: true,
+  orderNumberPrefix: "SIP",
 };
 
 /** Signed-in user with the given memberships; the first one is selected when there is only one. */

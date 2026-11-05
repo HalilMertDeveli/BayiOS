@@ -83,6 +83,11 @@ export type Access = {
   condition(permission: Permission): string | null;
   /** True when the permission is granted only under the given condition code. */
   hasCondition(permission: Permission, code: string): boolean;
+  /**
+   * The grant's limit parameters (#111), e.g. `maxDiscountPercent` of the sales discount limit (K¹⁰) as a number; null
+   * when the grant carries none or the permission is not granted.
+   */
+  maxDiscountPercent(permission: Permission): number | null;
   readonly grants: readonly PermissionGrant[];
 };
 
@@ -98,6 +103,11 @@ export function createAccess(grants: readonly PermissionGrant[] | null | undefin
     hasCondition: (permission, code) => {
       const grant = byPermission.get(permission);
       return grant !== undefined && grant.scope !== "all" && grant.condition === code;
+    },
+    maxDiscountPercent: (permission) => {
+      const raw = byPermission.get(permission)?.parameters?.maxDiscountPercent;
+      const value = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() ? Number(raw) : NaN;
+      return Number.isFinite(value) ? value : null;
     },
     grants: list,
   };

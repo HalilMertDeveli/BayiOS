@@ -459,8 +459,9 @@ test.describe("rol kısıtları (mock)", () => {
     await expect(page.getByRole("button", { name: "Siparişi iptal et" })).toBeVisible();
 
     // The API decides per record: a refusal (e.g. ownership changed) is shown plainly, nothing is lost.
+    // MOCK 403 orders.not_owner (#111): the message comes from the code, not the title.
     ctx.orders.overrides.set(`PATCH /api/v1/orders/${orderId(1)}`, (route) =>
-      fulfillJson(route, 403, problemBody(403, "auth.forbidden", { title: "orders.edit.draft: Only drafts you created can be edited" })),
+      fulfillJson(route, 403, problemBody(403, "orders.not_owner", { title: "x", permission: "orders.edit.draft" })),
     );
     await draftLine(page, 0).getByRole("textbox", { name: "MOCK-001-1 miktarı" }).fill("4");
     await page.getByRole("button", { name: "Taslağı kaydet" }).click();
@@ -476,9 +477,19 @@ test.describe("rol kısıtları (mock)", () => {
     const line = draftLine(page, 0);
     await expect(line.getByRole("textbox", { name: "MOCK-001-1 manuel birim fiyat" })).toHaveCount(0);
     await line.getByRole("combobox", { name: "MOCK-001-1 iskonto türü" }).selectOption("percent");
+    // The cap comes from GET /me (parameters.maxDiscountPercent, #111) and is shown next to the field.
+    await expect(line.getByText("En fazla %10", { exact: true })).toBeVisible();
     await line.getByRole("textbox", { name: "MOCK-001-1 iskonto oranı (%)" }).fill("15");
     await page.getByRole("button", { name: "Taslağı kaydet" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Taslak kaydedilemedi" })).toContainText("iskonto sınırını aşıyor");
+    await expect(line.getByText("İskonto en fazla %10 olabilir.")).toBeVisible();
+    expect(requestsTo(api, "PATCH", `/api/v1/orders/${orderId(1)}`)).toHaveLength(0);
+    // The API still decides (e.g. the limit was lowered meanwhile): 403 orders.discount_limit_exceeded with limitPercent.
+    ctx.orders.overrides.set(`PATCH /api/v1/orders/${orderId(1)}`, (route) =>
+      fulfillJson(route, 403, problemBody(403, "orders.discount_limit_exceeded", { permission: "orders.price.override", limitPercent: 7.5 })),
+    );
+    await line.getByRole("textbox", { name: "MOCK-001-1 iskonto oranı (%)" }).fill("9");
+    await page.getByRole("button", { name: "Taslağı kaydet" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Taslak kaydedilemedi" })).toContainText("İskonto en fazla %7,5 olabilir.");
     await line.getByRole("textbox", { name: "MOCK-001-1 iskonto oranı (%)" }).fill("5");
     await page.getByRole("button", { name: "Taslağı kaydet" }).click();
     await expect(page.getByText("Taslak kaydedildi")).toBeVisible();
@@ -524,6 +535,107 @@ test.describe("rol kısıtları (mock)", () => {
     await page.goto(`/siparisler/${orderId(2)}`);
     await expect(page.getByText("Yalnızca size atanmış veya havuzdaki görevlere bağlı siparişleri görebilirsiniz.")).toBeVisible();
     await expectNoSeriousViolations(page);
+  });
+});
+
+test.describe("sipariş ayarları etkisi ve adresler (mock, #92)", () => {
+  test("onay zorunlu değil: sahibin gönderdiği sipariş otomatik onaylanır ve stok ayrılır", async ({ page }) => {
+    const ctx = setup((c) => add(c, 1, { createdBy: USER.id, lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 2 }] }));
+    const api = await signedIn(page, { ...ctx, settings: { requireOrderApproval: false } });
+    await page.goto(`/siparisler/${orderId(1)}`);
+    await page.getByRole("button", { name: "Onaya gönder" }).click();
+    await expect(page.getByText("SIP-2026-000001: Sipariş otomatik onaylandı; stok ayrıldı")).toBeVisible();
+    await expect(page.getByText(/sipariş onayı zorunlu değil/)).toBeVisible();
+    await expect(page.getByRole("region", { name: "Satır bazında sevkiyat durumu" })).toContainText("MOCK-001-1");
+    expect(requestsTo(api, "POST", actionPath(1, "submit"))).toHaveLength(1);
+    expect(requestsTo(api, "POST", actionPath(1, "approve"))).toHaveLength(0);
+    expect(ctx.orders.orders[0].status).toBe("approved");
+  });
+
+  test("onay zorunlu değil + stok yetmiyor (engelle): sipariş taslak kalır, eksik satırlar listelenir", async ({ page }) => {
+    const ctx = setup((c) => {
+      add(c, 1, { createdBy: USER.id, lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 5 }] });
+      c.orders.available.set(variantOf(c.catalog, 1).id, 2);
+    });
+    await signedIn(page, { ...ctx, settings: { requireOrderApproval: false } });
+    await page.goto(`/siparisler/${orderId(1)}`);
+    await page.getByRole("button", { name: "Onaya gönder" }).click();
+    await expect(page.getByRole("heading", { name: "Gönderilemedi: stok yetersiz" })).toBeVisible();
+    await expect(page.getByText(/taslak olarak kaldı/)).toBeVisible();
+    expect(ctx.orders.orders[0].status).toBe("draft");
+  });
+
+  test("onay zorunlu değil + uyar: gönderim teyitle confirmNegativeStock ile tekrarlanır", async ({ page }) => {
+    const ctx = setup(
+      (c) => {
+        add(c, 1, { createdBy: USER.id, lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 5 }] });
+        c.orders.available.set(variantOf(c.catalog, 1).id, 2);
+      },
+      { policy: "warn" },
+    );
+    const api = await signedIn(page, { ...ctx, settings: { requireOrderApproval: false } });
+    await page.goto(`/siparisler/${orderId(1)}`);
+    await page.getByRole("button", { name: "Onaya gönder" }).click();
+    const dialog = page.getByRole("alertdialog", { name: "Stok eksiye düşecek" });
+    await expect(dialog).toContainText("sipariş gönderilince hemen onaylanır");
+    await dialog.getByRole("button", { name: "Yine de gönder ve onayla" }).click();
+    await expect(page.getByText("SIP-2026-000001: Sipariş otomatik onaylandı; stok ayrıldı")).toBeVisible();
+    const [first, second] = requestsTo(api, "POST", actionPath(1, "submit"));
+    expect(first.body).toBeNull();
+    expect(second.body).toEqual({ confirmNegativeStock: true });
+  });
+
+  test("satış (onay yetkisi yok): onay zorunlu olmasa da sipariş onay bekler", async ({ page }) => {
+    const ctx = setup((c) => add(c, 1, { createdBy: USER.id, lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 1 }] }));
+    await signedIn(page, { ...ctx, memberships: [SALES], settings: { requireOrderApproval: false } });
+    await page.goto(`/siparisler/${orderId(1)}`);
+    await page.getByRole("button", { name: "Onaya gönder" }).click();
+    await expect(page.getByText("SIP-2026-000001: Sipariş onaya gönderildi")).toBeVisible();
+    expect(ctx.orders.orders[0].status).toBe("pending_approval");
+  });
+
+  test("teslimat/fatura adresi: varsayılan seçili gelir, başka adres seçilir; gönderimde anlık görüntü gösterilir", async ({ page }) => {
+    const ctx = setup();
+    const api = await signedIn(page, ctx);
+    await page.goto("/siparisler/yeni");
+    await expect(page.getByText("Teslimat ve fatura adresi müşteri seçildikten sonra seçilir.")).toBeVisible();
+    await page.getByRole("searchbox", { name: "Müşteri" }).fill("001");
+    await page.getByRole("button", { name: "Müşteri ara" }).click();
+    await page.getByRole("button", { name: /Mock Müşteri 001/ }).click();
+    const shipping = page.getByRole("combobox", { name: "Teslimat adresi" });
+    await expect(shipping).toBeEnabled();
+    await expect(shipping.locator("option:checked")).toHaveText(/Merkez \(mock\).*\(varsayılan\)/);
+    await expect(page.getByText(/fatura adresi yok; müşteri kartından ekleyebilirsiniz/)).toBeVisible();
+    await shipping.selectOption({ label: "Depo (mock) — Sanayi Sit. Mock Sk. No:2, Mock İlçe / İstanbul" });
+    await page.getByRole("textbox", { name: "Ürün ekle" }).fill("MOCK-001-1");
+    await page.getByRole("textbox", { name: "Ürün ekle" }).press("Enter");
+    await page.getByRole("button", { name: "Taslak oluştur" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Sipariş SIP-2026-001000" })).toBeVisible();
+    expect(requestsTo(api, "POST", "/api/v1/orders")[0].body).toMatchObject({ shippingAddressId: ctx.commerce.addresses[1].id, billingAddressId: null });
+
+    const addresses = page.getByRole("region", { name: "Adresler" });
+    await expect(addresses).toContainText("Önizleme");
+    await expect(addresses).toContainText("Sanayi Sit. Mock Sk. No:2");
+    await page.getByRole("button", { name: "Onaya gönder" }).click();
+    await expect(page.getByText("SIP-2026-001000: Sipariş onaya gönderildi")).toBeVisible();
+    await expect(addresses).toContainText("Sipariş gönderildiğinde kaydedilen adresler");
+    await expect(addresses).toContainText("Sanayi Sit. Mock Sk. No:2");
+    // A later change on the customer card does not touch the snapshot.
+    ctx.commerce.addresses[1].line1 = "Değişti Cd. 9";
+    await page.reload();
+    await expect(page.getByRole("region", { name: "Adresler" })).toContainText("Sanayi Sit. Mock Sk. No:2");
+    await expectNoSeriousViolations(page);
+  });
+
+  test("seçili adres silinmişse gönderim 422 ile açıklanır", async ({ page }) => {
+    const ctx = setup((c) => add(c, 1, { createdBy: USER.id, lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 1 }] }));
+    await signedIn(page, ctx);
+    ctx.orders.orders[0].shippingAddressId = "00000000-0000-4000-8000-7e0000000999";
+    await page.goto(`/siparisler/${orderId(1)}`);
+    await expect(page.getByRole("combobox", { name: "Teslimat adresi" })).toHaveValue("00000000-0000-4000-8000-7e0000000999");
+    await expect(page.getByText("Seçili adres müşteriden silinmiş. Başka bir adres seçin.")).toBeVisible();
+    await page.getByRole("button", { name: "Onaya gönder" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Adres geçersiz" })).toContainText("Teslimat adresi: Seçili adres müşteriden silinmiş");
   });
 });
 

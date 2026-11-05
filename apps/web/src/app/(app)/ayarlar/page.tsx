@@ -1,15 +1,19 @@
 import Link from "next/link";
 import { ListPlus } from "lucide-react";
-import { ModulePlaceholder, placeholderMetadata } from "@/components/shell/module-placeholder";
+import { OrderSettings } from "@/components/settings/order-settings";
+import { PageHeader } from "@/components/ui/page-header";
 
-export const metadata = placeholderMetadata("/ayarlar");
+export const metadata = { title: "Ayarlar" };
 
+/** Ayarlar: order settings (#92) and the settings pages that are ready. Team, roles and the business profile come later. */
 export default function AyarlarPage() {
   return (
-    <ModulePlaceholder href="/ayarlar">
+    <>
+      <PageHeader title="Ayarlar" description="İşletmenizin sipariş kuralları ve kullanıma hazır ayarlar." />
+      <OrderSettings />
       <section aria-labelledby="ready-settings" className="flex flex-col gap-3">
         <h2 id="ready-settings" className="text-h3 text-fg">
-          Kullanıma hazır ayarlar
+          Diğer ayarlar
         </h2>
         <Link
           href="/ayarlar/ozel-alanlar"
@@ -21,7 +25,8 @@ export default function AyarlarPage() {
             <span className="text-caption text-fg-muted">Ürün ve varyantlara işletmenize özel bilgi alanları ekleyin.</span>
           </span>
         </Link>
+        <p className="text-caption text-fg-muted">Ekip, roller ve işletme profili ayarları henüz geliştiriliyor.</p>
       </section>
-    </ModulePlaceholder>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { ROUTES } from "@/lib/auth/routes";
 import { roleLabels } from "@/lib/navigation";
+import { tenantStatusLabel } from "@/lib/session/active-tenant";
 import { useSession } from "@/lib/session/session-context";
 
 /** Header: active tenant (switcher when the user has several), signed-in user, role and sign-out. */
@@ -26,7 +27,10 @@ export function UserMenu() {
           hideLabel
           value={active.tenantId}
           onChange={(event) => selectTenant(event.target.value)}
-          options={memberships.map((m) => ({ value: m.tenantId, label: m.tenantName }))}
+          options={memberships.map((m) => {
+            const inactive = tenantStatusLabel(m);
+            return { value: m.tenantId, label: inactive ? `${m.tenantName} (${inactive.toLocaleLowerCase("tr")})` : m.tenantName };
+          })}
           className="w-40 sm:w-56"
         />
       ) : active ? (

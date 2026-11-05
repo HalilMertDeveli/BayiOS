@@ -42,6 +42,7 @@ import { customerErrorMessage, customerFieldErrors } from "@/lib/customers/error
 import { customerPermissions } from "@/lib/customers/permissions";
 import { currencyOptions } from "@/lib/pricing/money";
 import { useSession } from "@/lib/session/session-context";
+import { useResetAfterCreate } from "@/lib/use-reset-after-create";
 import { AddressSection } from "./address-section";
 import { AnonymizeDialog } from "./anonymize-dialog";
 import { CustomerStatusBadge } from "./customer-status-badge";
@@ -82,6 +83,7 @@ export function CustomerEditor({ customerId }: { customerId: string | null }) {
   const { api } = useSession();
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const { generation, markCreated } = useResetAfterCreate();
 
   useEffect(() => {
     if (!customerId) return;
@@ -104,7 +106,9 @@ export function CustomerEditor({ customerId }: { customerId: string | null }) {
 
   const onAddresses = useCallback((addresses: Address[]) => setLoad((prev) => (prev.status === "ready" ? { ...prev, addresses } : prev)), []);
 
-  if (!customerId) return <CustomerForm key="new" loaded={null} onSaved={() => undefined} onAddresses={onAddresses} onReload={reload} />;
+  if (!customerId) {
+    return <CustomerForm key={`new-${generation}`} loaded={null} onSaved={() => undefined} onAddresses={onAddresses} onReload={reload} onCreated={markCreated} />;
+  }
 
   if (load.status === "loading") {
     return (
@@ -149,11 +153,14 @@ function CustomerForm({
   onSaved,
   onAddresses,
   onReload,
+  onCreated,
 }: {
   loaded: Loaded | null;
   onSaved: (loaded: Loaded) => void;
   onAddresses: (addresses: Address[]) => void;
   onReload: () => void;
+  /** A new customer was created: the page starts the next visit from an empty form (#96). */
+  onCreated?: () => void;
 }) {
   const { api, access } = useSession();
   const permissions = customerPermissions(access);
@@ -218,6 +225,7 @@ function CustomerForm({
         const body = buildCreateCustomer(values, permissions.assignPriceLists);
         const created = await createCustomer(api, body, keys.keyFor(body));
         keys.reset();
+        onCreated?.();
         toast({ tone: "success", title: "Müşteri eklendi", description: `${created.customer.name} — şimdi adres ekleyebilirsiniz.` });
         router.push(customerHref(created.customer.id));
         return;

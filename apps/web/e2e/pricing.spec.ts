@@ -80,6 +80,16 @@ test.describe("fiyat listeleri (mock)", () => {
     expect(create.headers["idempotency-key"]).toBeTruthy();
     expect(create.body).toMatchObject({ name: "Kampanya (mock)", kind: "sales", currency: "TRY", basePriceListId: PRICE_LIST_IDS.perakende, discountPercent: "12.5" });
 
+    // #96: the list page was kept mounted; going back shows it without the create dialog, and a new one starts empty.
+    await page.getByRole("link", { name: "Fiyat listeleri", exact: true }).first().click();
+    await expect(page.getByRole("heading", { level: 1, name: "Fiyat listeleri" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Yeni fiyat listesi" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Yeni liste" }).click();
+    await expect(page.getByRole("dialog", { name: "Yeni fiyat listesi" }).getByLabel("Liste adı")).toHaveValue("");
+    await page.getByRole("dialog", { name: "Yeni fiyat listesi" }).getByRole("button", { name: "Vazgeç" }).click();
+    await page.goBack();
+    await expect(page.getByRole("heading", { level: 1, name: "Kampanya (mock)" })).toBeVisible();
+
     await expect(page.getByRole("heading", { name: "Bu listede henüz fiyat yok" })).toBeVisible();
     await scan(page, "MOCK-001-1");
     await page.getByLabel("1. satır birim fiyat").fill("12,50");

@@ -51,6 +51,26 @@ test.describe("shell — desktop", () => {
     await expect(page.getByRole("button", { name: "Menüyü daralt" })).toBeVisible();
   });
 
+  test("long page (#111): the sidebar background reaches the bottom; the menu stays in view while scrolling", async ({ page }) => {
+    await page.goto("/tasarim-sistemi");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const box = await page.evaluate(() => {
+      const aside = document.getElementById("sidebar")!;
+      const panel = aside.firstElementChild as HTMLElement;
+      return {
+        pageHeight: document.documentElement.scrollHeight,
+        viewport: window.innerHeight,
+        asideHeight: aside.getBoundingClientRect().height,
+        panelTop: panel.getBoundingClientRect().top,
+      };
+    });
+    expect(box.pageHeight).toBeGreaterThan(box.viewport * 1.5);
+    expect(box.asideHeight).toBeGreaterThanOrEqual(box.pageHeight - 1);
+    expect(Math.abs(box.panelTop)).toBeLessThanOrEqual(1);
+    await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Pano" })).toBeInViewport();
+  });
+
   test("skip link moves focus to the main content", async ({ page }) => {
     await page.goto("/pano");
     await page.keyboard.press("Tab");

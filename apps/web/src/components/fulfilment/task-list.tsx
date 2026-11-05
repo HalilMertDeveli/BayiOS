@@ -377,7 +377,8 @@ function AssignDialog({
   useEffect(() => {
     if (!task || !canListMembers) return;
     const controller = new AbortController();
-    listActiveMembers(api, controller.signal)
+    // Only people whose role may pick (tasks.pick): the API refuses any other assignee (422).
+    listActiveMembers(api, controller.signal, { permissions: ["tasks.pick"] })
       .then((items) => !controller.signal.aborted && setMembers({ status: "ready", items }))
       .catch(() => !controller.signal.aborted && setMembers({ status: "error", items: [] }));
     return () => controller.abort();
@@ -418,7 +419,7 @@ function AssignDialog({
           size="lg"
           value={target}
           placeholder={members.status === "loading" ? "Ekip yükleniyor…" : "Personel seçin"}
-          hint="Toplama yetkisi olan bir personel seçin; uygun olmayan rol sunucuda reddedilir."
+          hint="Yalnızca toplama yetkisi olan personel listelenir."
           error={error ?? (members.status === "error" ? "Ekip listesi yüklenemedi; görevi kendinize atayabilirsiniz." : undefined)}
           onChange={(e) => setTarget(e.target.value)}
           options={options}

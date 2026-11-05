@@ -31,4 +31,16 @@ describe("GET /members (staff picker)", () => {
     expect(members.map(memberLabel)).toEqual(["ahmet@example.test", "Çağla", "Zeynep"]);
     expect(paths).toEqual(["/api/v1/members?status=active&limit=200", "/api/v1/members?status=active&limit=200&cursor=c1"]);
   });
+
+  it("filters by permission on the server (?permission=a,b) for the task assignment picker", async () => {
+    const paths: string[] = [];
+    const api: ApiClient = {
+      async request<T>(path: string) {
+        paths.push(path);
+        return { data: { items: [member("u1", "Ali")], page: { nextCursor: null, hasMore: false, limit: 200 } } as T, status: 200, etag: null };
+      },
+    };
+    await listActiveMembers(api, undefined, { permissions: ["tasks.pick", "tasks.pack"] });
+    expect(paths).toEqual(["/api/v1/members?status=active&limit=200&permission=tasks.pick%2Ctasks.pack"]);
+  });
 });

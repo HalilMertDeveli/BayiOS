@@ -81,3 +81,29 @@ test("mobile: the notice fits the phone width and stays accessible", async ({ pa
   expect(overflow).toBeLessThanOrEqual(0);
   await expectNoSeriousViolations(page);
 });
+
+test("picker (#111): a suspended business is greyed with its status; choosing it opens the notice", async ({ page }) => {
+  await signedIn(page, { memberships: [TENANT_A, TENANT_B], inactiveTenants: [TENANT_B.tenantId] });
+  await page.goto("/isletme-sec");
+  const list = page.getByRole("list", { name: "İşletmeleriniz" });
+  const suspended = list.getByRole("button", { name: TENANT_B.tenantName });
+  await expect(suspended).toContainText("Askıya alındı");
+  await expect(list.getByRole("button", { name: TENANT_A.tenantName })).not.toContainText("Askıya alındı");
+  await expectNoSeriousViolations(page);
+  await suspended.click();
+  await expect(page.getByRole("alert", { name: "İşletme kullanılamıyor" })).toContainText(TENANT_B.tenantName);
+});
+
+test("mobile (#111): the menu of a suspended business is not empty — explanation, switch and sign-out", async ({ page }) => {
+  await page.setViewportSize(MOBILE);
+  await signedIn(page, { memberships: [TENANT_A, TENANT_B], inactiveTenants: [TENANT_A.tenantId] });
+  await selectTenant(page, TENANT_A.tenantId);
+  await page.goto("/pano");
+  await page.getByRole("button", { name: "Menüyü aç" }).click();
+  const drawer = page.getByRole("dialog", { name: "Menü" });
+  await expect(drawer).toContainText("askıya alınmış veya kapatılmış; bu işletmenin menüsü kullanılamıyor");
+  await expect(drawer.getByRole("button", { name: "Çıkış yap" })).toBeVisible();
+  await expectNoSeriousViolations(page);
+  await drawer.getByRole("button", { name: "İşletme değiştir" }).click();
+  await expect(page).toHaveURL(/\/isletme-sec$/);
+});

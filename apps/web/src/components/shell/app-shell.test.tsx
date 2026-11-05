@@ -137,6 +137,36 @@ describe("AppShell", () => {
     expect(screen.getByRole("button", { name: "Çıkış yap" })).toBeDefined();
   });
 
+  it("the mobile menu of a suspended/closed business is not empty: it explains and offers switch + sign-out (#111)", async () => {
+    const other: Membership = { ...ownerMembership, tenantId: "t-2", tenantName: "Örnek LED" };
+    const signOut = vi.fn().mockResolvedValue(undefined);
+    renderShell(
+      "x",
+      session({ state: { status: "inactive", user: TEST_USER, memberships: [ownerMembership, other], tenant: ownerMembership }, role: null, access: NO_ACCESS, signOut }),
+    );
+    // Desktop sidebar: the explanation only (the page notice holds the buttons).
+    const sidebar = document.getElementById("sidebar") as HTMLElement;
+    expect(sidebar.textContent).toContain("askıya alınmış veya kapatılmış; bu işletmenin menüsü kullanılamıyor");
+    expect(within(sidebar).queryByRole("button", { name: "Çıkış yap" })).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Menüyü aç" }));
+    const drawer = document.getElementById("mobile-nav") as HTMLDialogElement;
+    expect(drawer.textContent).toContain("Örnek Motor");
+    const actions = within(drawer).getByRole("list", { name: "İşletme işlemleri" });
+    expect(within(actions).getByRole("button", { name: "İşletme değiştir" })).toBeDefined();
+    await userEvent.click(within(actions).getByRole("button", { name: "Çıkış yap" }));
+    expect(signOut).toHaveBeenCalled();
+  });
+
+  it("the sidebar column stretches to the page height; only its inner panel is sticky (#111)", () => {
+    renderShell();
+    const sidebar = document.getElementById("sidebar") as HTMLElement;
+    expect(sidebar.className).toContain("self-stretch");
+    expect(sidebar.className).toContain("bg-card");
+    expect(sidebar.className).not.toContain("h-dvh");
+    expect((sidebar.firstElementChild as HTMLElement).className).toContain("sticky");
+  });
+
   it("offers a skip link to the main content", () => {
     renderShell();
     expect(screen.getByRole("link", { name: "İçeriğe geç" }).getAttribute("href")).toBe("#main");

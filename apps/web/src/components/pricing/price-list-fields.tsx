@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { CheckboxField } from "@/components/ui/checkbox-field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -28,6 +29,11 @@ export function PriceListFields({
   canChooseKind: boolean;
 }) {
   const sales = values.kind === "sales";
+  // Changing the VAT mode or the currency drops the chosen base list (it must match both): say so instead of silently
+  // emptying the field (#96).
+  const [baseCleared, setBaseCleared] = useState<string | null>(null);
+  const hadBase = sales && values.basePriceListId !== "";
+  const baseName = hadBase ? (lists.find((l) => l.id === values.basePriceListId)?.name ?? "Seçili taban liste") : null;
   const candidates = baseListCandidates(lists, values, original?.id ?? null);
   const baseOptions = candidates.map((l) => ({ value: l.id, label: l.name }));
   if (values.basePriceListId && !baseOptions.some((o) => o.value === values.basePriceListId)) {
@@ -65,7 +71,10 @@ export function PriceListFields({
               options={currencyOptions(values.currency)}
               value={values.currency}
               error={errors.currency}
-              onChange={(e) => set({ currency: e.target.value, basePriceListId: "" })}
+              onChange={(e) => {
+                if (hadBase) setBaseCleared(`Para birimi değiştiği için taban liste seçimi (${baseName}) kaldırıldı: taban liste aynı para biriminde olmalı. Uygun bir taban liste yeniden seçin.`);
+                set({ currency: e.target.value, basePriceListId: "" });
+              }}
             />
           </>
         )}
@@ -73,8 +82,15 @@ export function PriceListFields({
       <CheckboxField
         label="Fiyatlar KDV dahil"
         checked={values.pricesIncludeTax}
-        onChange={(v) => set({ pricesIncludeTax: v, basePriceListId: "" })}
-        hint="Kapalıyken fiyatlar KDV hariç girilir; KDV oranı ürün kartından gelir."
+        onChange={(v) => {
+          if (hadBase) setBaseCleared(`KDV modu değiştiği için taban liste seçimi (${baseName}) kaldırıldı: taban liste bu listeyle aynı KDV modunda olmalı. Uygun bir taban liste yeniden seçin.`);
+          set({ pricesIncludeTax: v, basePriceListId: "" });
+        }}
+        hint={
+          hadBase
+            ? "Kapalıyken fiyatlar KDV hariç girilir. Değiştirirseniz taban liste seçimi kaldırılır (taban liste aynı KDV modunda olmalı)."
+            : "Kapalıyken fiyatlar KDV hariç girilir; KDV oranı ürün kartından gelir."
+        }
       />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input label="Geçerlilik başlangıcı" type="date" value={values.validFrom} error={errors.validFrom} hint="Boş: hemen geçerli" onChange={(e) => set({ validFrom: e.target.value })} />
@@ -87,6 +103,9 @@ export function PriceListFields({
             Bu listede kalemi olmayan ürünlerde fiyat, taban listenin fiyatından iskonto düşülerek API tarafından hesaplanır. Taban liste aynı para
             biriminde ve KDV modunda, kendisi türetilmemiş bir satış listesi olmalı.
           </p>
+          <p role="status" className={baseCleared ? "rounded-md border border-warning-border bg-warning-bg p-2 text-caption text-warning-fg" : "sr-only"}>
+            {baseCleared}
+          </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Select
               label="Taban liste"
@@ -96,7 +115,10 @@ export function PriceListFields({
               error={errors.basePriceListId}
               disabled={usedAsBase}
               hint={usedAsBase ? "Bu liste başka listelerin tabanı; kendisi türetilemez." : baseOptions.length === 0 ? "Uygun taban liste yok." : undefined}
-              onChange={(e) => set({ basePriceListId: e.target.value, ...(e.target.value ? {} : { discountPercent: "" }) })}
+              onChange={(e) => {
+                setBaseCleared(null);
+                set({ basePriceListId: e.target.value, ...(e.target.value ? {} : { discountPercent: "" }) });
+              }}
             />
             <Input
               label="İskonto (%)"

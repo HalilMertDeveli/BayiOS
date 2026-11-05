@@ -2,10 +2,13 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, Repeat, X } from "lucide-react";
 import { useModalDialog } from "@/components/ui/dialog";
+import { ROUTES } from "@/lib/auth/routes";
 import { cn } from "@/lib/cn";
 import { homeFor, navFor } from "@/lib/navigation";
+import { clearActiveTenantId } from "@/lib/session/active-tenant";
 import { useSession } from "@/lib/session/session-context";
 import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
 import { NavMenu } from "./nav-menu";
@@ -26,6 +29,55 @@ function Brand({ compact = false }: { compact?: boolean }) {
       </span>
       <span className={cn(compact && "sr-only")}>BayiOS</span>
     </Link>
+  );
+}
+
+/**
+ * Shown instead of an empty menu (#111): while the session loads nothing; for a suspended/closed business (no
+ * permissions) an explanation — in the mobile drawer also "switch business" and "sign out" (on the desktop the notice in
+ * the page offers them); for a role with no menu item a short note.
+ */
+function EmptyNav({ onNavigate, withActions = false }: { onNavigate?: () => void; withActions?: boolean }) {
+  const { state, signOut } = useSession();
+  const router = useRouter();
+  if (state.status === "loading" || state.status === "error") return null;
+  if (state.status === "ready") {
+    return <p className="px-3 text-caption text-fg-muted">Rolünüz için menüde gösterilecek bir bölüm yok. Gerekirse işletme yöneticinizle görüşün.</p>;
+  }
+  const others = state.memberships.some((m) => m.tenantId !== state.tenant.tenantId);
+  const itemClass = "flex min-h-10 w-full items-center gap-3 rounded-md px-3 text-body font-medium text-fg-secondary hover:bg-sunken hover:text-fg";
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="px-3 text-caption text-fg-muted">
+        <strong className="text-fg">{state.tenant.tenantName}</strong> askıya alınmış veya kapatılmış; bu işletmenin menüsü kullanılamıyor.
+      </p>
+      {withActions ? (
+        <ul aria-label="İşletme işlemleri" className="flex flex-col gap-0.5">
+          {others ? (
+            <li>
+              <button
+                type="button"
+                className={itemClass}
+                onClick={() => {
+                  clearActiveTenantId(state.user.id);
+                  onNavigate?.();
+                  router.replace(ROUTES.tenantPicker);
+                }}
+              >
+                <Repeat className="size-5 shrink-0" aria-hidden="true" />
+                İşletme değiştir
+              </button>
+            </li>
+          ) : null}
+          <li>
+            <button type="button" className={itemClass} onClick={() => void signOut()}>
+              <LogOut className="size-5 shrink-0" aria-hidden="true" />
+              Çıkış yap
+            </button>
+          </li>
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -63,34 +115,34 @@ export function AppShell({ children }: { children: ReactNode }) {
         İçeriğe geç
       </a>
 
-      {/* Desktop / tablet sidebar */}
+      {/* Desktop / tablet sidebar. The aside stretches to the full page height (background and border reach the bottom of
+          long pages); the sticky panel inside keeps the menu in view while the page scrolls. */}
       <aside
         id="sidebar"
-        className={cn(
-          "sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line bg-card transition-[width] md:flex",
-          collapsed ? "w-18" : "w-64",
-        )}
+        className={cn("hidden shrink-0 self-stretch border-r border-line bg-card transition-[width] md:block", collapsed ? "w-18" : "w-64")}
       >
-        <div className={cn("flex h-14 items-center border-b border-line px-4", collapsed && "justify-center px-0")}>
-          <Brand compact={collapsed} />
-        </div>
-        <div className="flex-1 overflow-y-auto px-3 py-4">
-          <NavMenu sections={sections} collapsed={collapsed} idPrefix="sidebar" />
-        </div>
-        <div className="border-t border-line p-3">
-          <button
-            type="button"
-            onClick={() => setCollapsed(!collapsed)}
-            aria-expanded={!collapsed}
-            aria-controls="sidebar"
-            className={cn(
-              "flex min-h-10 w-full items-center gap-3 rounded-md px-3 text-body font-medium text-fg-secondary hover:bg-sunken hover:text-fg",
-              collapsed && "justify-center px-0",
-            )}
-          >
-            {collapsed ? <PanelLeftOpen className="size-5" /> : <PanelLeftClose className="size-5" />}
-            <span className={cn(collapsed && "sr-only")}>{collapsed ? "Menüyü genişlet" : "Menüyü daralt"}</span>
-          </button>
+        <div className="sticky top-0 flex h-dvh flex-col">
+          <div className={cn("flex h-14 items-center border-b border-line px-4", collapsed && "justify-center px-0")}>
+            <Brand compact={collapsed} />
+          </div>
+          <div className="flex-1 overflow-y-auto px-3 py-4">
+            {sections.length > 0 ? <NavMenu sections={sections} collapsed={collapsed} idPrefix="sidebar" /> : collapsed ? null : <EmptyNav />}
+          </div>
+          <div className="border-t border-line p-3">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              aria-expanded={!collapsed}
+              aria-controls="sidebar"
+              className={cn(
+                "flex min-h-10 w-full items-center gap-3 rounded-md px-3 text-body font-medium text-fg-secondary hover:bg-sunken hover:text-fg",
+                collapsed && "justify-center px-0",
+              )}
+            >
+              {collapsed ? <PanelLeftOpen className="size-5" /> : <PanelLeftClose className="size-5" />}
+              <span className={cn(collapsed && "sr-only")}>{collapsed ? "Menüyü genişlet" : "Menüyü daralt"}</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -118,7 +170,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-3 py-4">
-              <NavMenu sections={sections} onNavigate={closeDrawer} idPrefix="drawer" />
+              {sections.length > 0 ? <NavMenu sections={sections} onNavigate={closeDrawer} idPrefix="drawer" /> : <EmptyNav onNavigate={closeDrawer} withActions />}
             </div>
           </div>
         ) : null}

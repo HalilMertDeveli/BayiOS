@@ -32,8 +32,9 @@ import {
 } from "@/lib/orders/draft-form";
 import { isOrderVersionConflict, isStaleState, orderErrorMessage, orderFieldErrors } from "@/lib/orders/errors";
 import type { OrderPermissions } from "@/lib/orders/permissions";
-import { formatMoney } from "@/lib/pricing/money";
+import { formatMoney, formatPercent } from "@/lib/pricing/money";
 import { useSession } from "@/lib/session/session-context";
+import { OrderAddressPickers } from "./order-address-pickers";
 import { LinePrice, lineDiscountText } from "./order-lines";
 import { useCustomerNames, useWarehouses } from "./use-order-reference";
 
@@ -62,6 +63,7 @@ export function OrderDraftEditor({
   onSaved,
   onDirtyChange,
   onReload,
+  onCreated,
 }: {
   loaded: LoadedOrder | null;
   permissions: OrderPermissions;
@@ -70,14 +72,17 @@ export function OrderDraftEditor({
   onSaved?: (next: LoadedOrder) => void;
   onDirtyChange?: (dirty: boolean) => void;
   onReload?: () => void;
+  /** New draft created (the page resets the form when it is left, see useResetAfterCreate). */
+  onCreated?: () => void;
 }) {
-  const { api } = useSession();
+  const { api, access } = useSession();
+  const showAddresses = access.canSome("customers.read");
   const router = useRouter();
   const { toast } = useToast();
   const warehouses = useWarehouses();
   const options = useMemo(
-    () => ({ manualPrice: permissions.overridePrice, discount: permissions.discount }),
-    [permissions.overridePrice, permissions.discount],
+    () => ({ manualPrice: permissions.overridePrice, discount: permissions.discount, maxDiscountPercent: permissions.maxDiscountPercent }),
+    [permissions.overridePrice, permissions.discount, permissions.maxDiscountPercent],
   );
   const customerNames = useCustomerNames(loaded ? [loaded.detail.order.customerId] : []);
 
@@ -112,7 +117,7 @@ export function OrderDraftEditor({
   const setLine = (key: string, patch: Partial<DraftLine>) => setValues((v) => ({ ...v, lines: v.lines.map((l) => (l.key === key ? { ...l, ...patch } : l)) }));
 
   const lineKeys = values.lines.flatMap((_, i) => [`lines[${i}].quantity`, `lines[${i}].unitPrice`, `lines[${i}].discountPercent`, `lines[${i}].discountAmount`, `lines[${i}].variantId`]);
-  const knownKeys = new Set(["customerId", "warehouseId", "notes", "requestedDeliveryDate", ...lineKeys]);
+  const knownKeys = new Set(["customerId", "warehouseId", "notes", "requestedDeliveryDate", "shippingAddressId", "billingAddressId", ...lineKeys]);
 
   const showErrors = (fieldErrors: Record<string, string>) => {
     const { onFields, unmatched } = partitionErrors(fieldErrors, knownKeys);
@@ -142,9 +147,8 @@ export function OrderDraftEditor({
         const body = buildCreateRequest(values, options);
         const created = await createOrder(api, body, keys.keyFor(body));
         keys.reset();
-        // The route may stay mounted (hidden) after navigating away: start the next new order from an empty form.
-        setValues(newDraftValues());
-        setErrors({});
+        // The route stays mounted (hidden) after navigating away: the page starts the next new order from an empty form.
+        onCreated?.();
         toast({ tone: "success", title: `${created.detail.order.number} taslağı oluşturuldu`, description: "Fiyatlar müşterinin fiyat listesinden çözüldü." });
         router.push(orderHref(created.detail.order.id));
         return;
@@ -225,8 +229,20 @@ export function OrderDraftEditor({
           status="active"
           value={customerShown}
           error={errors.customerId}
-          onChange={(c) => set({ customer: c ? { id: c.id, name: c.name, code: c.code } : null })}
+          onChange={(c) =>
+            // Another customer has other addresses: back to that customer's defaults (the API does the same).
+            set({ customer: c ? { id: c.id, name: c.name, code: c.code } : null, shippingAddressId: "", billingAddressId: "" })
+          }
         />
+        {showAddresses ? (
+          <OrderAddressPickers
+            customerId={values.customer?.id ?? null}
+            shippingAddressId={values.shippingAddressId}
+            billingAddressId={values.billingAddressId}
+            errors={errors}
+            onChange={(patch) => set(patch)}
+          />
+        ) : null}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Select
             label="Depo"
@@ -279,6 +295,7 @@ export function OrderDraftEditor({
                 manualPrice={permissions.overridePrice}
                 discount={permissions.discount}
                 discountLimited={permissions.discountLimited}
+                maxDiscountPercent={permissions.maxDiscountPercent}
                 flaggedUnpriced={unpricedLineIndexes.includes(i)}
                 onChange={(patch) => setLine(line.key, patch)}
                 onRemove={() => setValues((v) => ({ ...v, lines: v.lines.filter((l) => l.key !== line.key) }))}
@@ -316,6 +333,7 @@ function DraftLineRow({
   manualPrice,
   discount,
   discountLimited,
+  maxDiscountPercent,
   flaggedUnpriced,
   onChange,
   onRemove,
@@ -331,6 +349,8 @@ function DraftLineRow({
   discount: boolean;
   /** The discount is capped by the tenant's sales limit (the API enforces it). */
   discountLimited: boolean;
+  /** Cap of the limited discount grant (/me parameters), shown next to the discount field. */
+  maxDiscountPercent: number | null;
   flaggedUnpriced: boolean;
   onChange: (patch: Partial<DraftLine>) => void;
   onRemove: () => void;
@@ -397,7 +417,7 @@ function DraftLineRow({
               label={`${sku} iskonto türü`}
               options={DISCOUNT_OPTIONS}
               value={line.discountMode}
-              hint={discountLimited ? "İşletmenizin iskonto sınırı içinde." : undefined}
+              hint={discountLimited ? (maxDiscountPercent !== null ? `İskonto en fazla ${formatPercent(maxDiscountPercent)}` : "İşletmenizin iskonto sınırı içinde.") : undefined}
               onChange={(e) => onChange({ discountMode: e.target.value as DiscountMode, discount: "" })}
             />
             {line.discountMode !== "none" ? (
@@ -405,6 +425,7 @@ function DraftLineRow({
                 label={line.discountMode === "percent" ? `${sku} iskonto oranı (%)` : `${sku} iskonto tutarı`}
                 inputMode="decimal"
                 value={line.discount}
+                hint={discountLimited && maxDiscountPercent !== null && line.discountMode === "percent" ? `En fazla ${formatPercent(maxDiscountPercent)}` : undefined}
                 error={errors[discountKey(index, line.discountMode)]}
                 onChange={(e) => onChange({ discount: e.target.value })}
               />
