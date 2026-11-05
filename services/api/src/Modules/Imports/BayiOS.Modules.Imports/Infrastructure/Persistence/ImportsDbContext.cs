@@ -80,6 +80,9 @@ internal sealed class ImportsDbContext : DbContext, ITenantScopedDbContext
                 t.HasCheckConstraint("ck_import_jobs_file_format", "file_format IN ('xlsx', 'csv')");
                 t.HasCheckConstraint("ck_import_jobs_file_sha256", "file_sha256 ~ '^[0-9a-f]{64}$'");
                 t.HasCheckConstraint("ck_import_jobs_counters", "total_rows >= 0 AND processed_rows >= 0 AND checkpoint_row >= 0");
+                t.HasCheckConstraint(
+                    "ck_import_jobs_rollback_counters",
+                    "rolled_back_rows >= 0 AND rollback_conflict_rows >= 0 AND rollback_failed_rows >= 0 AND rollback_skipped_rows >= 0");
             });
             job.HasKey(j => j.Id);
             job.Property(j => j.Id).ValueGeneratedNever();
@@ -96,6 +99,7 @@ internal sealed class ImportsDbContext : DbContext, ITenantScopedDbContext
             job.Property(j => j.MatchKey).IsRequired();
             job.Property(j => j.Mode).IsRequired();
             job.Ignore(j => j.PlannedRows);
+            job.Ignore(j => j.RollbackProcessedRows);
             job.HasIndex(j => new { j.TenantId, j.CreatedAt }).IsDescending(false, true);
             // PRD IMP-09: "this file was already imported" warning lookup.
             job.HasIndex(j => new { j.TenantId, j.FileSha256, j.Type });
@@ -122,6 +126,7 @@ internal sealed class ImportsDbContext : DbContext, ITenantScopedDbContext
                 t.HasCheckConstraint("ck_import_rows_action", $"action IN ({Quoted(RowActions.All)})");
                 t.HasCheckConstraint("ck_import_rows_status", $"status IN ({Quoted(RowStatuses.All)})");
                 t.HasCheckConstraint("ck_import_rows_row_number", "row_number >= 2");
+                t.HasCheckConstraint("ck_import_rows_rollback_status", $"rollback_status IS NULL OR rollback_status IN ({Quoted(RowRollbackStatuses.All)})");
             });
             row.HasKey(r => r.Id);
             row.Property(r => r.Id).ValueGeneratedNever();
@@ -129,6 +134,7 @@ internal sealed class ImportsDbContext : DbContext, ITenantScopedDbContext
             row.Property(r => r.Normalized).IsRequired().HasColumnType("jsonb");
             row.Property(r => r.Errors).IsRequired().HasColumnType("jsonb");
             row.Property(r => r.PreviousValues).HasColumnType("jsonb");
+            row.Property(r => r.AppliedValues).HasColumnType("jsonb");
             row.Property(r => r.Action).IsRequired();
             row.Property(r => r.Status).IsRequired();
             row.HasOne<ImportJob>().WithMany()

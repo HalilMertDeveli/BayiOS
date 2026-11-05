@@ -20,6 +20,26 @@ internal sealed class ImportsOptions
 
     /// <summary>Rows per execution chunk; each chunk is one job run and one transaction (≤ 500: Pricing batch limit).</summary>
     public int ChunkSize { get; set; } = 500;
+
+    /// <summary>Uploads per tenant within <see cref="UploadWindow"/> (threat-model §6.5: 10/hour); 0 disables the limit.</summary>
+    public int UploadLimit { get; set; } = 10;
+
+    public TimeSpan UploadWindow { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>A completed import can be rolled back this long after it finished (PRD IMP-12: 7 days).</summary>
+    public TimeSpan RollbackWindow { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>Raw uploaded files are deleted this long after the import finished (data-policy §4: 30 days).</summary>
+    public TimeSpan FileRetention { get; set; } = TimeSpan.FromDays(30);
+
+    /// <summary>An import whose job is dead is failed (resumable) once it made no progress for this long.</summary>
+    public TimeSpan StallTimeout { get; set; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>How far back the sweep looks for dead import jobs.</summary>
+    public TimeSpan DeadJobLookback { get; set; } = TimeSpan.FromDays(1);
+
+    /// <summary>How often each instance enqueues the (deduplicated) <c>imports.maintenance</c> job.</summary>
+    public TimeSpan MaintenanceInterval { get; set; } = TimeSpan.FromMinutes(15);
 }
 
 /// <summary>Row lock on an import inside the job/request transaction (serialises jobs with cancel/start).</summary>
@@ -286,6 +306,7 @@ internal sealed class ImportChunkProcessor(IImportCatalogGateway catalog, IImpor
             row.Outcome = result.Outcome;
             row.TargetId = result.VariantId;
             row.PreviousValues = result.PreviousValuesJson;
+            row.AppliedValues = result.AppliedValuesJson;
             if (import.PriceListId is not null && Decimal(v.GetValueOrDefault(ImportFields.Price)) is { } price)
             {
                 priceRequests.Add((row, new ImportPriceItem(result.VariantId!.Value, 1m, price)));
@@ -341,30 +362,27 @@ internal sealed class ImportChunkProcessor(IImportCatalogGateway catalog, IImpor
 
             if (import.Type == ImportTypes.Prices)
             {
-                var previousJson = previous is { } p ? ImportJson.Serialize(new Dictionary<string, decimal> { ["unitPrice"] = p }) : null;
+                var previousJson = previous is { } p ? WithPrice(null, p) : null;
                 Finish(import, row, previous is null ? RowOutcomes.Created : RowOutcomes.Updated, result.ItemIds[i], previousJson);
             }
             else
             {
                 // Product row whose price changed: at least an update even if the product itself was unchanged.
+                // unitPrice: null in the previous values = the import created the price item.
                 var outcome = row.Outcome == RowOutcomes.Unchanged ? RowOutcomes.Updated : row.Outcome!;
-                Finish(import, row, outcome, row.TargetId, MergePrevious(row.PreviousValues, previous));
+                Finish(import, row, outcome, row.TargetId, WithPrice(row.PreviousValues, previous));
             }
+
+            row.AppliedValues = WithPrice(row.AppliedValues, item.UnitPrice);
         }
     }
 
-    private static string? MergePrevious(string? productPrevious, decimal? previousPrice)
+    /// <summary>Adds <c>unitPrice</c> (JSON null when absent) to a previous/applied values object.</summary>
+    internal static string WithPrice(string? valuesJson, decimal? price)
     {
-        if (previousPrice is null)
-        {
-            return productPrevious;
-        }
-
-        var merged = productPrevious is null
-            ? new Dictionary<string, object?>()
-            : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(productPrevious, ImportJson.Options) ?? [];
-        merged["unitPrice"] = previousPrice;
-        return ImportJson.Serialize(merged);
+        var values = valuesJson is null ? [] : System.Text.Json.Nodes.JsonNode.Parse(valuesJson) as System.Text.Json.Nodes.JsonObject ?? [];
+        values[RollbackKeys.UnitPrice] = price;
+        return values.ToJsonString();
     }
 
     private static void Finish(
@@ -418,5 +436,14 @@ internal sealed class ImportChunkProcessor(IImportCatalogGateway catalog, IImpor
         Decimal(v.GetValueOrDefault(ImportFields.TaxRate)),
         Id(v.GetValueOrDefault(ResolvedKeys.BrandId)),
         Id(v.GetValueOrDefault(ResolvedKeys.CategoryId)),
-        v.GetValueOrDefault(ImportFields.Status));
+        v.GetValueOrDefault(ImportFields.Status),
+        Attributes(v));
+
+    private static Dictionary<string, string>? Attributes(IReadOnlyDictionary<string, string?> v)
+    {
+        var attributes = v
+            .Where(p => p.Key.StartsWith(ImportCatalogFields.AttributePrefix, StringComparison.Ordinal) && p.Value is not null)
+            .ToDictionary(p => p.Key[ImportCatalogFields.AttributePrefix.Length..], p => p.Value!, StringComparer.Ordinal);
+        return attributes.Count > 0 ? attributes : null;
+    }
 }

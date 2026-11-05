@@ -1194,6 +1194,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/import-jobs/{id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tamamlanan içe aktarmayı geri alır (7 gün içinde, bir kez; If-Match zorunlu): oluşturulan ürünler arşivlenir, değişen alanlar/fiyatlar önceki değerine döner — kayıt sonradan değiştiyse satır 'conflict' olur ve dokunulmaz */
+        post: operations["Imports_Rollback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/import-jobs/{id}/rows": {
         parameters: {
             query?: never;
@@ -1201,7 +1218,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Satırlar: status (error = invalid + failed) ve action filtresi, satır no ile keyset */
+        /** Satırlar: status (error = invalid + failed), action ve rollbackStatus filtresi, satır no ile keyset */
         get: operations["Imports_Rows"];
         put?: never;
         post?: never;
@@ -1952,6 +1969,9 @@ export interface components {
             startedBy: null | string;
             /** Format: date-time */
             finishedAt: null | string;
+            /** Format: date-time */
+            rollbackDeadline: null | string;
+            rollback: null | components["schemas"]["ImportRollbackInfo"];
         };
         ImportPageInfo: {
             nextCursor: null | string;
@@ -1985,6 +2005,24 @@ export interface components {
             /** Format: int32 */
             failed: number | string;
         };
+        ImportRollbackInfo: {
+            /** Format: date-time */
+            requestedAt: string;
+            /** Format: uuid */
+            requestedBy: null | string;
+            /** Format: date-time */
+            finishedAt: null | string;
+            /** Format: int32 */
+            planned: number | string;
+            /** Format: int32 */
+            rolledBack: number | string;
+            /** Format: int32 */
+            conflicts: number | string;
+            /** Format: int32 */
+            failed: number | string;
+            /** Format: int32 */
+            skipped: number | string;
+        };
         ImportRowError: {
             field: null | string;
             column: null | string;
@@ -2010,6 +2048,7 @@ export interface components {
             matchedVariantId: null | string;
             /** Format: uuid */
             targetId: null | string;
+            rollbackStatus: null | string;
         };
         InventoryPageInfo: {
             nextCursor: null | string;
@@ -10247,6 +10286,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     Imports_Get: {
@@ -10697,11 +10745,103 @@ export interface operations {
             };
         };
     };
+    Imports_Rollback: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJobResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     Imports_Rows: {
         parameters: {
             query?: {
                 status?: string;
                 action?: string;
+                rollbackStatus?: string;
                 limit?: string;
                 cursor?: string;
             };

@@ -120,9 +120,24 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
     {
         ["platform.idempotency_keys"] = ["idempotency_purge_select", "idempotency_purge_delete"],
         ["audit.audit_events"] = ["audit_retention_select", "audit_retention_delete"],
+
+        // Raw import files past retention (imports.purge_expired_files, data-policy §4, #94); import jobs are only
+        // read, to find inactive imports that finished before the retention floor.
+        ["imports.import_files"] = ["import_files_purge_select", "import_files_purge_delete"],
+        ["imports.import_jobs"] = ["import_jobs_purge_select"],
     };
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task Import_file_purge_is_reachable_only_through_its_definer_function()
+    {
+        // The runtime role cannot see other tenants' files; the purge goes through the owner's function (and the
+        // owner-only policies checked in the policy sweep), which bayios_app may execute but PUBLIC may not.
+        Assert.True(await ScalarAsync<bool>($"SELECT has_function_privilege('{App}', 'imports.purge_expired_files(interval, integer)', 'EXECUTE')"));
+        Assert.Equal(3L, await ScalarAsync<long>(
+            "SELECT count(*) FROM pg_policies WHERE schemaname = 'imports' AND roles::text[] = ARRAY['bayios_migrator'] AND cmd IN ('SELECT', 'DELETE')"));
+    }
 
     [Fact]
     public async Task Business_schemas_are_the_known_modules_and_nothing_lives_in_public()

@@ -164,6 +164,34 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("processed_rows");
 
+                    b.Property<int>("RollbackConflictRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("rollback_conflict_rows");
+
+                    b.Property<int>("RollbackFailedRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("rollback_failed_rows");
+
+                    b.Property<DateTimeOffset?>("RollbackFinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rollback_finished_at");
+
+                    b.Property<DateTimeOffset?>("RollbackRequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rollback_requested_at");
+
+                    b.Property<Guid?>("RollbackRequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rollback_requested_by");
+
+                    b.Property<int>("RollbackSkippedRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("rollback_skipped_rows");
+
+                    b.Property<int>("RolledBackRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("rolled_back_rows");
+
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
                         .HasColumnType("bigint")
@@ -253,7 +281,9 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_import_jobs_mode", "mode IN ('upsert', 'create_only', 'update_only')");
 
-                            t.HasCheckConstraint("ck_import_jobs_status", "status IN ('uploaded', 'mapped', 'validating', 'validated', 'running', 'completed', 'failed', 'cancelled')");
+                            t.HasCheckConstraint("ck_import_jobs_rollback_counters", "rolled_back_rows >= 0 AND rollback_conflict_rows >= 0 AND rollback_failed_rows >= 0 AND rollback_skipped_rows >= 0");
+
+                            t.HasCheckConstraint("ck_import_jobs_status", "status IN ('uploaded', 'mapped', 'validating', 'validated', 'running', 'completed', 'failed', 'cancelled', 'rolling_back', 'rolled_back', 'partially_rolled_back', 'rollback_failed')");
 
                             t.HasCheckConstraint("ck_import_jobs_type", "type IN ('products', 'prices')");
                         });
@@ -269,6 +299,10 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("action");
+
+                    b.Property<string>("AppliedValues")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("applied_values");
 
                     b.Property<string>("Errors")
                         .IsRequired()
@@ -305,6 +339,14 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("raw");
 
+                    b.Property<string>("RollbackStatus")
+                        .HasColumnType("text")
+                        .HasColumnName("rollback_status");
+
+                    b.Property<DateTimeOffset?>("RolledBackAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rolled_back_at");
+
                     b.Property<int>("RowNumber")
                         .HasColumnType("integer")
                         .HasColumnName("row_number");
@@ -335,6 +377,8 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
                     b.ToTable("import_rows", "imports", t =>
                         {
                             t.HasCheckConstraint("ck_import_rows_action", "action IN ('create', 'update', 'skip', 'error')");
+
+                            t.HasCheckConstraint("ck_import_rows_rollback_status", "rollback_status IS NULL OR rollback_status IN ('rolled_back', 'conflict', 'failed', 'skipped')");
 
                             t.HasCheckConstraint("ck_import_rows_row_number", "row_number >= 2");
 
