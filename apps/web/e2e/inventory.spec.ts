@@ -56,7 +56,7 @@ test.describe("stok listesi (mock)", () => {
     await expect(table.getByRole("row").nth(1)).toContainText("10");
   });
 
-  test("filtreler: depo seçimi ve SKU/barkod (tam eşleşme) URL'de tutulur", async ({ page }) => {
+  test("filtreler: depo seçimi ve serbest metin araması (q) URL'de tutulur; çok geniş arama daraltılır", async ({ page }) => {
     const { catalog, inventory } = setup({ products: 5, stocked: 5 });
     const api = await signedIn(page, { catalog, inventory });
     await page.goto("/stok");
@@ -69,22 +69,27 @@ test.describe("stok listesi (mock)", () => {
     await page.getByRole("button", { name: "Filtreleri temizle" }).first().click();
     await expect(table.getByRole("row")).toHaveCount(6);
 
-    // Scanner-style: type + Enter, exact SKU.
-    await page.getByRole("textbox", { name: "SKU veya barkod" }).fill("MOCK-003-1");
-    await page.getByRole("textbox", { name: "SKU veya barkod" }).press("Enter");
+    // Scanner-style: type + Enter; the API matches SKU, barcode or product name (GET /inventory/balances?q=).
+    const search = page.getByRole("textbox", { name: "SKU, barkod veya ürün adı" });
+    await search.fill("MOCK-003-1");
+    await search.press("Enter");
     await expect(page).toHaveURL(/q=MOCK-003-1/);
     await expect(table.getByRole("row")).toHaveCount(2);
     await expect(table).toContainText("MOCK-003-1");
-    expect(new URLSearchParams(requestsTo(api, "GET", "/api/v1/inventory/balances").at(-1)!.search).get("variantId")).toBe(variantOf(catalog, 3).id);
+    expect(new URLSearchParams(requestsTo(api, "GET", "/api/v1/inventory/balances").at(-1)!.search).get("q")).toBe("MOCK-003-1");
 
-    // Barcode resolves through /variants/lookup.
-    await page.getByRole("textbox", { name: "SKU veya barkod" }).fill(variantOf(catalog, 2).barcode!);
-    await page.getByRole("textbox", { name: "SKU veya barkod" }).press("Enter");
+    await search.fill(variantOf(catalog, 2).barcode!);
+    await search.press("Enter");
     await expect(table).toContainText("MOCK-002-1");
 
-    await page.getByRole("textbox", { name: "SKU veya barkod" }).fill("YOK-999");
-    await page.getByRole("textbox", { name: "SKU veya barkod" }).press("Enter");
+    await search.fill("YOK-999");
+    await search.press("Enter");
     await expect(page.getByRole("heading", { name: "Ürün bulunamadı" })).toBeVisible();
+
+    // 422 inventory.search_too_broad (MOCK: "*").
+    await search.fill("*");
+    await search.press("Enter");
+    await expect(page.getByRole("heading", { name: "Aramayı daraltın" })).toBeVisible();
   });
 
   test("sık görünüm ve mobil kartlar; yatay kaydırma yok", async ({ page }) => {

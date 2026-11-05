@@ -330,7 +330,24 @@ export async function handleInventory(route: Route, inv: MockInventory, catalog:
   // ---- Inventory ----
   if (path === "/api/v1/inventory/balances" && method === "GET") {
     const p = url.searchParams;
+    // q: SKU contains, exact barcode or product name contains (as the Catalog variant search); "*" = too broad (422).
+    const q = (p.get("q") ?? "").trim();
+    if (q === "*") {
+      await json(route, 422, problemBody(422, "inventory.search_too_broad"));
+      return true;
+    }
+    const term = q.toLocaleLowerCase("tr");
+    const matching = q
+      ? new Set(
+          (catalog?.products ?? []).flatMap((pr) =>
+            pr.variants
+              .filter((v) => v.sku.toLocaleLowerCase("tr").includes(term) || v.barcode === q || pr.name.toLocaleLowerCase("tr").includes(term))
+              .map((v) => v.id),
+          ),
+        )
+      : null;
     const items = inv.balances
+      .filter((b) => !matching || matching.has(b.variantId))
       .filter((b) => (!p.get("variantId") || b.variantId === p.get("variantId")) && (!p.get("warehouseId") || b.warehouseId === p.get("warehouseId")))
       .filter((b) => !p.get("locationId") || b.locationId === p.get("locationId"))
       .sort((a, b) => a.id.localeCompare(b.id));

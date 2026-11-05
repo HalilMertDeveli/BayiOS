@@ -113,18 +113,18 @@ test.describe("görev listesi (mock)", () => {
     expect(assign.headers["if-match"]).toBe('W/"1"');
 
     const t2 = list.getByTestId(`task-${taskId(2)}`);
-    await expect(t2.getByText("Başka personele atandı")).toBeVisible();
+    await expect(t2.getByText("Atanan: Deniz Depocu (mock)")).toBeVisible();
     await t2.getByRole("button", { name: "Havuza bırak" }).click();
     await expect(t2.getByText("Havuzda (atanmamış)")).toBeVisible();
 
-    // Assign to a staff member by user id.
+    // Assign to a staff member picked from GET /members (sorted by name on the client).
     await t2.getByRole("button", { name: "Personele ata" }).click();
     const dialog = page.getByRole("dialog", { name: /görevini ata/ });
-    await dialog.getByLabel("Kime").selectOption("other");
-    await dialog.getByLabel("Personelin kullanıcı kimliği").fill("geçersiz");
-    await dialog.getByRole("button", { name: "Ata" }).click();
-    await expect(dialog.getByText("Geçerli bir kullanıcı kimliği girin")).toBeVisible();
-    await dialog.getByLabel("Personelin kullanıcı kimliği").fill(OTHER_USER);
+    const who = dialog.getByLabel("Kime");
+    await expect(who.locator("option", { hasText: "Deniz Depocu (mock)" })).toHaveCount(1);
+    const labels = (await who.locator("option").allInnerTexts()).filter((t) => t.includes("(mock)"));
+    expect(labels).toEqual(["Ali Toplayıcı (mock) · Depo personeli", "Deniz Depocu (mock) · Depo personeli"]);
+    await who.selectOption({ label: "Deniz Depocu (mock) · Depo personeli" });
     await dialog.getByRole("button", { name: "Ata" }).click();
     await expect(dialog).toBeHidden();
     expect(posts(api, "/assign").at(-1)!.body).toEqual({ userId: OTHER_USER });
@@ -310,6 +310,40 @@ test.describe("sevkiyat (mock)", () => {
     // inventory.movements.read K⁵: the movements of their own task's shipment are in the task context.
     await expect(page.getByRole("heading", { name: "Stok hareketleri" })).toBeVisible();
     await expectNoSeriousViolations(page);
+  });
+
+  test("yönetici taslak sevkiyatı sebeple iptal eder; sipariş paketlendi kalır mesajı; personel iptal göremez", async ({ page }) => {
+    const fulfilment = withTasks();
+    const shipment = packedTask(fulfilment);
+    const api = await signedIn(page, { memberships: [OWNER], fulfilment });
+    await page.goto(`/depo/sevkiyatlar/${shipment.id}`);
+    await page.getByRole("button", { name: "Sevkiyatı iptal et" }).click();
+    const dialog = page.getByRole("alertdialog", { name: /iptal edilsin mi/ });
+    await dialog.getByRole("button", { name: "Sevkiyatı iptal et" }).click();
+    await expect(dialog.getByText("İptal sebebini yazın.")).toBeVisible();
+    expect(posts(api, "/cancel")).toHaveLength(0);
+    await dialog.getByLabel("İptal sebebi").fill("Müşteri teslimatı erteledi");
+    await expectNoSeriousViolations(page);
+    await dialog.getByRole("button", { name: "Sevkiyatı iptal et" }).click();
+    await expect(dialog).toBeHidden();
+    const notice = page.getByRole("status").filter({ hasText: "Sevkiyat iptal edildi" });
+    await expect(notice).toContainText("paketlendi durumunda kalır");
+    await expect(notice).toContainText("yerine koyma görevi");
+    const cancel = posts(api, "/cancel")[0];
+    expect(cancel.body).toEqual({ reason: "Müşteri teslimatı erteledi" });
+    expect(cancel.headers["idempotency-key"]).toBeTruthy();
+    expect(cancel.headers["if-match"]).toBe('W/"1"');
+    await expect(page.getByRole("button", { name: "Sevkiyatı iptal et" })).toHaveCount(0);
+  });
+
+  test("personel sevkiyatı iptal edemez (tasks.assign yok)", async ({ page }) => {
+    const fulfilment = withTasks();
+    const shipment = packedTask(fulfilment);
+    await signedIn(page, { memberships: [STAFF], fulfilment });
+    await page.goto(`/depo/sevkiyatlar/${shipment.id}`);
+    await expect(page.getByRole("heading", { name: `Sevkiyat ${shipment.number}` })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sevkiyatı iptal et" })).toHaveCount(0);
+    await expect(page.getByText("Onaylanmamış sevkiyatı görev atama yetkisi olan bir yönetici iptal edebilir.")).toBeVisible();
   });
 
   test("sevk onayı: kopan yanıt aynı anahtarla tekrar; başka cihazdan onay → already_confirmed; hareketler", async ({ page }) => {

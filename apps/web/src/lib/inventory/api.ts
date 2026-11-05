@@ -92,13 +92,15 @@ export async function updateLocation(api: ApiClient, location: Location, patch: 
 
 // ---- Balances and movements (Inventory module) ----
 
-export type BalanceFilter = { variantId?: string | null; warehouseId?: string | null; locationId?: string | null };
+/** `q`: free text (SKU, barcode or product name) matched by the API; 422 inventory.search_too_broad when too broad. */
+export type BalanceFilter = { variantId?: string | null; warehouseId?: string | null; locationId?: string | null; q?: string | null };
 
 export function balanceQuery(filter: BalanceFilter, cursor?: string | null, limit: number = BALANCE_PAGE_SIZE): string {
   const params = new URLSearchParams();
   if (filter.variantId) params.set("variantId", filter.variantId);
   if (filter.warehouseId) params.set("warehouseId", filter.warehouseId);
   if (filter.locationId) params.set("locationId", filter.locationId);
+  if (filter.q?.trim()) params.set("q", filter.q.trim());
   params.set("limit", String(limit));
   if (cursor) params.set("cursor", cursor);
   return params.toString();

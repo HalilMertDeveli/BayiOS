@@ -5,9 +5,17 @@ import { historyActionLabels, orderStatusLabel } from "@/lib/orders/labels";
 const dateTime = new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Istanbul" });
 
 /**
- * Status history (order_status_history, PRD ORD-12), oldest first as the API returns it. `changedBy` is a user id
- * only: the current user is shown as "Siz", others as "Başka bir kullanıcı" (no user directory in the contract yet).
+ * Status history (order_status_history, PRD ORD-12), oldest first as the API returns it, with the API's
+ * `changedByName` (the current user is marked "(siz)"); a missing name falls back to a neutral label.
  */
+/** Who made the change: the API's display name; "(siz)" for the current user; "Sistem" without a user. */
+export function changedByText(h: Pick<OrderHistoryEntry, "changedBy" | "changedByName">, currentUserId: string | null): string {
+  if (!h.changedBy) return "Sistem";
+  const own = h.changedBy === currentUserId;
+  const name = h.changedByName ?? (own ? "Siz" : "Başka bir kullanıcı");
+  return own && h.changedByName ? `${name} (siz)` : name;
+}
+
 export function OrderTimeline({ history, currentUserId }: { history: readonly OrderHistoryEntry[]; currentUserId: string | null }) {
   const entries = [...history].sort((a, b) => a.changedAt.localeCompare(b.changedAt));
   return (
@@ -27,7 +35,7 @@ export function OrderTimeline({ history, currentUserId }: { history: readonly Or
               <p className="text-caption text-fg-muted">
                 <time dateTime={h.changedAt}>{dateTime.format(new Date(h.changedAt))}</time>
                 {" · "}
-                {h.changedBy && h.changedBy === currentUserId ? "Siz" : h.changedBy ? "Başka bir kullanıcı" : "Sistem"}
+                {changedByText(h, currentUserId)}
                 {h.fromStatus ? ` · ${orderStatusLabel(h.fromStatus)} → ${orderStatusLabel(h.toStatus)}` : ` · ${orderStatusLabel(h.toStatus)}`}
               </p>
               {h.reason ? <p className="mt-1 text-body text-fg-secondary">Sebep: {h.reason}</p> : null}

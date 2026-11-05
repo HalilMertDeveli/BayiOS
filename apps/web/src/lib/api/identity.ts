@@ -23,6 +23,32 @@ export async function getMe(api: ApiClient, options: { tenantId?: string | null;
   return (await api.request<Me>("/api/v1/me", { tenantId: options.tenantId, signal: options.signal })).data;
 }
 
+export type Member = components["schemas"]["MemberResponse"];
+type MemberPage = components["schemas"]["MemberPageResponse"];
+
+/** Display label of a member: the API's display name, else full name, else e-mail. */
+export function memberLabel(m: Pick<Member, "displayName" | "fullName" | "email" | "userId">): string {
+  return m.displayName || m.fullName || m.email || m.userId;
+}
+
+/**
+ * Active members of the active tenant (GET /members, members.read), every page (keyset, capped), sorted by name on the
+ * client (Turkish collation) for the staff picker.
+ */
+export async function listActiveMembers(api: ApiClient, signal?: AbortSignal, maxPages = 10): Promise<Member[]> {
+  const members: Member[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < maxPages; page++) {
+    const params = new URLSearchParams({ status: "active", limit: "200" });
+    if (cursor) params.set("cursor", cursor);
+    const data: MemberPage = (await api.request<MemberPage>(`/api/v1/members?${params}`, { tenant: true, signal })).data;
+    members.push(...data.items);
+    if (!data.page.hasMore || !data.page.nextCursor) break;
+    cursor = data.page.nextCursor;
+  }
+  return members.sort((a, b) => memberLabel(a).localeCompare(memberLabel(b), "tr"));
+}
+
 /** Creates a tenant; the caller becomes its owner. `idempotencyKey` must be reused for retries of the same attempt. */
 export async function createTenant(
   api: ApiClient,

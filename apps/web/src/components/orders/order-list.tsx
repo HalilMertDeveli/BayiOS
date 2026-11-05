@@ -170,9 +170,10 @@ function OrderListView({
   };
 
   const rows = useMemo(() => (current?.status === "ready" ? current.items : []), [current]);
-  const customerIds = useMemo(() => [...rows.map((o) => o.customerId), ...(query.customerId ? [query.customerId] : [])], [rows, query.customerId]);
-  const customers = useCustomerNames(canReadCustomers ? customerIds : []);
-  const customerName = (id: string) => customers.get(id)?.name ?? (canReadCustomers ? "Müşteri" : "—");
+  // Row names come with the list (#86); only the filter's customer is looked up. customerName is null for warehouse staff.
+  const filterIds = useMemo(() => (canReadCustomers && query.customerId ? [query.customerId] : []), [canReadCustomers, query.customerId]);
+  const customers = useCustomerNames(filterIds);
+  const customerName = (o: OrderSummary) => o.customerName ?? "—";
   const filterCustomer = query.customerId
     ? { id: query.customerId, name: customers.get(query.customerId)?.name ?? "Seçili müşteri", code: customers.get(query.customerId)?.code ?? "" }
     : null;
@@ -189,7 +190,7 @@ function OrderListView({
         </Link>
       ),
     },
-    { key: "customer", header: "Müşteri", cell: (o) => customerName(o.customerId) },
+    { key: "customer", header: "Müşteri", cell: (o) => customerName(o) },
     { key: "status", header: "Durum", width: "14rem", cell: (o) => <OrderStatusCell status={o.status} fulfillmentStatus={o.fulfillmentStatus} /> },
     { key: "source", header: "Kaynak", width: "8rem", cell: (o) => orderSourceLabels[o.source] ?? o.source },
     { key: "lines", header: "Satır", numeric: true, width: "5rem", cell: (o) => formatQuantity(o.lineCount) },
@@ -378,7 +379,7 @@ function OrderListView({
                       <OrderStatusCell status={o.status} fulfillmentStatus={o.fulfillmentStatus} />
                       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-caption">
                         <dt className="text-fg-muted">Müşteri</dt>
-                        <dd className="text-fg">{customerName(o.customerId)}</dd>
+                        <dd className="text-fg">{customerName(o)}</dd>
                         <dt className="text-fg-muted">Satır</dt>
                         <dd className="text-fg">{formatQuantity(o.lineCount)}</dd>
                         <dt className="text-fg-muted">Kaynak</dt>

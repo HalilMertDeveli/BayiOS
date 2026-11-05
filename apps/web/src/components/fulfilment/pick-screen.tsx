@@ -394,7 +394,7 @@ function PickView({
             ? permissions.claim
               ? "Toplamaya başlamak için görevi üstlenin."
               : "Görevi bir personele atayın; liste salt okunur."
-            : "Liste salt okunur; yalnızca atanan kişi toplayabilir."}
+            : `${task.assigneeName ? `Atanan: ${task.assigneeName}. ` : ""}Liste salt okunur; yalnızca atanan kişi toplayabilir.`}
         </FormAlert>
       ) : null}
 

@@ -56,6 +56,8 @@ export type MockShipmentLine = {
   variantId: string;
   sku: string;
   name: string;
+  /** Product barcode (#86): the pack check matches it without loading the task. */
+  barcode: string | null;
   unit: string;
   locationId: string | null;
   locationCode: string | null;
@@ -171,6 +173,7 @@ export function makeShipment(task: MockTask, n: number, overrides: Partial<MockS
         variantId: l.variantId,
         sku: l.sku,
         name: l.name,
+        barcode: l.barcode,
         unit: l.unit,
         locationId: l.locationId,
         locationCode: l.locationCode,
@@ -219,6 +222,12 @@ const PERMS: Record<string, string[]> = {
   ship: [...MANAGERS, "warehouse_staff"],
 };
 
+/** Display names of the synthetic members (GET /members in mock-backend.ts uses the same ids). */
+export const MOCK_MEMBER_NAMES: Record<string, string> = {
+  "00000000-0000-4000-8000-000000000001": "Mock Kullanıcı",
+  [uuid("7c", 1)]: "Deniz Depocu (mock)",
+};
+
 function summary(t: MockTask) {
   const sum = (k: "quantityToPick" | "quantityPicked" | "quantityShort") => round(t.lines.reduce((a, l) => a + l[k], 0));
   return {
@@ -229,6 +238,7 @@ function summary(t: MockTask) {
     orderNumber: t.orderNumber,
     warehouseId: t.warehouseId,
     assignedTo: t.assignedTo,
+    assigneeName: t.assignedTo ? (MOCK_MEMBER_NAMES[t.assignedTo] ?? null) : null,
     lineCount: t.lines.length,
     quantityToPick: sum("quantityToPick"),
     quantityPicked: sum("quantityPicked"),
@@ -458,6 +468,16 @@ export async function handleFulfilment(route: Route, mock: MockFulfilment, role:
     if (shipment.status === "confirmed") return fail(409, "shipment.already_confirmed");
   }
   if (versionMismatch(shipment.version)) return fail(412, "concurrency.version_mismatch");
+  if (action === "cancel") {
+    // tasks.assign; draft or packed only; no stock moves, a putaway task for what was picked.
+    if (!can("assign")) return forbidden("tasks.assign");
+    if (shipment.status !== "draft" && shipment.status !== "packed") return fail(409, "shipment.invalid_transition");
+    const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+    if (!reason) return fail(422, "validation.failed", { errors: { reason: ["Required."] } });
+    shipment.status = "cancelled";
+    shipment.version++;
+    return reply(200, { shipment, putawayTaskId: uuid("7e", 1) }, shipment.version);
+  }
   if (action === "pack") {
     if (shipment.status !== "draft") return fail(409, "shipment.invalid_transition");
     const packed = new Map<string, number>();

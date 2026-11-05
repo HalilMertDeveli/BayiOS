@@ -177,6 +177,28 @@ export async function reportShipmentShortage(
 }
 
 /** Stock leaves once: the same key replays the stored response; another key gets 409 shipment.already_confirmed. */
+export type CancelShipmentResponse = S["CancelShipmentResponse"];
+
+/**
+ * POST /shipments/{id}/cancel (tasks.assign): cancels a draft or packed shipment. No stock moves; the order stays as it
+ * is and a putaway task is created for what was picked (`putawayTaskId`).
+ */
+export async function cancelShipment(
+  api: ApiClient,
+  id: string,
+  reason: string,
+  options: { idempotencyKey: string; etag: string },
+): Promise<{ loaded: LoadedShipment; putawayTaskId: string | null }> {
+  const response = await api.request<CancelShipmentResponse>(shipmentPath(id, "/cancel"), {
+    method: "POST",
+    tenant: true,
+    body: { reason },
+    idempotencyKey: options.idempotencyKey,
+    ifMatch: options.etag,
+  });
+  return { loaded: loadedShipment(response.data.shipment, response.etag), putawayTaskId: response.data.putawayTaskId ?? null };
+}
+
 export async function confirmShipment(
   api: ApiClient,
   id: string,

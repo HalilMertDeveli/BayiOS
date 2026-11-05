@@ -30,14 +30,13 @@ import {
 } from "@/lib/orders/errors";
 import { orderSourceLabels } from "@/lib/orders/labels";
 import { orderPermissions, type OrderPermissions } from "@/lib/orders/permissions";
-import { customerPermissions } from "@/lib/customers/permissions";
 import { useSession } from "@/lib/session/session-context";
 import { FulfillmentBadge, OrderStatus } from "./order-badges";
 import { ReasonDialog } from "./order-actions";
 import { OrderDraftEditor } from "./order-draft-editor";
 import { FulfilmentSection, OrderLinesTable, OrderTotalsPanel, ShortagesPanel, pricesHidden } from "./order-lines";
 import { OrderTimeline } from "./order-timeline";
-import { useCustomerNames, useWarehouses, warehouseLabel } from "./use-order-reference";
+import { useWarehouses, warehouseLabel } from "./use-order-reference";
 
 type LoadState = { status: "loading" } | { status: "error"; message: string; notFound: boolean } | { status: "ready"; loaded: LoadedOrder };
 
@@ -156,12 +155,10 @@ function OrderView({
   onLoaded: (loaded: LoadedOrder) => void;
   onReload: () => void;
 }) {
-  const { api, state, access } = useSession();
+  const { api, state } = useSession();
   const { toast } = useToast();
   const { order } = loaded.detail;
   const warehouses = useWarehouses();
-  const canReadCustomers = customerPermissions(access).read;
-  const customers = useCustomerNames(canReadCustomers ? [order.customerId] : []);
   const hidePrices = pricesHidden(loaded.detail);
   const currentUserId = state.status === "ready" ? state.user.id : null;
 
@@ -269,14 +266,16 @@ function OrderView({
   };
 
   const skuOf = (variantId: string, fallback: string | null) => loaded.detail.lines.find((l) => l.variantId === variantId)?.sku ?? fallback ?? variantId;
-  const customer = customers.get(order.customerId);
+  // Names come with the order (#86); customerName is null for readers without customers.read (warehouse staff).
+  const customerName = order.customerName ?? null;
+  const personName = (id: string | null, name: string | null) => (id && id === currentUserId ? `${name ?? "Siz"} (siz)` : (name ?? "—"));
 
   return (
     <>
       <BackLink />
       <PageHeader
         title={`Sipariş ${order.number}`}
-        description={customer ? `${customer.name} · ${customer.code}` : undefined}
+        description={customerName ?? undefined}
         actions={
           <span className="flex flex-wrap items-center gap-2">
             <OrderStatus status={order.status} />
@@ -322,14 +321,20 @@ function OrderView({
           Sipariş bilgileri
         </h2>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-body sm:grid-cols-2 lg:grid-cols-3">
-          <Info label="Müşteri" value={customer ? `${customer.name} (${customer.code})` : canReadCustomers ? "Yükleniyor…" : "—"} />
-          <Info label="Depo" value={warehouseLabel(warehouses, order.warehouseId)} />
+          <Info label="Müşteri" value={customerName ?? "—"} />
+          <Info label="Depo" value={order.warehouseName ?? warehouseLabel(warehouses, order.warehouseId)} />
+          <Info label="Oluşturan" value={personName(order.createdBy ?? null, order.createdByName ?? null)} />
           <Info label="Kaynak" value={orderSourceLabels[order.source] ?? order.source} />
           <Info label="Oluşturma" value={dateTime.format(new Date(order.createdAt))} />
           <Info label="Fiyat tarihi" value={formatDate(order.priceDate)} />
           <Info label="İstenen teslim" value={order.requestedDeliveryDate ? formatDate(order.requestedDeliveryDate) : "—"} />
           <Info label="Para birimi" value={order.currency} />
-          {order.approvedAt ? <Info label="Onay" value={dateTime.format(new Date(order.approvedAt))} /> : null}
+          {order.approvedAt ? (
+            <Info
+              label="Onay"
+              value={`${dateTime.format(new Date(order.approvedAt))}${order.approvedBy ? ` — ${personName(order.approvedBy, order.approvedByName ?? null)}` : ""}`}
+            />
+          ) : null}
           {order.cancelledAt ? <Info label="İptal" value={`${dateTime.format(new Date(order.cancelledAt))}${order.cancelReason ? ` — ${order.cancelReason}` : ""}`} /> : null}
           {order.notes && !editable ? <Info label="Not" value={order.notes} /> : null}
         </dl>

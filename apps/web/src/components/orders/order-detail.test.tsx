@@ -89,6 +89,31 @@ describe("OrderDetailPage per role (MOCK /me permissions)", () => {
     expect(paths.some((p) => p.startsWith("/api/v1/customers"))).toBe(false);
   });
 
+  it("shows the names the API joins in: customer, warehouse, creator, approver and history (no per-customer lookup)", async () => {
+    const detail = orderDetail([orderLine()], {
+      status: "approved",
+      customerName: "Örnek Bayi",
+      warehouseName: "Merkez Depo",
+      createdBy: "someone-else",
+      createdByName: "Ayşe Satış",
+      approvedAt: "2026-11-05T10:00:00Z",
+      approvedBy: ME,
+      approvedByName: "Mert Yönetici",
+    });
+    detail.history = [
+      { id: "h1", action: "create", fromStatus: null, toStatus: "draft", fulfillmentStatus: "none", reason: null, changedBy: "someone-else", changedByName: "Ayşe Satış", changedAt: "2026-11-05T09:00:00Z" },
+      { id: "h2", action: "approve", fromStatus: "pending_approval", toStatus: "approved", fulfillmentStatus: "none", reason: null, changedBy: ME, changedByName: "Mert Yönetici", changedAt: "2026-11-05T10:00:00Z" },
+    ];
+    const { paths } = renderAs("owner", detail);
+    expect(await screen.findAllByText("Örnek Bayi")).not.toHaveLength(0);
+    expect(screen.getByText("Merkez Depo")).toBeTruthy();
+    expect(screen.getByText(/Mert Yönetici \(siz\)/, { selector: "dd" })).toBeTruthy();
+    const history = within(screen.getByRole("list", { name: "Durum geçmişi" }));
+    expect(history.getAllByText(/Ayşe Satış/).length).toBe(1);
+    expect(history.getByText(/Mert Yönetici \(siz\)/)).toBeTruthy();
+    expect(paths.some((p) => p.startsWith("/api/v1/customers"))).toBe(false);
+  });
+
   it("viewer reads without editor or actions", async () => {
     renderAs("viewer", draft("someone-else"));
     expect(await screen.findByRole("heading", { name: "Satırlar" })).toBeTruthy();

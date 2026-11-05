@@ -9,15 +9,16 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/ui/page-header";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import {
   SHIPMENTS_HREF,
+  cancelShipment,
   confirmShipment,
   getShipment,
-  getTask,
   packShipment,
   reportShipmentShortage,
   type LoadedShipment,
@@ -119,6 +120,55 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
   return <ShipmentView loaded={load.loaded} permissions={permissions} onLoaded={(loaded) => setLoad({ status: "ready", loaded })} onReload={reload} />;
 }
 
+/** Reason for cancelling an unconfirmed shipment (required by the API). Resolves with an error text, or null when done. */
+function CancelShipmentDialog({
+  open,
+  number,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  number: string;
+  onClose: () => void;
+  onSubmit: (reason: string) => Promise<string | null>;
+}) {
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    const text = reason.trim();
+    if (!text) {
+      setError("İptal sebebini yazın.");
+      return;
+    }
+    setBusy(true);
+    setError(await onSubmit(text));
+    setBusy(false);
+  };
+  return (
+    <Dialog
+      open={open}
+      onClose={() => !busy && onClose()}
+      role="alertdialog"
+      dismissOnBackdrop={false}
+      title={`${number} iptal edilsin mi?`}
+      description="Sevkiyat iptal edilir; stok hareketi olmaz ve sipariş yeniden toplanana kadar paketlendi durumunda kalır."
+      footer={
+        <>
+          <Button variant="secondary" size="lg" onClick={onClose} disabled={busy}>
+            Vazgeç
+          </Button>
+          <Button variant="danger" size="lg" loading={busy} onClick={() => void submit()}>
+            Sevkiyatı iptal et
+          </Button>
+        </>
+      }
+    >
+      <Textarea label="İptal sebebi" value={reason} maxLength={500} error={error ?? undefined} onChange={(e) => setReason(e.target.value)} />
+    </Dialog>
+  );
+}
+
 type Notice = { tone: "error" | "warning" | "info" | "success"; title: string; text: string } | null;
 
 function ShipmentView({
@@ -142,17 +192,9 @@ function ShipmentView({
 
   const [notice, setNotice] = useState<Notice>(null);
   const [shortageLine, setShortageLine] = useState<ShipmentLine | null>(null);
-  const [barcodes, setBarcodes] = useState<Map<string, string>>(new Map());
-
-  // Barcodes live on the picking task (shipment lines carry SKU only); without them the pack check matches by SKU.
-  useEffect(() => {
-    if (!shipment.pickingTaskId || !isDraft) return;
-    const controller = new AbortController();
-    getTask(api, shipment.pickingTaskId, controller.signal)
-      .then((t) => !controller.signal.aborted && setBarcodes(barcodeMap(t.detail.lines)))
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [api, shipment.pickingTaskId, isDraft]);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  // Shipment lines carry the product barcode (#86): the pack check matches barcode or SKU without loading the task.
+  const barcodes = useMemo(() => barcodeMap(shipment.lines), [shipment.lines]);
 
   const handleError = (error: unknown, title: string) => {
     if (isVersionConflict(error)) {
@@ -196,8 +238,8 @@ function ShipmentView({
           {shipment.carrier ? <Info label="Kargo" value={shipment.carrier} /> : null}
           {shipment.trackingNumber ? <Info label="Takip no" value={shipment.trackingNumber} /> : null}
         </dl>
-        {isDraft ? (
-          <p className="text-caption text-fg-muted">Taslak sevkiyat yalnızca sipariş iptal edildiğinde veya kapatıldığında iptal olur; bu ekrandan iptal edilemez.</p>
+        {isOpen && !permissions.assign ? (
+          <p className="text-caption text-fg-muted">Onaylanmamış sevkiyatı görev atama yetkisi olan bir yönetici iptal edebilir.</p>
         ) : null}
       </section>
 
@@ -239,6 +281,54 @@ function ShipmentView({
           onError={(error) => handleError(error, "Sevkiyat onaylanamadı")}
         />
       ) : null}
+
+      {isOpen && permissions.assign ? (
+        <section aria-labelledby="shipment-cancel" className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+          <h2 id="shipment-cancel" className="text-h3 text-fg">
+            Sevkiyatı iptal et
+          </h2>
+          <p className="text-body text-fg-secondary">
+            Stok hareketi olmaz; sipariş paketlendi durumunda kalır. Toplanan ürünler için yerine koyma görevi oluşturulur.
+          </p>
+          <div>
+            <Button variant="danger" onClick={() => setCancelOpen(true)}>
+              Sevkiyatı iptal et
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
+      <CancelShipmentDialog
+        key={cancelOpen ? `cancel-${shipment.version}` : "cancel-closed"}
+        open={cancelOpen}
+        number={shipment.number}
+        onClose={() => setCancelOpen(false)}
+        onSubmit={async (reason) => {
+          const key = crypto.randomUUID();
+          try {
+            const { loaded: next, putawayTaskId } = await withBusyRetry(
+              () => cancelShipment(api, shipment.id, reason, { idempotencyKey: key, etag: loaded.etag }),
+              { isBusy: isFulfilmentBusy },
+            );
+            setCancelOpen(false);
+            toast({ tone: "success", title: `${next.shipment.number} iptal edildi` });
+            setNotice({
+              tone: "info",
+              title: "Sevkiyat iptal edildi",
+              text: `Sipariş ${shipment.orderNumber} yeniden toplanana kadar paketlendi durumunda kalır: Görevler ekranından yeni toplama görevi açın, kalan miktarı kapatın veya siparişi iptal edin.${putawayTaskId ? " Toplanan ürünler için yerine koyma görevi oluşturuldu." : ""}`,
+            });
+            onLoaded(next);
+            return null;
+          } catch (error) {
+            if (isVersionConflict(error) || isStaleFulfilment(error)) {
+              setCancelOpen(false);
+              handleError(error, "Sevkiyat iptal edilemedi");
+              return null;
+            }
+            return error instanceof ApiError && error.status === 422 ? "İptal sebebini yazın (en fazla 500 karakter)." : fulfilmentErrorMessage(error);
+          }
+        }}
+      />
 
       {shipment.status === "confirmed" && canReadMovements ? <ShipmentMovements shipmentId={shipment.id} lines={shipment.lines} /> : null}
 

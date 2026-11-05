@@ -168,12 +168,22 @@ function totals(order: MockOrder) {
   };
 }
 
+/** Display names the API joins in (#86): synthetic mock users and the mock customers / warehouses. */
+const MOCK_USER_NAMES: Record<string, string> = { [MOCK_USER_ID]: "Mock Kullanıcı", [OTHER_USER_ID]: "Ayşe Mock" };
+const userName = (id: string | null) => (id ? (MOCK_USER_NAMES[id] ?? null) : null);
+const WAREHOUSE_NAMES: Record<string, string> = { [WAREHOUSE_IDS.main]: "Ana Depo (mock)" };
+/** Set per request by handleOrders so response builders can resolve customer names. */
+let namesCtx: Ctx | null = null;
+const customerNameOf = (id: string) => namesCtx?.commerce?.customers.find((c) => c.id === id)?.name ?? null;
+
 function orderResponse(order: MockOrder) {
   return {
     id: order.id,
     number: order.number,
     customerId: order.customerId,
+    customerName: customerNameOf(order.customerId),
     warehouseId: order.warehouseId,
+    warehouseName: WAREHOUSE_NAMES[order.warehouseId] ?? null,
     status: order.status,
     fulfillmentStatus: order.fulfillmentStatus,
     source: order.source,
@@ -185,9 +195,11 @@ function orderResponse(order: MockOrder) {
     totals: totals(order),
     createdAt: order.createdAt,
     createdBy: order.createdBy,
+    createdByName: userName(order.createdBy),
     submittedAt: null,
     approvedAt: order.approvedAt,
     approvedBy: order.approvedAt ? MOCK_USER_ID : null,
+    approvedByName: order.approvedAt ? userName(MOCK_USER_ID) : null,
     shippedAt: null,
     completedAt: null,
     cancelledAt: order.cancelledAt,
@@ -198,12 +210,13 @@ function orderResponse(order: MockOrder) {
 }
 
 export function orderDetailBody(order: MockOrder, hidePrices = false) {
-  const body = { order: orderResponse(order), lines: order.lines, history: order.history, shipments: [] as unknown[] };
+  const history = order.history.map((h) => ({ ...h, changedByName: userName(h.changedBy) }));
+  const body = { order: orderResponse(order), lines: order.lines, history, shipments: [] as unknown[] };
   if (!hidePrices) return body;
   // orders.read K⁸ (warehouse staff): totals and every line amount withheld, as the API does.
   return {
     ...body,
-    order: { ...body.order, totals: null },
+    order: { ...body.order, totals: null, customerName: null },
     lines: order.lines.map((l) => ({
       ...l,
       unitPrice: null,
@@ -224,7 +237,9 @@ function summary(order: MockOrder, hidePrices = false) {
     id: order.id,
     number: order.number,
     customerId: order.customerId,
+    customerName: hidePrices ? null : customerNameOf(order.customerId),
     warehouseId: order.warehouseId,
+    warehouseName: WAREHOUSE_NAMES[order.warehouseId] ?? null,
     status: order.status,
     fulfillmentStatus: order.fulfillmentStatus,
     source: order.source,
@@ -372,6 +387,7 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
   const path = url.pathname;
   const method = request.method();
   if (!path.startsWith("/api/v1/orders")) return false;
+  namesCtx = ctx;
   const body = (request.postDataJSON?.() ?? null) as Json | null;
 
   const override = mock.overrides.get(`${method} ${path}`);

@@ -1,7 +1,7 @@
 /** /stok list state as it lives in the page URL (?warehouseId=…&q=…). */
 export type BalanceListQuery = {
   warehouseId: string;
-  /** Exact SKU or barcode; resolved to one variant before the balances are queried. */
+  /** Free text: SKU, barcode or product name (GET /inventory/balances?q=). */
   q: string;
 };
 

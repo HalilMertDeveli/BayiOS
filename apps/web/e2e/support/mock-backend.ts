@@ -193,6 +193,28 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
     if (tenantHeader && state.inactiveTenants.includes(tenantHeader)) {
       return json(route, 403, problem(403, "tenant.inactive", { title: "This tenant is not active" }));
     }
+    if (path === "/api/v1/members" && method === "GET") {
+      // members.read; synthetic members (unsorted on purpose: the web sorts by name).
+      const role = state.memberships.find((m) => m.tenantId === tenantHeader)?.role ?? "viewer";
+      if (!grantsForRoleName(role, state.rules).some((g) => g.permission === "members.read")) {
+        return json(route, 403, problem(403, "auth.forbidden", { title: "Missing permission: members.read" }));
+      }
+      const member = (userId: string, displayName: string, memberRole: string) => ({
+        userId,
+        displayName,
+        fullName: displayName,
+        email: `${userId.slice(-4)}@example.test`,
+        role: memberRole,
+        status: "active",
+        createdAt: "2026-11-01T00:00:00Z",
+      });
+      const items = [
+        member("00000000-0000-4000-8000-7c0000000001", "Deniz Depocu (mock)", "warehouse_staff"),
+        member(USER.id, USER.fullName, role),
+        member("00000000-0000-4000-8000-7c0000000002", "Ali Toplayıcı (mock)", "warehouse_staff"),
+      ];
+      return json(route, 200, { items, page: { nextCursor: null, hasMore: false, limit: 200 } });
+    }
     if (path === "/api/v1/tenants" && method === "POST") {
       if (options.createTenant) return options.createTenant(route);
       return json(route, 201, {});

@@ -8,7 +8,6 @@ import { FormAlert } from "@/components/catalog/form-alert";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
@@ -31,6 +30,9 @@ import { fulfilmentPermissions, type FulfilmentPermissions } from "@/lib/fulfilm
 import { withBusyRetry } from "@/lib/inventory/busy-retry";
 import { formatDateTime } from "@/lib/inventory/labels";
 import { formatQuantity, toNumber } from "@/lib/inventory/quantity";
+import { listActiveMembers, memberLabel, type Member } from "@/lib/api/identity";
+import { roleLabels } from "@/lib/navigation";
+import { toRole } from "@/lib/session/active-tenant";
 import { useSession } from "@/lib/session/session-context";
 import { ProgressBar, TaskStatusBadge } from "./fulfilment-badges";
 
@@ -47,7 +49,6 @@ type ListData =
 
 type Keyed = { key: string; value: ListData };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Tabs from the effective permissions, in order: tasks.read.own → Görevlerim + Havuz; tasks.read.all (any scope; sales
@@ -172,7 +173,7 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
   };
 
   const assigneeText = (task: TaskSummary) =>
-    task.assignedTo === null ? "Havuzda (atanmamış)" : task.assignedTo === myId ? "Bana atandı" : "Başka personele atandı";
+    task.assignedTo === null ? "Havuzda (atanmamış)" : task.assignedTo === myId ? "Bana atandı" : task.assigneeName ? `Atanan: ${task.assigneeName}` : "Başka personele atandı";
 
   return (
     <>
@@ -351,8 +352,8 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
 }
 
 /**
- * Supervisor assignment. The API has no member list yet (contract gap), so the target is "me" or a member's user id
- * (Ayarlar → Ekip, when it lands). The API checks that the user is an active member whose role can pick.
+ * Supervisor assignment: "me" or an active member from GET /members (members.read), sorted by name. The API checks
+ * that the chosen member's role can pick (422 otherwise, shown in the dialog via the toast/notice).
  */
 function AssignDialog({
   task,
@@ -367,17 +368,32 @@ function AssignDialog({
   onClose: () => void;
   onAssign: (userId: string) => void;
 }) {
-  const [target, setTarget] = useState<"me" | "other">("me");
-  const [userId, setUserId] = useState("");
+  const { api, access } = useSession();
+  const canListMembers = access.canSome("members.read");
+  const [members, setMembers] = useState<{ status: "loading" | "error" | "ready"; items: Member[] }>({ status: canListMembers ? "loading" : "ready", items: [] });
+  const [target, setTarget] = useState(myId ?? "");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!task || !canListMembers) return;
+    const controller = new AbortController();
+    listActiveMembers(api, controller.signal)
+      .then((items) => !controller.signal.aborted && setMembers({ status: "ready", items }))
+      .catch(() => !controller.signal.aborted && setMembers({ status: "error", items: [] }));
+    return () => controller.abort();
+  }, [api, task, canListMembers]);
+
+  const options = [
+    ...(myId ? [{ value: myId, label: "Bana" }] : []),
+    ...members.items.filter((m) => m.userId !== myId).map((m) => ({ value: m.userId, label: `${memberLabel(m)} · ${roleLabels[toRole(m.role)]}` })),
+  ];
   const submit = () => {
-    const id = target === "me" ? myId : userId.trim();
-    if (!id || !UUID.test(id)) {
-      setError("Geçerli bir kullanıcı kimliği girin (ör. 3f2b…-…).");
+    if (!target) {
+      setError("Görevi atayacağınız kişiyi seçin.");
       return;
     }
     setError(null);
-    onAssign(id);
+    onAssign(target);
   };
   return (
     <Dialog
@@ -401,28 +417,12 @@ function AssignDialog({
           label="Kime"
           size="lg"
           value={target}
-          onChange={(e) => setTarget(e.target.value as "me" | "other")}
-          options={[
-            { value: "me", label: "Bana" },
-            { value: "other", label: "Başka bir personel (kullanıcı kimliğiyle)" },
-          ]}
+          placeholder={members.status === "loading" ? "Ekip yükleniyor…" : "Personel seçin"}
+          hint="Toplama yetkisi olan bir personel seçin; uygun olmayan rol sunucuda reddedilir."
+          error={error ?? (members.status === "error" ? "Ekip listesi yüklenemedi; görevi kendinize atayabilirsiniz." : undefined)}
+          onChange={(e) => setTarget(e.target.value)}
+          options={options}
         />
-        {target === "other" ? (
-          <Input
-            label="Personelin kullanıcı kimliği"
-            hint="Ekip listesi henüz yok; kimliği yöneticinizden alın. Depo personeli veya yönetici rolü olmalı."
-            size="lg"
-            value={userId}
-            error={error ?? undefined}
-            onChange={(e) => setUserId(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-          />
-        ) : error ? (
-          <p role="alert" className="text-body text-danger-fg">
-            {error}
-          </p>
-        ) : null}
       </div>
     </Dialog>
   );
