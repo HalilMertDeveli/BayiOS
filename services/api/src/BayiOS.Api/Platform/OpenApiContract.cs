@@ -2,9 +2,11 @@ using System.Text.Json.Nodes;
 using BayiOS.Api.Platform.Tenancy;
 using BayiOS.Modules.Catalog.Contracts;
 using BayiOS.Modules.Catalog.Domain;
+using BayiOS.Modules.Billing.Contracts;
 using BayiOS.Modules.Identity.Contracts;
 using BayiOS.Modules.Reports.Contracts;
 using BayiOS.Modules.Reports.Domain;
+using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
@@ -21,6 +23,7 @@ internal static class OpenApiContract
     private const string ProblemJson = "application/problem+json";
     private const string StockProblem = "StockProblemDetails";
     private const string ConflictProblem = "CodeConflictProblemDetails";
+    private const string EntitlementProblem = "EntitlementProblemDetails";
     private static readonly string[] StockStatuses = ["409", "422"];
 
     /// <summary>String properties that only take a fixed set of values: (type, JSON property) → values.</summary>
@@ -33,6 +36,19 @@ internal static class OpenApiContract
         },
         [typeof(PermissionGrantResponse)] = new() { ["scope"] = ["all", "conditional", "own"] },
         [typeof(ReportExportRequest)] = new() { ["format"] = ExportFormats.All },
+        [typeof(TenantEntitlementsResponse)] = new() { ["status"] = BayiOS.Modules.Billing.Domain.SubscriptionStatuses.All },
+        [typeof(SubscriptionResponse)] = new() { ["status"] = BayiOS.Modules.Billing.Domain.SubscriptionStatuses.All },
+        [typeof(UsageResponse)] = new() { ["status"] = BayiOS.Modules.Billing.Domain.SubscriptionStatuses.All },
+        [typeof(TenantModuleResponse)] = new()
+        {
+            ["status"] =
+            [
+                BayiOS.Modules.Billing.Application.BillingService.StatusIncludedInTrial,
+                .. BayiOS.Modules.Billing.Domain.ModuleStatuses.All,
+                BayiOS.Modules.Billing.Application.BillingService.StatusAvailable,
+                BayiOS.Modules.Billing.Application.BillingService.StatusUnavailable,
+            ],
+        },
     };
 
     public static OpenApiOptions AddBayiOsContract(this OpenApiOptions options)
@@ -82,6 +98,16 @@ internal static class OpenApiContract
                 "409 catalog.sku_taken / catalog.barcode_taken: conflict names the existing variant holding the value (absent when only the database index caught a concurrent write).",
                 ("code", String()),
                 ("conflict", new OpenApiSchemaReference("CodeConflict", document)));
+            schemas[EntitlementProblem] = Problem(document,
+                "403: auth.forbidden / auth.disabled_by_tenant_rule (permission), or entitlement.required (feature names the missing "
+                + "feature; suggestedPlan / suggestedModule what would grant it, null when nothing in the catalog does) and "
+                + "entitlement.limit_exceeded (feature names the limit; limit and current are the numbers). Existing data stays readable.",
+                ("code", String()),
+                ("feature", String()),
+                ("suggestedPlan", Nullable(String())),
+                ("suggestedModule", Nullable(String())),
+                ("limit", Nullable(Integer())),
+                ("current", Nullable(Integer())));
             return Task.CompletedTask;
         });
 
@@ -109,6 +135,11 @@ internal static class OpenApiContract
                 {
                     SetProblemSchema(operation, status, new OpenApiSchemaReference(StockProblem, context.Document));
                 }
+            }
+
+            if (metadata.OfType<EntitlementMetadata>().Any() || metadata.OfType<EntitlementLimitMetadata>().Any())
+            {
+                SetProblemSchema(operation, "403", new OpenApiSchemaReference(EntitlementProblem, context.Document));
             }
 
             if (metadata.OfType<ConflictDetailMetadata>().Any())
@@ -175,6 +206,8 @@ internal static class OpenApiContract
     private static OpenApiSchema Uuid() => new() { Type = JsonSchemaType.String, Format = "uuid" };
 
     private static OpenApiSchema Number() => new() { Type = JsonSchemaType.Number };
+
+    private static OpenApiSchema Integer() => new() { Type = JsonSchemaType.Integer, Format = "int64" };
 
     private static OpenApiSchema Nullable(OpenApiSchema schema)
     {

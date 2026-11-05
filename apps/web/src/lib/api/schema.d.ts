@@ -527,7 +527,10 @@ export interface paths {
         /** Depolar (sayfasız, ≤ 1000; varsayılan depo önce) */
         get: operations["Warehouse_List"];
         put?: never;
-        /** Depo oluşturur (tenant'ın ilk deposu varsayılan olur) */
+        /**
+         * Depo oluşturur (tenant'ın ilk deposu varsayılan olur)
+         * @description 403 `entitlement.limit_exceeded` when the plan's active-warehouse limit (`max_warehouses`, Basic: 1) is reached; 403 `entitlement.required` (`warehouse_locations`) for usesLocations = true without the Professional plan.
+         */
         post: operations["Warehouse_Create"];
         delete?: never;
         options?: never;
@@ -549,7 +552,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Depoyu günceller: ad, durum, varsayılan, lokasyon kullanımı (stok yokken) — If-Match zorunlu */
+        /**
+         * Depoyu günceller: ad, durum, varsayılan, lokasyon kullanımı (stok yokken) — If-Match zorunlu
+         * @description Reactivating a warehouse counts against `max_warehouses` and turning locations on needs `warehouse_locations` (403 `entitlement.limit_exceeded` / `entitlement.required`); renaming, deactivating and turning locations off are open on every plan.
+         */
         patch: operations["Warehouse_Update"];
         trace?: never;
     };
@@ -1470,7 +1476,7 @@ export interface paths {
         put?: never;
         /**
          * WhatsApp mesajını ayrıştırır ve tenant kataloğuyla eşleştirir; inceleme yükünü döner (fiyat/stok içermez)
-         * @description The text is masked (phone numbers, e-mail addresses) and parsed by the AI parser when it is enabled, configured and within the tenant's daily quota; otherwise — and on any provider error, timeout, refusal or invalid output — by the deterministic rules parser (fallbackReason + warnings say which and why). Lines are matched only against the tenant's own catalog: matched lines carry one proposal, ambiguous lines up to 5 candidates and no proposal, unmatched lines none. 429 `ai.rate_limited` (with Retry-After) when the hourly parse limit is reached.
+         * @description The text is masked (phone numbers, e-mail addresses) and parsed by the AI parser when it is enabled, configured and within the tenant's daily quota; otherwise — and on any provider error, timeout, refusal or invalid output — by the deterministic rules parser (fallbackReason + warnings say which and why). Lines are matched only against the tenant's own catalog: matched lines carry one proposal, ambiguous lines up to 5 candidates and no proposal, unmatched lines none. 429 `ai.rate_limited` (with Retry-After) when the hourly parse limit is reached. Needs the AI assistant add-on (403 `entitlement.required`, feature `ai_order_parsing`); 403 `entitlement.limit_exceeded` when the add-on's monthly parse quota (`ai_parses_per_month`) is used up. Reviewing, approving and rejecting stored parses stay open without the add-on.
          */
         post: operations["Ai_OrderParses_Submit"];
         delete?: never;
@@ -1772,6 +1778,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Paket ve ek modül kataloğu (sürümlü; fiyat yok) */
+        get: operations["Billing_Plans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Aktif tenant'ın etkin paketi, durumu (deneme/aktif/süresi doldu), özellikleri, limitleri ve modülleri */
+        get: operations["Billing_Subscription"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Modül mağazası: ek modüller ve tenant'taki durumları */
+        get: operations["Billing_Modules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Limitlere göre güncel kullanım (depo, kullanıcı, aylık AI ayrıştırma) */
+        get: operations["Billing_Usage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/modules/{code}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ek modülü ücretsiz deneme olarak etkinleştirir (ödeme yok; modül başına bir kez, denetim kaydı)
+         * @description Starts the free activation of an add-on for the configured number of days (during the tenant trial it starts when the trial ends). Switched-off modules can be switched on again until that date. 409 `billing.module_unavailable` (not built yet), `billing.module_already_active`, `billing.trial_used` (free activation used up; paid activation does not exist yet).
+         */
+        post: operations["Billing_ActivateModule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/modules/{code}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ek modülü kapatır; veriler silinmez (denetim kaydı)
+         * @description Existing records stay readable; only new use of the feature is refused. 409 `billing.module_not_active` (not activated, or only included in the tenant trial).
+         */
+        post: operations["Billing_DeactivateModule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1781,6 +1895,7 @@ export interface components {
             tenantId: string;
             role: string;
             permissions: components["schemas"]["PermissionGrantResponse"][];
+            entitlements: components["schemas"]["TenantEntitlementsResponse"];
         };
         AddressListResponse: {
             items: components["schemas"]["AddressResponse"][];
@@ -1966,6 +2081,17 @@ export interface components {
             /** Format: date-time */
             updatedAt: null | string;
         };
+        BillingCatalogResponse: {
+            catalogVersion: string;
+            trialPlan: string;
+            fallbackPlan: string;
+            /** Format: int32 */
+            trialDays: number | string;
+            /** Format: int32 */
+            moduleTrialDays: number | string;
+            plans: components["schemas"]["PlanResponse"][];
+            modules: components["schemas"]["CatalogModuleResponse"][];
+        };
         BrandResponse: {
             /** Format: uuid */
             id: string;
@@ -1985,6 +2111,14 @@ export interface components {
             shipment: components["schemas"]["ShipmentResponse"];
             /** Format: uuid */
             putawayTaskId: null | string;
+        };
+        CatalogModuleResponse: {
+            code: string;
+            name: string;
+            description: string;
+            available: boolean;
+            features: string[];
+            limits: components["schemas"]["LimitValueResponse"][];
         };
         CategoryResponse: {
             /** Format: uuid */
@@ -2319,6 +2453,22 @@ export interface components {
             /** Format: date-time */
             updatedAt: null | string;
         };
+        EntitlementLimitResponse: {
+            code: string;
+            /** Format: int64 */
+            value: null | number | string;
+        };
+        /** @description 403: auth.forbidden / auth.disabled_by_tenant_rule (permission), or entitlement.required (feature names the missing feature; suggestedPlan / suggestedModule what would grant it, null when nothing in the catalog does) and entitlement.limit_exceeded (feature names the limit; limit and current are the numbers). Existing data stays readable. */
+        EntitlementProblemDetails: components["schemas"]["ProblemDetails"] & {
+            code?: string;
+            feature?: string;
+            suggestedPlan?: null | string;
+            suggestedModule?: null | string;
+            /** Format: int64 */
+            limit?: null | number;
+            /** Format: int64 */
+            current?: null | number;
+        };
         FulfillmentPageInfo: {
             nextCursor: null | string;
             hasMore: boolean;
@@ -2485,6 +2635,11 @@ export interface components {
             hasMore: boolean;
             /** Format: int32 */
             limit: number | string;
+        };
+        LimitValueResponse: {
+            code: string;
+            /** Format: int64 */
+            value: null | number | string;
         };
         ListResponseOfBrandResponse: {
             items: components["schemas"]["BrandResponse"][];
@@ -3163,6 +3318,13 @@ export interface components {
             /** Format: int32 */
             openLineCount: number | string;
         };
+        PlanResponse: {
+            code: string;
+            name: string;
+            description: string;
+            features: string[];
+            limits: components["schemas"]["LimitValueResponse"][];
+        };
         PriceListItemInput: {
             /** Format: uuid */
             variantId: null | string;
@@ -3523,6 +3685,18 @@ export interface components {
         SubmitOrderRequest: {
             confirmNegativeStock: null | boolean;
         };
+        SubscriptionResponse: {
+            plan: string;
+            planName: string;
+            /** @enum {string} */
+            status: "trialing" | "active" | "expired" | "cancelled";
+            /** Format: date-time */
+            trialEndsAt: null | string;
+            catalogVersion: string;
+            features: string[];
+            limits: components["schemas"]["LimitValueResponse"][];
+            modules: components["schemas"]["TenantModuleResponse"][];
+        };
         TaxBreakdownResponse: {
             /** Format: double */
             rate: number | string;
@@ -3532,6 +3706,30 @@ export interface components {
             tax: number | string;
             /** Format: double */
             total: number | string;
+        };
+        TenantEntitlementsResponse: {
+            plan: string;
+            /** @enum {string} */
+            status: "trialing" | "active" | "expired" | "cancelled";
+            /** Format: date-time */
+            trialEndsAt: null | string;
+            catalogVersion: string;
+            features: string[];
+            limits: components["schemas"]["EntitlementLimitResponse"][];
+        };
+        TenantModuleListResponse: {
+            items: components["schemas"]["TenantModuleResponse"][];
+        };
+        TenantModuleResponse: {
+            code: string;
+            name: string;
+            available: boolean;
+            /** @enum {string} */
+            status: "included_in_trial" | "trialing" | "active" | "expired" | "cancelled" | "available" | "unavailable";
+            /** Format: date-time */
+            expiresAt: null | string;
+            canActivate: boolean;
+            canDeactivate: boolean;
         };
         TenantResponse: {
             /** Format: uuid */
@@ -3774,6 +3972,22 @@ export interface components {
             /** Format: int32 */
             updated: number | string;
             items: components["schemas"]["PriceListItemResponse"][];
+        };
+        UsageItemResponse: {
+            code: string;
+            /** Format: int64 */
+            limit: null | number | string;
+            /** Format: int64 */
+            current: number | string;
+            /** Format: int64 */
+            remaining: null | number | string;
+            period: null | string;
+        };
+        UsageResponse: {
+            plan: string;
+            /** @enum {string} */
+            status: "trialing" | "active" | "expired" | "cancelled";
+            items: components["schemas"]["UsageItemResponse"][];
         };
         VariantResponse: {
             /** Format: uuid */
@@ -7205,7 +7419,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["EntitlementProblemDetails"];
                 };
             };
             /** @description Conflict */
@@ -7351,7 +7565,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["EntitlementProblemDetails"];
                 };
             };
             /** @description Not Found */
@@ -7517,7 +7731,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["EntitlementProblemDetails"];
                 };
             };
             /** @description Not Found */
@@ -7611,7 +7825,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["EntitlementProblemDetails"];
                 };
             };
             /** @description Not Found */
@@ -13146,7 +13360,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["EntitlementProblemDetails"];
                 };
             };
             /** @description Conflict */
@@ -14492,6 +14706,347 @@ export interface operations {
             };
             /** @description Too Many Requests */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Billing_Plans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingCatalogResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Billing_Subscription: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Billing_Modules: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantModuleListResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Billing_Usage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Billing_ActivateModule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantModuleResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Billing_DeactivateModule: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantModuleResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
                 headers: {
                     [name: string]: unknown;
                 };

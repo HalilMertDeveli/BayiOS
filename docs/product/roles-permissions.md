@@ -161,6 +161,14 @@ Gösterim: **✓** izinli · **–** izin yok · **K** koşullu (dipnot) · **O*
 
 Abonelik düşürüldüğünde/bittiğinde: veri silinmez; entitlement'ı kalkan özellik salt okunur olur (ör. çoklu depo: mevcut depolar görüntülenir, yeni transfer yapılamaz; ancak stoğu sıfırlamak için transfer/düzeltme izinli bırakılır — öneri, ürün sahibi kararı).
 
+**Uygulanan davranış (#51/#52 — ürün sahibi onayına sunulan kararlar):**
+- Deneme: yeni tenant `Billing:TrialDays` (varsayılan 30) gün Profesyonel + tüm ek modüllerle başlar (SUB-05); bitişte Temel'e iner (`status = expired`). Pilot tenant'lara süresiz erişim (AQ-08) operatör override'ı ile verilir.
+- Temel'e inince **çekirdek tam çalışır**: ürün, stok hareketleri (mal kabul/düzeltme/sevkiyat — lokasyonlu depoda da), sipariş, toplama, rapor, dışa aktarma, audit. Mevcut tüm depolar ve lokasyonlar okunur ve stok işlemlerinde kullanılır.
+- **Salt okunur olanlar (yeni kullanım kapalı):** yeni aktif depo (aktif depo sayısı ≤ `max_warehouses`; pasif depoyu yeniden aktifleştirme de sayılır), lokasyon oluşturma/düzenleme ve depoda lokasyonu açma (`warehouse_locations`), yeni WhatsApp ayrıştırması (`ai_order_parsing`). Depo adı değiştirme, depoyu pasifleştirme, lokasyonu kapatma (`usesLocations = false`, stok yokken) her pakette açıktır (geri dönüş yolu).
+- AI ek modülü kapalıyken mevcut ayrıştırmalar listelenir, okunur, **onaylanır/reddedilir** (sipariş akışında takılı kalmaz); yalnızca yeni ayrıştırma reddedilir.
+- Ek modül "etkinleştirme" ödeme olmadan ücretsiz ve süreli (`Billing:ModuleTrialDays`, varsayılan 30) bir denemedir; modül başına bir kez; yalnızca owner (`billing.manage`), denetim kaydıyla. Paket değişikliği API'de yoktur.
+- Limit sayıları geçicidir (AQ-01/AQ-06): Temel `max_warehouses` 1, `max_users` 5; Profesyonel depo sınırsız, `max_users` 25; AI ek modülü `ai_parses_per_month` 1000. `max_users` tanımlı ve kullanımda gösterilir, ancak üye davet ucu henüz olmadığından zorlanmaz. `barcode_operations` (Profesyonel) tanımlıdır, henüz bir uç kapılamaz.
+
 ## 6. Test gereksinimleri
 - Her API ucu için rol × izin tablo-temelli yetki testi (bu dokümandaki matris kaynak alınır).
 - Her uç için çapraz tenant erişim testi (başka tenant'ın kaydına ID ile erişim → 404).

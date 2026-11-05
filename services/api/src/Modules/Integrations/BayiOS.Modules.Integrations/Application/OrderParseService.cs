@@ -8,6 +8,7 @@ using BayiOS.Modules.Integrations.Infrastructure.Persistence;
 using BayiOS.Modules.Integrations.Matching;
 using BayiOS.Modules.Integrations.Parsing;
 using BayiOS.SharedKernel.Authorization;
+using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Platform.Audit;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -44,6 +45,7 @@ internal sealed partial class OrderParseService(
     IAssistantCatalog catalog,
     IAssistantOrderDrafts drafts,
     AiUsageMeter meter,
+    IEntitlements entitlements,
     AiParserAccessor ai,
     IOptions<AiOptions> options,
     IAuditLog audit,
@@ -80,7 +82,15 @@ internal sealed partial class OrderParseService(
             return AppError.Validation("text", $"At most {settings.MaxInputLines} lines.");
         }
 
-        if (!await meter.TryStartParseAsync(TenantId, UserId, settings.HourlyParseLimit, cancellationToken))
+        // The endpoint gate already required ai_order_parsing; the add-on's monthly quota is checked with the hourly limit.
+        var monthlyLimit = (await entitlements.CurrentAsync(cancellationToken)).LimitOf(EntitlementCodes.AiParsesPerMonth);
+        var start = await meter.TryStartParseAsync(TenantId, UserId, settings.HourlyParseLimit, monthlyLimit, cancellationToken);
+        if (start.Decision == ParseStartDecision.MonthlyLimitReached)
+        {
+            throw entitlements.LimitExceeded(EntitlementCodes.AiParsesPerMonth, monthlyLimit ?? 0, start.MonthlyUsed ?? 0);
+        }
+
+        if (start.Decision != ParseStartDecision.Allowed)
         {
             return new AppError(
                 429, AssistantProblems.RateLimited, $"At most {settings.HourlyParseLimit} messages per hour can be parsed; try again later",

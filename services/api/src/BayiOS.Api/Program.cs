@@ -3,6 +3,7 @@ using BayiOS.Api.Platform.Auth;
 using BayiOS.Api.Platform.Jobs;
 using BayiOS.Api.Platform.Persistence;
 using BayiOS.Api.Platform.Tenancy;
+using BayiOS.Modules.Billing;
 using BayiOS.Modules.Catalog;
 using BayiOS.Modules.Customers;
 using BayiOS.Modules.Identity;
@@ -52,6 +53,8 @@ builder.Services.AddIntegrationsModule();
 builder.Services.AddIntegrationsPorts();
 builder.Services.AddReportsModule();
 builder.Services.AddReportsPorts();
+builder.Services.AddBillingModule();
+builder.Services.AddBillingPorts();
 
 var app = builder.Build();
 
@@ -82,6 +85,7 @@ app.MapImportsModule();
 app.MapOrdersModule();
 app.MapIntegrationsModule();
 app.MapReportsModule();
+app.MapBillingModule();
 
 app.Run();
 

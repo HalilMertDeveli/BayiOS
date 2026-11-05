@@ -190,8 +190,21 @@ public sealed class ReportsExportTests(ApiFixture fixture)
     [Fact]
     public async Task Exports_are_available_to_every_report_role_without_an_entitlement()
     {
-        // A fresh tenant has no paid module: exports must still work (roles-permissions §1.5 / §5 "asla kilitlenmez").
+        // Trial over, no paid module: exports must still work (roles-permissions §1.5 / §5 "asla kilitlenmez").
         var owner = await CatalogClient.NewTenantOwnerAsync(fixture);
+        await Billing.BillingKit.EndTrialAsync(fixture, owner.TenantId);
+        await Billing.BillingKit.RunExpiryJobAsync(fixture);
+
+        using (var document = JsonDocument.Parse(await fixture.CreateClient().GetStringAsync("/openapi/v1.json", Ct)))
+        {
+            var reportOperations = document.RootElement.GetProperty("paths").EnumerateObject()
+                .Where(p => p.Name.StartsWith("/api/v1/reports/", StringComparison.Ordinal))
+                .SelectMany(p => p.Value.EnumerateObject())
+                .ToList();
+            Assert.Equal(12, reportOperations.Count);
+            Assert.All(reportOperations, o => Assert.False(o.Value.TryGetProperty("x-entitlement", out _), "reports and exports are never entitlement-gated"));
+        }
+
         foreach (var role in new[] { Roles.Owner, Roles.Admin, Roles.Manager, Roles.Viewer })
         {
             var member = role == Roles.Owner ? owner : await owner.AddMemberAsync(fixture, role);

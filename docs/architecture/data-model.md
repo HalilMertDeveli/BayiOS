@@ -165,6 +165,33 @@ Gösterim: **PK**, FK (modül içi, bileşik tenant FK), UQ = unique, IX = index
 | tenant_id · metric text · period_start date · value bigint NOT NULL DEFAULT 0 |
 | **PK** (tenant_id, metric, period_start) |
 
+> **Uygulanan durum (migration `InitialBilling`, #51/#52):** `tenant_subscriptions`, `tenant_modules`, `tenant_entitlements`;
+> hepsinde ENABLE + FORCE RLS (std), EF global query filter. Taslaktan farklar:
+> - **`subscription_plans` tablosu yok.** Paket/ek modül kataloğu sürümlü koddur (`BillingCatalog`, `Version` örn.
+>   `2026-11-05.1`): kodla birlikte gözden geçirilir, tüm tenant'lar aynı sürüme göre çözülür; kod listeleri CHECK
+>   kısıtlarındadır (yeni plan/modül = migration). Entitlement'lar **saklanmaz, her istekte türetilir**: etkin plan
+>   (deneme / aktif / süresi dolmuş → Temel) + açık ek modüller + override'lar; zaman girdi olduğundan bitiş anı bir
+>   job'ı beklemez.
+> - `tenant_subscriptions`: `plan_code` (basic, professional), `status` (trialing, active, expired, cancelled — `past_due`
+>   yok, ödeme yok), `trial_started_at`, `trial_ends_at`, `current_period_start`, `current_period_end NULL`,
+>   `catalog_version`, `provider`/`provider_ref` (boş; ödeme sağlayıcısı ürün sahibi onayı ister), `row_version`, audit
+>   kolonları. `UQ (tenant_id)`; CHECK: trialing ⇒ deneme tarihleri dolu ve bitiş > başlangıç. Kısmi index
+>   `ix_tenant_subscriptions_trialing_ends_at`.
+> - Yeni tablo `tenant_modules` (ek modül etkinleştirmeleri): `module_code`, `status` (trialing, active, expired,
+>   cancelled), `started_at`, `expires_at` (yalnızca ücretli `active` için NULL olabilir), `deactivated_at/by`.
+>   `UQ (tenant_id, module_code)` — ücretsiz süre modül başına bir kez.
+> - `tenant_entitlements` yalnızca **operatör override'ı** (`source = 'override'`; SUB-08): `feature_code`, `enabled`
+>   (özellik kodları), `limit_value` (limit kodları; NULL = sınırsız), `reason`, `expires_at`. `UQ (tenant_id, feature_code)`.
+> - `usage_counters` yok: sayılar sahip modüllerden okunur (aktif depo, aktif üye, `integrations.ai_usage` aylık toplamı).
+>
+> `bayios_app`: `tenant_subscriptions`, `tenant_modules` SELECT/INSERT/UPDATE (**DELETE yok** — veri silinmez, SUB-06);
+> `tenant_entitlements` yalnızca SELECT (operatör migrator rolüyle yazar). Deneme bitişi kaydı: tenant'sız bakım işi
+> `billing.subscription_expiry` → `billing.due_subscription_tenants(limit)` (SECURITY DEFINER, sabit search_path; sahibin
+> politikaları `tenant_subscriptions_expiry_select` / `tenant_modules_expiry_select` yalnızca bitişi geçmiş `trialing`
+> satırları gösterir, fonksiyon yalnızca tenant id döner); güncelleme ve denetim her tenant'ın kendi bağlamında RLS ile
+> yapılır. Yeni tenant denemesi `POST /tenants` transaction'ında başlar; aboneliği olmayan eski tenant'a ilk yazma
+> isteğinde (ON CONFLICT DO NOTHING) deneme kaydı açılır, salt-okunur istekler aynı denemeyi kaydetmeden çözer.
+
 ### 5.3 `catalog`
 
 > **Uygulanan durum (migration `InitialCatalog`, #16/#17):** `units`, `brands`, `categories`, `products`, `product_variants` oluşturuldu. Tüm tablolarda `tenant_id`, `UQ (tenant_id, id)`, bileşik tenant FK'leri, `row_version`, `created_at/by`, `updated_at/by`, ENABLE + FORCE RLS (std) ve EF global query filter var. `bayios_app` katalogda yalnızca `SELECT/INSERT/UPDATE` alır (**DELETE yok**: katalog satırları arşivlenir, fiziksel silinmez). `units`, `brands`, `categories` ayrıca `archived_at` taşır; `brands` ve kardeş kategori adı benzersizliği arşivlenmiş satırları dışlar (kısmi index), SKU benzersizliği arşivlenmişleri **içerir**. Kategori ebeveyni oluşturulduktan sonra değişmez (taşıma ileride). Henüz yapılmayanlar: `variant_barcodes` (çoklu barkod — şimdilik varyantta tek `barcode` kolonu, `UQ (tenant_id, barcode)`, NULL çakışmaz), `variant_aliases`, `suppliers`, `variant_unit_conversions`, `product_compatibilities`, `purchase_price`/`weight_kg`/`low_stock_threshold`/`normalized_name` kolonları. Arama: `products.name` ve `product_variants.sku` üzerinde `pg_trgm` GIN (`ILIKE '%q%'`), barkod tam eşleşme (unique btree). `pg_trgm` yoksa migration `extensions` şemasına kurar; varsa bulunduğu şemadaki operatör sınıfını kullanır.

@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using BayiOS.IntegrationTests.Infrastructure;
+using BayiOS.Modules.Billing.Infrastructure.Persistence;
 using BayiOS.Modules.Catalog.Infrastructure.Persistence;
 using BayiOS.Modules.Customers.Infrastructure.Persistence;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
@@ -124,6 +125,13 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         await using (var orders = new OrdersDbContext(ordersOptions.Options, new RequestContext()))
         {
             await orders.Database.MigrateAsync();
+        }
+
+        var billingOptions = new DbContextOptionsBuilder<BillingDbContext>();
+        BillingDbContext.Configure(billingOptions, MigratorConnectionString);
+        await using (var billing = new BillingDbContext(billingOptions.Options, new RequestContext()))
+        {
+            await billing.Database.MigrateAsync();
         }
 
         var integrationsOptions = new DbContextOptionsBuilder<IntegrationsDbContext>();

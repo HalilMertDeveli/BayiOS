@@ -20,6 +20,16 @@ public sealed record AiUsageSnapshot(
     public long QuotaTokens => InputTokens + CacheWriteTokens + OutputTokens;
 }
 
+public enum ParseStartDecision
+{
+    Allowed,
+    HourlyLimitReached,
+    MonthlyLimitReached,
+}
+
+/// <summary>Outcome of counting one parse request; <see cref="MonthlyUsed"/> is set when the monthly limit stopped it.</summary>
+public sealed record ParseStart(ParseStartDecision Decision, long? MonthlyUsed);
+
 /// <summary>Outcome of reserving one AI call against the tenant's daily quota.</summary>
 public enum AiQuotaDecision
 {
@@ -42,11 +52,32 @@ public sealed class AiUsageMeter(NpgsqlDataSource dataSource, TimeProvider clock
 
     public DateTimeOffset CurrentHour => Hour(clock.GetUtcNow());
 
-    /// <summary>Counts one parse request in the current hour unless <paramref name="hourlyLimit"/> is reached.</summary>
-    public async Task<bool> TryStartParseAsync(Guid tenantId, Guid? userId, int hourlyLimit, CancellationToken cancellationToken)
+    /// <summary>
+    /// Counts one parse request in the current hour unless <paramref name="hourlyLimit"/> is reached or — when
+    /// <paramref name="monthlyLimit"/> is set (entitlement <c>ai_parses_per_month</c>, null = unlimited) — this calendar
+    /// month's parse requests have reached it. The monthly check takes a per-tenant transaction lock, so concurrent
+    /// requests on any instance cannot overshoot it.
+    /// </summary>
+    public async Task<ParseStart> TryStartParseAsync(Guid tenantId, Guid? userId, int hourlyLimit, long? monthlyLimit, CancellationToken cancellationToken)
     {
         return await InTransactionAsync(tenantId, userId, async (connection, transaction) =>
         {
+            if (monthlyLimit is { } limit)
+            {
+                await using (var lockCommand = new NpgsqlCommand(
+                    "SELECT pg_advisory_xact_lock(hashtextextended('integrations.ai_month:' || @tenant::text, 0))", connection, transaction))
+                {
+                    lockCommand.Parameters.Add(new NpgsqlParameter<Guid>("tenant", tenantId));
+                    await lockCommand.ExecuteNonQueryAsync(cancellationToken);
+                }
+
+                var used = await MonthParsesAsync(connection, transaction, tenantId, cancellationToken);
+                if (used >= limit)
+                {
+                    return new ParseStart(ParseStartDecision.MonthlyLimitReached, used);
+                }
+            }
+
             await using var command = new NpgsqlCommand(
                 """
                 INSERT INTO integrations.ai_usage AS u (tenant_id, usage_hour, parse_requests) VALUES (@tenant, @hour, 1)
@@ -59,8 +90,32 @@ public sealed class AiUsageMeter(NpgsqlDataSource dataSource, TimeProvider clock
             command.Parameters.Add(new NpgsqlParameter<Guid>("tenant", tenantId));
             command.Parameters.Add(new NpgsqlParameter<DateTimeOffset>("hour", CurrentHour));
             command.Parameters.Add(new NpgsqlParameter<int>("limit", hourlyLimit));
-            return hourlyLimit > 0 && await command.ExecuteScalarAsync(cancellationToken) is not null;
+            return hourlyLimit > 0 && await command.ExecuteScalarAsync(cancellationToken) is not null
+                ? new ParseStart(ParseStartDecision.Allowed, null)
+                : new ParseStart(ParseStartDecision.HourlyLimitReached, null);
         }, cancellationToken);
+    }
+
+    /// <summary>Parse requests of the tenant in the current calendar month (Europe/Istanbul).</summary>
+    public Task<long> MonthToDateParsesAsync(Guid tenantId, Guid? userId, CancellationToken cancellationToken) =>
+        InTransactionAsync(tenantId, userId, (connection, transaction) => MonthParsesAsync(connection, transaction, tenantId, cancellationToken), cancellationToken);
+
+    /// <summary>Start of the current usage month (Europe/Istanbul, first day 00:00) as an instant.</summary>
+    public DateTimeOffset MonthStart()
+    {
+        var local = clock.GetUtcNow().ToOffset(Istanbul);
+        return new DateTimeOffset(local.Year, local.Month, 1, 0, 0, 0, Istanbul).ToUniversalTime();
+    }
+
+    private async Task<long> MonthParsesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid tenantId, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT coalesce(sum(parse_requests), 0)::bigint FROM integrations.ai_usage WHERE tenant_id = @tenant AND usage_hour >= @start",
+            connection,
+            transaction);
+        command.Parameters.Add(new NpgsqlParameter<Guid>("tenant", tenantId));
+        command.Parameters.Add(new NpgsqlParameter<DateTimeOffset>("start", MonthStart()));
+        return (long)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
 
     /// <summary>Reserves one AI call (increments <c>ai_calls</c>) when today's calls and tokens are under the limits.</summary>

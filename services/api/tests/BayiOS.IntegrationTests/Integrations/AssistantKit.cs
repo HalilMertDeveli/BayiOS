@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using BayiOS.IntegrationTests.Billing;
 using BayiOS.IntegrationTests.Catalog;
 using BayiOS.IntegrationTests.Infrastructure;
 using BayiOS.IntegrationTests.Orders;
@@ -48,6 +49,10 @@ internal sealed class AssistantKit
     public static async Task<AssistantKit> CreateAsync(ApiFixture fixture)
     {
         var orders = await OrdersKit.CreateAsync(fixture);
+
+        // Explicit entitlements (#51): Professional plan + the AI assistant add-on (free activation), not the trial.
+        await BillingKit.SetPlanAsync(fixture, orders.Owner.TenantId, BillingKit.Professional);
+        await BillingKit.ActivateAsync(orders.Owner);
         var unit = await orders.Owner.CreateUnitAsync("takim", "Takım");
         var variants = new Dictionary<string, Guid>();
         foreach (var (sku, name, price) in Products)
