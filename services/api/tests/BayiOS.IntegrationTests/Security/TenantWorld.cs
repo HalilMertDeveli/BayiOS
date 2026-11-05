@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using BayiOS.IntegrationTests.Catalog;
 using BayiOS.IntegrationTests.Infrastructure;
+using BayiOS.IntegrationTests.Warehouse;
 using BayiOS.TestSupport.BulkImport;
 using Npgsql;
 
@@ -16,7 +17,7 @@ namespace BayiOS.IntegrationTests.Security;
 /// </summary>
 internal sealed class TenantWorld
 {
-    /// <summary>Literal path segment before an <c>{id}</c> → resource kind. A new collection must be added here.</summary>
+    /// <summary>Collection before an <c>{id}</c> (nested: <c>parent/child</c>, falling back to <c>child</c>) → resource kind. A new collection must be added here.</summary>
     public static readonly IReadOnlyDictionary<string, string> SegmentKinds = new Dictionary<string, string>
     {
         ["units"] = "unit",
@@ -36,6 +37,10 @@ internal sealed class TenantWorld
         ["import-jobs"] = "importJob",
         ["import-mapping-templates"] = "mappingTemplate",
         ["orders"] = "order",
+        ["picking-tasks"] = "pickingTask",
+        ["picking-tasks/lines"] = "pickingTaskLine",
+        ["shipments"] = "shipment",
+        ["shipments/lines"] = "shipmentLine",
     };
 
     private readonly ApiFixture _fixture;
@@ -69,6 +74,11 @@ internal sealed class TenantWorld
     public Guid Id(string kind) => _ids.TryGetValue(kind, out var id) ? id : throw new KeyNotFoundException($"TenantWorld has no '{kind}'.");
 
     public string ETag(string kind) => CatalogClient.ETag(_versions.GetValueOrDefault(kind, 1));
+
+    public bool HasVersion(string kind) => _versions.ContainsKey(kind);
+
+    /// <summary>ETag for a path addressing <paramref name="kinds"/> (outer → inner): the innermost versioned resource.</summary>
+    public string ETag(IReadOnlyList<string> kinds) => ETag(kinds.LastOrDefault(HasVersion) ?? kinds[0]);
 
     /// <summary>Every id this tenant owns plus its tenant id — none may appear in another tenant's response.</summary>
     public IEnumerable<string> Secrets() => [Token, TenantId.ToString(), .. _ids.Values.Select(id => id.ToString())];
@@ -153,6 +163,7 @@ internal sealed class TenantWorld
         Remember("order", order.GetProperty("order"));
         OrderLineId = order.GetProperty("lines")[0].GetProperty("id").GetGuid();
         _ids["orderLine"] = OrderLineId;
+        await FulfilAsync();
 
         // Versions may have moved while children were added (ETag of the current state is used by the probes).
         await RefreshAsync("product", $"/api/v1/products/{Id("product")}");
@@ -165,6 +176,45 @@ internal sealed class TenantWorld
         var detail = await SendOkAsync(HttpMethod.Get, $"/api/v1/customers/{Id("customer")}");
         _versions["customer"] = detail.GetProperty("customer").GetProperty("version").GetInt64();
         _versions["address"] = detail.GetProperty("addresses")[0].GetProperty("version").GetInt64();
+    }
+
+    /// <summary>
+    /// Two more orders, approved (approval creates the pick task): one task stays open (probes reach its lines), the
+    /// other is picked and completed, which creates the draft shipment.
+    /// </summary>
+    private async Task FulfilAsync()
+    {
+        var open = await ActiveTaskForNewOrderAsync();
+        _ids["pickingTask"] = open.Task.Id;
+        _ids["pickingTaskLine"] = open.Lines[0].Id;
+        _versions["pickingTask"] = open.Task.Version;
+
+        var picked = await ActiveTaskForNewOrderAsync();
+        var completed = await Fulfillment.PickAndCompleteAsync(Owner, picked, new Dictionary<Guid, decimal> { [picked.Lines[0].OrderLineId] = 1m });
+        _ids["shipment"] = completed.ShipmentId!.Value;
+        var shipment = await SendOkAsync(HttpMethod.Get, $"/api/v1/shipments/{Id("shipment")}");
+        Remember("shipment", shipment);
+        _ids["shipmentLine"] = shipment.GetProperty("lines")[0].GetProperty("id").GetGuid();
+    }
+
+    private async Task<BayiOS.Modules.Warehouse.Contracts.PickingTaskResponse> ActiveTaskForNewOrderAsync()
+    {
+        var order = (await CreateAsync(null, "/api/v1/orders", new
+        {
+            customerId = Id("customer"),
+            warehouseId = Id("warehouse"),
+            notes = "Sevk " + Token,
+            lines = new[] { new { variantId = Id("variant"), quantity = 1m } },
+        })).GetProperty("order");
+        var orderId = order.GetProperty("id").GetGuid();
+        var version = order.GetProperty("version").GetInt64();
+        foreach (var action in new[] { "submit", "approve" })
+        {
+            var response = await Owner.SendAsync(HttpMethod.Post, $"/api/v1/orders/{orderId}/{action}", new { }, CatalogClient.ETag(version));
+            version = (await ReadAsync(response, HttpStatusCode.OK, action)).GetProperty("order").GetProperty("version").GetInt64();
+        }
+
+        return await Fulfillment.ActiveTaskAsync(Owner, orderId);
     }
 
     private async Task UploadImportAsync()

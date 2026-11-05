@@ -82,26 +82,30 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
                 continue;
             }
 
-            var segments = route.Template.Split('/');
-            var lastKind = TenantWorld.SegmentKinds[segments[Array.FindLastIndex(segments, x => x.StartsWith('{')) - 1]];
-            var paths = new List<string> { path };
+            var kinds = new List<string>();
+            _ = ApiRoutes.Fill(route.Template, (segment, _) => { kinds.Add(KindOf(segment)!); return string.Empty; });
+
+            // If-Match carries the current version of what the path addresses, so a probe is never stopped by a stale ETag.
+            var paths = new List<(string Path, string ETag)> { (path, a.ETag(kinds)) };
             if (route.PathParameters.Count > 1)
             {
                 // Own parent, foreign child: /customers/{B}/addresses/{A}.
                 var lastParameter = route.PathParameters[^1];
-                paths.Add(ApiRoutes.Fill(route.Template, (segment, name) => name == lastParameter ? Victim(segment, name) : Resolve(b, segment, name, unresolved)));
+                paths.Add((
+                    ApiRoutes.Fill(route.Template, (segment, name) => name == lastParameter ? Victim(segment, name) : Resolve(b, segment, name, unresolved)),
+                    a.HasVersion(kinds[^1]) ? a.ETag(kinds[^1]) : b.ETag(kinds[0])));
             }
 
             foreach (var (attacker, client) in attackers)
             {
-                foreach (var probe in paths)
+                foreach (var (probe, etag) in paths)
                 {
                     probed++;
-                    var response = await SecurityProbes.SendAsync(fixture, client, route, probe, body, a.ETag(lastKind));
+                    var response = await SecurityProbes.SendAsync(fixture, client, route, probe, body, etag);
                     var text = await response.Content.ReadAsStringAsync(Ct);
                     if (!Hidden.Contains(response.StatusCode))
                     {
-                        failures.Add($"{route} as {attacker} → {(int)response.StatusCode} (expected 404/403): {Trim(text)}");
+                        failures.Add($"{route} as {attacker}, {probe} → {(int)response.StatusCode} (expected 404/403): {Trim(text)}");
                     }
 
                     var leaks = SecurityProbes.Leaks(text, probe, a);
@@ -313,7 +317,7 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
 
     private static string Resolve(TenantWorld world, string segment, string name, List<string> unresolved)
     {
-        if (TenantWorld.SegmentKinds.TryGetValue(segment, out var kind) && world.Ids.ContainsKey(kind))
+        if (KindOf(segment) is { } kind && world.Ids.ContainsKey(kind))
         {
             return world.Id(kind).ToString();
         }
@@ -321,6 +325,9 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
         unresolved.Add($"{{{name}}} after '{segment}'");
         return Guid.Empty.ToString();
     }
+
+    private static string? KindOf(string collection) =>
+        TenantWorld.SegmentKinds.TryGetValue(collection, out var kind) || TenantWorld.SegmentKinds.TryGetValue(collection.Split('/')[^1], out kind) ? kind : null;
 
     private static IEnumerable<string> StaleEntries(IEnumerable<string> keys, IReadOnlyList<ApiRoute> routes) =>
         keys.Where(k => routes.All(r => r.Key != k)).Select(k => $"{k}: listed as an exception but no longer exists — remove it");

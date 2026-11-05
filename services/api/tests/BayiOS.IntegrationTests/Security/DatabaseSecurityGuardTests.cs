@@ -71,6 +71,13 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         ["pricing.price_list_items"] = Full,
         ["pricing.price_lists"] = ArchiveOnly,
 
+        // Tasks and shipments are cancelled, never deleted; packages are written once by the pack check (#36–#39).
+        ["warehouse.picking_task_lines"] = ArchiveOnly,
+        ["warehouse.picking_tasks"] = ArchiveOnly,
+        ["warehouse.shipment_lines"] = ArchiveOnly,
+        ["warehouse.shipment_package_items"] = AppendOnly,
+        ["warehouse.shipment_packages"] = AppendOnly,
+        ["warehouse.shipments"] = ArchiveOnly,
         ["warehouse.warehouse_locations"] = ArchiveOnly,
         ["warehouse.warehouses"] = ArchiveOnly,
     };

@@ -58,17 +58,27 @@ internal static partial class ApiRoutes
         return routes;
     }
 
-    /// <summary>Fills <c>{name}</c> placeholders.</summary>
+    /// <summary>
+    /// Fills <c>{name}</c> placeholders. The callback gets the collection the parameter addresses: the literal segment
+    /// before it, prefixed with the parent collection when nested (<c>picking-tasks/lines</c> for
+    /// <c>/picking-tasks/{id}/lines/{lineId}</c>), and the parameter name.
+    /// </summary>
     public static string Fill(string template, Func<string, string, string> value)
     {
-        // value(segmentBefore, parameterName)
+        var original = template.Split('/');
         var segments = template.Split('/');
         for (var i = 0; i < segments.Length; i++)
         {
             var match = PathParameter().Match(segments[i]);
             if (match.Success)
             {
-                segments[i] = value(i > 0 ? segments[i - 1] : string.Empty, match.Groups[1].Value);
+                var collection = i > 0 ? segments[i - 1] : string.Empty;
+                if (i > 2 && PathParameter().IsMatch(original[i - 2]))
+                {
+                    collection = segments[i - 3] + '/' + collection;
+                }
+
+                segments[i] = value(collection, match.Groups[1].Value);
             }
         }
 
