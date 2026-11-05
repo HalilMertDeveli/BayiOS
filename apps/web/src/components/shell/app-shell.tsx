@@ -11,6 +11,7 @@ import { homeFor, navFor } from "@/lib/navigation";
 import { clearActiveTenantId } from "@/lib/session/active-tenant";
 import { useSession } from "@/lib/session/session-context";
 import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
+import { TrialBanner } from "@/components/billing/trial-banner";
 import { NavMenu } from "./nav-menu";
 import { SessionGate } from "./session-gate";
 import { UserMenu } from "./user-menu";
@@ -196,6 +197,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main id="main" tabIndex={-1} className="flex w-full flex-1 flex-col gap-6 px-4 py-6 focus:outline-none md:px-8">
+          <TrialBanner />
           <SessionGate>{children}</SessionGate>
         </main>
       </div>

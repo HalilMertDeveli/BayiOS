@@ -97,10 +97,23 @@ export type RequestOptions = {
   idempotencyKey?: string;
   ifMatch?: string;
   contentType?: string;
+  /** Accept header; defaults to application/json. File downloads ask for the file types plus problem+json. */
+  accept?: string;
+  /** "blob": the success body is returned as a Blob (file downloads, e.g. report exports); errors stay Problem Details. */
+  responseType?: "json" | "blob";
   signal?: AbortSignal;
 };
 
-export type ApiResponse<T> = { data: T; status: number; etag: string | null };
+export type ApiResponse<T> = {
+  data: T;
+  status: number;
+  etag: string | null;
+  /**
+   * Response headers of a `responseType: "blob"` download (e.g. Content-Disposition — readable only when the API exposes
+   * it to the browser via Access-Control-Expose-Headers). Absent on JSON responses.
+   */
+  headers?: Headers;
+};
 
 export type ApiClient = {
   request<T>(path: string, options?: RequestOptions): Promise<ApiResponse<T>>;
@@ -111,7 +124,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   return {
     async request<T>(path: string, request: RequestOptions = {}): Promise<ApiResponse<T>> {
       const method = request.method ?? "GET";
-      const headers = new Headers({ Accept: "application/json" });
+      const headers = new Headers({ Accept: request.accept ?? "application/json" });
 
       const token = await options.getAccessToken();
       if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -157,8 +170,12 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         );
       }
 
+      const etag = response.headers.get("ETag");
+      if (request.responseType === "blob") {
+        return { data: (await response.blob()) as T, status: response.status, etag, headers: response.headers };
+      }
       const data = (response.status === 204 ? undefined : await response.json()) as T;
-      return { data, status: response.status, etag: response.headers.get("ETag") };
+      return { data, status: response.status, etag };
     },
   };
 }

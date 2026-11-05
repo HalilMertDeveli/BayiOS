@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CircleAlert, Clock, Lock, MessageSquareText, ScanText } from "lucide-react";
+import { LockedFeature } from "@/components/billing/locked-feature";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +24,7 @@ import {
 } from "@/lib/assistant/api";
 import { assistantErrorMessage, isRateLimited, rateLimitMessage, translateTextError } from "@/lib/assistant/errors";
 import { parserNotice } from "@/lib/assistant/labels";
+import { FEATURES, featureGate } from "@/lib/billing/entitlements";
 import { assistantPermissions } from "@/lib/assistant/permissions";
 import { ORDERS_HREF } from "@/lib/orders/api";
 import { useSession } from "@/lib/session/session-context";
@@ -52,8 +54,10 @@ export function messageError(text: string): string | null {
  * assistant (whatsapp.parse). The API parses and matches it against the tenant catalog only; the review page follows.
  */
 export function WhatsappOrderPage() {
-  const { access } = useSession();
+  const { access, entitlements } = useSession();
   const permissions = assistantPermissions(access);
+  // The AI assistant is an add-on (#51): without it new messages cannot be parsed, but started reviews stay reachable.
+  const aiGate = featureGate(entitlements, FEATURES.aiOrderParsing);
   return (
     <>
       <BackLink />
@@ -63,7 +67,13 @@ export function WhatsappOrderPage() {
       />
       {permissions.parse ? (
         <>
-          <SubmitForm />
+          {aiGate.locked ? (
+            <section aria-label="WhatsApp mesajı" className="rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+              <LockedFeature gate={aiGate} title="WhatsApp siparişi ayrıştırma kapalı" />
+            </section>
+          ) : (
+            <SubmitForm />
+          )}
           <PendingReviews />
         </>
       ) : (

@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { WHATSAPP_ORDER_HREF } from "@/lib/assistant/api";
 import { assistantPermissions } from "@/lib/assistant/permissions";
+import { FEATURES, featureGate } from "@/lib/billing/entitlements";
 import { NEW_ORDER_HREF, listOrders, orderHref, type OrderSummary } from "@/lib/orders/api";
 import { orderErrorMessage } from "@/lib/orders/errors";
 import { ORDER_SOURCES, orderSourceLabels } from "@/lib/orders/labels";
@@ -51,7 +52,7 @@ export const formatOrderDate = (iso: string) => dateTime.format(new Date(iso));
  * Totals are the API's `grandTotal`, formatted only.
  */
 export function OrderList() {
-  const { api, access } = useSession();
+  const { api, access, entitlements } = useSession();
   const permissions = orderPermissions(access);
   if (!permissions.read) return <NoAccess />;
   return (
@@ -59,6 +60,7 @@ export function OrderList() {
       api={api}
       canCreate={permissions.create}
       canParseWhatsapp={assistantPermissions(access).parse}
+      whatsappLocked={featureGate(entitlements, FEATURES.aiOrderParsing).locked}
       canReadCustomers={customerPermissions(access).read}
       taskLinkedOnly={permissions.readTaskLinkedOnly}
     />
@@ -84,6 +86,7 @@ function OrderListView({
   api,
   canCreate,
   canParseWhatsapp,
+  whatsappLocked,
   canReadCustomers,
   taskLinkedOnly,
 }: {
@@ -91,6 +94,8 @@ function OrderListView({
   canCreate: boolean;
   /** whatsapp.parse: the "WhatsApp siparişi" entry (the draft itself also needs orders.create; checked on the review page). */
   canParseWhatsapp: boolean;
+  /** The AI assistant add-on is not in the plan (#51): the entry stays (started reviews), marked as locked. */
+  whatsappLocked: boolean;
   /** customers.read: names and the customer filter (warehouse staff have neither). */
   canReadCustomers: boolean;
   /** orders.read limited to task-linked orders without prices (warehouse staff). */
@@ -247,8 +252,9 @@ function OrderListView({
             <>
               {canParseWhatsapp ? (
                 <Link href={WHATSAPP_ORDER_HREF} className={buttonClasses("secondary")}>
-                  <MessageSquareText className="size-4" aria-hidden="true" />
+                  {whatsappLocked ? <Lock className="size-4" aria-hidden="true" /> : <MessageSquareText className="size-4" aria-hidden="true" />}
                   WhatsApp siparişi
+                  {whatsappLocked ? <span className="sr-only"> (paketinizde kapalı)</span> : null}
                 </Link>
               ) : null}
               {canCreate ? (

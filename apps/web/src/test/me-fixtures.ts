@@ -148,3 +148,71 @@ export function grantsFor(role: FixtureRole, rules: Partial<FixtureRules> = {}):
 export function grantsForRoleName(role: string, rules: Partial<FixtureRules> = {}): FixtureGrant[] {
   return (ROLE_ORDER as readonly string[]).includes(role) ? grantsFor(role as FixtureRole, rules) : [];
 }
+
+/**
+ * MOCK `activeTenant.entitlements` (#51) — what GET /me returns for a tenant on a plan (services/api BillingCatalog
+ * 2026-11-05.1; its limit numbers are provisional too). Synthetic test data only.
+ * - "trial": a new tenant — 30-day Profesyonel trial with every available add-on (AI assistant included).
+ * - "professional": Profesyonel without add-ons.
+ * - "basic": Temel; "expired": Temel after the trial ended (`status: "expired"`, nothing deleted).
+ */
+export type FixturePlan = "trial" | "professional" | "basic" | "expired";
+
+export type FixtureEntitlements = {
+  plan: string;
+  status: "trialing" | "active" | "expired" | "cancelled";
+  trialEndsAt: string | null;
+  catalogVersion: string;
+  features: string[];
+  limits: { code: string; value: number | null }[];
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function entitlementsFor(plan: FixturePlan, options: { trialDaysLeft?: number; now?: number } = {}): FixtureEntitlements {
+  const now = options.now ?? Date.now();
+  const catalogVersion = "2026-11-05.1";
+  const basicLimits = [
+    { code: "max_warehouses", value: 1 },
+    { code: "max_users", value: 5 },
+  ];
+  switch (plan) {
+    case "trial":
+      return {
+        plan: "professional",
+        status: "trialing",
+        // An hour short of whole days, so "N days left" holds however long after `now` the page renders.
+        trialEndsAt: new Date(now + (options.trialDaysLeft ?? 25) * DAY_MS - 60 * 60 * 1000).toISOString(),
+        catalogVersion,
+        features: ["warehouse_locations", "barcode_operations", "ai_order_parsing"],
+        limits: [
+          { code: "max_warehouses", value: null },
+          { code: "max_users", value: 25 },
+          { code: "ai_parses_per_month", value: 1000 },
+        ],
+      };
+    case "professional":
+      return {
+        plan: "professional",
+        status: "active",
+        trialEndsAt: null,
+        catalogVersion,
+        features: ["warehouse_locations", "barcode_operations"],
+        limits: [
+          { code: "max_warehouses", value: null },
+          { code: "max_users", value: 25 },
+        ],
+      };
+    case "basic":
+      return { plan: "basic", status: "active", trialEndsAt: null, catalogVersion, features: [], limits: basicLimits };
+    case "expired":
+      return {
+        plan: "basic",
+        status: "expired",
+        trialEndsAt: new Date(now - 2 * DAY_MS).toISOString(),
+        catalogVersion,
+        features: [],
+        limits: basicLimits,
+      };
+  }
+}
