@@ -10,13 +10,14 @@
 import type { BrowserContext, Page, Route } from "@playwright/test";
 import { createMockCatalog, handleCatalog, type MockCatalog } from "./mock-catalog";
 import { createMockCommerce, handleCommerce, type MockCommerce } from "./mock-commerce";
+import { createMockFulfilment, handleFulfilment, type MockFulfilment } from "./mock-fulfilment";
 import { createMockInventory, handleInventory, type MockInventory } from "./mock-inventory";
 import { createMockOrders, handleOrders, type MockOrders } from "./mock-orders";
 
 /** Must match the build-time env used for the e2e build (ci-web.yml / README). */
 export const SUPABASE_URL = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
 export const API_URL = process.env.E2E_API_URL ?? "http://localhost:5280";
-const APP_ORIGIN = "http://localhost:3200";
+const APP_ORIGIN = `http://localhost:${process.env.E2E_PORT ?? 3200}`;
 
 export type MockMembership = { tenantId: string; tenantName: string; tenantSlug: string; role: string; status: string };
 
@@ -124,6 +125,8 @@ export type ApiMockOptions = {
   commerce?: MockCommerce | null;
   /** In-memory Orders API (mock-orders.ts). Defaults to no orders; null disables it. */
   orders?: MockOrders | null;
+  /** In-memory Warehouse fulfilment API (mock-fulfilment.ts): picking tasks + shipments. Defaults to none; null disables it. */
+  fulfilment?: MockFulfilment | null;
 };
 
 /** Mocked BayiOS API. `state.memberships` can be changed by a test (e.g. after a tenant is created). */
@@ -132,12 +135,14 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
   const inventory = options.inventory === undefined ? createMockInventory(catalog) : options.inventory;
   const commerce = options.commerce === undefined ? createMockCommerce(catalog) : options.commerce;
   const orders = options.orders === undefined ? createMockOrders() : options.orders;
+  const fulfilment = options.fulfilment === undefined ? createMockFulfilment() : options.fulfilment;
   const state = {
     memberships: options.memberships ?? [TENANT_A],
     catalog,
     inventory,
     commerce,
     orders,
+    fulfilment,
     requests: [] as { method: string; path: string; search: string; headers: Record<string, string>; body: unknown }[],
   };
 
@@ -187,6 +192,10 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
     if (orders) {
       const role = state.memberships.find((m) => m.tenantId === request.headers()["x-tenant-id"])?.role ?? "viewer";
       if (await handleOrders(route, orders, { catalog, commerce }, role)) return;
+    }
+    if (fulfilment) {
+      const role = state.memberships.find((m) => m.tenantId === request.headers()["x-tenant-id"])?.role ?? "viewer";
+      if (await handleFulfilment(route, fulfilment, role)) return;
     }
     if (inventory && (await handleInventory(route, inventory, catalog))) return;
     if (commerce) {
