@@ -67,6 +67,21 @@ https://packages.nuget.org/packages/FluentAssertions/8.3.0/License (2026-11-04 k
 
 Mobil ayağı olan senaryolar (1, 2, 4) Flutter SDK kurulana kadar **API seviyesinde** koşar; mobil ayak BLOCKED olarak izlenir.
 
+### 4.1 Gerçek yığın web E2E (`e2e-real`, issue #40)
+`apps/web/e2e/` Playwright testleri ağ katmanında mock'ludur. Ayrıca **hiçbir şeyin mock'lanmadığı** tek bir iş
+vardır: `.github/workflows/e2e-real.yml` → iş adı `e2e real stack` (ci-gate otomatik toplar). Yığın:
+`infra/ci/e2e-stack.sh up` — Supabase CLI yerel Auth (ES256, JWKS; e-posta doğrulaması Mailpit'ten), boş PostgreSQL 17
+(`infra/docker/initdb` rolleri, EF idempotent betikleri `bayios_migrator` ile), API (Release, `Production` ortamı,
+`bayios_app` ile bağlanır), web (`next build` + `next start`). Testler: `apps/web/e2e-local/` (`npm run test:e2e:real`).
+
+| Senaryo | Kapsam |
+|---|---|
+| Kayıt → doğrulama e-postası → onboarding (motosiklet şablonu) → pano → çıkış → giriş | `real-stack.spec.ts` |
+| Ürün + varyant + barkod → mal kabul (barkod okutma) → fiyat listesi + fiyat → müşteri → taslak sipariş (fiyat API'den) → onaya gönder → onay (rezervasyon; /stok'ta ayrılmış) → toplama/paket/sevkiyat (web ekranı yokken kullanıcının kendi token'ıyla API'den) → sipariş "Sevk Edildi", /stok'ta rafta azaldı, ledger'da tek `shipment_out`; ikinci onay stok oynatmaz | `order-to-shipment.spec.ts` (#3, #5) |
+| İkinci işletme (ayrı kayıt) A'nın ürününü UI'da (liste, detay, stok) ve API'de (404, boş arama, sahte `X-Tenant-Id` → 403) göremez; A pozitif kontrol | `order-to-shipment.spec.ts` (#8 smoke) |
+
+Yeniden deneme yok (`retries: 0`); veriler çalıştırma başına benzersiz ve sentetik. Yerelde çalıştırma: `apps/web/README.md`.
+
 ## 5. Eşzamanlılık test tasarımı
 - **Ortam:** Testcontainers PostgreSQL 17 (in-memory/SQLite **yasak** — kilit davranışı farklı).
 - **Kurulum:** ürün P, depo W, `on_hand = 1`, `reserved = 0`; iki onaylanmaya hazır sipariş (her biri 1 adet).
