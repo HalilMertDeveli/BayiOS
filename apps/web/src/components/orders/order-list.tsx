@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CircleAlert, Lock, Plus, Rows3, Rows4, Search, SearchX, ShoppingCart } from "lucide-react";
+import { CircleAlert, Lock, MessageSquareText, Plus, Rows3, Rows4, Search, SearchX, ShoppingCart } from "lucide-react";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
 import { Table, type TableColumn } from "@/components/ui/table";
+import { WHATSAPP_ORDER_HREF } from "@/lib/assistant/api";
+import { assistantPermissions } from "@/lib/assistant/permissions";
 import { NEW_ORDER_HREF, listOrders, orderHref, type OrderSummary } from "@/lib/orders/api";
 import { orderErrorMessage } from "@/lib/orders/errors";
 import { ORDER_SOURCES, orderSourceLabels } from "@/lib/orders/labels";
@@ -56,6 +58,7 @@ export function OrderList() {
     <OrderListView
       api={api}
       canCreate={permissions.create}
+      canParseWhatsapp={assistantPermissions(access).parse}
       canReadCustomers={customerPermissions(access).read}
       taskLinkedOnly={permissions.readTaskLinkedOnly}
     />
@@ -80,11 +83,14 @@ function NoAccess() {
 function OrderListView({
   api,
   canCreate,
+  canParseWhatsapp,
   canReadCustomers,
   taskLinkedOnly,
 }: {
   api: ReturnType<typeof useSession>["api"];
   canCreate: boolean;
+  /** whatsapp.parse: the "WhatsApp siparişi" entry (the draft itself also needs orders.create; checked on the review page). */
+  canParseWhatsapp: boolean;
   /** customers.read: names and the customer filter (warehouse staff have neither). */
   canReadCustomers: boolean;
   /** orders.read limited to task-linked orders without prices (warehouse staff). */
@@ -237,11 +243,21 @@ function OrderListView({
             : "Siparişleri numarayla arayın, duruma, müşteriye, kaynağa ve tarihe göre süzün."
         }
         actions={
-          canCreate ? (
-            <Link href={NEW_ORDER_HREF} className={buttonClasses("primary")}>
-              <Plus className="size-4" aria-hidden="true" />
-              Yeni sipariş
-            </Link>
+          canCreate || canParseWhatsapp ? (
+            <>
+              {canParseWhatsapp ? (
+                <Link href={WHATSAPP_ORDER_HREF} className={buttonClasses("secondary")}>
+                  <MessageSquareText className="size-4" aria-hidden="true" />
+                  WhatsApp siparişi
+                </Link>
+              ) : null}
+              {canCreate ? (
+                <Link href={NEW_ORDER_HREF} className={buttonClasses("primary")}>
+                  <Plus className="size-4" aria-hidden="true" />
+                  Yeni sipariş
+                </Link>
+              ) : null}
+            </>
           ) : null
         }
       />
