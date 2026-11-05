@@ -36,8 +36,8 @@ type Done = { lines: number; total: number; warehouseId: string };
 
 /** W09 / M05 goods receipt: scan or search variants into lines, set quantities and locations, post once. */
 export function ReceiptForm() {
-  const { api, role } = useSession();
-  const permissions = inventoryPermissions(role);
+  const { api, access } = useSession();
+  const permissions = inventoryPermissions(access);
   const { state: warehouses } = useWarehouses();
   const activeWarehouses = useMemo(() => (warehouses.status === "ready" ? warehouses.data.filter((w) => w.status === "active") : []), [warehouses]);
 
@@ -78,7 +78,7 @@ export function ReceiptForm() {
           <EmptyState
             icon={<Lock className="size-6" />}
             title="Mal kabul yetkiniz yok"
-            description="Mal kabulü işletme sahibi, yönetici, operasyon müdürü ve depo personeli yapabilir."
+            description="Rolünüz mal kabulüne izin vermiyor. Gerekirse işletme yöneticinizle görüşün."
           />
         </section>
       </>

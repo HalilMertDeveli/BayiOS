@@ -13,8 +13,8 @@ export class ApiError extends Error {
   /** The full problem body, including extension members (e.g. `shortages`, `confirmationRequired`). */
   readonly problem: ProblemDetails | null;
   /**
-   * Seconds from a `Retry-After` header, or null when absent/unreadable. Cross-origin, the browser only exposes it
-   * when the API lists it in Access-Control-Expose-Headers.
+   * Seconds from a `Retry-After` header, or null when absent/unreadable. The API exposes the header to the browser
+   * (Access-Control-Expose-Headers, #86); callers keep a safe default for a missing value.
    */
   readonly retryAfterSeconds: number | null;
 
@@ -80,6 +80,8 @@ export type ApiClientOptions = {
   onUnauthorized?: () => void;
   /** Called after 403 `tenant.access_denied` — the session layer clears the selection and shows the picker. */
   onTenantAccessDenied?: () => void;
+  /** Called after 403 `tenant.inactive` (the business is suspended or closed) — the session layer shows a notice. */
+  onTenantInactive?: () => void;
 };
 
 export type RequestOptions = {
@@ -87,6 +89,11 @@ export type RequestOptions = {
   body?: unknown;
   /** Sends X-Tenant-Id. Required by every tenant-scoped endpoint. */
   tenant?: boolean;
+  /**
+   * Sends this X-Tenant-Id without requiring an active tenant (GET /me: the header is optional and selects whose
+   * effective permissions come back). Ignored when null/undefined or when `tenant` is set.
+   */
+  tenantId?: string | null;
   idempotencyKey?: string;
   ifMatch?: string;
   contentType?: string;
@@ -116,6 +123,8 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
           throw new ApiError(`${method} ${path}: no active tenant`, 403, { code: "tenant.access_denied" });
         }
         headers.set(TENANT_HEADER, tenantId);
+      } else if (request.tenantId) {
+        headers.set(TENANT_HEADER, request.tenantId);
       }
       if (request.idempotencyKey) headers.set(IDEMPOTENCY_HEADER, request.idempotencyKey);
       if (request.ifMatch) headers.set("If-Match", request.ifMatch);
@@ -138,6 +147,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         const problem = await readProblem(response);
         if (response.status === 401) options.onUnauthorized?.();
         if (response.status === 403 && problem?.code === "tenant.access_denied") options.onTenantAccessDenied?.();
+        if (response.status === 403 && problem?.code === "tenant.inactive") options.onTenantInactive?.();
         throw new ApiError(
           `${method} ${path} failed with ${response.status}`,
           response.status,

@@ -1,6 +1,46 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/client";
-import { catalogErrorMessage, fieldId, isVersionConflict, partitionErrors, serverFieldErrors, translateFieldMessage } from "./errors";
+import {
+  catalogErrorMessage,
+  codeConflictMessage,
+  conflictRowIndex,
+  fieldId,
+  isVersionConflict,
+  partitionErrors,
+  readCodeConflict,
+  serverFieldErrors,
+  translateFieldMessage,
+} from "./errors";
+
+describe("409 sku/barcode conflict detail", () => {
+  const taken = (code: string, conflict?: object) => new ApiError("x", 409, { code, ...(conflict ? { conflict } : {}) });
+  const rows = [
+    { sku: "FB-1", barcode: "" },
+    { sku: "fb-2", barcode: "8690000000011" },
+  ];
+
+  it("reads the field and the holder from the problem", () => {
+    const parsed = readCodeConflict(taken("catalog.barcode_taken", { field: "barcode", value: "8690000000011", variantId: "v9", productId: "p9", sku: "LED-9" }));
+    expect(parsed).toEqual({ field: "barcode", conflict: { field: "barcode", value: "8690000000011", variantId: "v9", productId: "p9", sku: "LED-9" } });
+    expect(readCodeConflict(taken("catalog.sku_taken"))).toEqual({ field: "sku", conflict: null });
+    expect(readCodeConflict(new ApiError("x", 409, { code: "catalog.last_variant" }))).toBeNull();
+  });
+
+  it("finds the exact variant row by the taken value (SKU case-insensitive)", () => {
+    expect(conflictRowIndex(rows, { field: "sku", conflict: { field: "sku", value: "FB-2" } })).toBe(1);
+    expect(conflictRowIndex(rows, { field: "barcode", conflict: { field: "barcode", value: "8690000000011" } })).toBe(1);
+    // No detail (only the DB index caught it): pinned only on a single-row form.
+    expect(conflictRowIndex(rows, { field: "sku", conflict: null })).toBe(-1);
+    expect(conflictRowIndex([rows[0]], { field: "sku", conflict: null })).toBe(0);
+  });
+
+  it("names the holder: this product vs another product", () => {
+    expect(codeConflictMessage({ field: "sku", conflict: { productId: "p1" } }, "p1")).toContain("bu ürünün başka bir varyantında");
+    expect(codeConflictMessage({ field: "sku", conflict: { productId: "p2" } }, "p1")).toBe("Bu SKU başka bir üründe kullanılıyor. Farklı bir SKU girin.");
+    expect(codeConflictMessage({ field: "barcode", conflict: { productId: "p2", sku: "LED-9" } }, null)).toContain("(SKU LED-9)");
+    expect(codeConflictMessage({ field: "barcode", conflict: null })).toBe("Bu barkod başka bir üründe kullanılıyor. Farklı bir barkod girin.");
+  });
+});
 
 describe("translateFieldMessage", () => {
   it("translates the API's known messages", () => {

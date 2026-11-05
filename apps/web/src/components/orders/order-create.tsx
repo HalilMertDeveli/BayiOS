@@ -11,8 +11,8 @@ import { OrderDraftEditor } from "./order-draft-editor";
 
 /** /siparisler/yeni: manual draft order (orders.create). Saving creates the draft and opens its detail page. */
 export function OrderCreatePage() {
-  const { role } = useSession();
-  const permissions = orderPermissions(role);
+  const { access } = useSession();
+  const permissions = orderPermissions(access);
   return (
     <>
       <Link href={ORDERS_HREF} className="inline-flex w-fit items-center gap-1 text-body text-brand-fg underline-offset-2 hover:underline">
@@ -27,7 +27,7 @@ export function OrderCreatePage() {
           <EmptyState
             icon={<Lock className="size-6" />}
             title="Sipariş oluşturma yetkiniz yok"
-            description="Manuel siparişi işletme sahibi, yönetici, operasyon müdürü ve satış personeli oluşturabilir."
+            description="Rolünüz manuel sipariş oluşturmaya izin vermiyor. Gerekirse işletme yöneticinizle görüşün."
           />
         </section>
       )}

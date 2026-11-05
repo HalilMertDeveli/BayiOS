@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { ROLES, type Role } from "@/lib/navigation";
-import { availableActions, isDraftEditable, isInFulfilment } from "./actions";
+import { accessFor } from "@/test/session";
+import type { FixtureRole } from "@/test/me-fixtures";
+import { availableActions, isDraftEditable, isInFulfilment, isOwnOrder } from "./actions";
 import { ORDER_STATUSES } from "./labels";
 import { orderPermissions } from "./permissions";
 
-const actionsOf = (role: Role, status: string, fulfillmentStatus = "none") =>
-  availableActions({ status, fulfillmentStatus }, orderPermissions(role)).map((a) => a.action);
+const ROLES: FixtureRole[] = ["owner", "admin", "manager", "sales", "warehouse_staff", "viewer"];
+const ME = "user-me";
+const OTHER = "user-other";
 
-describe("availableActions — state machine × role (inventory-and-orders §3.1, roles-permissions §3.5)", () => {
+const actionsOf = (role: FixtureRole, status: string, fulfillmentStatus = "none", createdBy: string | null = OTHER, rules = {}) =>
+  availableActions({ status, fulfillmentStatus, createdBy }, orderPermissions(accessFor(role, rules)), ME).map((a) => a.action);
+
+describe("availableActions — state machine × /me permissions (inventory-and-orders §3.1)", () => {
   it.each(["owner", "admin", "manager"] as const)("%s gets every order-desk transition the state allows", (role) => {
     expect(actionsOf(role, "draft")).toEqual(["submit", "cancel"]);
     expect(actionsOf(role, "pending_approval")).toEqual(["approve", "reject", "withdraw", "cancel"]);
@@ -24,14 +29,16 @@ describe("availableActions — state machine × role (inventory-and-orders §3.1
     expect(actionsOf("manager", "packed", "partial")).toEqual([]);
   });
 
-  it("sales submits and withdraws, but approve/reject/cancel stay fail-closed (K)", () => {
-    expect(actionsOf("sales", "draft")).toEqual(["submit"]);
-    expect(actionsOf("sales", "pending_approval")).toEqual(["withdraw"]);
-    expect(actionsOf("sales", "approved")).toEqual([]);
+  it("sales cancels only its own draft / pending order (K¹¹); approve follows the tenant rule (K⁹)", () => {
+    expect(actionsOf("sales", "draft", "none", ME)).toEqual(["submit", "cancel"]);
+    expect(actionsOf("sales", "draft", "none", OTHER)).toEqual(["submit"]);
+    expect(actionsOf("sales", "pending_approval", "none", ME)).toEqual(["approve", "reject", "withdraw", "cancel"]);
+    expect(actionsOf("sales", "pending_approval", "none", OTHER, { salesCanApproveOrders: false })).toEqual(["withdraw"]);
+    expect(actionsOf("sales", "approved", "none", ME)).toEqual([]);
   });
 
   it.each(["viewer", "warehouse_staff"] as const)("%s gets no actions in any state", (role) => {
-    for (const status of ORDER_STATUSES) expect(actionsOf(role, status)).toEqual([]);
+    for (const status of ORDER_STATUSES) expect(actionsOf(role, status, "none", ME)).toEqual([]);
   });
 
   it("never offers fulfilment transitions (picking, packing, shipping, short-close move to Warehouse)", () => {
@@ -40,16 +47,26 @@ describe("availableActions — state machine × role (inventory-and-orders §3.1
   });
 
   it("reject and cancel ask for a reason first", () => {
-    const actions = availableActions({ status: "pending_approval", fulfillmentStatus: "none" }, orderPermissions("owner"));
+    const actions = availableActions({ status: "pending_approval", fulfillmentStatus: "none" }, orderPermissions(accessFor("owner")));
     expect(actions.filter((a) => a.needsReason).map((a) => a.action)).toEqual(["reject", "cancel"]);
   });
 });
 
-describe("isDraftEditable / isInFulfilment", () => {
-  it("only drafts are editable, and only with orders.edit.draft", () => {
-    expect(isDraftEditable({ status: "draft" }, orderPermissions("manager"))).toBe(true);
-    expect(isDraftEditable({ status: "draft" }, orderPermissions("sales"))).toBe(false);
-    expect(isDraftEditable({ status: "pending_approval" }, orderPermissions("owner"))).toBe(false);
+describe("isDraftEditable / isOwnOrder / isInFulfilment", () => {
+  it("only drafts are editable; sales only the drafts it created (O)", () => {
+    const sales = orderPermissions(accessFor("sales"));
+    expect(isDraftEditable({ status: "draft" }, orderPermissions(accessFor("manager")))).toBe(true);
+    expect(isDraftEditable({ status: "draft", createdBy: ME }, sales, ME)).toBe(true);
+    expect(isDraftEditable({ status: "draft", createdBy: OTHER }, sales, ME)).toBe(false);
+    expect(isDraftEditable({ status: "draft", createdBy: null }, sales, ME)).toBe(false);
+    expect(isDraftEditable({ status: "pending_approval", createdBy: ME }, sales, ME)).toBe(false);
+    expect(isDraftEditable({ status: "draft", createdBy: ME }, orderPermissions(accessFor("viewer")), ME)).toBe(false);
+  });
+
+  it("ownership needs both a creator and a signed-in user", () => {
+    expect(isOwnOrder({ createdBy: ME }, ME)).toBe(true);
+    expect(isOwnOrder({ createdBy: ME }, null)).toBe(false);
+    expect(isOwnOrder({ createdBy: null }, ME)).toBe(false);
   });
 
   it("fulfilment starts at approval", () => {

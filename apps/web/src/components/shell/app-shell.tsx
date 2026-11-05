@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useModalDialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/cn";
-import { homeFor, navForRole } from "@/lib/navigation";
+import { homeFor, navFor } from "@/lib/navigation";
 import { useSession } from "@/lib/session/session-context";
 import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
 import { NavMenu } from "./nav-menu";
@@ -15,9 +15,9 @@ import { UserMenu } from "./user-menu";
 const MOBILE_NAV_ID = "mobile-nav";
 
 function Brand({ compact = false }: { compact?: boolean }) {
-  const { role } = useSession();
+  const { access } = useSession();
   return (
-    <Link href={homeFor(role)} className="flex items-center gap-2 rounded-md text-h3 text-fg">
+    <Link href={homeFor(access)} className="flex items-center gap-2 rounded-md text-h3 text-fg">
       <span
         aria-hidden="true"
         className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand text-caption font-bold text-on-brand"
@@ -31,7 +31,8 @@ function Brand({ compact = false }: { compact?: boolean }) {
 
 /**
  * Application shell: persistent, collapsible sidebar from md (768 px) up; off-canvas drawer below.
- * Menu items follow the role of the active membership (GET /api/v1/me) — visibility only, the API authorizes.
+ * Menu items follow the effective permissions of the active membership (GET /api/v1/me) — visibility only, the API
+ * authorizes.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = usePersistentBoolean("bayios.sidebar.collapsed");
@@ -50,8 +51,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => desktop.removeEventListener("change", onChange);
   }, []);
 
-  const { role } = useSession();
-  const sections = role ? navForRole(role) : [];
+  const { access } = useSession();
+  const sections = navFor(access);
 
   return (
     <div className="flex min-h-dvh w-full">

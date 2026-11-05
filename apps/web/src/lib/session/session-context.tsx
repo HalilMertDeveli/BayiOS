@@ -7,6 +7,7 @@ import { getMe } from "@/lib/api/identity";
 import { ROUTES, signInUrl } from "@/lib/auth/routes";
 import type { Role } from "@/lib/navigation";
 import { getAccessToken, getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { NO_ACCESS, createAccess, type Access } from "./access";
 import {
   activeMemberships,
   clearActiveTenantId,
@@ -22,14 +23,25 @@ export type SessionUser = { id: string; email: string | null; fullName: string |
 export type SessionState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; user: SessionUser; memberships: Membership[]; active: Membership | null };
+  | {
+      status: "ready";
+      user: SessionUser;
+      memberships: Membership[];
+      active: Membership | null;
+      /** Effective permissions of `active` from GET /me (`activeTenant.permissions`); NO_ACCESS without a tenant. */
+      access: Access;
+    }
+  /** The selected business is suspended or closed (403 `tenant.inactive`, or /me returned no activeTenant for it). */
+  | { status: "inactive"; user: SessionUser; memberships: Membership[]; tenant: Membership };
 
 export type SessionContextValue = {
   state: SessionState;
   /** API client bound to this session (Bearer token + active tenant). */
   api: ApiClient;
-  /** Menu role of the active membership; null until a tenant is active. */
+  /** Role of the active membership, for display only (labels); null until a tenant is active. */
   role: Role | null;
+  /** What the UI may show for the active tenant (GET /me effective permissions). Visibility only — the API authorizes. */
+  access: Access;
   selectTenant: (tenantId: string) => void;
   /** Reloads /me (e.g. after creating a tenant). Resolves with the new memberships. */
   reload: () => Promise<Membership[]>;
@@ -78,8 +90,9 @@ function createSessionStore(initialPath: string) {
 type LoadResult = { state: SessionState | null; memberships: Membership[] };
 
 /**
- * Real session: Supabase identity (cookie session) + GET /api/v1/me for memberships and roles.
- * Nothing here is authorization; the API re-checks token, membership and role on every request.
+ * Real session: Supabase identity (cookie session) + GET /api/v1/me for memberships, the active membership's role and
+ * its effective permissions (X-Tenant-Id is sent on /me). Nothing here is authorization; the API re-checks token,
+ * membership, tenant status and permission on every request.
  */
 export function SessionProvider({ require, children }: SessionProviderProps) {
   const router = useRouter();
@@ -105,6 +118,14 @@ export function SessionProvider({ require, children }: SessionProviderProps) {
           store.setTenantId(null);
           router.replace(ROUTES.tenantPicker);
         },
+        onTenantInactive: () => {
+          // Suspended/closed while the user was working: the page is replaced by the notice (no tenant data stays).
+          setState((prev) =>
+            prev.status === "ready" && prev.active
+              ? { status: "inactive", user: prev.user, memberships: prev.memberships, tenant: prev.active }
+              : prev,
+          );
+        },
       }),
     [router, store, toSignIn],
   );
@@ -118,7 +139,8 @@ export function SessionProvider({ require, children }: SessionProviderProps) {
         return { state: null, memberships: [] };
       }
       try {
-        const me = await getMe(api, signal);
+        // Ask for the stored selection's permissions straight away; a second call only when the selection changes.
+        let me = await getMe(api, { tenantId: readActiveTenantId(data.session.user.id), signal });
         store.setUserId(me.userId);
         const memberships = activeMemberships(me);
         const resolution = resolveActiveTenant(memberships, readActiveTenantId(me.userId));
@@ -135,7 +157,20 @@ export function SessionProvider({ require, children }: SessionProviderProps) {
         const active = resolution.kind === "active" ? resolution.membership : null;
         if (active) writeActiveTenantId(me.userId, active.tenantId);
         store.setTenantId(active?.tenantId ?? null);
-        return { state: { status: "ready", user, memberships, active }, memberships };
+        if (require === "user" || !active) {
+          return { state: { status: "ready", user, memberships, active, access: NO_ACCESS }, memberships };
+        }
+
+        if (me.activeTenant?.tenantId !== active.tenantId) me = await getMe(api, { tenantId: active.tenantId, signal });
+        const granted = me.activeTenant?.tenantId === active.tenantId ? me.activeTenant : null;
+        if (!granted) {
+          // An active membership the API will not open: the business is suspended or closed.
+          return { state: { status: "inactive", user, memberships, tenant: active }, memberships };
+        }
+        return {
+          state: { status: "ready", user, memberships, active: { ...active, role: granted.role }, access: createAccess(granted.permissions) },
+          memberships,
+        };
       } catch (error) {
         if (signal?.aborted) return { state: null, memberships: [] };
         if (error instanceof ApiError && error.status === 401) return { state: null, memberships: [] }; // onUnauthorized redirects
@@ -164,14 +199,23 @@ export function SessionProvider({ require, children }: SessionProviderProps) {
 
   const selectTenant = useCallback(
     (tenantId: string) => {
-      if (state.status !== "ready") return;
+      if (state.status !== "ready" && state.status !== "inactive") return;
       const membership = state.memberships.find((m) => m.tenantId === tenantId);
       if (!membership) return;
       writeActiveTenantId(state.user.id, tenantId);
       store.setTenantId(tenantId);
-      setState({ ...state, active: membership });
+      if (require === "user") {
+        // Onboarding / tenant picker: the next page loads its own session (and the permissions) for this tenant.
+        setState({ status: "ready", user: state.user, memberships: state.memberships, active: membership, access: NO_ACCESS });
+        return;
+      }
+      // Another tenant means other permissions: reload /me for it before rendering anything of that tenant.
+      setState({ status: "loading" });
+      void load().then((result) => {
+        if (result.state) setState(result.state);
+      });
     },
-    [state, store],
+    [state, store, require, load],
   );
 
   const signOut = useCallback(async () => {
@@ -186,10 +230,11 @@ export function SessionProvider({ require, children }: SessionProviderProps) {
   }, [load]);
 
   const role = state.status === "ready" && state.active ? toRole(state.active.role) : null;
+  const access = state.status === "ready" ? state.access : NO_ACCESS;
 
   const value = useMemo<SessionContextValue>(
-    () => ({ state, api, role, selectTenant, reload, signOut }),
-    [state, api, role, selectTenant, reload, signOut],
+    () => ({ state, api, role, access, selectTenant, reload, signOut }),
+    [state, api, role, access, selectTenant, reload, signOut],
   );
 
   return <SessionContext value={value}>{children}</SessionContext>;

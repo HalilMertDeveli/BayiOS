@@ -301,6 +301,29 @@ test.describe("ürün oluştur / düzenle (mock)", () => {
     expect(patch.headers["if-match"]).toBe('W/"1"');
   });
 
+  test("409 barkod çakışması: hata çakışan varyantın SKU'suyla ilgili alana yazılır", async ({ page }) => {
+    const catalog = createMockCatalog({ products: [makeProduct(1)] });
+    catalog.overrides.set(`POST /api/v1/products/${productId(1)}/variants`, (route) =>
+      fulfillJson(
+        route,
+        409,
+        problemBody(409, "catalog.barcode_taken", {
+          conflict: { field: "barcode", value: "8690000099999", variantId: "00000000-0000-4000-8000-00000000ff01", productId: "00000000-0000-4000-8000-00000000ff02", sku: "LED-9" },
+        }),
+      ),
+    );
+    await signedIn(page, { catalog });
+    await page.goto(`/urunler/${productId(1)}`);
+    await page.getByRole("button", { name: "Varyant ekle" }).click();
+    const dialog = page.getByRole("dialog", { name: "Varyant ekle" });
+    await dialog.getByLabel("SKU (stok kodu)").fill("MOCK-001-2");
+    await dialog.getByLabel("Barkod").fill("8690000099999");
+    await dialog.getByLabel("Renk", { exact: true }).selectOption("Sarı");
+    await dialog.getByRole("button", { name: "Varyantı ekle" }).click();
+    await expect(dialog.getByLabel("Barkod")).toHaveAttribute("aria-invalid", "true");
+    await expect(dialog.getByText("Bu barkod başka bir üründeki varyantta (SKU LED-9) kullanılıyor. Farklı bir barkod girin.")).toBeVisible();
+  });
+
   test("ürün sayfası erişilebilirlik (axe) — masaüstü ve mobil", async ({ page }) => {
     await signedIn(page, { catalog: createMockCatalog({ products: [makeProduct(1, { name: "Erişilebilir (mock)" })] }) });
     await page.goto(`/urunler/${productId(1)}`);

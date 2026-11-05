@@ -99,11 +99,33 @@ export function unpricedLineIndexes(error: unknown): number[] {
   return result.sort((a, b) => a - b);
 }
 
+const DISCOUNT_LIMIT_MESSAGE =
+  "İskonto, işletmenizin satış personeli için belirlediği iskonto sınırını aşıyor. Daha düşük bir iskonto girin veya yöneticinizden onay isteyin.";
+const MANUAL_PRICE_LIMITED_MESSAGE = "Manuel birim fiyat giremezsiniz; yalnızca iskonto sınırınız içinde iskonto uygulayabilirsiniz.";
+const OWN_DRAFT_MESSAGE = "Bu taslağı yalnızca oluşturan kişi veya yetkili bir yönetici düzenleyebilir.";
+const OWN_CANCEL_MESSAGE = "Yalnızca kendi oluşturduğunuz taslak veya onay bekleyen siparişleri iptal edebilirsiniz.";
+
+/**
+ * 403 `auth.forbidden` for a record a conditional / own-records grant does not cover (the API names the permission in
+ * the problem title — no dedicated code yet). Returns null for other errors.
+ */
+export function recordForbiddenMessage(error: unknown): string | null {
+  if (!(error instanceof ApiError) || error.status !== 403 || error.code !== "auth.forbidden") return null;
+  const title = error.problem?.title ?? "";
+  if (/^orders\.price\.override:.*sales limit/.test(title)) return DISCOUNT_LIMIT_MESSAGE;
+  if (/^orders\.price\.override:.*manual unit price/.test(title)) return MANUAL_PRICE_LIMITED_MESSAGE;
+  if (/^orders\.edit\.draft:/.test(title)) return OWN_DRAFT_MESSAGE;
+  if (/^orders\.cancel:/.test(title)) return OWN_CANCEL_MESSAGE;
+  if (/orders\.price\.override/.test(title)) return PRICE_OVERRIDE_MESSAGE;
+  return null;
+}
+
 /** User-facing message for any failed orders call. */
 export function orderErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code && ORDER_MESSAGES[error.code]) return ORDER_MESSAGES[error.code];
-    if (error.status === 403 && /orders\.price\.override/.test(error.problem?.title ?? "")) return PRICE_OVERRIDE_MESSAGE;
+    const forbidden = recordForbiddenMessage(error);
+    if (forbidden) return forbidden;
     return error.userMessage;
   }
   return "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.";

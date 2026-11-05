@@ -3,7 +3,7 @@ import { toNumber } from "@/lib/inventory/quantity";
 
 /**
  * Local pack check: the packer re-scans every item into packages (koli). Each scan is matched to a shipment line by the
- * product barcode (from the picking task) or the SKU; the packed total per line must equal what ships. Nothing is sent
+ * product barcode (on the shipment line) or the SKU; the packed total per line must equal what ships. Nothing is sent
  * until "Paket kontrolünü kaydet": the API checks the same rule again (packing.over_pack / quantity_mismatch).
  */
 
@@ -24,7 +24,7 @@ export function packedOf(state: PackState, lineId: string): number {
   return state.packages.reduce((sum, p) => add(sum, p[lineId] ?? 0), 0);
 }
 
-/** Barcode per variant from the picking task (shipment lines carry no barcode). */
+/** Barcode per variant (shipment lines and picking-task lines both carry it). */
 export function barcodeMap(taskLines: readonly Pick<TaskLine, "variantId" | "barcode">[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const l of taskLines) if (l.barcode) map.set(l.variantId, l.barcode);

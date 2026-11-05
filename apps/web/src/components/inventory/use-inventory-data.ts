@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { listLocations, listWarehouses, getVariant, type Location, type Warehouse } from "@/lib/inventory/api";
+import { getVariantsBatch, listLocations, listWarehouses, variantBatches, type Location, type Warehouse } from "@/lib/inventory/api";
 import { inventoryErrorMessage } from "@/lib/inventory/errors";
 import type { VariantRef } from "@/lib/inventory/receipt-form";
 import { useSession } from "@/lib/session/session-context";
@@ -94,8 +94,8 @@ export function useLocationNames(warehouseIds: readonly string[]) {
 }
 
 /**
- * SKU/name for variant ids shown in stock rows. The Inventory API returns ids only and Catalog has no batch-by-id
- * endpoint, so each unknown id is fetched once (GET /variants/{id}) and cached for the page's lifetime.
+ * SKU/name for variant ids shown in stock and price rows. Unknown ids are fetched once with GET /variants/batch
+ * (up to 100 per call) and cached for the page's lifetime; an id the API leaves out (deleted, foreign) maps to null.
  */
 export function useVariantDirectory(variantIds: readonly string[]) {
   const { api } = useSession();
@@ -108,26 +108,22 @@ export function useVariantDirectory(variantIds: readonly string[]) {
     const missing = idsKey ? idsKey.split(",").filter((id) => !seen.has(id)) : [];
     if (missing.length === 0) return;
     for (const id of missing) seen.add(id);
-    let cancelled = false;
-    const queue = [...missing];
-    // A few requests at a time: a 50-row page must not open 50 connections at once.
-    const worker = async () => {
-      while (queue.length > 0 && !cancelled) {
-        const id = queue.shift()!;
-        try {
-          const v = await getVariant(api, id);
-          setVariants((prev) => new Map(prev).set(id, { id: v.id, sku: v.sku, name: v.name ?? null, barcode: v.barcode ?? null }));
-        } catch {
-          setVariants((prev) => new Map(prev).set(id, null));
-        }
-      }
-    };
-    void Promise.all(Array.from({ length: Math.min(6, missing.length) }, worker));
-    return () => {
-      cancelled = true;
-      // Ids still queued were never fetched; allow a later effect run to request them.
-      for (const id of queue) seen.delete(id);
-    };
+    // Not aborted when the visible ids change: the results are a cache, not view state.
+    for (const chunk of variantBatches(missing)) {
+      getVariantsBatch(api, chunk)
+        .then((items) => {
+          const found = new Map(items.map((v) => [v.id, { id: v.id, sku: v.sku, name: v.name ?? null, barcode: v.barcode ?? null }] as const));
+          setVariants((prev) => {
+            const next = new Map(prev);
+            for (const id of chunk) next.set(id, found.get(id) ?? null);
+            return next;
+          });
+        })
+        .catch(() => {
+          // Failed: allow a later effect run to request these ids again.
+          for (const id of chunk) seen.delete(id);
+        });
+    }
   }, [api, idsKey]);
 
   return variants;

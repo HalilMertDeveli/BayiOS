@@ -113,39 +113,43 @@ test.describe("görev listesi (mock)", () => {
     expect(assign.headers["if-match"]).toBe('W/"1"');
 
     const t2 = list.getByTestId(`task-${taskId(2)}`);
-    await expect(t2.getByText("Başka personele atandı")).toBeVisible();
+    await expect(t2.getByText("Atanan: Deniz Depocu (mock)")).toBeVisible();
     await t2.getByRole("button", { name: "Havuza bırak" }).click();
     await expect(t2.getByText("Havuzda (atanmamış)")).toBeVisible();
 
-    // Assign to a staff member by user id.
+    // Assign to a staff member picked from GET /members (sorted by name on the client).
     await t2.getByRole("button", { name: "Personele ata" }).click();
     const dialog = page.getByRole("dialog", { name: /görevini ata/ });
-    await dialog.getByLabel("Kime").selectOption("other");
-    await dialog.getByLabel("Personelin kullanıcı kimliği").fill("geçersiz");
-    await dialog.getByRole("button", { name: "Ata" }).click();
-    await expect(dialog.getByText("Geçerli bir kullanıcı kimliği girin")).toBeVisible();
-    await dialog.getByLabel("Personelin kullanıcı kimliği").fill(OTHER_USER);
+    const who = dialog.getByLabel("Kime");
+    await expect(who.locator("option", { hasText: "Deniz Depocu (mock)" })).toHaveCount(1);
+    const labels = (await who.locator("option").allInnerTexts()).filter((t) => t.includes("(mock)"));
+    expect(labels).toEqual(["Ali Toplayıcı (mock) · Depo personeli", "Deniz Depocu (mock) · Depo personeli"]);
+    await who.selectOption({ label: "Deniz Depocu (mock) · Depo personeli" });
     await dialog.getByRole("button", { name: "Ata" }).click();
     await expect(dialog).toBeHidden();
     expect(posts(api, "/assign").at(-1)!.body).toEqual({ userId: OTHER_USER });
     await expectNoSeriousViolations(page);
   });
 
-  test("izleyici: tüm görevleri salt okunur görür, toplama ekranını açamaz, sevkiyat menüsü yok", async ({ page }) => {
+  test("izleyici: tüm görevleri ve ayrıntıyı salt okunur görür (tasks.read.all any-of), sevkiyatlar menüde", async ({ page }) => {
     const api = await signedIn(page, { memberships: [VIEWER], fulfilment: withTasks(makeTask(1)) });
     await page.goto("/depo/gorevler");
     const list = page.getByRole("list", { name: "Tüm görevler" });
     await expect(list.getByRole("listitem")).toHaveCount(1);
     await expect(page.getByRole("tab")).toHaveCount(0);
     await expect(list.getByRole("button")).toHaveCount(0);
-    await expect(list.getByRole("link")).toHaveCount(0);
+    await expect(list.getByRole("link")).toHaveCount(1);
     expect(api.requests.some((r) => r.path === "/api/v1/picking-tasks/mine")).toBe(false);
-    await page.goto(`/depo/gorevler/${taskId(1)}`);
-    await expect(page.getByText("Görev ayrıntısını görme yetkiniz yok")).toBeVisible();
+    await list.getByRole("link").click();
+    await expect(page).toHaveURL(new RegExp(`/depo/gorevler/${taskId(1)}$`));
+    await expect(page.getByText("MOCK-001").first()).toBeVisible();
+    await expect(page.getByRole("textbox", { name: /Raf barkodu|Ürün barkodu veya SKU/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Üstlen" })).toHaveCount(0);
+    expect(api.requests.filter((r) => r.method === "POST")).toHaveLength(0);
     await page.getByRole("button", { name: "Menüyü aç" }).click();
     const nav = page.getByRole("dialog", { name: "Menü" }).getByRole("navigation");
     await expect(nav.getByRole("link", { name: "Görevler" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Sevkiyatlar" })).toHaveCount(0);
+    await expect(nav.getByRole("link", { name: "Sevkiyatlar" })).toBeVisible();
   });
 });
 
@@ -270,8 +274,8 @@ test.describe("sevkiyat (mock)", () => {
     await page.getByRole("link", { name: shipment.number }).click();
     await expect(page.getByRole("heading", { name: `Sevkiyat ${shipment.number}` })).toBeVisible();
     await expect(page.getByText("Taslak", { exact: true }).filter({ visible: true })).toBeVisible();
-    // Staff cannot read orders: the order number is plain text, no link; no movement history.
-    await expect(page.getByRole("link", { name: "SIP-2026-000001" })).toHaveCount(0);
+    // Staff read the orders behind their tasks (orders.read K⁸): the order number links to the order (prices hidden there).
+    await expect(page.getByRole("link", { name: "SIP-2026-000001" })).toHaveAttribute("href", /\/siparisler\//);
 
     const save = page.getByRole("button", { name: /Paket kontrolünü kaydet/ });
     await expect(save).toBeDisabled();
@@ -303,8 +307,43 @@ test.describe("sevkiyat (mock)", () => {
     await page.getByRole("alertdialog").getByRole("button", { name: "Sevk et" }).click();
     await expect(page.getByText("Sevk edildi", { exact: true }).filter({ visible: true }).first()).toBeVisible();
     expect(posts(api, "/confirm")[0].body).toEqual({ carrier: "Mock Kargo", trackingNumber: null, packageCount: 2 });
-    await expect(page.getByRole("heading", { name: "Stok hareketleri" })).toHaveCount(0);
+    // inventory.movements.read K⁵: the movements of their own task's shipment are in the task context.
+    await expect(page.getByRole("heading", { name: "Stok hareketleri" })).toBeVisible();
     await expectNoSeriousViolations(page);
+  });
+
+  test("yönetici taslak sevkiyatı sebeple iptal eder; sipariş paketlendi kalır mesajı; personel iptal göremez", async ({ page }) => {
+    const fulfilment = withTasks();
+    const shipment = packedTask(fulfilment);
+    const api = await signedIn(page, { memberships: [OWNER], fulfilment });
+    await page.goto(`/depo/sevkiyatlar/${shipment.id}`);
+    await page.getByRole("button", { name: "Sevkiyatı iptal et" }).click();
+    const dialog = page.getByRole("alertdialog", { name: /iptal edilsin mi/ });
+    await dialog.getByRole("button", { name: "Sevkiyatı iptal et" }).click();
+    await expect(dialog.getByText("İptal sebebini yazın.")).toBeVisible();
+    expect(posts(api, "/cancel")).toHaveLength(0);
+    await dialog.getByLabel("İptal sebebi").fill("Müşteri teslimatı erteledi");
+    await expectNoSeriousViolations(page);
+    await dialog.getByRole("button", { name: "Sevkiyatı iptal et" }).click();
+    await expect(dialog).toBeHidden();
+    const notice = page.getByRole("status").filter({ hasText: "Sevkiyat iptal edildi" });
+    await expect(notice).toContainText("paketlendi durumunda kalır");
+    await expect(notice).toContainText("yerine koyma görevi");
+    const cancel = posts(api, "/cancel")[0];
+    expect(cancel.body).toEqual({ reason: "Müşteri teslimatı erteledi" });
+    expect(cancel.headers["idempotency-key"]).toBeTruthy();
+    expect(cancel.headers["if-match"]).toBe('W/"1"');
+    await expect(page.getByRole("button", { name: "Sevkiyatı iptal et" })).toHaveCount(0);
+  });
+
+  test("personel sevkiyatı iptal edemez (tasks.assign yok)", async ({ page }) => {
+    const fulfilment = withTasks();
+    const shipment = packedTask(fulfilment);
+    await signedIn(page, { memberships: [STAFF], fulfilment });
+    await page.goto(`/depo/sevkiyatlar/${shipment.id}`);
+    await expect(page.getByRole("heading", { name: `Sevkiyat ${shipment.number}` })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sevkiyatı iptal et" })).toHaveCount(0);
+    await expect(page.getByText("Onaylanmamış sevkiyatı görev atama yetkisi olan bir yönetici iptal edebilir.")).toBeVisible();
   });
 
   test("sevk onayı: kopan yanıt aynı anahtarla tekrar; başka cihazdan onay → already_confirmed; hareketler", async ({ page }) => {

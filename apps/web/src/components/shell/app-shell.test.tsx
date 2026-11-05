@@ -3,22 +3,16 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { AppShell } from "./app-shell";
-import type { ApiClient } from "@/lib/api/client";
+import { NO_ACCESS } from "@/lib/session/access";
 import { SessionContext, type SessionContextValue } from "@/lib/session/session-context";
 import type { Membership } from "@/lib/session/active-tenant";
+import { TEST_USER, accessFor, membership, mockSession } from "@/test/session";
 
-const ownerMembership: Membership = { tenantId: "t-1", tenantName: "Örnek Motor", tenantSlug: "ornek-motor", role: "owner", status: "active" };
+const ownerMembership: Membership = membership("owner");
 
+/** MOCK session: permissions as GET /me returns them for the role (src/test/me-fixtures.ts). */
 function session(overrides: Partial<SessionContextValue> = {}): SessionContextValue {
-  return {
-    state: { status: "ready", user: { id: "u-1", email: "ayse@example.test", fullName: "Ayşe Yılmaz" }, memberships: [ownerMembership], active: ownerMembership },
-    api: {} as ApiClient,
-    role: "owner",
-    selectTenant: vi.fn(),
-    reload: vi.fn(),
-    signOut: vi.fn(),
-    ...overrides,
-  };
+  return mockSession("owner", overrides);
 }
 
 function renderShell(children: ReactNode = "x", value: SessionContextValue = session()) {
@@ -53,8 +47,8 @@ describe("AppShell", () => {
     expect(screen.getByText("İşletme sahibi")).toBeDefined();
   });
 
-  it("builds the menu from the active membership's role", () => {
-    renderShell("x", session({ role: "warehouse_staff" }));
+  it("builds the menu from the /me effective permissions", () => {
+    renderShell("x", session({ role: "warehouse_staff", access: accessFor("warehouse_staff") }));
     const nav = screen.getByRole("navigation", { name: "Ana menü" });
     expect(within(nav).queryByRole("link", { name: "Ayarlar" })).toBeNull();
     expect(within(nav).queryByRole("link", { name: "Pano" })).toBeNull();
@@ -66,7 +60,7 @@ describe("AppShell", () => {
     const selectTenant = vi.fn();
     renderShell("x", session({
       selectTenant,
-      state: { status: "ready", user: { id: "u-1", email: "a@b.test", fullName: null }, memberships: [ownerMembership, other], active: ownerMembership },
+      state: { status: "ready", user: { id: "u-1", email: "a@b.test", fullName: null }, memberships: [ownerMembership, other], active: ownerMembership, access: accessFor("owner") },
     }));
     await userEvent.selectOptions(screen.getByLabelText("Aktif işletme"), "t-2");
     expect(selectTenant).toHaveBeenCalledWith("t-2");
@@ -80,7 +74,7 @@ describe("AppShell", () => {
   });
 
   it("does not render the page before the session is ready", () => {
-    renderShell("Gizli içerik", session({ state: { status: "loading" }, role: null }));
+    renderShell("Gizli içerik", session({ state: { status: "loading" }, role: null, access: NO_ACCESS }));
     expect(screen.queryByText("Gizli içerik")).toBeNull();
     expect(screen.getByRole("status").textContent).toContain("Oturum yükleniyor");
   });
@@ -118,6 +112,29 @@ describe("AppShell", () => {
     const drawer = document.getElementById("mobile-nav") as HTMLDialogElement;
     await userEvent.click(within(drawer).getByRole("link", { name: "Stok" }));
     expect(drawer.open).toBe(false);
+  });
+
+  it("replaces the page with the suspended/closed notice (tenant.inactive) and offers switch + sign-out", async () => {
+    const other: Membership = { ...ownerMembership, tenantId: "t-2", tenantName: "Örnek LED" };
+    const signOut = vi.fn().mockResolvedValue(undefined);
+    renderShell(
+      "Gizli içerik",
+      session({ state: { status: "inactive", user: TEST_USER, memberships: [ownerMembership, other], tenant: ownerMembership }, role: null, access: NO_ACCESS, signOut }),
+    );
+    expect(screen.queryByText("Gizli içerik")).toBeNull();
+    const notice = screen.getByRole("alert", { name: "İşletme kullanılamıyor" });
+    expect(within(notice).getByRole("heading", { name: "Bu işletme askıya alınmış veya kapatılmış" })).toBeDefined();
+    expect(notice.textContent).toContain("Örnek Motor");
+    expect(within(notice).getByRole("button", { name: "İşletme değiştir" })).toBeDefined();
+    await userEvent.click(within(notice).getByRole("button", { name: "Çıkış yap" }));
+    expect(signOut).toHaveBeenCalled();
+    expect(screen.queryByRole("navigation", { name: "Ana menü" })?.querySelectorAll("a").length ?? 0).toBe(0);
+  });
+
+  it("without another business the notice offers sign-out only", () => {
+    renderShell("x", session({ state: { status: "inactive", user: TEST_USER, memberships: [ownerMembership], tenant: ownerMembership }, role: null, access: NO_ACCESS }));
+    expect(screen.queryByRole("button", { name: "İşletme değiştir" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Çıkış yap" })).toBeDefined();
   });
 
   it("offers a skip link to the main content", () => {

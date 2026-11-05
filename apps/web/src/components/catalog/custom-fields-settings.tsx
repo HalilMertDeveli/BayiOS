@@ -47,8 +47,8 @@ type Editing = { mode: "create" } | { mode: "edit"; field: CustomField };
 
 /** Ayarlar → Özel alanlar (PRD CAT-05): custom field definitions for products and variants. */
 export function CustomFieldsSettings() {
-  const { api, role } = useSession();
-  const canManage = catalogPermissions(role).manageFields;
+  const { api, access } = useSession();
+  const canManage = catalogPermissions(access).manageFields;
   const [entity, setEntity] = useState<"" | EntityType>("");
   const [includeArchived, setIncludeArchived] = useState(false);
   const [attempt, setAttempt] = useState(0);

@@ -92,13 +92,15 @@ export async function updateLocation(api: ApiClient, location: Location, patch: 
 
 // ---- Balances and movements (Inventory module) ----
 
-export type BalanceFilter = { variantId?: string | null; warehouseId?: string | null; locationId?: string | null };
+/** `q`: free text (SKU, barcode or product name) matched by the API; 422 inventory.search_too_broad when too broad. */
+export type BalanceFilter = { variantId?: string | null; warehouseId?: string | null; locationId?: string | null; q?: string | null };
 
 export function balanceQuery(filter: BalanceFilter, cursor?: string | null, limit: number = BALANCE_PAGE_SIZE): string {
   const params = new URLSearchParams();
   if (filter.variantId) params.set("variantId", filter.variantId);
   if (filter.warehouseId) params.set("warehouseId", filter.warehouseId);
   if (filter.locationId) params.set("locationId", filter.locationId);
+  if (filter.q?.trim()) params.set("q", filter.q.trim());
   params.set("limit", String(limit));
   if (cursor) params.set("cursor", cursor);
   return params.toString();
@@ -137,6 +139,29 @@ export async function createAdjustment(api: ApiClient, body: CreateAdjustmentReq
 
 export async function getVariant(api: ApiClient, id: string, signal?: AbortSignal): Promise<Variant> {
   return (await api.request<Variant>(`/api/v1/variants/${encodeURIComponent(id)}`, { tenant: true, signal })).data;
+}
+
+export type VariantSummary = components["schemas"]["VariantSummaryResponse"];
+
+/** GET /variants/batch accepts 1–100 ids per call. */
+export const VARIANT_BATCH_LIMIT = 100;
+
+/**
+ * SKU, name, product name, barcode and status for up to 100 variant ids in one call (GET /variants/batch). Foreign or
+ * unknown ids are simply absent from the result.
+ */
+export async function getVariantsBatch(api: ApiClient, ids: readonly string[], signal?: AbortSignal): Promise<VariantSummary[]> {
+  if (ids.length === 0) return [];
+  if (ids.length > VARIANT_BATCH_LIMIT) throw new Error(`getVariantsBatch: at most ${VARIANT_BATCH_LIMIT} ids per call`);
+  const params = new URLSearchParams({ ids: ids.join(",") });
+  return (await api.request<{ items: VariantSummary[] }>(`/api/v1/variants/batch?${params}`, { tenant: true, signal })).data.items;
+}
+
+/** Splits ids into GET /variants/batch sized chunks. */
+export function variantBatches(ids: readonly string[], size: number = VARIANT_BATCH_LIMIT): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) chunks.push(ids.slice(i, i + size));
+  return chunks;
 }
 
 /** Variants matching a search term (SKU contains, exact barcode, name contains), SKU order. */

@@ -25,6 +25,7 @@ import {
   type OrderListQuery,
 } from "@/lib/orders/list-query";
 import { orderPermissions } from "@/lib/orders/permissions";
+import { customerPermissions } from "@/lib/customers/permissions";
 import { formatMoney, formatQuantity } from "@/lib/pricing/money";
 import { useSession } from "@/lib/session/session-context";
 import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
@@ -48,10 +49,17 @@ export const formatOrderDate = (iso: string) => dateTime.format(new Date(iso));
  * Totals are the API's `grandTotal`, formatted only.
  */
 export function OrderList() {
-  const { api, role } = useSession();
-  const permissions = orderPermissions(role);
+  const { api, access } = useSession();
+  const permissions = orderPermissions(access);
   if (!permissions.read) return <NoAccess />;
-  return <OrderListView api={api} canCreate={permissions.create} />;
+  return (
+    <OrderListView
+      api={api}
+      canCreate={permissions.create}
+      canReadCustomers={customerPermissions(access).read}
+      taskLinkedOnly={permissions.readTaskLinkedOnly}
+    />
+  );
 }
 
 function NoAccess() {
@@ -62,14 +70,26 @@ function NoAccess() {
         <EmptyState
           icon={<Lock className="size-6" />}
           title="Sipariş listesini görme yetkiniz yok"
-          description="Depo personeli siparişleri toplama görevleri üzerinden görür. Görevler mobil uygulamada ve Depo ekranında."
+          description="Rolünüz siparişleri görmeye izin vermiyor. Gerekirse işletme yöneticinizle görüşün."
         />
       </section>
     </>
   );
 }
 
-function OrderListView({ api, canCreate }: { api: ReturnType<typeof useSession>["api"]; canCreate: boolean }) {
+function OrderListView({
+  api,
+  canCreate,
+  canReadCustomers,
+  taskLinkedOnly,
+}: {
+  api: ReturnType<typeof useSession>["api"];
+  canCreate: boolean;
+  /** customers.read: names and the customer filter (warehouse staff have neither). */
+  canReadCustomers: boolean;
+  /** orders.read limited to task-linked orders without prices (warehouse staff). */
+  taskLinkedOnly: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -150,9 +170,10 @@ function OrderListView({ api, canCreate }: { api: ReturnType<typeof useSession>[
   };
 
   const rows = useMemo(() => (current?.status === "ready" ? current.items : []), [current]);
-  const customerIds = useMemo(() => [...rows.map((o) => o.customerId), ...(query.customerId ? [query.customerId] : [])], [rows, query.customerId]);
-  const customers = useCustomerNames(customerIds);
-  const customerName = (id: string) => customers.get(id)?.name ?? "Müşteri";
+  // Row names come with the list (#86); only the filter's customer is looked up. customerName is null for warehouse staff.
+  const filterIds = useMemo(() => (canReadCustomers && query.customerId ? [query.customerId] : []), [canReadCustomers, query.customerId]);
+  const customers = useCustomerNames(filterIds);
+  const customerName = (o: OrderSummary) => o.customerName ?? "—";
   const filterCustomer = query.customerId
     ? { id: query.customerId, name: customers.get(query.customerId)?.name ?? "Seçili müşteri", code: customers.get(query.customerId)?.code ?? "" }
     : null;
@@ -169,7 +190,7 @@ function OrderListView({ api, canCreate }: { api: ReturnType<typeof useSession>[
         </Link>
       ),
     },
-    { key: "customer", header: "Müşteri", cell: (o) => customerName(o.customerId) },
+    { key: "customer", header: "Müşteri", cell: (o) => customerName(o) },
     { key: "status", header: "Durum", width: "14rem", cell: (o) => <OrderStatusCell status={o.status} fulfillmentStatus={o.fulfillmentStatus} /> },
     { key: "source", header: "Kaynak", width: "8rem", cell: (o) => orderSourceLabels[o.source] ?? o.source },
     { key: "lines", header: "Satır", numeric: true, width: "5rem", cell: (o) => formatQuantity(o.lineCount) },
@@ -194,7 +215,7 @@ function OrderListView({ api, canCreate }: { api: ReturnType<typeof useSession>[
       headingLevel="h3"
       icon={<ShoppingCart className="size-6" />}
       title="Henüz sipariş yok"
-      description={canCreate ? "İlk siparişi oluşturun: müşteri seçin, ürünleri okutun; fiyatlar müşterinin fiyat listesinden gelir." : "Bu işletmede henüz sipariş yok."}
+      description={taskLinkedOnly ? "Görevlerinize bağlı sipariş yok. Size atanan veya havuzdaki görevlerin siparişleri burada görünür." : canCreate ? "İlk siparişi oluşturun: müşteri seçin, ürünleri okutun; fiyatlar müşterinin fiyat listesinden gelir." : "Bu işletmede henüz sipariş yok."}
       action={
         canCreate ? (
           <Link href={NEW_ORDER_HREF} className={buttonClasses("primary")}>
@@ -210,7 +231,11 @@ function OrderListView({ api, canCreate }: { api: ReturnType<typeof useSession>[
     <>
       <PageHeader
         title="Siparişler"
-        description="Siparişleri numarayla arayın, duruma, müşteriye, kaynağa ve tarihe göre süzün."
+        description={
+          taskLinkedOnly
+            ? "Görevlerinize bağlı siparişler; fiyatlar rolünüz gereği gösterilmez."
+            : "Siparişleri numarayla arayın, duruma, müşteriye, kaynağa ve tarihe göre süzün."
+        }
         actions={
           canCreate ? (
             <Link href={NEW_ORDER_HREF} className={buttonClasses("primary")}>
@@ -258,13 +283,15 @@ function OrderListView({ api, canCreate }: { api: ReturnType<typeof useSession>[
             onChange={(e) => navigate({ ...query, to: e.target.value })}
           />
         </div>
-        <CustomerPicker
-          label="Müşteriye göre süz"
-          pickedLabel="Müşteri filtresi"
-          hint="Ad veya kodun bir kısmı; tam vergi no / telefon."
-          value={filterCustomer}
-          onChange={(c) => navigate({ ...query, customerId: c?.id ?? "" })}
-        />
+        {canReadCustomers ? (
+          <CustomerPicker
+            label="Müşteriye göre süz"
+            pickedLabel="Müşteri filtresi"
+            hint="Ad veya kodun bir kısmı; tam vergi no / telefon."
+            value={filterCustomer}
+            onChange={(c) => navigate({ ...query, customerId: c?.id ?? "" })}
+          />
+        ) : null}
         <p className="text-caption text-fg-muted">Tarihler siparişin oluşturulduğu güne göre (UTC) süzülür.</p>
         {hasCriteria ? (
           <div>
@@ -352,7 +379,7 @@ function OrderListView({ api, canCreate }: { api: ReturnType<typeof useSession>[
                       <OrderStatusCell status={o.status} fulfillmentStatus={o.fulfillmentStatus} />
                       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-caption">
                         <dt className="text-fg-muted">Müşteri</dt>
-                        <dd className="text-fg">{customerName(o.customerId)}</dd>
+                        <dd className="text-fg">{customerName(o)}</dd>
                         <dt className="text-fg-muted">Satır</dt>
                         <dd className="text-fg">{formatQuantity(o.lineCount)}</dd>
                         <dt className="text-fg-muted">Kaynak</dt>

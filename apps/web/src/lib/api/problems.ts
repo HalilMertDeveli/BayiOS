@@ -20,6 +20,7 @@ const MESSAGES: Record<string, string> = {
   "auth.invalid_token": "Oturumunuzun süresi doldu. Lütfen yeniden giriş yapın.",
   "auth.forbidden": "Bu işlem için yetkiniz yok. Gerekirse işletme yöneticinizle görüşün.",
   "tenant.access_denied": "Bu işletmeye erişiminiz yok. Lütfen erişebildiğiniz bir işletme seçin.",
+  "tenant.inactive": "Bu işletme askıya alınmış veya kapatılmış; işlem yapılamıyor. Başka bir işletme seçin veya işletme sahibiyle görüşün.",
   "tenant.slug_taken": "Bu işletme adresi başka bir işletme tarafından kullanılıyor. Lütfen farklı bir adres girin.",
   "validation.failed": "Bazı alanlar geçersiz. Lütfen işaretli alanları düzeltip tekrar deneyin.",
   "request.malformed": "İstek işlenemedi. Sayfayı yenileyip tekrar deneyin.",

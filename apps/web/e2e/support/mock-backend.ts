@@ -4,7 +4,9 @@
  * CI has no Supabase and no API. These helpers fake both at the network/cookie layer only:
  * - a Supabase session cookie in the exact @supabase/ssr format, holding an UNSIGNED fake JWT
  *   (the real API would reject it; nothing here talks to the real API);
- * - `page.route` handlers for the browser's calls to Supabase Auth and to the BayiOS API.
+ * - `page.route` handlers for the browser's calls to Supabase Auth and to the BayiOS API. GET /me answers with the
+ *   active membership's effective permissions from the MOCK fixtures in src/test/me-fixtures.ts (what the real API
+ *   returns for that role under the given tenant rules).
  * The real end-to-end run (local Supabase + API, no mocks) lives in e2e-local/ — see apps/web/README.md.
  */
 import type { BrowserContext, Page, Route } from "@playwright/test";
@@ -13,6 +15,7 @@ import { createMockCommerce, handleCommerce, type MockCommerce } from "./mock-co
 import { createMockFulfilment, handleFulfilment, type MockFulfilment } from "./mock-fulfilment";
 import { createMockInventory, handleInventory, type MockInventory } from "./mock-inventory";
 import { createMockOrders, handleOrders, type MockOrders } from "./mock-orders";
+import { grantsForRoleName, type FixtureRules } from "../../src/test/me-fixtures";
 
 /** Must match the build-time env used for the e2e build (ci-web.yml / README). */
 export const SUPABASE_URL = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
@@ -83,7 +86,7 @@ const json = (route: Route, status: number, body: unknown, headers: Record<strin
   route.fulfill({
     status,
     contentType: status >= 400 ? "application/problem+json" : "application/json",
-    headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "ETag", ...headers },
+    headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "ETag, Retry-After", ...headers },
     body: JSON.stringify(body),
   });
 
@@ -127,7 +130,17 @@ export type ApiMockOptions = {
   orders?: MockOrders | null;
   /** In-memory Warehouse fulfilment API (mock-fulfilment.ts): picking tasks + shipments. Defaults to none; null disables it. */
   fulfilment?: MockFulfilment | null;
+  /**
+   * Tenant rules behind the conditional grants in GET /me (and the orders mock gates). Default: the API defaults, except
+   * "sales may approve orders" off (as in `defaultSettings`).
+   */
+  rules?: Partial<FixtureRules>;
+  /** Tenants that are suspended/closed: /me returns no activeTenant for them and every tenant-scoped call gets 403 tenant.inactive. */
+  inactiveTenants?: string[];
 };
+
+/** MOCK default tenant rules for /me (see ApiMockOptions.rules). */
+export const MOCK_RULES: Partial<FixtureRules> = { salesCanApproveOrders: false };
 
 /** Mocked BayiOS API. `state.memberships` can be changed by a test (e.g. after a tenant is created). */
 export async function mockApi(page: Page, options: ApiMockOptions = {}) {
@@ -138,6 +151,8 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
   const fulfilment = options.fulfilment === undefined ? createMockFulfilment() : options.fulfilment;
   const state = {
     memberships: options.memberships ?? [TENANT_A],
+    rules: { ...MOCK_RULES, ...options.rules },
+    inactiveTenants: options.inactiveTenants ?? [],
     catalog,
     inventory,
     commerce,
@@ -164,8 +179,41 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
     state.requests.push({ method, path, search: url.search, headers: request.headers(), body: request.postDataJSON?.() ?? null });
 
     if (path === "/api/v1/meta") return json(route, 200, { name: "BayiOS API (mock)", version: "0.0.0", environment: "Mock" });
+    const tenantHeader = request.headers()["x-tenant-id"];
     if (path === "/api/v1/me") {
-      return json(route, 200, { userId: USER.id, email: USER.email, fullName: USER.fullName, memberships: state.memberships });
+      // Optional X-Tenant-Id: the active membership's role and effective permissions (MOCK fixtures); null when the
+      // header is absent, foreign, or the tenant is not active — exactly as the API does.
+      const m = state.memberships.find((x) => x.tenantId === tenantHeader && x.status === "active");
+      const activeTenant =
+        m && !state.inactiveTenants.includes(m.tenantId)
+          ? { tenantId: m.tenantId, role: m.role, permissions: grantsForRoleName(m.role, state.rules) }
+          : null;
+      return json(route, 200, { userId: USER.id, email: USER.email, fullName: USER.fullName, memberships: state.memberships, activeTenant });
+    }
+    if (tenantHeader && state.inactiveTenants.includes(tenantHeader)) {
+      return json(route, 403, problem(403, "tenant.inactive", { title: "This tenant is not active" }));
+    }
+    if (path === "/api/v1/members" && method === "GET") {
+      // members.read; synthetic members (unsorted on purpose: the web sorts by name).
+      const role = state.memberships.find((m) => m.tenantId === tenantHeader)?.role ?? "viewer";
+      if (!grantsForRoleName(role, state.rules).some((g) => g.permission === "members.read")) {
+        return json(route, 403, problem(403, "auth.forbidden", { title: "Missing permission: members.read" }));
+      }
+      const member = (userId: string, displayName: string, memberRole: string) => ({
+        userId,
+        displayName,
+        fullName: displayName,
+        email: `${userId.slice(-4)}@example.test`,
+        role: memberRole,
+        status: "active",
+        createdAt: "2026-11-01T00:00:00Z",
+      });
+      const items = [
+        member("00000000-0000-4000-8000-7c0000000001", "Deniz Depocu (mock)", "warehouse_staff"),
+        member(USER.id, USER.fullName, role),
+        member("00000000-0000-4000-8000-7c0000000002", "Ali Toplayıcı (mock)", "warehouse_staff"),
+      ];
+      return json(route, 200, { items, page: { nextCursor: null, hasMore: false, limit: 200 } });
     }
     if (path === "/api/v1/tenants" && method === "POST") {
       if (options.createTenant) return options.createTenant(route);
@@ -191,7 +239,8 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
     }
     if (orders) {
       const role = state.memberships.find((m) => m.tenantId === request.headers()["x-tenant-id"])?.role ?? "viewer";
-      if (await handleOrders(route, orders, { catalog, commerce }, role)) return;
+      const taskOrderIds = () => (fulfilment ? fulfilment.tasks.map((t) => t.orderId) : []);
+      if (await handleOrders(route, orders, { catalog, commerce, taskOrderIds, rules: state.rules }, role)) return;
     }
     if (fulfilment) {
       const role = state.memberships.find((m) => m.tenantId === request.headers()["x-tenant-id"])?.role ?? "viewer";

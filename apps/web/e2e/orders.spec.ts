@@ -7,9 +7,10 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { DESKTOP, MOBILE } from "./viewports";
-import { TENANT_A, signedIn, type MockMembership } from "./support/mock-backend";
+import { TENANT_A, USER, signedIn, type MockMembership } from "./support/mock-backend";
 import { createMockCatalog, problemBody, fulfillJson, type MockCatalog } from "./support/mock-catalog";
 import { createMockCommerce, customerId, type MockCommerce } from "./support/mock-commerce";
+import { createMockFulfilment, makeTask } from "./support/mock-fulfilment";
 import { createMockOrders, makeOrder, orderBusyResponse, orderId, type MockOrders } from "./support/mock-orders";
 
 test.use({ viewport: DESKTOP });
@@ -408,7 +409,7 @@ test.describe("onay, red, iptal (mock)", () => {
 });
 
 test.describe("rol kısıtları (mock)", () => {
-  test("satış: oluşturur ve onaya gönderir; taslağı düzenleyemez, onaylayamaz, iptal edemez, fiyat giremez", async ({ page }) => {
+  test("satış: başkasının taslağını düzenleyemez / iptal edemez; onaylayamaz (kural kapalı); fiyat giremez; kendi taslağı açık", async ({ page }) => {
     const ctx = setup((c) => {
       add(c, 1, { lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 1 }] });
       add(c, 2, { status: "pending_approval", lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 1 }] });
@@ -418,7 +419,7 @@ test.describe("rol kısıtları (mock)", () => {
     await expect(page.getByRole("button", { name: "Onaya gönder" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Siparişi iptal et" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Taslağı kaydet" })).toHaveCount(0);
-    await expect(page.getByText(/Taslağı düzenleme yetkiniz yok/)).toBeVisible();
+    await expect(page.getByText(/Bu taslağı başka bir kullanıcı oluşturdu/)).toBeVisible();
 
     await page.goto(`/siparisler/${orderId(2)}`);
     await expect(page.getByRole("button", { name: "Onaydan geri çek" })).toBeVisible();
@@ -440,6 +441,49 @@ test.describe("rol kısıtları (mock)", () => {
       unitPrice: null,
       discountPercent: null,
     });
+    // The draft just created is the user's own (orders.edit.draft O, orders.cancel K¹¹): editable and cancellable.
+    await expect(page.getByRole("button", { name: "Taslağı kaydet" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Siparişi iptal et" })).toBeVisible();
+  });
+
+  test("satış: kendi taslağını düzenler; API reddederse (403) açık mesaj gösterilir", async ({ page }) => {
+    const ctx = setup((c) => add(c, 1, { createdBy: USER.id, lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 1 }] }));
+    const api = await signedIn(page, { ...ctx, memberships: [SALES] });
+    await page.goto(`/siparisler/${orderId(1)}`);
+    const quantity = draftLine(page, 0).getByRole("textbox", { name: "MOCK-001-1 miktarı" });
+    await quantity.fill("3");
+    await page.getByRole("button", { name: "Taslağı kaydet" }).click();
+    await expect(page.getByText("Taslak kaydedildi")).toBeVisible();
+    const patch = requestsTo(api, "PATCH", `/api/v1/orders/${orderId(1)}`)[0].body as { lines: { quantity: string; unitPrice: unknown }[] };
+    expect(patch.lines[0]).toMatchObject({ quantity: "3", unitPrice: null });
+    await expect(page.getByRole("button", { name: "Siparişi iptal et" })).toBeVisible();
+
+    // The API decides per record: a refusal (e.g. ownership changed) is shown plainly, nothing is lost.
+    ctx.orders.overrides.set(`PATCH /api/v1/orders/${orderId(1)}`, (route) =>
+      fulfillJson(route, 403, problemBody(403, "auth.forbidden", { title: "orders.edit.draft: Only drafts you created can be edited" })),
+    );
+    await draftLine(page, 0).getByRole("textbox", { name: "MOCK-001-1 miktarı" }).fill("4");
+    await page.getByRole("button", { name: "Taslağı kaydet" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Taslak kaydedilemedi" })).toContainText("yalnızca oluşturan kişi");
+    await expect(draftLine(page, 0).getByRole("textbox", { name: "MOCK-001-1 miktarı" })).toHaveValue("4");
+    await expectNoSeriousViolations(page);
+  });
+
+  test("satış + iskonto sınırı (K¹⁰): iskonto girer, manuel fiyat yok; sınırı aşan iskonto açık mesajla reddedilir", async ({ page }) => {
+    const ctx = setup((c) => add(c, 1, { createdBy: USER.id, lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 1 }] }));
+    const api = await signedIn(page, { ...ctx, memberships: [SALES], rules: { salesMaxDiscountPercent: 10 } });
+    await page.goto(`/siparisler/${orderId(1)}`);
+    const line = draftLine(page, 0);
+    await expect(line.getByRole("textbox", { name: "MOCK-001-1 manuel birim fiyat" })).toHaveCount(0);
+    await line.getByRole("combobox", { name: "MOCK-001-1 iskonto türü" }).selectOption("percent");
+    await line.getByRole("textbox", { name: "MOCK-001-1 iskonto oranı (%)" }).fill("15");
+    await page.getByRole("button", { name: "Taslağı kaydet" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Taslak kaydedilemedi" })).toContainText("iskonto sınırını aşıyor");
+    await line.getByRole("textbox", { name: "MOCK-001-1 iskonto oranı (%)" }).fill("5");
+    await page.getByRole("button", { name: "Taslağı kaydet" }).click();
+    await expect(page.getByText("Taslak kaydedildi")).toBeVisible();
+    const patches = requestsTo(api, "PATCH", `/api/v1/orders/${orderId(1)}`);
+    expect((patches.at(-1)!.body as { lines: { discountPercent: string; unitPrice: unknown }[] }).lines[0]).toMatchObject({ discountPercent: "5", unitPrice: null });
   });
 
   test("izleyici: salt okunur, işlem ve yeni sipariş yok", async ({ page }) => {
@@ -454,12 +498,32 @@ test.describe("rol kısıtları (mock)", () => {
     await expect(page.getByRole("table", { name: "Sipariş satırları" })).toContainText("MOCK-001-1");
   });
 
-  test("depo personeli: sipariş listesi yetkisi yok (API'de koşullu, kapalı)", async ({ page }) => {
-    const ctx = setup((c) => add(c, 1, {}));
-    const api = await signedIn(page, { ...ctx, memberships: [STAFF] });
+  test("depo personeli: yalnızca görevlerine bağlı siparişler; fiyatlar '—', müşteri araması ve işlem yok", async ({ page }) => {
+    const ctx = setup((c) => {
+      add(c, 1, { status: "approved", lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 2 }] });
+      add(c, 2, { status: "approved", lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 1 }] });
+    });
+    const fulfilment = createMockFulfilment({ tasks: [makeTask(1)] });
+    const api = await signedIn(page, { ...ctx, fulfilment, memberships: [STAFF] });
     await page.goto("/siparisler");
-    await expect(page.getByRole("heading", { name: "Sipariş listesini görme yetkiniz yok" })).toBeVisible();
-    expect(requestsTo(api, "GET", "/api/v1/orders")).toHaveLength(0);
+    const table = page.getByRole("table", { name: "Siparişler" });
+    await expect(table.getByRole("row")).toHaveCount(2);
+    await expect(table).toContainText("SIP-2026-000001");
+    await expect(table).not.toContainText("₺");
+    await expect(page.getByRole("searchbox", { name: "Müşteriye göre süz" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Yeni sipariş" })).toHaveCount(0);
+    await table.getByRole("link", { name: "SIP-2026-000001" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Sipariş SIP-2026-000001" })).toBeVisible();
+    await expect(page.getByText(/Fiyat ve tutarlar rolünüz gereği gösterilmiyor/)).toBeVisible();
+    await expect(page.getByRole("table", { name: "Sipariş satırları" })).toContainText("MOCK-001-1");
+    await expect(page.getByText("Fiyat yok")).toHaveCount(0);
+    await expect(page.locator("main")).not.toContainText("₺");
+    await expect(page.getByRole("heading", { name: "İşlemler" })).toHaveCount(0);
+    expect(api.requests.some((r) => r.path.startsWith("/api/v1/customers"))).toBe(false);
+    // An order outside the user's tasks: the API answers 404.
+    await page.goto(`/siparisler/${orderId(2)}`);
+    await expect(page.getByText("Yalnızca size atanmış veya havuzdaki görevlere bağlı siparişleri görebilirsiniz.")).toBeVisible();
+    await expectNoSeriousViolations(page);
   });
 });
 

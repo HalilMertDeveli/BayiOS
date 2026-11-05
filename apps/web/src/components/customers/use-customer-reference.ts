@@ -17,8 +17,8 @@ export type CustomerReference =
  * Price lists need prices.read.sell; without it (or if that call fails) the page still works, names stay hidden.
  */
 export function useCustomerReference() {
-  const { api, role } = useSession();
-  const canReadPrices = pricingPermissions(role).readSell;
+  const { api, access } = useSession();
+  const canReadPrices = pricingPermissions(access).readSell;
   const [state, setState] = useState<CustomerReference>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 

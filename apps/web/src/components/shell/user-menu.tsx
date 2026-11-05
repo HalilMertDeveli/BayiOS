@@ -14,7 +14,7 @@ export function UserMenu() {
   const { state, role, selectTenant, signOut } = useSession();
   const [signingOut, setSigningOut] = useState(false);
 
-  if (state.status !== "ready") return null;
+  if (state.status !== "ready") return null; // the tenant-inactive notice offers switch / sign-out itself
   const { user, memberships, active } = state;
   const displayName = user.fullName || user.email || "Kullanıcı";
 

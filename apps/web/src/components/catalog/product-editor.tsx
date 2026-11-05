@@ -15,7 +15,17 @@ import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api/client";
 import { archiveProduct, createProduct, getProduct, productHref, updateProduct, type Product } from "@/lib/catalog/api";
 import { fieldsFor } from "@/lib/catalog/attributes";
-import { CATALOG_CONFLICTS, catalogErrorMessage, fieldId, isVersionConflict, partitionErrors, serverFieldErrors } from "@/lib/catalog/errors";
+import {
+  CATALOG_CONFLICTS,
+  catalogErrorMessage,
+  codeConflictMessage,
+  conflictRowIndex,
+  fieldId,
+  isVersionConflict,
+  partitionErrors,
+  readCodeConflict,
+  serverFieldErrors,
+} from "@/lib/catalog/errors";
 import { IdempotencyKeys } from "@/lib/catalog/idempotency";
 import { categoryOptions } from "@/lib/catalog/list-query";
 import { catalogPermissions } from "@/lib/catalog/permissions";
@@ -44,7 +54,7 @@ type LoadState = { status: "loading" } | { status: "error"; message: string; not
 
 /** /urunler/yeni (no productId) and /urunler/[id]. */
 export function ProductEditor({ productId }: { productId?: string }) {
-  const { api, role } = useSession();
+  const { api, access } = useSession();
   const { state: reference, reload: reloadReference } = useCatalogReference();
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -69,7 +79,7 @@ export function ProductEditor({ productId }: { productId?: string }) {
 
   const title = productId ? "Ürün" : "Yeni ürün";
 
-  if (!productId && !catalogPermissions(role).write) {
+  if (!productId && !catalogPermissions(access).write) {
     return (
       <>
         <BackLink />
@@ -187,8 +197,8 @@ type ProductFormProps = {
 };
 
 function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged }: ProductFormProps) {
-  const { api, role } = useSession();
-  const permissions = catalogPermissions(role);
+  const { api, access } = useSession();
+  const permissions = catalogPermissions(access);
   const readOnly = !permissions.write;
   const router = useRouter();
   const { toast } = useToast();
@@ -249,14 +259,17 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged }
       showErrors(serverFieldErrors(error));
       return;
     }
+    const taken = readCodeConflict(error);
+    if (taken) {
+      // 409 conflict detail names the taken value: pin the message to the variant row that holds it.
+      const message = codeConflictMessage(taken, product?.id ?? null);
+      const row = product ? -1 : conflictRowIndex(values.variants, taken);
+      if (row >= 0) showErrors({ [`variants[${row}].${taken.field}`]: message });
+      else showErrors({}, [message]);
+      return;
+    }
     if (error instanceof ApiError && error.code && CATALOG_CONFLICTS[error.code]) {
-      const message = CATALOG_CONFLICTS[error.code];
-      // A taken SKU/barcode on a single-variant create can be pinned to its input.
-      if (!product && values.variants.length === 1 && (error.code === "catalog.sku_taken" || error.code === "catalog.barcode_taken")) {
-        showErrors({ [error.code === "catalog.sku_taken" ? "variants[0].sku" : "variants[0].barcode"]: message });
-        return;
-      }
-      showErrors({}, [message]);
+      showErrors({}, [CATALOG_CONFLICTS[error.code]]);
       return;
     }
     showErrors({}, [catalogErrorMessage(error)]);

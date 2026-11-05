@@ -1,39 +1,53 @@
-import type { Role } from "@/lib/navigation";
+import { CONDITIONS, type Access } from "@/lib/session/access";
 
 export type OrderPermissions = {
-  /** orders.read — list and detail. warehouse_staff has it only conditionally (K⁸), which the API does not grant yet. */
+  /** orders.read — list and detail (any scope; a restricted reader gets only the orders the API lets through). */
   read: boolean;
+  /** orders.read is limited to orders behind the caller's tasks, without prices (warehouse staff, K⁸). */
+  readTaskLinkedOnly: boolean;
   /** orders.create — manual draft. */
   create: boolean;
-  /** orders.edit.draft — change a draft's header and lines. sales has it for own records only (O): fail-closed (#69). */
+  /** orders.edit.draft — change a draft's header and lines (any scope). */
   editDraft: boolean;
+  /** orders.edit.draft only for drafts the caller created (sales, O). */
+  editDraftOwnOnly: boolean;
   /** orders.submit — send for approval, withdraw. */
   submit: boolean;
-  /** orders.approve — approve (reserve stock) and reject. sales is conditional (K⁹): fail-closed. */
+  /** orders.approve — approve (reserve stock) and reject. */
   approve: boolean;
-  /** orders.cancel — cancel with a reason. sales is conditional (K¹¹): fail-closed. */
+  /** orders.cancel — cancel with a reason (any scope). */
   cancel: boolean;
-  /** orders.price.override — manual unit price and discounts. sales is conditional (K¹⁰): fail-closed. */
+  /** orders.cancel only for the caller's own draft / pending-approval orders (sales, K¹¹). */
+  cancelOwnOpenOnly: boolean;
+  /** orders.price.override unconditionally: manual unit price and discounts. */
   overridePrice: boolean;
+  /** Line discounts may be entered: full override, or the sales discount limit (K¹⁰; the API enforces the limit). */
+  discount: boolean;
+  /** Discounts are capped by the tenant's sales limit and manual unit prices are not allowed. */
+  discountLimited: boolean;
 };
 
-const MANAGERS: readonly Role[] = ["owner", "admin", "manager"];
-
 /**
- * roles-permissions.md §3.5 as the API enforces it (RolePermissions.IsGranted: only unconditional ✓ passes; K and O
- * stay fail-closed until tenant rules / record ownership are evaluated). /me returns the role only, so the UI derives
- * what to show from it. Visibility only: the API checks every permission again.
+ * Order-desk actions from the effective permissions (GET /me). Conditional / own grants show the action; the record
+ * checks below use the order's `createdBy` where the condition is known, and the API decides in every case.
  */
-export function orderPermissions(role: Role | null): OrderPermissions {
-  const manager = role !== null && MANAGERS.includes(role);
-  const desk = manager || role === "sales";
+export function orderPermissions(access: Access): OrderPermissions {
+  const editDraft = access.canSome("orders.edit.draft");
+  const cancel = access.canSome("orders.cancel");
+  const overridePrice = access.can("orders.price.override");
+  const discount = access.canSome("orders.price.override");
   return {
-    read: desk || role === "viewer",
-    create: desk,
-    editDraft: manager,
-    submit: desk,
-    approve: manager,
-    cancel: manager,
-    overridePrice: manager,
+    read: access.canSome("orders.read"),
+    readTaskLinkedOnly: access.hasCondition("orders.read", CONDITIONS.ordersTaskLinked),
+    create: access.can("orders.create"),
+    editDraft,
+    editDraftOwnOnly: editDraft && (access.scope("orders.edit.draft") === "own" || access.hasCondition("orders.edit.draft", CONDITIONS.ordersOwn)),
+    submit: access.can("orders.submit"),
+    approve: access.canSome("orders.approve"),
+    cancel,
+    cancelOwnOpenOnly: access.hasCondition("orders.cancel", CONDITIONS.ordersOwnDraftOrPending),
+    overridePrice,
+    discount,
+    discountLimited: discount && !overridePrice,
   };
 }

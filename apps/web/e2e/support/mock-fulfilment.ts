@@ -56,6 +56,8 @@ export type MockShipmentLine = {
   variantId: string;
   sku: string;
   name: string;
+  /** Product barcode (#86): the pack check matches it without loading the task. */
+  barcode: string | null;
   unit: string;
   locationId: string | null;
   locationCode: string | null;
@@ -171,6 +173,7 @@ export function makeShipment(task: MockTask, n: number, overrides: Partial<MockS
         variantId: l.variantId,
         sku: l.sku,
         name: l.name,
+        barcode: l.barcode,
         unit: l.unit,
         locationId: l.locationId,
         locationCode: l.locationCode,
@@ -209,13 +212,20 @@ export function fulfilmentBusyResponse(route: Route, code = "picking.busy") {
   return json(route, 409, problemBody(409, code), { "Retry-After": "1" });
 }
 
+// Simplified: sales (tasks.read.all K¹², tasks of its own orders) sees every task in the mock.
 const PERMS: Record<string, string[]> = {
-  readAll: [...MANAGERS, "viewer"],
+  readAll: [...MANAGERS, "viewer", "sales"],
   readOwn: [...MANAGERS, "warehouse_staff"],
   assign: MANAGERS,
   claim: ["manager", "warehouse_staff"],
   pick: [...MANAGERS, "warehouse_staff"],
   ship: [...MANAGERS, "warehouse_staff"],
+};
+
+/** Display names of the synthetic members (GET /members in mock-backend.ts uses the same ids). */
+export const MOCK_MEMBER_NAMES: Record<string, string> = {
+  "00000000-0000-4000-8000-000000000001": "Mock Kullanıcı",
+  [uuid("7c", 1)]: "Deniz Depocu (mock)",
 };
 
 function summary(t: MockTask) {
@@ -228,6 +238,7 @@ function summary(t: MockTask) {
     orderNumber: t.orderNumber,
     warehouseId: t.warehouseId,
     assignedTo: t.assignedTo,
+    assigneeName: t.assignedTo ? (MOCK_MEMBER_NAMES[t.assignedTo] ?? null) : null,
     lineCount: t.lines.length,
     quantityToPick: sum("quantityToPick"),
     quantityPicked: sum("quantityPicked"),
@@ -303,7 +314,7 @@ export async function handleFulfilment(route: Route, mock: MockFulfilment, role:
     if (method === "POST" && key && status !== 409) mock.idempotency.set(`${path} ${key}`, { status, body: payload });
     return done(json(route, status, payload));
   };
-  const visible = (t: MockTask) => can("assign") || t.assignedTo === mock.userId || (t.assignedTo === null && active(t));
+  const visible = (t: MockTask) => can("assign") || can("readAll") || t.assignedTo === mock.userId || (t.assignedTo === null && active(t));
 
   // ---- Picking tasks ----
   if (path === "/api/v1/picking-tasks/mine" && method === "GET") {
@@ -324,7 +335,8 @@ export async function handleFulfilment(route: Route, mock: MockFulfilment, role:
   if (taskMatch) {
     const task = mock.tasks.find((t) => t.id === taskMatch[1]);
     const action = taskMatch[2] ?? "";
-    if (!can("readOwn")) return forbidden("tasks.read.own");
+    // GET accepts tasks.read.own or tasks.read.all (x-permission-any-of); work needs tasks.read.own.
+    if (!can("readOwn") && !(method === "GET" && can("readAll"))) return forbidden("tasks.read.own");
     if (!task || !visible(task)) return notFound();
     if (method === "GET" && action === "") return done(json(route, 200, taskBody(task), { ETag: `W/"${task.version}"` }));
     if (method !== "POST") return notFound();
@@ -437,8 +449,8 @@ export async function handleFulfilment(route: Route, mock: MockFulfilment, role:
   }
 
   // ---- Shipments ----
-  if (!can("readOwn")) return forbidden("tasks.read.own");
-  const shipmentVisible = (s: MockShipment) => can("assign") || mock.tasks.find((t) => t.id === s.pickingTaskId)?.assignedTo === mock.userId;
+  if (!can("readOwn") && !(method === "GET" && can("readAll"))) return forbidden("tasks.read.own");
+  const shipmentVisible = (s: MockShipment) => can("assign") || can("readAll") || mock.tasks.find((t) => t.id === s.pickingTaskId)?.assignedTo === mock.userId;
   if (path === "/api/v1/shipments" && method === "GET") {
     const statuses = (url.searchParams.get("status") ?? "").split(",").filter(Boolean);
     const items = mock.shipments.filter((s) => shipmentVisible(s) && (!statuses.length || statuses.includes(s.status)));
@@ -456,6 +468,16 @@ export async function handleFulfilment(route: Route, mock: MockFulfilment, role:
     if (shipment.status === "confirmed") return fail(409, "shipment.already_confirmed");
   }
   if (versionMismatch(shipment.version)) return fail(412, "concurrency.version_mismatch");
+  if (action === "cancel") {
+    // tasks.assign; draft or packed only; no stock moves, a putaway task for what was picked.
+    if (!can("assign")) return forbidden("tasks.assign");
+    if (shipment.status !== "draft" && shipment.status !== "packed") return fail(409, "shipment.invalid_transition");
+    const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+    if (!reason) return fail(422, "validation.failed", { errors: { reason: ["Required."] } });
+    shipment.status = "cancelled";
+    shipment.version++;
+    return reply(200, { shipment, putawayTaskId: uuid("7e", 1) }, shipment.version);
+  }
   if (action === "pack") {
     if (shipment.status !== "draft") return fail(409, "shipment.invalid_transition");
     const packed = new Map<string, number>();

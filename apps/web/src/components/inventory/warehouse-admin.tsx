@@ -51,8 +51,8 @@ function mutationError(error: unknown): { fields: Record<string, string>; messag
 
 /** /depo: warehouses and their shelf/bin locations (create, edit, deactivate) + entry to goods receipt. */
 export function WarehouseAdmin() {
-  const { role } = useSession();
-  const permissions = inventoryPermissions(role);
+  const { access } = useSession();
+  const permissions = inventoryPermissions(access);
   const { state, reload, upsert } = useWarehouses();
   const router = useRouter();
   const pathname = usePathname();

@@ -37,8 +37,10 @@ export type DraftValues = {
 };
 
 export type DraftOptions = {
-  /** orders.price.override: manual prices and discounts are sent only when the role has it. */
-  overridePrice: boolean;
+  /** Unconditional orders.price.override: a manual unit price may be sent. */
+  manualPrice: boolean;
+  /** orders.price.override in any scope: line discounts may be sent (a limited grant is capped by the API). */
+  discount: boolean;
 };
 
 let lineCounter = 0;
@@ -102,9 +104,8 @@ export function validateDraft(values: DraftValues, options: DraftOptions): Recor
   values.lines.forEach((line, i) => {
     const q = parseDecimalInput(line.quantity, 3);
     if (!q.ok || isZeroDecimal(q.value)) errors[`lines[${i}].quantity`] = QUANTITY_MESSAGE;
-    if (!options.overridePrice) return;
-    if (line.unitPrice.trim() && !parseDecimalInput(line.unitPrice, 4).ok) errors[`lines[${i}].unitPrice`] = PRICE_MESSAGE;
-    if (line.discountMode !== "none") {
+    if (options.manualPrice && line.unitPrice.trim() && !parseDecimalInput(line.unitPrice, 4).ok) errors[`lines[${i}].unitPrice`] = PRICE_MESSAGE;
+    if (options.discount && line.discountMode !== "none") {
       const d = parseDecimalInput(line.discount, 2);
       if (!d.ok) errors[discountKey(i, line.discountMode)] = line.discountMode === "percent" ? PERCENT_MESSAGE : AMOUNT_MESSAGE;
       else if (line.discountMode === "percent" && !percentInRange(d.value)) errors[discountKey(i, "percent")] = PERCENT_MESSAGE;
@@ -121,16 +122,17 @@ const decimalOrNull = (text: string, maxDecimals: number): string | null => {
 
 /**
  * Lines as the API takes them. Without orders.price.override no manual price or discount is sent: the API then
- * applies the list price and the dealer group's default discount (sending one would be a 403).
+ * applies the list price and the dealer group's default discount (sending one would be a 403). A limited grant (sales
+ * discount limit) sends discounts but never a manual price.
  */
 export function buildLineInputs(values: DraftValues, options: DraftOptions): OrderLineInput[] {
   return values.lines.map((line) => {
-    const discount = options.overridePrice && line.discountMode !== "none" ? decimalOrNull(line.discount, 2) : null;
+    const discount = options.discount && line.discountMode !== "none" ? decimalOrNull(line.discount, 2) : null;
     return {
       id: line.id,
       variantId: line.variant.id,
       quantity: decimalOrNull(line.quantity, 3),
-      unitPrice: options.overridePrice ? decimalOrNull(line.unitPrice, 4) : null,
+      unitPrice: options.manualPrice ? decimalOrNull(line.unitPrice, 4) : null,
       discountPercent: line.discountMode === "percent" ? discount : null,
       discountAmount: line.discountMode === "amount" ? discount : null,
     };

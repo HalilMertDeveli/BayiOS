@@ -52,8 +52,8 @@ function primaryVariant(product: Product) {
  * status, filterable custom fields), keyset paging with "Daha fazla yükle". Only one page at a time is fetched.
  */
 export function ProductList() {
-  const { api, role } = useSession();
-  const permissions = catalogPermissions(role);
+  const { api, access } = useSession();
+  const permissions = catalogPermissions(access);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

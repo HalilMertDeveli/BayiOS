@@ -227,7 +227,7 @@ test.describe("rol görünürlüğü (mock)", () => {
     await expect(page.getByLabel("Firma / müşteri adı")).toBeEnabled();
     await expect(page.getByRole("combobox", { name: "Bayi grubu" })).toBeDisabled();
     await expect(page.getByRole("combobox", { name: "Müşteriye özel fiyat listesi" })).toBeDisabled();
-    await expect(page.getByText("Bayi grubu ve fiyat listesini işletme sahibi, yönetici veya operasyon müdürü atayabilir.")).toBeVisible();
+    await expect(page.getByText("Bayi grubu ve fiyat listesi atama yetkiniz yok; atama için işletme yöneticinizle görüşün.")).toBeVisible();
   });
 
   test("arşivle: onay sonrası salt okunur, arşivden çıkar geri açar", async ({ page }) => {

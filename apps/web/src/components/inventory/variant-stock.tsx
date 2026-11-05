@@ -25,8 +25,8 @@ type Head = { status: "loading" } | { status: "error"; message: string; notFound
 
 /** /stok/varyant/[id]: one variant's balances per warehouse/location and its movement history (W08 stock card). */
 export function VariantStock({ variantId }: { variantId: string }) {
-  const { api, role } = useSession();
-  const permissions = inventoryPermissions(role);
+  const { api, access } = useSession();
+  const permissions = inventoryPermissions(access);
   const { state: warehouses } = useWarehouses();
   const warehouseById = useWarehouseNames(warehouses);
   const [head, setHead] = useState<Head>({ status: "loading" });
@@ -139,14 +139,17 @@ export function VariantStock({ variantId }: { variantId: string }) {
       </section>
 
       {permissions.movements ? (
-        <MovementHistory variantId={variantId} warehouseOptions={warehouses.status === "ready" ? warehouses.data : []} warehouseLabel={warehouseLabel} />
+        <MovementHistory
+          variantId={variantId}
+          ownOnly={permissions.movementsOwnOnly}
+          warehouseOptions={warehouses.status === "ready" ? warehouses.data : []} warehouseLabel={warehouseLabel} />
       ) : (
         <section aria-label="Hareket geçmişi" className="rounded-lg border border-line bg-card shadow-e1">
           <EmptyState
             headingLevel="h3"
             icon={<Lock className="size-6" />}
             title="Hareket geçmişini görme yetkiniz yok"
-            description="Stok hareketlerini işletme sahibi, yönetici, operasyon müdürü ve izleyici rolleri görebilir."
+            description="Rolünüz stok hareketlerini görmeye izin vermiyor. Gerekirse işletme yöneticinizle görüşün."
           />
         </section>
       )}
@@ -169,10 +172,13 @@ type MovementData =
 
 function MovementHistory({
   variantId,
+  ownOnly,
   warehouseOptions,
   warehouseLabel,
 }: {
   variantId: string;
+  /** inventory.movements.read is limited to the user's own movements and task context (the API filters). */
+  ownOnly: boolean;
   warehouseOptions: { id: string; name: string; code: string }[];
   warehouseLabel: (id: string) => string;
 }) {
@@ -241,6 +247,7 @@ function MovementHistory({
           {current === null ? "Yükleniyor…" : current.status === "ready" ? `${current.items.length} hareket${current.hasMore ? " (devamı var)" : ""}` : ""}
         </p>
       </div>
+      {ownOnly ? <p className="text-caption text-fg-muted">Yalnızca sizin yaptığınız ve görevlerinizle ilgili hareketler gösterilir.</p> : null}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-2xl">
         <Select
           label="Depo"

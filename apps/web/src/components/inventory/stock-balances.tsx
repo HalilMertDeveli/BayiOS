@@ -11,9 +11,9 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
 import { Table, type TableColumn } from "@/components/ui/table";
-import { balanceQuery, findVariantByCode, listBalances, type Balance } from "@/lib/inventory/api";
+import { balanceQuery, listBalances, type Balance } from "@/lib/inventory/api";
 import { RECEIPT_HREF, adjustmentHref, parseBalanceQuery, toBalanceSearch, variantStockHref, type BalanceListQuery } from "@/lib/inventory/balance-query";
-import { inventoryErrorMessage } from "@/lib/inventory/errors";
+import { inventoryErrorMessage, isSearchTooBroad } from "@/lib/inventory/errors";
 import { inventoryPermissions } from "@/lib/inventory/permissions";
 import { formatQuantity } from "@/lib/inventory/quantity";
 import { useSession } from "@/lib/session/session-context";
@@ -21,22 +21,24 @@ import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
 import { AvailableQuantity } from "./quantity-cells";
 import { useLocationNames, useVariantDirectory, useWarehouseNames, useWarehouses } from "./use-inventory-data";
 
-type Filter = { variantId: string | null; warehouseId: string | null };
+type Filter = { q: string | null; warehouseId: string | null };
 
 type ListData =
   | { key: string; status: "ready"; filter: Filter; items: Balance[]; nextCursor: string | null; hasMore: boolean }
   | { key: string; status: "nomatch"; term: string }
+  | { key: string; status: "tooBroad"; term: string }
   | { key: string; status: "error"; message: string };
 
 type MoreState = { status: "idle" } | { status: "loading" } | { status: "error"; message: string };
 
 /**
  * W07 stock balances: physical (rafta), reserved (ayrılmış) and available (satılabilir) per variant, warehouse and
- * location. Filter by warehouse and by an exact SKU/barcode (scanner friendly: Enter submits); keyset paging.
+ * location. Filter by warehouse and by free text (GET /inventory/balances?q=: SKU, barcode or product name — scanner
+ * friendly, Enter submits); keyset paging. A term matching too many products gets 422 → "Aramayı daraltın".
  */
 export function StockBalances() {
-  const { api, role } = useSession();
-  const permissions = inventoryPermissions(role);
+  const { api, access } = useSession();
+  const permissions = inventoryPermissions(access);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -68,23 +70,19 @@ export function StockBalances() {
     const controller = new AbortController();
     const { signal } = controller;
     (async () => {
-      let variantId: string | null = null;
-      if (query.q) {
-        const variant = await findVariantByCode(api, query.q, signal);
-        if (signal.aborted) return;
-        if (!variant) {
-          setData({ key: dataKey, status: "nomatch", term: query.q });
-          return;
-        }
-        variantId = variant.id;
-      }
-      const filter: Filter = { variantId, warehouseId: query.warehouseId || null };
+      const filter: Filter = { q: query.q || null, warehouseId: query.warehouseId || null };
       const page = await listBalances(api, balanceQuery(filter), signal);
       if (signal.aborted) return;
       setMore({ status: "idle" });
+      if (filter.q && page.items.length === 0) {
+        setData({ key: dataKey, status: "nomatch", term: filter.q });
+        return;
+      }
       setData({ key: dataKey, status: "ready", filter, items: page.items, nextCursor: page.page.nextCursor, hasMore: page.page.hasMore });
     })().catch((error: unknown) => {
-      if (!signal.aborted) setData({ key: dataKey, status: "error", message: inventoryErrorMessage(error) });
+      if (signal.aborted) return;
+      if (isSearchTooBroad(error)) setData({ key: dataKey, status: "tooBroad", term: query.q });
+      else setData({ key: dataKey, status: "error", message: inventoryErrorMessage(error) });
     });
     return () => controller.abort();
     // query.q / query.warehouseId are encoded in dataKey.
@@ -175,12 +173,24 @@ export function StockBalances() {
   ];
 
   const emptyView =
-    current?.status === "nomatch" ? (
+    current?.status === "tooBroad" ? (
+      <EmptyState
+        headingLevel="h3"
+        icon={<SearchX className="size-6" />}
+        title="Aramayı daraltın"
+        description={`"${current.term}" çok fazla ürünle eşleşiyor. Daha uzun bir SKU, barkod veya ürün adı yazın.`}
+        action={
+          <Button variant="secondary" onClick={() => navigate({ warehouseId: query.warehouseId, q: "" })}>
+            Aramayı temizle
+          </Button>
+        }
+      />
+    ) : current?.status === "nomatch" ? (
       <EmptyState
         headingLevel="h3"
         icon={<SearchX className="size-6" />}
         title="Ürün bulunamadı"
-        description={`"${current.term}" SKU veya barkoduyla eşleşen ürün yok. Kodu kontrol edin.`}
+        description={`"${current.term}" ile eşleşen stok kaydı yok. SKU, barkod veya ürün adını kontrol edin.`}
         action={
           <Button variant="secondary" onClick={() => navigate({ warehouseId: query.warehouseId, q: "" })}>
             Aramayı temizle
@@ -253,10 +263,10 @@ export function StockBalances() {
             disabled={warehouses.status !== "ready"}
             onChange={(e) => navigate({ ...query, warehouseId: e.target.value })}
           />
-          <form role="search" aria-label="SKU veya barkodla ara" onSubmit={submitSearch} className="flex items-start gap-2">
+          <form role="search" aria-label="Stokta ara" onSubmit={submitSearch} className="flex items-start gap-2">
             <Input
-              label="SKU veya barkod"
-              hint="Okutun veya yazıp Enter'a basın (tam eşleşme)."
+              label="SKU, barkod veya ürün adı"
+              hint="Okutun veya yazıp Enter'a basın."
               className="flex-1"
               prefix={<ScanBarcode className="size-4" />}
               value={searchText}

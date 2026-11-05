@@ -48,6 +48,7 @@ export const INVENTORY_MESSAGES: Record<string, string> = {
   "inventory.insufficient_available":
     "Satılabilir stok yetersiz. Siparişler için ayrılmış (rezerve) stok düzeltmeyle düşülemez.",
   "inventory.insufficient_stock": "Stok yetersiz: işlem negatif stok kuralına takıldı.",
+  "inventory.search_too_broad": "Arama çok fazla ürünle eşleşiyor. Aramayı daraltın: daha uzun bir SKU, barkod veya ürün adı yazın.",
   "inventory.busy": "Stok kayıtları şu an başka bir işlem tarafından kullanılıyor. Birkaç saniye sonra tekrar deneyin.",
   "inventory.duplicate_source": "Bu belge satırı stoğa zaten işlenmiş.",
 };
@@ -106,4 +107,9 @@ export function inventoryErrorMessage(error: unknown): string {
     return error.userMessage;
   }
   return "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.";
+}
+
+/** 422 `inventory.search_too_broad`: the balance search matches too many products. */
+export function isSearchTooBroad(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "inventory.search_too_broad";
 }
