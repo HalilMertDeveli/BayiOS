@@ -4,6 +4,8 @@ using System.Text.Json;
 using BayiOS.Modules.Inventory.Contracts;
 using BayiOS.Modules.Inventory.Domain;
 using BayiOS.Modules.Inventory.Infrastructure.Persistence;
+using BayiOS.SharedKernel.Authorization;
+using BayiOS.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace BayiOS.Modules.Inventory.Application;
@@ -13,7 +15,11 @@ internal sealed record BalanceQuery(Guid? VariantId, Guid? WarehouseId, Guid? Lo
 internal sealed record MovementQuery(Guid? VariantId, Guid? WarehouseId, string? Type, Guid? SourceId, int Limit, InventoryCursor? After);
 
 /// <summary>Read side: tenant-filtered EF queries (RLS underneath), keyset paginated.</summary>
-internal sealed class InventoryQueries(InventoryDbContext db) : IStockQueries
+internal sealed class InventoryQueries(
+    InventoryDbContext db,
+    IAuthorizationContext authorization,
+    IRequestContext requestContext,
+    ITaskContextVariants taskVariants) : IStockQueries
 {
     public const string BalanceSort = "id";
     public const string MovementSort = "-occurredAt";
@@ -52,7 +58,7 @@ internal sealed class InventoryQueries(InventoryDbContext db) : IStockQueries
     /// <summary>Movement history (stock card), newest first; keyset on (occurred_at, id) descending.</summary>
     public async Task<MovementPageResponse> ListMovementsAsync(MovementQuery query, CancellationToken cancellationToken)
     {
-        var movements = db.Movements.AsNoTracking();
+        var movements = await VisibleMovementsAsync(cancellationToken);
         if (query.VariantId is { } variantId)
         {
             movements = movements.Where(m => m.VariantId == variantId);
@@ -92,8 +98,26 @@ internal sealed class InventoryQueries(InventoryDbContext db) : IStockQueries
         return new MovementPageResponse(items, new InventoryPageInfo(next, hasMore, query.Limit));
     }
 
+    /// <returns>Null when missing or outside the caller's movement visibility (404, no existence hint).</returns>
     public async Task<MovementResult?> GetMovementAsync(Guid id, CancellationToken cancellationToken) =>
-        await db.Movements.AsNoTracking().Where(m => m.Id == id).Select(m => ToResponse(m)).SingleOrDefaultAsync(cancellationToken);
+        await (await VisibleMovementsAsync(cancellationToken)).Where(m => m.Id == id).Select(m => ToResponse(m)).SingleOrDefaultAsync(cancellationToken);
+
+    /// <summary>
+    /// <c>inventory.movements.read</c> is "own records" for warehouse_staff (footnote 5): movements they created plus
+    /// movements of variants on their active assigned or pool tasks. Everyone else with the grant sees all.
+    /// </summary>
+    private async Task<IQueryable<InventoryMovement>> VisibleMovementsAsync(CancellationToken cancellationToken)
+    {
+        var movements = db.Movements.AsNoTracking();
+        if (await authorization.ScopeAsync(Permissions.InventoryMovementsRead, cancellationToken) == PermissionScope.All)
+        {
+            return movements;
+        }
+
+        var me = requestContext.UserId ?? throw new InvalidOperationException("No authenticated user.");
+        var variants = (await taskVariants.VariantsForUserAsync(me, cancellationToken)).ToList();
+        return movements.Where(m => m.CreatedBy == me || variants.Contains(m.VariantId));
+    }
 
     public Task<bool> WarehouseHasStockAsync(Guid warehouseId, CancellationToken cancellationToken) =>
         db.Balances.AnyAsync(b => b.WarehouseId == warehouseId && (b.OnHand != 0 || b.Reserved != 0), cancellationToken);

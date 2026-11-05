@@ -1,6 +1,20 @@
 namespace BayiOS.Modules.Identity.Contracts;
 
-public sealed record MeResponse(Guid UserId, string? Email, string? FullName, IReadOnlyList<MembershipResponse> Memberships);
+/// <param name="ActiveTenant">
+/// The tenant selected with the optional <c>X-Tenant-Id</c> header and the caller's effective permissions there; null when
+/// the header is absent or names no active membership.
+/// </param>
+public sealed record MeResponse(Guid UserId, string? Email, string? FullName, IReadOnlyList<MembershipResponse> Memberships, ActiveTenantResponse? ActiveTenant);
+
+/// <summary>Effective permissions in the active tenant: the role matrix with tenant rules (roles-permissions §4) applied.</summary>
+public sealed record ActiveTenantResponse(Guid TenantId, string Role, IReadOnlyList<PermissionGrantResponse> Permissions);
+
+/// <param name="Scope">
+/// <c>all</c> = every record; <c>conditional</c> = K grant limited per record by <paramref name="Condition"/>;
+/// <c>own</c> = O grant, own records only. Permissions the caller does not hold (or whose tenant rule is off) are absent.
+/// </param>
+/// <param name="Condition">Stable condition code (roles-permissions §3 footnote), for <c>conditional</c> / <c>own</c>.</param>
+public sealed record PermissionGrantResponse(string Permission, string Scope, string? Condition);
 
 public sealed record MembershipResponse(Guid TenantId, string TenantName, string TenantSlug, string Role, string Status);
 

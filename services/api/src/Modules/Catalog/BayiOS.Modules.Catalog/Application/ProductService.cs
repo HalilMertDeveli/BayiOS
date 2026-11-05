@@ -53,6 +53,7 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
     public const string SortName = "name";
     public const string VariantSort = "sku";
     public const int MaxVariantsPerRequest = 100;
+    public const int MaxBatchVariants = 100;
 
     public static readonly IReadOnlyList<string> Sorts = [SortCreatedDesc, SortName];
 
@@ -213,6 +214,21 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
     {
         var variant = await db.Variants.AsNoTracking().SingleOrDefaultAsync(v => v.Id == id, cancellationToken);
         return variant is null ? AppError.NotFound() : ToResponse(variant);
+    }
+
+    /// <summary>
+    /// Display lookup by id (any status). Tenant filter and RLS apply: ids that do not exist or belong to another
+    /// tenant are simply absent from the result (no 404, no hint). Ordered by SKU.
+    /// </summary>
+    public async Task<IReadOnlyList<VariantSummaryResponse>> BatchVariantsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        var list = ids.ToList();
+        return await (from variant in db.Variants.AsNoTracking()
+                      join product in db.Products.AsNoTracking() on variant.ProductId equals product.Id
+                      where list.Contains(variant.Id)
+                      orderby variant.Sku, variant.Id
+                      select new VariantSummaryResponse(variant.Id, variant.ProductId, variant.Sku, variant.Name, product.Name, variant.Barcode, variant.Status))
+            .ToListAsync(cancellationToken);
     }
 
     /// <summary>Barcode scan (mobile): exactly one variant or 404.</summary>
@@ -679,6 +695,13 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
 
     private async Task<AppError?> SaveAsync(CancellationToken cancellationToken)
     {
+        // Pre-check so a 409 can name the clashing variant (after a unique violation the transaction is aborted and
+        // cannot be queried). The unique indexes still decide under concurrency; that path has no conflict detail.
+        if (await FindCodeConflictAsync(cancellationToken) is { } taken)
+        {
+            return AppError.CodeTaken(taken);
+        }
+
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -692,6 +715,37 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
         {
             return conflict;
         }
+    }
+
+    /// <summary>An existing variant (other than the ones being saved) that already has a pending SKU or barcode.</summary>
+    private async Task<CodeConflict?> FindCodeConflictAsync(CancellationToken cancellationToken)
+    {
+        var pending = db.ChangeTracker.Entries<ProductVariant>()
+            .Where(e => e.State is EntityState.Added || (e.State is EntityState.Modified
+                && (e.Property(v => v.Sku).IsModified || e.Property(v => v.Barcode).IsModified)))
+            .Select(e => e.Entity)
+            .ToList();
+        if (pending.Count == 0)
+        {
+            return null;
+        }
+
+        var ids = pending.Select(v => v.Id).ToList();
+        var skus = pending.Select(v => v.Sku).Distinct().ToList();
+        var barcodes = pending.Where(v => v.Barcode is not null).Select(v => v.Barcode!).Distinct().ToList();
+        var clash = await db.Variants.AsNoTracking()
+            .Where(v => !ids.Contains(v.Id) && (skus.Contains(v.Sku) || (v.Barcode != null && barcodes.Contains(v.Barcode))))
+            .OrderBy(v => v.Sku)
+            .Select(v => new { v.Id, v.ProductId, v.Sku, v.Barcode })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (clash is null)
+        {
+            return null;
+        }
+
+        return skus.Contains(clash.Sku)
+            ? new CodeConflict("sku", clash.Sku, clash.Id, clash.ProductId, clash.Sku)
+            : new CodeConflict("barcode", clash.Barcode!, clash.Id, clash.ProductId, clash.Sku);
     }
 
     private async Task<ProductResponse> LoadResponseAsync(Product product, CancellationToken cancellationToken)

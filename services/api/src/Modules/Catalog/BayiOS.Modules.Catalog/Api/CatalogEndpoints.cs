@@ -93,6 +93,9 @@ internal static class CatalogEndpoints
         group.MapGet("/variants", ListVariants).WithName("Catalog_ListVariants")
             .WithSummary("Varyant listesi: keyset sayfalama (SKU sırası), arama ve sku/barcode/productId filtresi")
             .RequirePermission(Permissions.CatalogRead);
+        group.MapGet("/variants/batch", BatchVariants).WithName("Catalog_BatchVariants")
+            .WithSummary("Toplu varyant okuma: ids (virgülle, ≤ 100) → SKU, ad, ürün adı, barkod; bulunmayan / başka tenant'a ait id'ler sonuçta yer almaz")
+            .RequirePermission(Permissions.CatalogRead);
         group.MapGet("/variants/lookup", LookupVariant).WithName("Catalog_LookupVariant")
             .WithSummary("Barkod okutma: tek varyant veya 404").RequirePermission(Permissions.CatalogRead)
             .ProducesProblem(StatusCodes.Status404NotFound);
@@ -391,6 +394,35 @@ internal static class CatalogEndpoints
         return TypedResults.Ok(await service.ListVariantsAsync(query, cancellationToken));
     }
 
+    /// <param name="ids">Virgülle ayrılmış varyant UUID'leri (1–100; tekrarlar tekilleştirilir).</param>
+    private static async Task<Results<Ok<ListResponse<VariantSummaryResponse>>, ProblemHttpResult>> BatchVariants(
+        HttpRequest http, string? ids, ProductService service, CancellationToken cancellationToken)
+    {
+        if (RejectUnknownQuery(http, "ids") is { } unknown)
+        {
+            return unknown;
+        }
+
+        var parts = (ids ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var parsed = new HashSet<Guid>();
+        foreach (var part in parts)
+        {
+            if (!Guid.TryParse(part, out var id))
+            {
+                return Malformed("ids must be comma-separated UUIDs");
+            }
+
+            parsed.Add(id);
+        }
+
+        if (parsed.Count is 0 or > ProductService.MaxBatchVariants)
+        {
+            return Malformed($"ids must name 1 to {ProductService.MaxBatchVariants} variants");
+        }
+
+        return TypedResults.Ok(new ListResponse<VariantSummaryResponse>(await service.BatchVariantsAsync(parsed, cancellationToken)));
+    }
+
     private static async Task<Results<Ok<VariantResponse>, ProblemHttpResult>> LookupVariant(
         HttpRequest http, string? barcode, ProductService service, HttpContext context, CancellationToken cancellationToken)
     {
@@ -543,10 +575,25 @@ internal static class CatalogEndpoints
     private static Results<NoContent, ProblemHttpResult> NoContent(AppError? error) =>
         error is null ? TypedResults.NoContent() : Problem(error);
 
-    private static ProblemHttpResult Problem(AppError error) => TypedResults.Problem(
-        error.Errors is null
+    private static ProblemHttpResult Problem(AppError error)
+    {
+        var problem = error.Errors is null
             ? ApiProblems.Create(error.Status, error.Code, error.Title)
-            : ApiProblems.Validation(error.Errors));
+            : ApiProblems.Validation(error.Errors);
+        if (error.Taken is { } conflict)
+        {
+            problem.Extensions["conflict"] = new
+            {
+                field = conflict.Field,
+                value = conflict.Value,
+                variantId = conflict.VariantId,
+                productId = conflict.ProductId,
+                sku = conflict.Sku,
+            };
+        }
+
+        return TypedResults.Problem(problem);
+    }
 
     private static ProblemHttpResult Malformed(string title) =>
         TypedResults.Problem(ApiProblems.Create(StatusCodes.Status400BadRequest, "request.malformed", title));

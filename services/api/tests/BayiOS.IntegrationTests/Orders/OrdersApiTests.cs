@@ -47,7 +47,7 @@ public class OrdersApiTests(ApiFixture fixture)
         Assert.Equal((37.04m, 3.70m, 33.34m), (first.LineSubtotal!.Value, first.LineDiscount!.Value, first.LineTotal!.Value));
         Assert.Equal((0.13m, 0.03m, 0.10m), (order.Lines[1].LineSubtotal!.Value, order.Lines[1].LineDiscount!.Value, order.Lines[1].LineTotal!.Value));
 
-        var totals = order.Order.Totals;
+        var totals = order.Order.Totals!;
         Assert.False(totals.PricesIncludeTax);
         Assert.False(totals.HasUnpricedLines);
         // VAT per rate on the summed base: 33.44 × 20 % = 6.688 → 6.69.
@@ -69,18 +69,18 @@ public class OrdersApiTests(ApiFixture fixture)
         var inclusive = await OrdersKit.ReadAsync(
             await kit.CreateResponseAsync(kit.Owner, [OrdersKit.Line(helmet, 1m)], customer.Customer.Id), HttpStatusCode.Created);
 
-        Assert.True(inclusive.Order.Totals.PricesIncludeTax);
+        Assert.True(inclusive.Order.Totals!.PricesIncludeTax);
         Assert.Equal(118m, inclusive.Lines[0].UnitPrice);
         // Base = 118 × 100 / 120 = 98.333… → 98.33; VAT = 118 − 98.33.
-        Assert.Equal((118m, 0m, 19.67m, 98.33m, 118m), (inclusive.Order.Totals.Subtotal, inclusive.Order.Totals.DiscountTotal,
-            inclusive.Order.Totals.TaxTotal, inclusive.Order.Totals.NetTotal, inclusive.Order.Totals.GrandTotal));
+        Assert.Equal((118m, 0m, 19.67m, 98.33m, 118m), (inclusive.Order.Totals!.Subtotal, inclusive.Order.Totals!.DiscountTotal,
+            inclusive.Order.Totals!.TaxTotal, inclusive.Order.Totals!.NetTotal, inclusive.Order.Totals!.GrandTotal));
 
         // The same list price on a VAT-excluded order is converted with 4-decimal rounding.
         var exclusive = await OrdersKit.ReadAsync(
             await kit.CreateResponseAsync(kit.Owner, [OrdersKit.Line(helmet, 1m)], customer.Customer.Id, pricesIncludeTax: false), HttpStatusCode.Created);
-        Assert.False(exclusive.Order.Totals.PricesIncludeTax);
+        Assert.False(exclusive.Order.Totals!.PricesIncludeTax);
         Assert.Equal(98.3333m, exclusive.Lines[0].UnitPrice);
-        Assert.Equal((98.33m, 19.67m, 118m), (exclusive.Order.Totals.Subtotal, exclusive.Order.Totals.TaxTotal, exclusive.Order.Totals.GrandTotal));
+        Assert.Equal((98.33m, 19.67m, 118m), (exclusive.Order.Totals!.Subtotal, exclusive.Order.Totals!.TaxTotal, exclusive.Order.Totals!.GrandTotal));
     }
 
     [Fact]
@@ -95,8 +95,8 @@ public class OrdersApiTests(ApiFixture fixture)
         Assert.Equal("no_price", line.PriceStatus);
         Assert.Null(line.UnitPrice);
         Assert.Null(line.LineTotal);
-        Assert.True(order.Order.Totals.HasUnpricedLines);
-        Assert.Equal(0m, order.Order.Totals.GrandTotal);
+        Assert.True(order.Order.Totals!.HasUnpricedLines);
+        Assert.Equal(0m, order.Order.Totals!.GrandTotal);
 
         await HttpAssert.ProblemAsync(await OrdersKit.ActAsync(kit.Owner, order, "submit"), HttpStatusCode.UnprocessableEntity, "order.price_missing");
 
@@ -106,7 +106,7 @@ public class OrdersApiTests(ApiFixture fixture)
             new { lines = new[] { OrdersKit.Line(unpriced, 2m, unitPrice: 49.9m, id: line.Id) } },
             CatalogClient.ETag(order.Order.Version)));
         Assert.Equal((49.9m, true, "manual", line.Id), (priced.Lines[0].UnitPrice!.Value, priced.Lines[0].PriceOverridden, priced.Lines[0].PriceSource!, priced.Lines[0].Id));
-        Assert.Equal(119.76m, priced.Order.Totals.GrandTotal);
+        Assert.Equal(119.76m, priced.Order.Totals!.GrandTotal);
 
         var submitted = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, priced, "submit"));
         var approved = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, submitted, "approve"));
@@ -437,7 +437,7 @@ public class OrdersApiTests(ApiFixture fixture)
         var order = await OrdersKit.ReadAsync(await kit.CreateResponseAsync(sales, [OrdersKit.Line(variant, 1m)], customer.Customer.Id), HttpStatusCode.Created);
 
         Assert.Equal((5m, 10m, 190m), (order.Lines[0].DiscountPercent!.Value, order.Lines[0].LineDiscount!.Value, order.Lines[0].LineTotal!.Value));
-        Assert.Equal(228m, order.Order.Totals.GrandTotal);
+        Assert.Equal(228m, order.Order.Totals!.GrandTotal);
         Assert.Equal(0L, await kit.CountAsync($"SELECT count(*) FROM audit.audit_events WHERE tenant_id = $1 AND action = '{AuditActions.OrderPriceOverridden}'"));
     }
 
@@ -528,8 +528,8 @@ public class OrdersApiTests(ApiFixture fixture)
         Assert.Equal([1, 2], edited.Lines.Select(l => l.LineNo));
         Assert.Equal(order.Lines[1].Id, edited.Lines[0].Id);
         Assert.NotEqual(order.Lines[0].Id, edited.Lines[1].Id);
-        Assert.Equal(60m, edited.Order.Totals.Subtotal);
-        Assert.Equal(72m, edited.Order.Totals.GrandTotal);
+        Assert.Equal(60m, edited.Order.Totals!.Subtotal);
+        Assert.Equal(72m, edited.Order.Totals!.GrandTotal);
 
         await HttpAssert.ProblemAsync(
             await kit.Owner.PatchAsync($"/api/v1/orders/{order.Order.Id}", new { notes = "eski" }, CatalogClient.ETag(order.Order.Version)),

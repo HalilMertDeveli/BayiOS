@@ -225,3 +225,12 @@ public interface INegativeStockPolicyProvider
 {
     Task<string> GetPolicyAsync(CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Implemented by the Warehouse module: the variants in a user's task context (roles-permissions footnote 5 —
+/// lines of active picking tasks assigned to them or waiting in the pool).
+/// </summary>
+public interface ITaskContextVariants
+{
+    Task<IReadOnlyList<Guid>> VariantsForUserAsync(Guid userId, CancellationToken cancellationToken);
+}
