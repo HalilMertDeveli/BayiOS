@@ -50,6 +50,10 @@ internal sealed partial class PlatformWorker(
     TimeProvider clock,
     ILogger<PlatformWorker> logger) : BackgroundService
 {
+    /// <summary>Tenant-less platform jobs enqueued once per maintenance interval (threat-model §3.6 allowlist).</summary>
+    public static readonly IReadOnlyList<string> MaintenanceJobTypes =
+        [IdempotencyCleanupJob.Type, QueueCleanupJob.Type, AuditRetentionJob.Type];
+
     private JobsOptions _options = null!;
     private JobStore _store = null!;
     private OutboxDispatcher _dispatcher = null!;
@@ -91,9 +95,13 @@ internal sealed partial class PlatformWorker(
         if (now >= _nextMaintenance)
         {
             var bucket = now.Ticks / Math.Max(_options.MaintenanceInterval.Ticks, TimeSpan.TicksPerSecond);
-            await _store.InsertAsync(
-                new NewJob(null, IdempotencyCleanupJob.Type, "{}", null, -1, 3, $"{IdempotencyCleanupJob.Type}:{bucket.ToString(CultureInfo.InvariantCulture)}", null),
-                cancellationToken);
+            foreach (var type in MaintenanceJobTypes)
+            {
+                await _store.InsertAsync(
+                    new NewJob(null, type, "{}", null, -1, 3, $"{type}:{bucket.ToString(CultureInfo.InvariantCulture)}", null),
+                    cancellationToken);
+            }
+
             _nextMaintenance = now + _options.MaintenanceInterval;
         }
 

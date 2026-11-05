@@ -29,13 +29,17 @@ Ayrıntılı sır tablosu: `docs/security/data-policy.md` §9. Özet:
 - `ConnectionStrings__Default` = `bayios_app` rolü (`NOBYPASSRLS`, tablo sahibi değil); `ConnectionStrings__Migrator` = `bayios_migrator` (yalnızca CI/deploy migration adımı, API'ye verilmez). `postgres`/service-role ile uygulama bağlantısı yasaktır; local compose'da da aynı bootstrap SQL'i (`infra/docker/initdb/`) çalıştırılır.
 - API yapılandırması ASP.NET Core adlandırmasını kullanır (`:` → `__`). Diziler indeksle verilir: CORS için `Cors__AllowedOrigins__0`, `Cors__AllowedOrigins__1`, … (tek değerli `Cors__AllowedOrigins=` diziye bağlanmaz).
 - Eksik `ConnectionStrings__Default` / `Auth__*` ile API yine açılır (`/health` 200) ama kapalı-güvenli kalır: `/health/ready` 503, tüm token'lar 401.
+- `Audit__IpHashKey`: audit kayıtlarındaki istemci IP'sinin HMAC-SHA-256 anahtarı (data-policy §8.5). **Fail-safe:** boşsa API çalışır ama IP hash'i hiç yazılmaz (`ip_hash = NULL`). Doluysa en az 32 bayt olmalı; daha kısası başlangıçta `OptionsValidationException` ile reddedilir (API açılmaz — yanlış sır bir deploy hatasıdır). Ortam başına ayrı rastgele değer (ör. `openssl rand -base64 48`); preview/production'da API host secret'ı, repo'ya asla. Değiştirmek eski hash'lerle karşılaştırmayı keser.
+- `Audit__Retention` 730 günden kısa olamaz (başlangıçta reddedilir; veritabanı tabanı da 2 yıl). Saklama ve kuyruk temizliği saatlik bakım job'larıyla çalışır (`Jobs__Enabled=false` olan instance'ta çalışmaz; o durumda ayrı worker çalıştırılmalıdır).
 - Değişken adları tüm ortamlarda aynı; değerler farklı. API `ASPNETCORE_ENVIRONMENT` = `Development | Preview | Production`.
 
 Örnek değişken adları (değer yok):
 ```
 API (uygulanmış): ConnectionStrings__Default, ConnectionStrings__Migrator (yalnızca migration adımı),
 Auth__Authority (= JWT issuer, https://<ref>.supabase.co/auth/v1), Auth__Audience, Auth__JwksUrl (opsiyonel;
-varsayılan {Authority}/.well-known/jwks.json), Cors__AllowedOrigins__0..n
+varsayılan {Authority}/.well-known/jwks.json), Cors__AllowedOrigins__0..n,
+Audit__IpHashKey (sır; opsiyonel), Audit__Retention (opsiyonel, varsayılan 730.00:00:00),
+Jobs__Enabled, Jobs__SucceededRetention / Jobs__DeadRetention / Jobs__OutboxRetention (opsiyonel; 7 / 30 / 7 gün)
 API (henüz uygulanmadı, ad önerisi): SUPABASE_URL, SUPABASE_SECRET_KEY, STORAGE_BUCKET_IMPORTS, ANTHROPIC_API_KEY,
 AI_MODE (mock|live), AI_DAILY_TENANT_QUOTA, FCM_SERVICE_ACCOUNT_JSON
 Web: NEXT_PUBLIC_API_BASE_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY

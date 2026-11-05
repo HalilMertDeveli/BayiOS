@@ -448,12 +448,13 @@ Not: hacim büyüdüğünde `occurred_at` üzerinden aylık partitioning değerl
 
 **audit.audit_events** — RLS: std · append-only (yalnızca INSERT/SELECT) — #79
 | id · actor_user_id NULL (sistem/job aktörü) · actor_role · action text · entity_type · entity_id uuid NULL · changes jsonb NULL · ip_hash bytea (HMAC-SHA-256, anahtar `Audit:IpHashKey`; anahtar yoksa NULL; data-policy §8) · user_agent (≤ 200, yazdırılabilir) · correlation_id · occurred_at |
-| IX (tenant_id, occurred_at DESC, id DESC) — keyset · IX (tenant_id, entity_type, entity_id, occurred_at DESC) |
+| IX (tenant_id, occurred_at DESC, id DESC) — keyset · IX (tenant_id, entity_type, entity_id, occurred_at DESC) · IX (occurred_at) — saklama temizliği (#89) |
 | CHECK: action `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$` (≤ 100) · `pg_column_size(changes) ≤ 32 KB` |
 
 - Sahibi `PlatformDbContext` (migration `AuditJobsOutbox`); çalışma zamanı: `IAuditLog.RecordAsync` (SharedKernel arayüzü, `BayiOS.Api/Platform/Audit` ham SQL) — **isteğin UnitOfWork transaction'ında** yazar; tenant/aktör/rol/correlation id istek bağlamından gelir.
 - `changes` yalnızca değişen alanlar: `{"alan": {"from": …, "to": …}}`; kişisel veri (vergi no/TCKN, telefon) yalnızca `{"changed": true}`; serbest metin (stok düzeltme sebebi) audit'e kopyalanmaz, kayda id ile bağlanır.
-- `bayios_app`: yalnızca `SELECT, INSERT`; `trg_audit_events_append_only` / `_no_truncate` UPDATE/DELETE/TRUNCATE'i sahip ve süper kullanıcı için de reddeder. Saklama süresi (data-policy §6, 2 yıl) için silme yolu **henüz yok**: bilinçli, gözden geçirilmiş bir istisna gerektirir.
+- `bayios_app`: yalnızca `SELECT, INSERT`; `trg_audit_events_append_only` / `_no_truncate` UPDATE/DELETE/TRUNCATE'i sahip ve süper kullanıcı için de reddeder.
+- **Saklama istisnası (#89, migration `AuditRetentionQueueCleanup`; data-policy §4: 2 yıl):** append-only kuralının **tek** istisnası. `audit.reject_audit_change()` yalnızca şu üç koşul birlikte sağlanınca bir satır **DELETE**'ine izin verir: (1) transaction-yerel `bayios.audit_retention_purge = 'on'` işareti, (2) `current_user` tablo sahibi (`bayios_migrator`), (3) `occurred_at < now() - interval '2 years'` (veritabanındaki sabit taban). UPDATE ve TRUNCATE koşulsuz reddedilir. İşareti sahip olarak koyan tek yol `audit.purge_expired_audit_events(p_retention interval, p_limit int)` — SECURITY DEFINER, sahibi `bayios_migrator`, `search_path = pg_catalog`, PUBLIC'e kapalı, `bayios_app`'e yalnızca EXECUTE; `p_retention < 730 gün` ve `p_limit ∉ 1..10000` reddedilir, kesim `least(now() - p_retention, now() - 2 yıl)`, en eski önce `p_limit` satır siler. Sahip FORCE RLS altında: yalnızca `bayios_migrator`'a özel `audit_retention_select/_delete` politikaları (`occurred_at < now() - 2 yıl`) eklidir. `bayios_app`'in UPDATE/DELETE/TRUNCATE yetkisi yoktur — işareti kendisi koysa da bir şey değişmez; süper kullanıcı sahip olmadığından tetikleyiciye takılır. Tabanı kısaltmak gözden geçirilmiş migration ister; uzatmak yapılandırmadır (`Audit:Retention`, varsayılan ve en az 730 gün). Çalıştıran: tenant'sız `platform.audit_retention` job'ı (saatlik bakım, 1000'lik partiler).
 - Okuma: `GET /api/v1/audit-events` (`audit.read` — owner/admin), filtre: entityType, entityId, action, actorUserId, from, to; keyset sayfalama.
 
 **notifications.device_tokens** — RLS: std (+ `user_id = app.user_id` ile kendi token'ları)
@@ -476,9 +477,9 @@ Not: hacim büyüdüğünde `occurred_at` üzerinden aylık partitioning değerl
 | processed_at | timestamptz NULL | |
 | attempts | int DEFAULT 0 | |
 | next_attempt_at | timestamptz NOT NULL DEFAULT now() | |
-| last_error | text | |
+| last_error | text | yalnızca temizlenmiş hata (`JobErrorSanitizer`, ADR 0006) |
 | IX | (next_attempt_at) WHERE processed_at IS NULL | dispatcher (`ix_outbox_messages_pending`) |
-| IX | (processed_at) WHERE processed_at IS NOT NULL | ileride temizlik |
+| IX | (processed_at) WHERE processed_at IS NOT NULL | `platform.queue_cleanup` (`Jobs:OutboxRetention`, 7 gün) |
 
 **platform.jobs** — RLS yok (§2.3)
 | id **PK** · tenant_id NULL · type text · payload jsonb · status (queued, running, succeeded, dead) · priority smallint · run_after timestamptz · attempts · max_attempts (1–100) · locked_by text · locked_until timestamptz · last_error (≤ 1000) · dedupe_key text NULL · correlation_id · created_at · finished_at |
@@ -487,6 +488,9 @@ Not: hacim büyüdüğünde `occurred_at` üzerinden aylık partitioning değerl
 - Başarısız deneme `failed` durumu tutmaz: `max_attempts` dolmadıysa üstel geri çekilmeyle `queued`'a (`run_after`), dolduysa `dead`'e döner.
 - **Tenant koruması (RLS yerine):** `platform.enforce_queue_tenant()` tetikleyicisi (`trg_jobs_tenant`, `trg_outbox_messages_tenant`) — `app.tenant_id` ayarlıyken (istek veya job handler'ı) yalnızca **aynı** tenant'a satır yazılabilir; tenant'sız bağlam (worker'ın kendi alma/dağıtma transaction'ları) her tenant'ı yazabilir.
 - `bayios_app`: `SELECT, INSERT, UPDATE, DELETE` (jobs, outbox_messages).
+- `last_error` (≤ 1000) yalnızca `JobErrorSanitizer` çıktısıdır: istisna tipi + temizlenmiş mesaj; SQL parametresi, `Detail`, kişisel veri yok (#89).
+- Temizlik (#89): tenant'sız `platform.queue_cleanup` job'ı `succeeded` job'ları `Jobs:SucceededRetention` (7 gün), `dead` job'ları `Jobs:DeadRetention` (30 gün) sonra siler; `queued`/`running` satırlara dokunmaz.
+- Kayıtsız tip: `IBackgroundJobs.EnqueueAsync` handler'ı kayıtlı olmayan tipi transaction içinde reddeder (`UnknownJobTypeException`).
 
 **Süresi dolmuş idempotency anahtarı temizliği:** tenant'sız `platform.idempotency_cleanup` job'ı `platform.purge_expired_idempotency_keys(p_limit)` fonksiyonunu çağırır (SECURITY DEFINER, sahibi `bayios_migrator`, `search_path = pg_catalog`; `bayios_app` yalnızca EXECUTE). Sahip FORCE RLS altında olduğundan yalnızca `bayios_migrator`'a özel `idempotency_purge_select/_delete` politikaları (`expires_at < now()`) eklidir: fonksiyon yalnızca süresi dolmuş satırları görebilir ve silebilir; `idempotency_scope` gevşetilmedi.
 

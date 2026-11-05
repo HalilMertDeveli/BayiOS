@@ -81,6 +81,17 @@ public sealed record OutboxMessage(
         ?? throw new InvalidOperationException($"Outbox message {Id} has an empty payload.");
 }
 
+/// <summary>
+/// Thrown by <see cref="IBackgroundJobs.EnqueueAsync"/> for a job type with no registered handler
+/// (<see cref="JobServiceCollectionExtensions.AddJobHandler{THandler}"/>) or a reserved internal type. A programming
+/// error: the surrounding unit of work must not commit.
+/// </summary>
+public sealed class UnknownJobTypeException(string type)
+    : InvalidOperationException($"Job type '{type}' has no registered handler (AddJobHandler); it cannot be enqueued.")
+{
+    public string JobType { get; } = type;
+}
+
 /// <summary>Registration of a job handler for one job type.</summary>
 public sealed record JobHandlerRegistration(string Type, Type HandlerType);
 
