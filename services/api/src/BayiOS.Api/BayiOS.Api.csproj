@@ -21,6 +21,7 @@
     <ProjectReference Include="..\Modules\Inventory\BayiOS.Modules.Inventory\BayiOS.Modules.Inventory.csproj" />
     <ProjectReference Include="..\Modules\Orders\BayiOS.Modules.Orders\BayiOS.Modules.Orders.csproj" />
     <ProjectReference Include="..\Modules\Pricing\BayiOS.Modules.Pricing\BayiOS.Modules.Pricing.csproj" />
+    <ProjectReference Include="..\Modules\Reports\BayiOS.Modules.Reports\BayiOS.Modules.Reports.csproj" />
     <ProjectReference Include="..\Modules\Warehouse\BayiOS.Modules.Warehouse\BayiOS.Modules.Warehouse.csproj" />
   </ItemGroup>
 

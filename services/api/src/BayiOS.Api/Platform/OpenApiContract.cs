@@ -4,6 +4,8 @@ using BayiOS.Modules.Catalog.Contracts;
 using BayiOS.Modules.Catalog.Domain;
 using BayiOS.Modules.Billing.Contracts;
 using BayiOS.Modules.Identity.Contracts;
+using BayiOS.Modules.Reports.Contracts;
+using BayiOS.Modules.Reports.Domain;
 using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.OpenApi;
@@ -33,6 +35,7 @@ internal static class OpenApiContract
             ["dataType"] = CustomFieldDataTypes.All,
         },
         [typeof(PermissionGrantResponse)] = new() { ["scope"] = ["all", "conditional", "own"] },
+        [typeof(ReportExportRequest)] = new() { ["format"] = ExportFormats.All },
         [typeof(TenantEntitlementsResponse)] = new() { ["status"] = BayiOS.Modules.Billing.Domain.SubscriptionStatuses.All },
         [typeof(SubscriptionResponse)] = new() { ["status"] = BayiOS.Modules.Billing.Domain.SubscriptionStatuses.All },
         [typeof(UsageResponse)] = new() { ["status"] = BayiOS.Modules.Billing.Domain.SubscriptionStatuses.All },

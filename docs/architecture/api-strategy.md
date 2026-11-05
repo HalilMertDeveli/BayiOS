@@ -350,3 +350,32 @@ flowchart LR
 ### 12.12 Platform
 | GET | `/health/live`, `/health/ready` | anonim |
 | GET | `/openapi/v1.json` | yalnızca local/preview |
+
+### 12.13 Reports (#53) — entitlement yok (dışa aktarma hiçbir pakette kilitlenmez, roles-permissions §5)
+| GET | `/reports/critical-stock` (threshold, warehouseId, limit, cursor) | `reports.read` | REP-03: aktif varyantlardan kullanılabilir (Σ eldeki − Σ rezerve) ≤ eşik; hiç bakiyesi olmayan = 0. SKU sırasıyla keyset (100, en fazla 500). Eşik isteğin parametresidir (varsayılan 0) — `inventory.stock_thresholds` (data-model §5.13) henüz yok |
+| GET | `/reports/orders` (from, to, status) | `reports.read` | REP-04: oluşturma günü (Europe/Istanbul) × güncel durum × para birimi; adet ve genel toplam |
+| GET | `/reports/top-products` (from, to, limit) | `reports.read` | REP-06: onaylanmış ve sonrası (approved, picking, packed, shipped, completed) siparişlerin satırları; miktar, sipariş sayısı, tutar (satır toplamı, KDV hariç) |
+| GET | `/reports/stock-movements` (from, to, warehouseId) | `reports.read` | REP-07: ledger, gün × hareket tipi: adet, giriş, çıkış miktarı (maliyet yok) |
+| GET | `/reports/picking-tasks` (from, to, warehouseId) | `reports.read` | REP-05 (tenant düzeyi): pick görevleri, kendi olay gününe göre oluşturulan / tamamlanan / eksikle tamamlanan / iptal, ortalama toplama süresi (dk). Personel kırılımı yok |
+| GET | `/reports/ai-usage` (from, to) | `billing.read` | AI asistan sayaçları (`integrations.ai_usage`) gün bazında: ayrıştırma, AI çağrısı, hata, geri dönüş, token'lar — owner/admin |
+| POST | `/reports/{critical-stock\|orders\|top-products\|stock-movements\|picking-tasks}/export` (İ) | `reports.export` | REP-08: gövde `{ format: csv\|xlsx, …raporun filtreleri }`; almadığı filtre → 422 |
+| POST | `/reports/ai-usage/export` (İ) | `billing.read` | |
+
+> **Uygulanan durum (#53):** Yeni **Reports** modülü salt okunur; iş verisi tutmaz. Veriyi sahibi modüllerin şemasından,
+> `BayiOS.Api/Platform/ReportsPorts.cs` içindeki port adaptörleri okur (her biri yalnız kendi modülünün DbContext'i ve
+> bağlantısı üzerinden, istek transaction'ında: RLS + açık `tenant_id` filtresi; iki modülün tablolarını birleştiren
+> sorgu yok — kritik stok, Inventory'den "eşik üstü" varyant kimliklerini alır, Catalog'da bunları dışlayarak sayfalar).
+> Tarih aralığı varsayılan son 30 gün, en fazla 366 gün; gün = Europe/Istanbul takvim günü (sabit UTC+03:00).
+> **İzinler:** sales (dipnot 4, kayıt düzeyi K) yalnızca sipariş raporları (`orders`, `top-products`) — diğerleri
+> `403 reports.orders_and_customers_only`; warehouse_staff hiçbiri (`403 auth.forbidden`). Tutarlar yalnızca koşulsuz
+> `prices.read.sell` ile dolu (`amountsVisible`); dışa aktarmada tutar kolonları o zaman hiç yazılmaz. Raporlarda ve
+> dosyalarda müşteri, kişi (üye/atanan), adres ve maliyet verisi yoktur.
+> **Dışa aktarma:** senkron, bellekte, en fazla 20.000 satır (`422 reports.export_too_large`). CSV: UTF-8 BOM, `;`
+> ayırıcı (tr-TR liste ayırıcısı; `,` ondalık ayırıcı olduğundan virgüllü CSV Türkçe Excel'de tek kolon açılır),
+> CRLF, RFC 4180 tırnaklama, ondalık virgül (`1234,5`), ISO tarih. XLSX: DocumentFormat.OpenXml (MIT), `OpenXmlWriter`
+> ile ileri yönlü yazım, metin = inline string (formül elemanı hiç yazılmaz), sayılar sayı, günler tarih biçimli.
+> Her metin hücresi `= + - @ TAB CR` ile başlıyorsa başına `'` eklenir (threat-model §6.1; Imports `CsvSanitizer` ile
+> aynı kural). Tenant başına saatte 10 dışa aktarma (threat-model §6.5): `reports.export_requests` (Postgres, tüm
+> instance'larca paylaşılır, tenant başına advisory lock) — aşımda `429 rate_limit.exceeded` + `Retry-After`; reddedilen
+> ve idempotent tekrar edilen istekler sayılmaz. Her dışa aktarma bir audit olayı: `export.downloaded`
+> (`report_export`; yalnızca rapor, biçim, satır sayısı). Export POST'tur çünkü GET transaction'ları salt okunurdur.

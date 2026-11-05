@@ -496,6 +496,16 @@ Not: hacim büyüdüğünde `occurred_at` üzerinden aylık partitioning değerl
 > tenant'sız `integrations.ai_text_retention` job'ı (`PlatformWorker.MaintenanceJobTypes`, saatlik). `integrations.integrations`
 > tablosu henüz yok.
 
+### 5.10a `reports` (#53)
+
+**reports.export_requests** — RLS: std · `bayios_app`: SELECT, INSERT, DELETE (UPDATE yok)
+| id uuid PK · tenant_id · report text CHECK (critical_stock, orders, top_products, stock_movements, picking_tasks, ai_usage) · format text CHECK (csv, xlsx) · row_count int ≥ 0 · created_at timestamptz · IX (tenant_id, created_at DESC) |
+
+Yalnızca saatlik dışa aktarma sınırının sayacıdır (threat-model §6.5): rapor verisi ve kişi (aktör) tutmaz — aktör audit
+olayındadır. Bir tenant'ın her dışa aktarması, aynı transaction'da o tenant'ın 1 günden eski satırlarını siler (RLS
+altında). Reports modülünün başka tablosu yoktur; raporlar sahibi modüllerin tablolarını port adaptörleriyle okur
+(api-strategy §12.13). Modüller arası FK yok.
+
 ### 5.11 `audit` ve `notifications`
 
 **audit.audit_events** — RLS: std · append-only (yalnızca INSERT/SELECT) — #79

@@ -11,6 +11,7 @@ using BayiOS.Modules.Inventory.Infrastructure.Persistence;
 using BayiOS.Modules.Orders.Infrastructure.Persistence;
 using BayiOS.Modules.Platform.Persistence;
 using BayiOS.Modules.Pricing.Infrastructure.Persistence;
+using BayiOS.Modules.Reports.Infrastructure.Persistence;
 using BayiOS.Modules.Warehouse.Infrastructure.Persistence;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -138,6 +139,13 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         await using (var integrations = new IntegrationsDbContext(integrationsOptions.Options, new RequestContext()))
         {
             await integrations.Database.MigrateAsync();
+        }
+
+        var reportsOptions = new DbContextOptionsBuilder<ReportsDbContext>();
+        ReportsDbContext.Configure(reportsOptions, MigratorConnectionString);
+        await using (var reports = new ReportsDbContext(reportsOptions.Options, new RequestContext()))
+        {
+            await reports.Database.MigrateAsync();
         }
     }
 

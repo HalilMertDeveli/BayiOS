@@ -34,6 +34,9 @@
   <Folder Name="/src/Modules/Pricing/">
     <Project Path="src/Modules/Pricing/BayiOS.Modules.Pricing/BayiOS.Modules.Pricing.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Reports/">
+    <Project Path="src/Modules/Reports/BayiOS.Modules.Reports/BayiOS.Modules.Reports.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Warehouse/">
     <Project Path="src/Modules/Warehouse/BayiOS.Modules.Warehouse/BayiOS.Modules.Warehouse.csproj" />
   </Folder>

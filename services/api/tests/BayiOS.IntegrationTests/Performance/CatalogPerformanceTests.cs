@@ -231,6 +231,70 @@ public sealed class CatalogPerformanceTests(ApiFixture fixture)
         Assert.True(over.Count == 0, $"p95 budget {BudgetMs} ms exceeded:\n{string.Join('\n', over)}\n\nAll results:\n{Table(results)}");
     }
 
+    /// <summary>
+    /// #53: the critical-stock report on the 10k catalog (stock 1–7 per variant): every critical variant exactly once
+    /// across keyset pages (SQL truth), first pages within the p95 budget, and a CSV / XLSX export of a few thousand
+    /// rows as a sanity check of the in-memory export path.
+    /// </summary>
+    [Fact]
+    public async Task Critical_stock_report_pages_the_large_catalog_exactly_within_the_p95_budget()
+    {
+        var catalog = await CatalogAsync();
+        var owner = catalog.Owner;
+        await StockEveryActiveVariantAsync(catalog);
+
+        var truth = await catalog.IdsAsync(
+            fixture,
+            """
+            SELECT v.id FROM catalog.product_variants v JOIN catalog.products p ON p.tenant_id = v.tenant_id AND p.id = v.product_id
+            WHERE v.tenant_id = $1 AND v.status = 'active' AND p.status = 'active'
+              AND coalesce((SELECT sum(b.on_hand) - sum(b.reserved) FROM inventory.inventory_balances b
+                            WHERE b.tenant_id = v.tenant_id AND b.variant_id = v.id), 0) <= 2
+            """);
+        await AssertExactlyOnceAsync(owner, "/api/v1/reports/critical-stock?threshold=2&limit=500", truth);
+
+        var scenarios = new (string Name, Func<int, string> Url)[]
+        {
+            ("Critical stock: first page (threshold 2, 100)", _ => "/api/v1/reports/critical-stock?threshold=2"),
+            ("Critical stock: first page (threshold 7, 500)", _ => "/api/v1/reports/critical-stock?threshold=7&limit=500"),
+            ("Critical stock: nothing critical (threshold 0)", _ => "/api/v1/reports/critical-stock"),
+        };
+        var results = new List<(string Name, double P50, double P95, double Max)>();
+        foreach (var (name, url) in scenarios)
+        {
+            var samples = new List<double>();
+            for (var run = 0; run < Warmup + Runs; run++)
+            {
+                var watch = Stopwatch.StartNew();
+                var response = await owner.GetAsync(url(run));
+                await response.Content.ReadAsByteArrayAsync(Ct);
+                Assert.True(response.StatusCode == HttpStatusCode.OK, $"{name}: {(int)response.StatusCode}");
+                if (run >= Warmup)
+                {
+                    samples.Add(watch.Elapsed.TotalMilliseconds);
+                }
+            }
+
+            results.Add((name, Percentile(samples, 50), Percentile(samples, 95), samples.Max()));
+        }
+
+        foreach (var format in new[] { "csv", "xlsx" })
+        {
+            var watch = Stopwatch.StartNew();
+            var response = await owner.SendAsync(HttpMethod.Post, "/api/v1/reports/critical-stock/export", new { format, threshold = 2m });
+            var bytes = await response.Content.ReadAsByteArrayAsync(Ct);
+            var elapsed = watch.Elapsed.TotalMilliseconds;
+            Assert.True(response.StatusCode == HttpStatusCode.OK, $"export {format}: {(int)response.StatusCode}");
+            Assert.True(bytes.Length > 1000);
+            results.Add(($"Export {format.ToUpperInvariant()}: {truth.Count:N0} critical rows (single run, {bytes.Length / 1024:N0} KB)", elapsed, elapsed, elapsed));
+        }
+
+        Report(catalog, results);
+        var over = results.Where(r => r.Name.StartsWith("Critical", StringComparison.Ordinal) && r.P95 >= BudgetMs).Select(r => $"{r.Name}: p95 {r.P95:F1} ms").ToList();
+        Assert.True(over.Count == 0, $"p95 budget {BudgetMs} ms exceeded:\n{string.Join('\n', over)}\n\nAll results:\n{Table(results)}");
+        Assert.True(results.Where(r => r.Name.StartsWith("Export", StringComparison.Ordinal)).All(r => r.Max < 10_000), Table(results));
+    }
+
     /// <summary>One receipt line per active variant (500 lines per receipt) into the default warehouse; once per run.</summary>
     private async Task StockEveryActiveVariantAsync(SyntheticCatalog catalog)
     {
