@@ -145,7 +145,8 @@ up_web() {
   fi
   log "Starting the web app on http://localhost:${WEB_PORT}"
   stop_bg web
-  start_bg web "${STATE_DIR}/web.log" npm --prefix "$web" run start -- -p "$WEB_PORT"
+  # node directly (not `npm run start`): the recorded PID is the server itself, so `down` stops it on every OS.
+  start_bg web "${STATE_DIR}/web.log" node "${web}/node_modules/next/dist/bin/next" start "$web" -p "$WEB_PORT"
   if ! wait_http "http://localhost:${WEB_PORT}/giris" 60 web; then
     cat "${STATE_DIR}/web.log"
     fail "web app did not start"
