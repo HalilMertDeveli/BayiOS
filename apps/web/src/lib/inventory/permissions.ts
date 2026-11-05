@@ -1,10 +1,15 @@
-import type { Role } from "@/lib/navigation";
+import type { Access } from "@/lib/session/access";
 
 export type InventoryPermissions = {
-  /** inventory.read — balances, warehouses and locations (every role). */
+  /** inventory.read — balances, warehouses and locations. */
   read: boolean;
-  /** inventory.movements.read — movement history. warehouse_staff has it only for own records (O), which the API does not grant at endpoint level yet. */
+  /**
+   * inventory.movements.read — movement history. A restricted grant (warehouse staff: own movements and the task
+   * context) still shows the history; the API returns only the rows the caller may see.
+   */
   movements: boolean;
+  /** True when the movement history is filtered to the caller's own records / task context. */
+  movementsOwnOnly: boolean;
   /** inventory.receive — goods receipt. */
   receive: boolean;
   /** inventory.adjust — manual stock adjustment. */
@@ -13,19 +18,14 @@ export type InventoryPermissions = {
   manageWarehouses: boolean;
 };
 
-const MANAGERS: readonly Role[] = ["owner", "admin", "manager"];
-
-/**
- * roles-permissions.md §3.4 (as enforced by the API's RolePermissions: only unconditional ✓ grants pass).
- * /me returns the role only, so the UI derives what to show from it. Visibility only: the API checks again.
- */
-export function inventoryPermissions(role: Role | null): InventoryPermissions {
-  const manager = role !== null && MANAGERS.includes(role);
+/** Inventory actions from the effective permissions (GET /me). Visibility only: the API checks every request again. */
+export function inventoryPermissions(access: Access): InventoryPermissions {
   return {
-    read: role !== null,
-    movements: manager || role === "viewer",
-    receive: manager || role === "warehouse_staff",
-    adjust: manager,
-    manageWarehouses: manager,
+    read: access.canSome("inventory.read"),
+    movements: access.canSome("inventory.movements.read"),
+    movementsOwnOnly: access.canSome("inventory.movements.read") && !access.can("inventory.movements.read"),
+    receive: access.can("inventory.receive"),
+    adjust: access.can("inventory.adjust"),
+    manageWarehouses: access.can("warehouses.manage"),
   };
 }

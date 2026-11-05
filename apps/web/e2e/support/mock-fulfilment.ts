@@ -209,8 +209,9 @@ export function fulfilmentBusyResponse(route: Route, code = "picking.busy") {
   return json(route, 409, problemBody(409, code), { "Retry-After": "1" });
 }
 
+// Simplified: sales (tasks.read.all K¹², tasks of its own orders) sees every task in the mock.
 const PERMS: Record<string, string[]> = {
-  readAll: [...MANAGERS, "viewer"],
+  readAll: [...MANAGERS, "viewer", "sales"],
   readOwn: [...MANAGERS, "warehouse_staff"],
   assign: MANAGERS,
   claim: ["manager", "warehouse_staff"],
@@ -303,7 +304,7 @@ export async function handleFulfilment(route: Route, mock: MockFulfilment, role:
     if (method === "POST" && key && status !== 409) mock.idempotency.set(`${path} ${key}`, { status, body: payload });
     return done(json(route, status, payload));
   };
-  const visible = (t: MockTask) => can("assign") || t.assignedTo === mock.userId || (t.assignedTo === null && active(t));
+  const visible = (t: MockTask) => can("assign") || can("readAll") || t.assignedTo === mock.userId || (t.assignedTo === null && active(t));
 
   // ---- Picking tasks ----
   if (path === "/api/v1/picking-tasks/mine" && method === "GET") {
@@ -324,7 +325,8 @@ export async function handleFulfilment(route: Route, mock: MockFulfilment, role:
   if (taskMatch) {
     const task = mock.tasks.find((t) => t.id === taskMatch[1]);
     const action = taskMatch[2] ?? "";
-    if (!can("readOwn")) return forbidden("tasks.read.own");
+    // GET accepts tasks.read.own or tasks.read.all (x-permission-any-of); work needs tasks.read.own.
+    if (!can("readOwn") && !(method === "GET" && can("readAll"))) return forbidden("tasks.read.own");
     if (!task || !visible(task)) return notFound();
     if (method === "GET" && action === "") return done(json(route, 200, taskBody(task), { ETag: `W/"${task.version}"` }));
     if (method !== "POST") return notFound();
@@ -437,8 +439,8 @@ export async function handleFulfilment(route: Route, mock: MockFulfilment, role:
   }
 
   // ---- Shipments ----
-  if (!can("readOwn")) return forbidden("tasks.read.own");
-  const shipmentVisible = (s: MockShipment) => can("assign") || mock.tasks.find((t) => t.id === s.pickingTaskId)?.assignedTo === mock.userId;
+  if (!can("readOwn") && !(method === "GET" && can("readAll"))) return forbidden("tasks.read.own");
+  const shipmentVisible = (s: MockShipment) => can("assign") || can("readAll") || mock.tasks.find((t) => t.id === s.pickingTaskId)?.assignedTo === mock.userId;
   if (path === "/api/v1/shipments" && method === "GET") {
     const statuses = (url.searchParams.get("status") ?? "").split(",").filter(Boolean);
     const items = mock.shipments.filter((s) => shipmentVisible(s) && (!statuses.length || statuses.includes(s.status)));

@@ -44,8 +44,8 @@ function mutationError(error: unknown): { fields: Record<string, string>; messag
 
 /** /musteriler/gruplar (W18): dealer groups with their price list and default discount. */
 export function DealerGroups() {
-  const { role } = useSession();
-  const permissions = customerPermissions(role);
+  const { access } = useSession();
+  const permissions = customerPermissions(access);
   const { state, reload, upsertGroup } = useCustomerReference();
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<DealerGroup | "new" | null>(null);
@@ -224,8 +224,8 @@ function DealerGroupDialog({
   onClose: () => void;
   onSaved: (g: DealerGroup) => void;
 }) {
-  const { api, role } = useSession();
-  const canAssign = customerPermissions(role).assignPriceLists;
+  const { api, access } = useSession();
+  const canAssign = customerPermissions(access).assignPriceLists;
   const { toast } = useToast();
   const [values, setValues] = useState<DealerGroupFormValues>(() => (group ? dealerGroupToValues(group) : newDealerGroupValues()));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -297,7 +297,7 @@ function DealerGroupDialog({
           value={values.priceListId}
           error={errors.priceListId}
           disabled={!canAssign || !reference.priceListsAvailable}
-          hint={canAssign ? "Yalnızca satış listeleri atanabilir." : "Fiyat listesini işletme sahibi, yönetici veya operasyon müdürü atayabilir."}
+          hint={canAssign ? "Yalnızca satış listeleri atanabilir." : "Fiyat listesi atama yetkiniz yok."}
           onChange={(e) => set({ priceListId: e.target.value })}
         />
         <Input

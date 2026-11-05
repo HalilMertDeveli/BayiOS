@@ -30,11 +30,12 @@ import {
 } from "@/lib/orders/errors";
 import { orderSourceLabels } from "@/lib/orders/labels";
 import { orderPermissions, type OrderPermissions } from "@/lib/orders/permissions";
+import { customerPermissions } from "@/lib/customers/permissions";
 import { useSession } from "@/lib/session/session-context";
 import { FulfillmentBadge, OrderStatus } from "./order-badges";
 import { ReasonDialog } from "./order-actions";
 import { OrderDraftEditor } from "./order-draft-editor";
-import { FulfilmentSection, OrderLinesTable, OrderTotalsPanel, ShortagesPanel } from "./order-lines";
+import { FulfilmentSection, OrderLinesTable, OrderTotalsPanel, ShortagesPanel, pricesHidden } from "./order-lines";
 import { OrderTimeline } from "./order-timeline";
 import { useCustomerNames, useWarehouses, warehouseLabel } from "./use-order-reference";
 
@@ -63,8 +64,8 @@ function BackLink() {
 
 /** /siparisler/[id]: order detail, draft editing, approval actions, fulfilment (read only) and the status history. */
 export function OrderDetailPage({ orderId }: { orderId: string }) {
-  const { api, role } = useSession();
-  const permissions = orderPermissions(role);
+  const { api, access } = useSession();
+  const permissions = orderPermissions(access);
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 
@@ -90,7 +91,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         <BackLink />
         <PageHeader title="Sipariş" />
         <section aria-label="Sipariş durumu" className="rounded-lg border border-line bg-card shadow-e1">
-          <EmptyState icon={<Lock className="size-6" />} title="Siparişi görme yetkiniz yok" description="Depo personeli siparişleri toplama görevleri üzerinden görür." />
+          <EmptyState icon={<Lock className="size-6" />} title="Siparişi görme yetkiniz yok" description="Rolünüz siparişleri görmeye izin vermiyor. Gerekirse işletme yöneticinizle görüşün." />
         </section>
       </>
     );
@@ -115,7 +116,13 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           <EmptyState
             icon={<CircleAlert className="size-6" />}
             title={load.notFound ? "Sipariş bulunamadı" : "Sipariş yüklenemedi"}
-            description={load.notFound ? "Kayıt bu işletmeye ait değil veya bağlantı hatalı." : load.message}
+            description={
+              load.notFound
+                ? permissions.readTaskLinkedOnly
+                  ? "Yalnızca size atanmış veya havuzdaki görevlere bağlı siparişleri görebilirsiniz."
+                  : "Kayıt bu işletmeye ait değil veya bağlantı hatalı."
+                : load.message
+            }
             action={
               load.notFound ? undefined : (
                 <Button
@@ -149,11 +156,13 @@ function OrderView({
   onLoaded: (loaded: LoadedOrder) => void;
   onReload: () => void;
 }) {
-  const { api, state } = useSession();
+  const { api, state, access } = useSession();
   const { toast } = useToast();
   const { order } = loaded.detail;
   const warehouses = useWarehouses();
-  const customers = useCustomerNames([order.customerId]);
+  const canReadCustomers = customerPermissions(access).read;
+  const customers = useCustomerNames(canReadCustomers ? [order.customerId] : []);
+  const hidePrices = pricesHidden(loaded.detail);
   const currentUserId = state.status === "ready" ? state.user.id : null;
 
   const [keys] = useState(() => new IdempotencyKeys());
@@ -170,8 +179,8 @@ function OrderView({
   const noticeRef = useRef<HTMLDivElement>(null);
   const shortagesRef = useRef<HTMLDivElement>(null);
 
-  const actions = availableActions(order, permissions);
-  const editable = isDraftEditable(order, permissions);
+  const actions = availableActions(order, permissions, currentUserId);
+  const editable = isDraftEditable(order, permissions, currentUserId);
   const fulfilment = isInFulfilment(order.status);
   const submitBlock =
     order.status !== "draft"
@@ -313,7 +322,7 @@ function OrderView({
           Sipariş bilgileri
         </h2>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-body sm:grid-cols-2 lg:grid-cols-3">
-          <Info label="Müşteri" value={customer ? `${customer.name} (${customer.code})` : "Yükleniyor…"} />
+          <Info label="Müşteri" value={customer ? `${customer.name} (${customer.code})` : canReadCustomers ? "Yükleniyor…" : "—"} />
           <Info label="Depo" value={warehouseLabel(warehouses, order.warehouseId)} />
           <Info label="Kaynak" value={orderSourceLabels[order.source] ?? order.source} />
           <Info label="Oluşturma" value={dateTime.format(new Date(order.createdAt))} />
@@ -371,8 +380,15 @@ function OrderView({
           <h2 id="order-lines" className="text-h3 text-fg">
             Satırlar
           </h2>
-          {order.status === "draft" && permissions.submit && !permissions.editDraft ? (
-            <p className="text-caption text-fg-muted">Taslağı düzenleme yetkiniz yok; satırlar salt okunur. Düzeltme için yöneticinize başvurun.</p>
+          {order.status === "draft" && permissions.submit && !editable ? (
+            <p className="text-caption text-fg-muted">
+              {permissions.editDraftOwnOnly
+                ? "Bu taslağı başka bir kullanıcı oluşturdu; yalnızca oluşturan kişi veya yönetici düzenleyebilir. Satırlar salt okunur."
+                : "Taslağı düzenleme yetkiniz yok; satırlar salt okunur. Düzeltme için yöneticinize başvurun."}
+            </p>
+          ) : null}
+          {hidePrices ? (
+            <p className="text-caption text-fg-muted">Fiyat ve tutarlar rolünüz gereği gösterilmiyor; miktarlar ve sevkiyat durumu görünür.</p>
           ) : null}
           <OrderLinesTable detail={loaded.detail} showFulfilment={fulfilment} />
         </section>

@@ -15,8 +15,12 @@ export type Sector = (typeof SECTORS)[number];
 export const NEGATIVE_STOCK_POLICIES = ["block", "warn", "allow"] as const;
 export type NegativeStockPolicy = (typeof NEGATIVE_STOCK_POLICIES)[number];
 
-export async function getMe(api: ApiClient, signal?: AbortSignal): Promise<Me> {
-  return (await api.request<Me>("/api/v1/me", { signal })).data;
+/**
+ * GET /api/v1/me. With `tenantId` the optional X-Tenant-Id header is sent and `activeTenant` carries that membership's
+ * role and effective permissions; it is null when the header is absent, or the tenant is foreign or not active.
+ */
+export async function getMe(api: ApiClient, options: { tenantId?: string | null; signal?: AbortSignal } = {}): Promise<Me> {
+  return (await api.request<Me>("/api/v1/me", { tenantId: options.tenantId, signal: options.signal })).data;
 }
 
 /** Creates a tenant; the caller becomes its owner. `idempotencyKey` must be reused for retries of the same attempt. */

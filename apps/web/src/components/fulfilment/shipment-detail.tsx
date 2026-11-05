@@ -59,13 +59,13 @@ function BackLink() {
 
 /** /depo/sevkiyatlar/[id]: pack check (#38), packing shortage and shipment confirmation (#39 on the web). */
 export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
-  const { api, role } = useSession();
-  const permissions = fulfilmentPermissions(role);
+  const { api, access } = useSession();
+  const permissions = fulfilmentPermissions(access);
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!permissions.readOwn) return;
+    if (!permissions.readDetail) return;
     const controller = new AbortController();
     getShipment(api, shipmentId, controller.signal)
       .then((loaded) => !controller.signal.aborted && setLoad({ status: "ready", loaded }))
@@ -74,11 +74,11 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
         setLoad({ status: "error", message: fulfilmentErrorMessage(error), notFound: error instanceof ApiError && error.status === 404 });
       });
     return () => controller.abort();
-  }, [api, shipmentId, attempt, permissions.readOwn]);
+  }, [api, shipmentId, attempt, permissions.readDetail]);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
 
-  if (!permissions.readOwn) {
+  if (!permissions.readDetail) {
     return (
       <>
         <BackLink />
@@ -132,11 +132,11 @@ function ShipmentView({
   onLoaded: (loaded: LoadedShipment) => void;
   onReload: () => void;
 }) {
-  const { api, role } = useSession();
+  const { api, access } = useSession();
   const { toast } = useToast();
   const { shipment } = loaded;
-  const canReadOrder = orderPermissions(role).read;
-  const canReadMovements = inventoryPermissions(role).movements;
+  const canReadOrder = orderPermissions(access).read;
+  const canReadMovements = inventoryPermissions(access).movements;
   const isDraft = shipment.status === "draft";
   const isOpen = shipment.status === "draft" || shipment.status === "packed";
 

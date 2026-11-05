@@ -52,7 +52,8 @@ const DISCOUNT_OPTIONS: { value: DiscountMode; label: string }[] = [
 /**
  * Draft order form for /siparisler/yeni (no `loaded`) and the draft on /siparisler/[id]. Lines are added with the
  * VariantScanner; prices, discounts, VAT and totals are resolved by the API on save and shown from its response — a
- * line without a price stays "Fiyat yok" and blocks submit. Manual prices and discounts only with orders.price.override.
+ * line without a price stays "Fiyat yok" and blocks submit. Manual prices only with an unconditional orders.price.override;
+ * discounts also with a limited one (sales discount limit, enforced by the API).
  */
 export function OrderDraftEditor({
   loaded,
@@ -74,7 +75,10 @@ export function OrderDraftEditor({
   const router = useRouter();
   const { toast } = useToast();
   const warehouses = useWarehouses();
-  const options = useMemo(() => ({ overridePrice: permissions.overridePrice }), [permissions.overridePrice]);
+  const options = useMemo(
+    () => ({ manualPrice: permissions.overridePrice, discount: permissions.discount }),
+    [permissions.overridePrice, permissions.discount],
+  );
   const customerNames = useCustomerNames(loaded ? [loaded.detail.order.customerId] : []);
 
   const original = useMemo(() => (loaded ? draftValuesFromDetail(loaded.detail) : null), [loaded]);
@@ -272,7 +276,9 @@ export function OrderDraftEditor({
                 server={line.id ? (serverLines.get(line.id) ?? null) : null}
                 currency={currency}
                 errors={errors}
-                overridePrice={permissions.overridePrice}
+                manualPrice={permissions.overridePrice}
+                discount={permissions.discount}
+                discountLimited={permissions.discountLimited}
                 flaggedUnpriced={unpricedLineIndexes.includes(i)}
                 onChange={(patch) => setLine(line.key, patch)}
                 onRemove={() => setValues((v) => ({ ...v, lines: v.lines.filter((l) => l.key !== line.key) }))}
@@ -307,7 +313,9 @@ function DraftLineRow({
   server,
   currency,
   errors,
-  overridePrice,
+  manualPrice,
+  discount,
+  discountLimited,
   flaggedUnpriced,
   onChange,
   onRemove,
@@ -317,7 +325,12 @@ function DraftLineRow({
   server: OrderLine | null;
   currency: string;
   errors: Record<string, string>;
-  overridePrice: boolean;
+  /** Unconditional orders.price.override: manual unit price. */
+  manualPrice: boolean;
+  /** orders.price.override in any scope: line discount. */
+  discount: boolean;
+  /** The discount is capped by the tenant's sales limit (the API enforces it). */
+  discountLimited: boolean;
   flaggedUnpriced: boolean;
   onChange: (patch: Partial<DraftLine>) => void;
   onRemove: () => void;
@@ -354,7 +367,7 @@ function DraftLineRow({
       </div>
       {noPrice ? (
         <p className="text-caption text-danger-fg">
-          Bu ürünün müşteri için geçerli bir fiyatı yok. {overridePrice ? "Manuel fiyat girin veya" : "Yetkili bir kullanıcıdan manuel fiyat isteyin veya"} fiyat
+          Bu ürünün müşteri için geçerli bir fiyatı yok. {manualPrice ? "Manuel fiyat girin veya" : "Yetkili bir kullanıcıdan manuel fiyat isteyin veya"} fiyat
           listesine fiyat ekleyin; aksi hâlde sipariş onaya gönderilemez.
         </p>
       ) : null}
@@ -367,21 +380,24 @@ function DraftLineRow({
           suffix={server?.unit}
           onChange={(e) => onChange({ quantity: e.target.value })}
         />
-        {overridePrice ? (
+        {manualPrice ? (
+          <Input
+            label={`${sku} manuel birim fiyat`}
+            inputMode="decimal"
+            placeholder="Liste fiyatı"
+            hint="Boş: fiyat listesinden"
+            value={line.unitPrice}
+            error={errors[`lines[${index}].unitPrice`]}
+            onChange={(e) => onChange({ unitPrice: e.target.value })}
+          />
+        ) : null}
+        {discount ? (
           <>
-            <Input
-              label={`${sku} manuel birim fiyat`}
-              inputMode="decimal"
-              placeholder="Liste fiyatı"
-              hint="Boş: fiyat listesinden"
-              value={line.unitPrice}
-              error={errors[`lines[${index}].unitPrice`]}
-              onChange={(e) => onChange({ unitPrice: e.target.value })}
-            />
             <Select
               label={`${sku} iskonto türü`}
               options={DISCOUNT_OPTIONS}
               value={line.discountMode}
+              hint={discountLimited ? "İşletmenizin iskonto sınırı içinde." : undefined}
               onChange={(e) => onChange({ discountMode: e.target.value as DiscountMode, discount: "" })}
             />
             {line.discountMode !== "none" ? (

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildCustomFieldCreate, buildCustomFieldPatch, customFieldToValues, keyFromLabel, newCustomFieldValues } from "./custom-field-form";
 import { IdempotencyKeys } from "./idempotency";
-import { catalogPermissions } from "./permissions";
 import { field } from "./test-fixtures";
 
 describe("keyFromLabel", () => {
@@ -50,12 +49,3 @@ describe("IdempotencyKeys", () => {
   });
 });
 
-describe("catalogPermissions", () => {
-  it("follows roles-permissions §3.2", () => {
-    expect(catalogPermissions("owner")).toEqual({ write: true, manageFields: true });
-    expect(catalogPermissions("manager")).toEqual({ write: true, manageFields: false });
-    expect(catalogPermissions("sales")).toEqual({ write: false, manageFields: false });
-    expect(catalogPermissions("viewer")).toEqual({ write: false, manageFields: false });
-    expect(catalogPermissions(null)).toEqual({ write: false, manageFields: false });
-  });
-});

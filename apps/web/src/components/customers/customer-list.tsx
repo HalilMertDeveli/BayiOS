@@ -42,8 +42,8 @@ type MoreState = { status: "idle" } | { status: "loading" } | { status: "error";
  * API returns them: 11-digit (TCKN) numbers arrive masked in lists (data-policy §2).
  */
 export function CustomerList() {
-  const { api, role } = useSession();
-  const permissions = customerPermissions(role);
+  const { api, access } = useSession();
+  const permissions = customerPermissions(access);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

@@ -35,8 +35,8 @@ type MoreState = { status: "idle" } | { status: "loading" } | { status: "error";
  * location. Filter by warehouse and by an exact SKU/barcode (scanner friendly: Enter submits); keyset paging.
  */
 export function StockBalances() {
-  const { api, role } = useSession();
-  const permissions = inventoryPermissions(role);
+  const { api, access } = useSession();
+  const permissions = inventoryPermissions(access);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

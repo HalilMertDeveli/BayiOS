@@ -13,8 +13,10 @@ import {
 import { orderDetail, orderLine } from "./test-fixtures";
 
 const variant = { id: "var-9", sku: "LED-9", name: null, barcode: null };
-const manager = { overridePrice: true };
-const sales = { overridePrice: false };
+const manager = { manualPrice: true, discount: true };
+const sales = { manualPrice: false, discount: false };
+/** Sales under a tenant discount limit (orders.price.override conditional): discounts yes, manual price no. */
+const limitedSales = { manualPrice: false, discount: true };
 
 function withLine(patch: Partial<ReturnType<typeof newDraftLine>> = {}): DraftValues {
   return { ...newDraftValues("wh-1"), customer: { id: "cus-1", name: "Müşteri", code: "C1" }, lines: [{ ...newDraftLine(variant), ...patch }] };
@@ -42,6 +44,14 @@ describe("buildLineInputs / buildCreateRequest", () => {
     const values = withLine({ quantity: "2,5", unitPrice: "99,90", discountMode: "percent", discount: "5" });
     expect(buildLineInputs(values, sales)).toEqual([{ id: null, variantId: "var-9", quantity: "2.5", unitPrice: null, discountPercent: null, discountAmount: null }]);
     expect(buildLineInputs(values, manager)).toEqual([{ id: null, variantId: "var-9", quantity: "2.5", unitPrice: "99.90", discountPercent: "5", discountAmount: null }]);
+  });
+
+  it("a limited discount grant (sales, K¹⁰) sends discounts but never a manual price", () => {
+    const values = withLine({ quantity: "2", unitPrice: "99,90", discountMode: "percent", discount: "5" });
+    expect(buildLineInputs(values, limitedSales)).toEqual([{ id: null, variantId: "var-9", quantity: "2", unitPrice: null, discountPercent: "5", discountAmount: null }]);
+    expect(validateDraft(withLine({ unitPrice: "abc", discountMode: "percent", discount: "101" }), limitedSales)).toEqual({
+      "lines[0].discountPercent": "0 ile 100 arasında, en fazla 2 ondalıklı bir oran girin.",
+    });
   });
 
   it("creates a manual draft; empty optional fields are null", () => {

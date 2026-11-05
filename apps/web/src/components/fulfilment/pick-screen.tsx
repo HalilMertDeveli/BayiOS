@@ -70,13 +70,13 @@ function BackLink() {
 
 /** /depo/gorevler/[id]: shelf-ordered pick list with the scan flow (#37) and shortage reporting (#38). */
 export function PickScreen({ taskId }: { taskId: string }) {
-  const { api, role } = useSession();
-  const permissions = fulfilmentPermissions(role);
+  const { api, access } = useSession();
+  const permissions = fulfilmentPermissions(access);
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!permissions.readOwn) return;
+    if (!permissions.readDetail) return;
     const controller = new AbortController();
     getTask(api, taskId, controller.signal)
       .then((loaded) => !controller.signal.aborted && setLoad({ status: "ready", loaded }))
@@ -85,17 +85,17 @@ export function PickScreen({ taskId }: { taskId: string }) {
         setLoad({ status: "error", message: fulfilmentErrorMessage(error), notFound: error instanceof ApiError && error.status === 404 });
       });
     return () => controller.abort();
-  }, [api, taskId, attempt, permissions.readOwn]);
+  }, [api, taskId, attempt, permissions.readDetail]);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
 
-  if (!permissions.readOwn) {
+  if (!permissions.readDetail) {
     return (
       <>
         <BackLink />
         <PageHeader title="Toplama görevi" />
         <section aria-label="Görev" className="rounded-lg border border-line bg-card shadow-e1">
-          <EmptyState icon={<Lock className="size-6" />} title="Görev ayrıntısını görme yetkiniz yok" description="Görev listesini görebilirsiniz; toplama ekranı depo personeli ve yöneticiler içindir." />
+          <EmptyState icon={<Lock className="size-6" />} title="Görev ayrıntısını görme yetkiniz yok" description="Rolünüz görev ayrıntısını görmeye izin vermiyor. Gerekirse işletme yöneticinizle görüşün." />
         </section>
       </>
     );

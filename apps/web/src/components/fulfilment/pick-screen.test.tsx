@@ -4,8 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/ui/toast";
 import { ApiError, type ApiClient, type RequestOptions } from "@/lib/api/client";
 import { twoShelfTask } from "@/lib/fulfilment/test-fixtures";
-import type { Role } from "@/lib/navigation";
-import { SessionContext, type SessionContextValue } from "@/lib/session/session-context";
+import { NO_ACCESS } from "@/lib/session/access";
+import { SessionContext } from "@/lib/session/session-context";
+import type { FixtureRole } from "@/test/me-fixtures";
+import { mockSession } from "@/test/session";
 import { PickScreen } from "./pick-screen";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/depo/gorevler/t1", useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
@@ -25,15 +27,9 @@ function fakeApi(scan: (body: Record<string, unknown>) => unknown) {
   return { api, calls };
 }
 
-function renderScreen(api: ApiClient, role: Role = "warehouse_staff") {
-  const value: SessionContextValue = {
-    state: { status: "ready", user: { id: "u1", email: null, fullName: null }, memberships: [], active: null },
-    api,
-    role,
-    selectTenant: vi.fn(),
-    reload: vi.fn(),
-    signOut: vi.fn(),
-  };
+function renderScreen(api: ApiClient, role: FixtureRole = "warehouse_staff", options: { noAccess?: boolean } = {}) {
+  // MOCK session: permissions as GET /me returns them for the role (src/test/me-fixtures.ts).
+  const value = mockSession(role, { api, user: { id: "u1", email: "", fullName: "" }, ...(options.noAccess ? { access: NO_ACCESS } : {}) });
   return render(
     <SessionContext value={value}>
       <ToastProvider>
@@ -150,9 +146,18 @@ describe("PickScreen scan flow", () => {
     expect(scans[1].options.body).toEqual(scans[0].options.body);
   });
 
-  it("a viewer cannot open the pick screen", () => {
+  it("a viewer (tasks.read.all) sees the task read-only: no scan fields, no claim", async () => {
     const { api, calls } = fakeApi(() => progress(1));
     renderScreen(api, "viewer");
+    expect(await screen.findByText("MOCK-001", { exact: false })).toBeTruthy();
+    expect(screen.queryByLabelText("Raf barkodu")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Üstlen" })).toBeNull();
+    expect(calls.map((c) => c.path)).toEqual(["/api/v1/picking-tasks/t1"]);
+  });
+
+  it("without any task permission the pick screen is not loaded", () => {
+    const { api, calls } = fakeApi(() => progress(1));
+    renderScreen(api, "viewer", { noAccess: true });
     expect(screen.getByText("Görev ayrıntısını görme yetkiniz yok")).toBeTruthy();
     expect(calls).toHaveLength(0);
   });

@@ -57,8 +57,8 @@ export function usePriceLists(includeArchived: boolean) {
 
 /** /fiyat-listeleri (W18): sales and (for cost-permitted roles) purchase lists; default first. */
 export function PriceListIndex() {
-  const { role } = useSession();
-  const permissions = pricingPermissions(role);
+  const { access } = useSession();
+  const permissions = pricingPermissions(access);
   const [showArchived, setShowArchived] = useState(false);
   const { state, reload } = usePriceLists(showArchived);
   const [creating, setCreating] = useState(false);
@@ -119,7 +119,7 @@ export function PriceListIndex() {
       />
       {!permissions.write ? (
         <FormAlert tone="info" title="Salt okunur görünüm">
-          Fiyat listelerini işletme sahibi veya yönetici düzenler. Fiyatları “Fiyat sorgula” ile müşteri bazında görebilirsiniz.
+          Fiyat listelerini düzenleme yetkiniz yok. Fiyatları “Fiyat sorgula” ile müşteri bazında görebilirsiniz.
         </FormAlert>
       ) : null}
 

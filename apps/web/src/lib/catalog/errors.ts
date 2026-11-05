@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api/client";
+import type { components } from "@/lib/api/schema";
 
 /**
  * The API's per-field validation messages are English developer text (api-strategy §6). They are never shown
@@ -78,6 +79,50 @@ export const CATALOG_CONFLICTS: Record<string, string> = {
   "catalog.field_limit_reached": "Aktif özel alan sınırına ulaşıldı. Kullanmadığınız bir alanı arşivleyin.",
   "catalog.brand_name_taken": "Bu marka adı zaten kayıtlı.",
 };
+
+export type CodeConflict = components["schemas"]["CodeConflict"];
+
+/** The `conflict` detail of a 409 catalog.sku_taken / catalog.barcode_taken (absent when only the DB index caught it). */
+export function readCodeConflict(error: unknown): { field: "sku" | "barcode"; conflict: CodeConflict | null } | null {
+  if (!(error instanceof ApiError) || (error.code !== "catalog.sku_taken" && error.code !== "catalog.barcode_taken")) return null;
+  const field = error.code === "catalog.sku_taken" ? "sku" : "barcode";
+  const raw = error.problem?.conflict;
+  const conflict = raw && typeof raw === "object" ? (raw as CodeConflict) : null;
+  return { field: conflict?.field ?? field, conflict };
+}
+
+const sameCode = (a: string, b: string) => a.trim().toLocaleUpperCase("tr-TR") === b.trim().toLocaleUpperCase("tr-TR");
+
+/**
+ * Row (0-based) of the form whose SKU / barcode is the taken value. Falls back to the only row of a single-variant form;
+ * -1 when the row cannot be told (the message then goes to the form summary).
+ */
+export function conflictRowIndex(rows: readonly { sku: string; barcode: string }[], taken: { field: "sku" | "barcode"; conflict: CodeConflict | null }): number {
+  const value = taken.conflict?.value;
+  if (value) {
+    const index = rows.findIndex((r) => sameCode(taken.field === "sku" ? r.sku : r.barcode, value));
+    if (index >= 0) return index;
+  }
+  return rows.length === 1 ? 0 : -1;
+}
+
+/**
+ * Field message naming who holds the code: another variant of this product, or another product (barcode conflicts
+ * also name the holder's SKU, which the user can search for).
+ */
+export function codeConflictMessage(taken: { field: "sku" | "barcode"; conflict: CodeConflict | null }, currentProductId: string | null = null): string {
+  const { field, conflict } = taken;
+  const sameProduct = currentProductId !== null && conflict?.productId === currentProductId;
+  if (field === "sku") {
+    return sameProduct ? "Bu SKU bu ürünün başka bir varyantında kullanılıyor. Farklı bir SKU girin." : CATALOG_CONFLICTS["catalog.sku_taken"];
+  }
+  const holder = conflict?.sku ? ` (SKU ${conflict.sku})` : "";
+  return sameProduct
+    ? `Bu barkod bu ürünün başka bir varyantında${holder} kullanılıyor. Farklı bir barkod girin.`
+    : conflict?.sku
+      ? `Bu barkod başka bir üründeki varyantta${holder} kullanılıyor. Farklı bir barkod girin.`
+      : CATALOG_CONFLICTS["catalog.barcode_taken"];
+}
 
 /** True for the optimistic-concurrency failure (412 / concurrency.version_mismatch). */
 export function isVersionConflict(error: unknown): boolean {

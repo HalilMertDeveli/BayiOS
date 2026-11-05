@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { customerPermissions } from "@/lib/customers/permissions";
-import { ROLES } from "@/lib/navigation";
+import { catalogPermissions } from "@/lib/catalog/permissions";
+import { NO_ACCESS } from "@/lib/session/access";
+import type { FixtureRole } from "@/test/me-fixtures";
+import { accessFor } from "@/test/session";
 import { pricingPermissions } from "./permissions";
 
-describe("pricingPermissions (roles-permissions §3.2)", () => {
-  it("matches the API's unconditional grants per role", () => {
-    const table = Object.fromEntries(ROLES.map((r) => [r, pricingPermissions(r)]));
+const ROLES: FixtureRole[] = ["owner", "admin", "manager", "sales", "warehouse_staff", "viewer"];
+
+describe("pricingPermissions — derived from GET /me effective permissions", () => {
+  it("per role (default tenant rules)", () => {
+    const table = Object.fromEntries(ROLES.map((r) => [r, pricingPermissions(accessFor(r))]));
     expect(table).toEqual({
       owner: { readSell: true, readCost: true, write: true, assign: true },
       admin: { readSell: true, readCost: true, write: true, assign: true },
-      // prices.read.cost is conditional (K³) for manager/viewer: purchase lists stay hidden.
+      // prices.read.cost depends on a tenant rule for manager/viewer (K³): off by default.
       manager: { readSell: true, readCost: false, write: false, assign: true },
       sales: { readSell: true, readCost: false, write: false, assign: false },
       warehouse_staff: { readSell: false, readCost: false, write: false, assign: false },
@@ -17,14 +22,19 @@ describe("pricingPermissions (roles-permissions §3.2)", () => {
     });
   });
 
-  it("grants nothing without a role", () => {
-    expect(pricingPermissions(null)).toEqual({ readSell: false, readCost: false, write: false, assign: false });
+  it("follows the tenant rule for cost prices (the API reports it as granted when the rule is on)", () => {
+    expect(pricingPermissions(accessFor("manager", { showCostToManager: true })).readCost).toBe(true);
+    expect(pricingPermissions(accessFor("viewer", { showCostToViewer: true })).readCost).toBe(true);
+  });
+
+  it("grants nothing without a tenant", () => {
+    expect(pricingPermissions(NO_ACCESS)).toEqual({ readSell: false, readCost: false, write: false, assign: false });
   });
 });
 
-describe("customerPermissions (roles-permissions §3.5 + anonymize = tenant.settings.manage)", () => {
-  it("matches the API per role", () => {
-    const table = Object.fromEntries(ROLES.map((r) => [r, customerPermissions(r)]));
+describe("customerPermissions — anonymize = tenant.settings.manage", () => {
+  it("per role", () => {
+    const table = Object.fromEntries(ROLES.map((r) => [r, customerPermissions(accessFor(r))]));
     expect(table).toEqual({
       owner: { read: true, write: true, manageGroups: true, assignPriceLists: true, anonymize: true },
       admin: { read: true, write: true, manageGroups: true, assignPriceLists: true, anonymize: true },
@@ -33,5 +43,15 @@ describe("customerPermissions (roles-permissions §3.5 + anonymize = tenant.sett
       warehouse_staff: { read: false, write: false, manageGroups: false, assignPriceLists: false, anonymize: false },
       viewer: { read: true, write: false, manageGroups: false, assignPriceLists: false, anonymize: false },
     });
+  });
+});
+
+describe("catalogPermissions", () => {
+  it("per role", () => {
+    expect(catalogPermissions(accessFor("owner"))).toEqual({ write: true, manageFields: true });
+    expect(catalogPermissions(accessFor("manager"))).toEqual({ write: true, manageFields: false });
+    expect(catalogPermissions(accessFor("sales"))).toEqual({ write: false, manageFields: false });
+    expect(catalogPermissions(accessFor("viewer"))).toEqual({ write: false, manageFields: false });
+    expect(catalogPermissions(NO_ACCESS)).toEqual({ write: false, manageFields: false });
   });
 });

@@ -37,8 +37,8 @@ function BackLink() {
 
 /** /fiyat-listeleri/[id]: list settings (If-Match / 412) and its items (tiers, bulk upsert). */
 export function PriceListDetail({ priceListId }: { priceListId: string }) {
-  const { api, role } = useSession();
-  const canWrite = pricingPermissions(role).write;
+  const { api, access } = useSession();
+  const canWrite = pricingPermissions(access).write;
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 
@@ -102,8 +102,8 @@ export function PriceListDetail({ priceListId }: { priceListId: string }) {
 }
 
 function SettingsAndItems({ loaded, onSaved, onReload }: { loaded: Loaded; onSaved: (list: PriceList, etag: string) => void; onReload: () => void }) {
-  const { api, role } = useSession();
-  const permissions = pricingPermissions(role);
+  const { api, access } = useSession();
+  const permissions = pricingPermissions(access);
   const { toast } = useToast();
   const list = loaded.priceList;
   const archived = list.status === "archived";
@@ -215,7 +215,7 @@ function SettingsAndItems({ loaded, onSaved, onReload }: { loaded: Loaded; onSav
         </FormAlert>
       ) : !permissions.write ? (
         <FormAlert tone="info" title="Salt okunur görünüm">
-          Fiyat listelerini işletme sahibi veya yönetici düzenler.
+          Fiyat listelerini düzenleme yetkiniz yok.
         </FormAlert>
       ) : null}
       {baseName ? (

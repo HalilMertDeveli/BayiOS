@@ -13,8 +13,9 @@ import {
   Warehouse,
   type LucideIcon,
 } from "lucide-react";
+import type { Access } from "@/lib/session/access";
 
-/** Fixed MVP role set (docs/product/roles-permissions.md §2). `dealer_user` is reserved and not assignable. */
+/** Fixed MVP role set (docs/product/roles-permissions.md §2) — for labels only; what a role may do comes from GET /me. */
 export const ROLES = ["owner", "admin", "manager", "sales", "warehouse_staff", "viewer"] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -33,24 +34,21 @@ export type NavItem = {
   /** One-line description shown on the placeholder page. */
   description: string;
   Icon: LucideIcon;
-  /** Roles that see the item. Visibility only — the API enforces permissions. */
-  roles: readonly Role[];
+  /** Whether the effective permissions (GET /me) show the item. Visibility only — the API enforces permissions. */
+  visible: (access: Access) => boolean;
 };
 
 export type NavSection = { id: string; label: string; items: readonly NavItem[] };
 
-const ALL: readonly Role[] = ROLES;
-/** tasks.read.all (owner/admin/manager/viewer) or tasks.read.own (owner/admin/manager/warehouse_staff); sales K¹² fail-closed. */
-const TASK_READERS: readonly Role[] = ["owner", "admin", "manager", "warehouse_staff", "viewer"];
-/** tasks.read.own — shipments list/detail. */
-const WAREHOUSE_WORKERS: readonly Role[] = ["owner", "admin", "manager", "warehouse_staff"];
+const tasks = (a: Access) => a.canSome("tasks.read.all") || a.canSome("tasks.read.own");
 
 /**
- * Menu derived from the page inventory (design-system-plan §4.1) and the permission matrix:
- * Pano → W03 roles; Siparişler → orders.read; Ürünler → catalog.read; Stok → inventory.read;
- * Depo → tasks.read.*; Görevler → tasks.read.all | tasks.read.own; Sevkiyatlar → tasks.read.own; Müşteriler → customers.read; Raporlar → reports.read;
- * Fiyat listeleri → prices.read.sell (W18; dealer groups live under Müşteriler at /musteriler/gruplar);
- * İçe aktarma → imports.run / imports.run.stock; Ayarlar → tenant.settings.manage / members.read.
+ * Menu derived from the page inventory (design-system-plan §4.1) and the effective permissions (any scope: a restricted
+ * grant still opens the screen, the API filters the records):
+ * Pano → orders.read (unconditional) or reports.read; Siparişler → orders.read; Ürünler → catalog.read;
+ * Stok → inventory.read; Depo → inventory.read or tasks; Görevler and Sevkiyatlar → tasks.read.all | tasks.read.own
+ * (x-permission-any-of); Müşteriler → customers.read; Fiyat listeleri → prices.read.sell; Raporlar → reports.read;
+ * İçe aktarma → imports.run | imports.run.stock; Ayarlar → tenant.settings.manage | members.read.
  */
 export const navSections: readonly NavSection[] = [
   {
@@ -62,56 +60,56 @@ export const navSections: readonly NavSection[] = [
         label: "Pano",
         description: "Bekleyen onaylar, kritik stok ve görev özeti burada olacak.",
         Icon: LayoutDashboard,
-        roles: ["owner", "admin", "manager", "sales", "viewer"],
+        visible: (a) => a.can("orders.read") || a.canSome("reports.read"),
       },
       {
         href: "/siparisler",
         label: "Siparişler",
         description: "Sipariş listesi, WhatsApp'tan sipariş ve onay akışı burada olacak.",
         Icon: ShoppingCart,
-        roles: ALL,
+        visible: (a) => a.canSome("orders.read"),
       },
       {
         href: "/urunler",
         label: "Ürünler",
         description: "Ürün kataloğu, barkodlar ve fiyatlar burada olacak.",
         Icon: Package,
-        roles: ALL,
+        visible: (a) => a.canSome("catalog.read"),
       },
       {
         href: "/stok",
         label: "Stok",
         description: "Depo bazında satılabilir, rafta ve ayrılmış stok burada olacak.",
         Icon: Boxes,
-        roles: ALL,
+        visible: (a) => a.canSome("inventory.read"),
       },
       {
         href: "/depo",
         label: "Depo",
         description: "Toplama ve paketleme görevleri, mal kabul ve sayım burada olacak.",
         Icon: Warehouse,
-        roles: ALL,
+        visible: (a) => a.canSome("inventory.read") || tasks(a),
       },
       {
         href: "/depo/gorevler",
         label: "Görevler",
         description: "Toplama görevleri: görevlerim, havuz ve raf sırasıyla barkodlu toplama.",
         Icon: ClipboardList,
-        roles: TASK_READERS,
+        visible: tasks,
       },
       {
         href: "/depo/sevkiyatlar",
         label: "Sevkiyatlar",
         description: "Taslak sevkiyatlar, paket kontrolü ve sevk onayı.",
         Icon: Truck,
-        roles: WAREHOUSE_WORKERS,
+        visible: tasks,
       },
       {
         href: "/musteriler",
         label: "Müşteriler",
         description: "Müşteri kayıtları, adresler, bayi grupları ve fiyat listesi ataması.",
         Icon: Users,
-        roles: ["owner", "admin", "manager", "sales", "viewer"],
+        visible: (a) => a.canSome("customers.read"),
       },
     ],
   },
@@ -124,37 +122,37 @@ export const navSections: readonly NavSection[] = [
         label: "Fiyat listeleri",
         description: "Satış fiyat listeleri, miktar kademeleri ve fiyat sorgulama.",
         Icon: Tags,
-        roles: ["owner", "admin", "manager", "sales", "viewer"],
+        visible: (a) => a.canSome("prices.read.sell"),
       },
       {
         href: "/raporlar",
         label: "Raporlar",
         description: "Satış, stok ve sipariş raporları burada olacak.",
         Icon: ChartColumn,
-        roles: ["owner", "admin", "manager", "sales", "viewer"],
+        visible: (a) => a.canSome("reports.read"),
       },
       {
         href: "/ice-aktarma",
         label: "İçe aktarma",
         description: "Excel/CSV ile ürün, fiyat ve stok içe aktarma burada olacak.",
         Icon: FileUp,
-        roles: ["owner", "admin", "manager"],
+        visible: (a) => a.canSome("imports.run") || a.canSome("imports.run.stock"),
       },
       {
         href: "/ayarlar",
         label: "Ayarlar",
         description: "İşletme, ticari ayarlar, ekip ve roller burada olacak.",
         Icon: Settings,
-        roles: ["owner", "admin", "manager"],
+        visible: (a) => a.canSome("tenant.settings.manage") || a.canSome("members.read"),
       },
     ],
   },
 ];
 
-/** Sections and items visible to a role; empty sections are dropped. */
-export function navForRole(role: Role): NavSection[] {
+/** Sections and items the effective permissions show; empty sections are dropped. */
+export function navFor(access: Access): NavSection[] {
   return navSections
-    .map((section) => ({ ...section, items: section.items.filter((item) => item.roles.includes(role)) }))
+    .map((section) => ({ ...section, items: section.items.filter((item) => item.visible(access)) }))
     .filter((section) => section.items.length > 0);
 }
 
@@ -181,7 +179,10 @@ export function activeHref(pathname: string, hrefs: readonly string[]): string |
   return best;
 }
 
-/** Where a role starts after sign-in / from the logo: warehouse staff go straight to their tasks (W12). */
-export function homeFor(role: Role | null): string {
-  return role === "warehouse_staff" ? "/depo/gorevler" : "/pano";
+/**
+ * Where the user starts after sign-in / from the logo: the dashboard for order-desk users; users whose work is warehouse
+ * tasks (no unconditional orders.read, but tasks.read.own — warehouse staff, W12) go straight to their tasks.
+ */
+export function homeFor(access: Access): string {
+  return !access.can("orders.read") && !access.canSome("reports.read") && access.canSome("tasks.read.own") ? "/depo/gorevler" : "/pano";
 }

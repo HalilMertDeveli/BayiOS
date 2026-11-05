@@ -9,7 +9,7 @@ import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api/client";
 import { addVariant, archiveVariant, etagOf, updateVariant, type CustomField, type Product, type Variant } from "@/lib/catalog/api";
 import { formatAttribute } from "@/lib/catalog/attributes";
-import { CATALOG_CONFLICTS, catalogErrorMessage, isVersionConflict, partitionErrors, serverFieldErrors } from "@/lib/catalog/errors";
+import { catalogErrorMessage, codeConflictMessage, isVersionConflict, partitionErrors, readCodeConflict, serverFieldErrors } from "@/lib/catalog/errors";
 import { IdempotencyKeys } from "@/lib/catalog/idempotency";
 import { buildVariantCreate, buildVariantPatch, emptyVariant, variantToValues, type FormErrors, type VariantFormValues } from "@/lib/catalog/product-form";
 import { useSession } from "@/lib/session/session-context";
@@ -205,10 +205,8 @@ function VariantDialog({
       if (error instanceof ApiError && error.status === 422 && Object.keys(error.fieldErrors).length) {
         return show(prefixed(serverFieldErrors(error)));
       }
-      if (error instanceof ApiError && error.code === "catalog.sku_taken") return show({ [`${PREFIX}sku`]: CATALOG_CONFLICTS[error.code] });
-      if (error instanceof ApiError && error.code === "catalog.barcode_taken") {
-        return show({ [`${PREFIX}barcode`]: CATALOG_CONFLICTS[error.code] });
-      }
+      const taken = readCodeConflict(error);
+      if (taken) return show({ [`${PREFIX}${taken.field}`]: codeConflictMessage(taken, product.id) });
       show({}, [catalogErrorMessage(error)]);
     }
   };

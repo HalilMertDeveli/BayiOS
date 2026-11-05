@@ -151,3 +151,28 @@ describe("problem extensions and Retry-After", () => {
     expect(parseRetryAfter("Thu, 05 Nov 2026 09:59:00 GMT", now)).toBe(0);
   });
 });
+
+describe("GET /me tenant selection and tenant.inactive", () => {
+  it("sends an explicit X-Tenant-Id (tenantId option) without requiring an active tenant", async () => {
+    const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () => Response.json({}));
+    vi.stubGlobal("fetch", fetchMock);
+    const onTenantAccessDenied = vi.fn();
+    const api = createApiClient({ getAccessToken: async () => "t", getTenantId: () => null, onTenantAccessDenied });
+    await api.request("/api/v1/me", { tenantId: "tenant-9" });
+    await api.request("/api/v1/me", { tenantId: null });
+    const headers = fetchMock.mock.calls.map((c) => (c[1].headers as Headers).get("X-Tenant-Id"));
+    expect(headers).toEqual(["tenant-9", null]);
+    expect(onTenantAccessDenied).not.toHaveBeenCalled();
+  });
+
+  it("reports 403 tenant.inactive to the session layer with a Turkish message", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(problemResponse(403, { status: 403, code: "tenant.inactive", title: "This tenant is not active" })));
+    const onTenantInactive = vi.fn();
+    const onTenantAccessDenied = vi.fn();
+    const api = createApiClient({ getAccessToken: async () => "t", getTenantId: () => "tenant-1", onTenantInactive, onTenantAccessDenied });
+    const error = (await api.request("/api/v1/orders", { tenant: true }).catch((e: unknown) => e)) as ApiError;
+    expect(onTenantInactive).toHaveBeenCalledTimes(1);
+    expect(onTenantAccessDenied).not.toHaveBeenCalled();
+    expect(error.userMessage).toContain("askıya alınmış veya kapatılmış");
+  });
+});

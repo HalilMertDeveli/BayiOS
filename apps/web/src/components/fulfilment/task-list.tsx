@@ -49,7 +49,10 @@ type Keyed = { key: string; value: ListData };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Tabs a role sees, in order: staff → Görevlerim + Havuz; supervisors also "Tüm görevler"; viewer only that. */
+/**
+ * Tabs from the effective permissions, in order: tasks.read.own → Görevlerim + Havuz; tasks.read.all (any scope; sales
+ * see the tasks of their own orders) → "Tüm görevler".
+ */
 export function tabsFor(permissions: FulfilmentPermissions): Tab[] {
   const tabs: Tab[] = [];
   if (permissions.readOwn) tabs.push("mine", "pool");
@@ -59,15 +62,15 @@ export function tabsFor(permissions: FulfilmentPermissions): Tab[] {
 
 /** /depo/gorevler: the warehouse work list (W12 / mobile M02 on the web). */
 export function TaskList() {
-  const { role } = useSession();
-  const permissions = fulfilmentPermissions(role);
+  const { access } = useSession();
+  const permissions = fulfilmentPermissions(access);
   const tabs = tabsFor(permissions);
   if (tabs.length === 0) {
     return (
       <>
         <PageHeader title="Depo görevleri" />
         <section aria-label="Görevler" className="rounded-lg border border-line bg-card shadow-e1">
-          <EmptyState icon={<Lock className="size-6" />} title="Depo görevlerini görme yetkiniz yok" description="Toplama görevleri depo personeli ve yöneticiler içindir." />
+          <EmptyState icon={<Lock className="size-6" />} title="Depo görevlerini görme yetkiniz yok" description="Rolünüz depo görevlerini görmeye izin vermiyor. Gerekirse işletme yöneticinizle görüşün." />
         </section>
       </>
     );
@@ -178,7 +181,7 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
         description="Toplama görevleri raf sırasıyla. Görevi açın, önce rafı sonra ürünü okutun."
         actions={
           <span className="flex flex-wrap gap-2">
-            {permissions.readOwn ? (
+            {permissions.readDetail ? (
               <Link href={SHIPMENTS_HREF} className={cn(buttonClasses("secondary", "lg"), "min-h-12")}>
                 <Truck className="size-5" aria-hidden="true" />
                 Sevkiyatlar
@@ -262,7 +265,8 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
               const short = toNumber(task.quantityShort);
               const active = task.status === "open" || task.status === "in_progress";
               const mine = task.assignedTo !== null && task.assignedTo === myId;
-              const canOpen = permissions.readOwn && (permissions.assign || mine || task.assignedTo === null);
+              // Detail: tasks.read.all (any task the list showed) or tasks.read.own (own and pool tasks).
+              const canOpen = permissions.readAll || permissions.assign || (permissions.readOwn && (mine || task.assignedTo === null));
               return (
                 <li key={task.id} data-testid={`task-${task.id}`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
                   <div className="flex flex-wrap items-start justify-between gap-2">

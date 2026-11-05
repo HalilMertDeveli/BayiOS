@@ -43,8 +43,8 @@ type Done = { sku: string; balanceAfter: number | string };
  * negative-stock policy decides what happens below available: `block` refuses, `warn` asks for confirmation here.
  */
 export function AdjustmentForm() {
-  const { api, role } = useSession();
-  const permissions = inventoryPermissions(role);
+  const { api, access } = useSession();
+  const permissions = inventoryPermissions(access);
   const searchParams = useSearchParams();
   const prefill = useMemo(
     () => ({
@@ -128,7 +128,7 @@ export function AdjustmentForm() {
           <EmptyState
             icon={<Lock className="size-6" />}
             title="Stok düzeltme yetkiniz yok"
-            description="Manuel stok düzeltmeyi işletme sahibi, yönetici ve operasyon müdürü yapabilir."
+            description="Rolünüz manuel stok düzeltmeye izin vermiyor. Gerekirse işletme yöneticinizle görüşün."
           />
         </section>
       </>

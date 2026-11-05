@@ -419,6 +419,19 @@ export async function handleCatalog(route: Route, catalog: MockCatalog): Promise
     return true;
   }
 
+  // GET /variants/batch?ids= (1–100): summaries; unknown ids are left out, as the API does.
+  if (method === "GET" && path === "/api/v1/variants/batch") {
+    const ids = (url.searchParams.get("ids") ?? "").split(",").filter(Boolean);
+    if (ids.length === 0 || ids.length > 100) return fulfillJson(route, 400, problemBody(400, "request.malformed")).then(() => true);
+    const items = catalog.products.flatMap((p) =>
+      p.variants
+        .filter((v) => ids.includes(v.id))
+        .map((v) => ({ id: v.id, productId: p.id, sku: v.sku, name: v.name ?? null, productName: p.name, barcode: v.barcode ?? null, status: v.status })),
+    );
+    await fulfillJson(route, 200, { items });
+    return true;
+  }
+
   const variantMatch = path.match(/^\/api\/v1\/variants\/([^/]+)$/);
   if (variantMatch && method === "GET") {
     const found = allVariants().find((v) => v.id === variantMatch[1]);

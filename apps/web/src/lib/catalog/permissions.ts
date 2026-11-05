@@ -1,4 +1,4 @@
-import type { Role } from "@/lib/navigation";
+import type { Access } from "@/lib/session/access";
 
 export type CatalogPermissions = {
   /** catalog.write — create, edit and archive products, variants and brands. */
@@ -7,13 +7,10 @@ export type CatalogPermissions = {
   manageFields: boolean;
 };
 
-/**
- * roles-permissions.md §3.2. /me returns the role only, so the UI derives what to show from it.
- * Visibility only: the API checks every permission again on each request.
- */
-export function catalogPermissions(role: Role | null): CatalogPermissions {
+/** Catalog actions from the effective permissions (GET /me). Visibility only: the API checks every request again. */
+export function catalogPermissions(access: Access): CatalogPermissions {
   return {
-    write: role === "owner" || role === "admin" || role === "manager",
-    manageFields: role === "owner" || role === "admin",
+    write: access.can("catalog.write"),
+    manageFields: access.can("catalog.fields.manage"),
   };
 }

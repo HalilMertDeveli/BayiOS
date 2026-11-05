@@ -6,7 +6,9 @@
  * Idempotency-Key required on create and transitions (replayed on reuse), draft-only PATCH (409 order.not_editable),
  * the order-desk transitions with 409 order.invalid_transition, 422 order.price_missing on submit/approve, all-or-nothing
  * approve with 409 inventory.insufficient_stock + `shortages` (+ `confirmationRequired` under the warn policy), and the
- * role gates as the API enforces them (only ✓ grants; sales cannot edit drafts, approve, cancel or override prices).
+ * permission gates from the same MOCK /me grants the web receives (src/test/me-fixtures.ts): sales edits / cancels only
+ * its own drafts (403 with the API's title otherwise), discounts within the tenant limit without manual prices, warehouse
+ * staff read only task-linked orders with prices withheld (others 404).
  * Prices come from the mock default price list only (no customer/dealer lists, no tiers); totals use simplified
  * rounding. Tests inject single responses with `overrides` (one-shot, keyed "METHOD /path"). All values are invented.
  */
@@ -14,6 +16,7 @@ import type { Route } from "@playwright/test";
 import { fulfillJson, problemBody, type MockCatalog } from "./mock-catalog";
 import { PRICE_LIST_IDS, type MockCommerce } from "./mock-commerce";
 import { WAREHOUSE_IDS } from "./mock-inventory";
+import { grantsForRoleName, type FixtureGrant, type FixtureRules } from "../../src/test/me-fixtures";
 
 type Json = Record<string, unknown>;
 
@@ -72,6 +75,8 @@ export type MockOrder = {
   cancelReason: string | null;
   /** A picker reported a shortage (Warehouse, JOB 10). */
   hasShortage: boolean;
+  /** Creator (own-records grants): orders created through the mock API belong to the signed-in mock user. */
+  createdBy: string;
   version: number;
   lines: MockOrderLine[];
   history: MockHistory[];
@@ -90,12 +95,19 @@ export type MockOrders = {
 };
 
 export const MOCK_USER_ID = "00000000-0000-4000-8000-000000000001";
-const OTHER_USER_ID = "00000000-0000-4000-8000-000000000099";
+export const OTHER_USER_ID = "00000000-0000-4000-8000-000000000099";
 const uuid = (prefix: string, n: number) => `00000000-0000-4000-8000-${prefix}${String(n).padStart(12 - prefix.length, "0")}`;
 export const orderId = (n: number) => uuid("6a", n);
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
-type Ctx = { catalog: MockCatalog | null; commerce: MockCommerce | null };
+type Ctx = {
+  catalog: MockCatalog | null;
+  commerce: MockCommerce | null;
+  /** Orders behind picking tasks (warehouse staff read only these). */
+  taskOrderIds?: () => string[];
+  /** Tenant rules behind the conditional grants (MOCK /me). */
+  rules?: Partial<FixtureRules>;
+};
 
 function variantInfo(ctx: Ctx, variantId: string) {
   for (const p of ctx.catalog?.products ?? []) {
@@ -172,7 +184,7 @@ function orderResponse(order: MockOrder) {
     notes: order.notes,
     totals: totals(order),
     createdAt: order.createdAt,
-    createdBy: MOCK_USER_ID,
+    createdBy: order.createdBy,
     submittedAt: null,
     approvedAt: order.approvedAt,
     approvedBy: order.approvedAt ? MOCK_USER_ID : null,
@@ -185,11 +197,29 @@ function orderResponse(order: MockOrder) {
   };
 }
 
-export function orderDetailBody(order: MockOrder) {
-  return { order: orderResponse(order), lines: order.lines, history: order.history, shipments: [] };
+export function orderDetailBody(order: MockOrder, hidePrices = false) {
+  const body = { order: orderResponse(order), lines: order.lines, history: order.history, shipments: [] as unknown[] };
+  if (!hidePrices) return body;
+  // orders.read K⁸ (warehouse staff): totals and every line amount withheld, as the API does.
+  return {
+    ...body,
+    order: { ...body.order, totals: null },
+    lines: order.lines.map((l) => ({
+      ...l,
+      unitPrice: null,
+      priceSource: null,
+      priceListId: null,
+      priceOverridden: false,
+      discountPercent: null,
+      discountAmount: null,
+      lineSubtotal: null,
+      lineDiscount: null,
+      lineTotal: null,
+    })),
+  };
 }
 
-function summary(order: MockOrder) {
+function summary(order: MockOrder, hidePrices = false) {
   return {
     id: order.id,
     number: order.number,
@@ -199,7 +229,7 @@ function summary(order: MockOrder) {
     fulfillmentStatus: order.fulfillmentStatus,
     source: order.source,
     currency: order.currency,
-    grandTotal: totals(order).grandTotal,
+    grandTotal: hidePrices ? null : totals(order).grandTotal,
     lineCount: order.lines.length,
     createdAt: order.createdAt,
     version: order.version,
@@ -232,6 +262,8 @@ export function makeOrder(
     source?: string;
     createdAt?: string;
     lines?: { variantId: string; quantity: number; unitPrice?: number | null }[];
+    /** Defaults to another user (the signed-in mock user does not own seeded orders). */
+    createdBy?: string;
   },
 ): MockOrder {
   const order: MockOrder = {
@@ -252,6 +284,7 @@ export function makeOrder(
     cancelledAt: null,
     cancelReason: null,
     hasShortage: options.hasShortage ?? false,
+    createdBy: options.createdBy ?? OTHER_USER_ID,
     version: 1,
     lines: [],
     history: [],
@@ -322,23 +355,15 @@ const HEADERS = { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Hea
 const json = (route: Route, status: number, body: unknown, headers: Record<string, string> = {}) => fulfillJson(route, status, body, { ...HEADERS, ...headers });
 const done = (p: Promise<unknown>) => p.then(() => true);
 const versionOf = (ifMatch: string | undefined) => (ifMatch ? Number(ifMatch.replace(/^W\//, "").replace(/"/g, "")) : NaN);
-const MANAGERS = ["owner", "admin", "manager"];
 
 /** 409 order.busy with Retry-After: 1, as the API sends it on a lock timeout (for overrides). */
 export function orderBusyResponse(route: Route) {
   return json(route, 409, problemBody(409, "order.busy"), { "Retry-After": "1" });
 }
 
-const PERMISSIONS: Record<string, string[]> = {
-  read: ["owner", "admin", "manager", "sales", "viewer"],
-  create: ["owner", "admin", "manager", "sales"],
-  edit: MANAGERS,
-  submit: ["owner", "admin", "manager", "sales"],
-  approve: MANAGERS,
-  cancel: MANAGERS,
-  override: MANAGERS,
-};
-const allowed = (role: string, permission: string) => PERMISSIONS[permission].includes(role);
+/** The role's grant for a permission, from the same MOCK /me fixtures the web gets. */
+const grantOf = (role: string, rules: Partial<FixtureRules> | undefined, permission: string): FixtureGrant | undefined =>
+  grantsForRoleName(role, rules).find((g) => g.permission === permission);
 
 /** Handles an Orders request; returns false when the path is not one of them. */
 export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, role: string): Promise<boolean> {
@@ -356,8 +381,27 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
     return true;
   }
 
-  const forbidden = (permission: string) => done(json(route, 403, problemBody(403, "auth.forbidden", { title: `Missing permission: ${permission}` })));
-  if (!allowed(role, "read")) return forbidden("orders.read");
+  const grant = (permission: string) => grantOf(role, ctx.rules, permission);
+  const forbidden = (permission: string, reason?: string) =>
+    done(json(route, 403, problemBody(403, "auth.forbidden", { title: reason ? `${permission}: ${reason}` : `Missing permission: ${permission}` })));
+  const read = grant("orders.read");
+  if (!read) return forbidden("orders.read");
+  // K⁸: warehouse staff see only the orders behind tasks, without prices.
+  const taskLinkedOnly = read.scope !== "all";
+  const linked = (o: MockOrder) => !taskLinkedOnly || (ctx.taskOrderIds?.() ?? []).includes(o.id);
+  /** orders.price.override for the changed lines: null = allowed, otherwise the 403 response. */
+  const overrideProblem = (lines: Json[]) => {
+    const override = grant("orders.price.override");
+    const manual = lines.some((l) => l.unitPrice != null);
+    const discount = lines.some((l) => l.discountPercent != null || l.discountAmount != null);
+    if (!manual && !discount) return null;
+    if (!override) return forbidden("orders.price.override");
+    if (override.scope === "all") return null;
+    if (manual) return forbidden("orders.price.override", "A manual unit price is not allowed; only a discount within the sales limit");
+    const limit = ctx.rules?.salesMaxDiscountPercent ?? 0;
+    if (lines.some((l) => Number(l.discountPercent ?? 0) > limit)) return forbidden("orders.price.override", `The discount exceeds the sales limit of ${limit} %`);
+    return null;
+  };
 
   const key = request.headers()["idempotency-key"];
   const ifMatch = request.headers()["if-match"];
@@ -383,23 +427,24 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
     if (p.get("from")) items = items.filter((o) => o.createdAt.slice(0, 10) >= p.get("from")!);
     if (p.get("to")) items = items.filter((o) => o.createdAt.slice(0, 10) <= p.get("to")!);
     if (p.get("q")) items = items.filter((o) => o.number.toLowerCase().includes(p.get("q")!.toLowerCase()));
+    items = items.filter(linked);
     items.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
     const limit = Number(p.get("limit") ?? 50);
     const offset = Number((p.get("cursor") ?? "o:0").slice(2));
     const hasMore = offset + limit < items.length;
-    return done(json(route, 200, { items: items.slice(offset, offset + limit).map(summary), page: { nextCursor: hasMore ? `o:${offset + limit}` : null, hasMore, limit } }));
+    return done(json(route, 200, { items: items.slice(offset, offset + limit).map((o) => summary(o, taskLinkedOnly)), page: { nextCursor: hasMore ? `o:${offset + limit}` : null, hasMore, limit } }));
   }
 
   // ---- Create ----
   if (path === "/api/v1/orders" && method === "POST") {
-    if (!allowed(role, "create")) return forbidden("orders.create");
+    if (grant("orders.create")?.scope !== "all") return forbidden("orders.create");
     if (!body?.customerId) return done(json(route, 422, problemBody(422, "validation.failed", { errors: { customerId: ["Required."] } })));
     const lines = (body.lines as Json[] | null) ?? [];
-    if (!allowed(role, "override") && lines.some((l) => l.unitPrice != null || l.discountPercent != null || l.discountAmount != null)) {
-      return forbidden("orders.price.override");
-    }
+    const denied = overrideProblem(lines);
+    if (denied) return denied;
     const n = mock.orders.length + 1000;
     const order = makeOrder(ctx, n, { customerId: String(body.customerId), createdAt: new Date(Date.UTC(2026, 10, 5, 12) + mock.orders.length * 60_000).toISOString() });
+    order.createdBy = MOCK_USER_ID;
     order.history = [];
     addHistory(order, "create", null);
     order.warehouseId = String(body.warehouseId ?? WAREHOUSE_IDS.main);
@@ -414,16 +459,19 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
   const match = path.match(/^\/api\/v1\/orders\/([^/]+)(?:\/([a-z-]+))?$/);
   if (!match) return false;
   const order = mock.orders.find((o) => o.id === match[1]);
-  if (!order) return done(json(route, 404, problemBody(404, "resource.not_found")));
+  if (!order || !linked(order)) return done(json(route, 404, problemBody(404, "resource.not_found")));
   const action = match[2];
 
-  if (!action && method === "GET") return done(json(route, 200, orderDetailBody(order), { ETag: `W/"${order.version}"` }));
+  if (!action && method === "GET") return done(json(route, 200, orderDetailBody(order, taskLinkedOnly), { ETag: `W/"${order.version}"` }));
+  const own = order.createdBy === MOCK_USER_ID;
 
   const checkVersion = () => ifMatch !== undefined && versionOf(ifMatch) !== order.version;
 
   // ---- Draft edit ----
   if (!action && method === "PATCH") {
-    if (!allowed(role, "edit")) return forbidden("orders.edit.draft");
+    const edit = grant("orders.edit.draft");
+    if (!edit) return forbidden("orders.edit.draft");
+    if (edit.scope !== "all" && !own) return forbidden("orders.edit.draft", "Only drafts you created can be edited");
     if (!ifMatch) return done(json(route, 428, problemBody(428, "precondition.required")));
     if (checkVersion()) return done(json(route, 412, problemBody(412, "concurrency.version_mismatch")));
     if (order.status !== "draft") return done(json(route, 409, problemBody(409, "order.not_editable")));
@@ -434,6 +482,15 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
     if (body && "pricesIncludeTax" in body) order.pricesIncludeTax = body.pricesIncludeTax === true;
     if (body && Array.isArray(body.lines)) {
       const inputs = body.lines as Json[];
+      const asNumber = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+      const changed = inputs.filter((l) => {
+        const prior = order.lines.find((x) => x.id === l.id);
+        if (!prior) return true;
+        const priceChanged = l.unitPrice != null && Number(l.unitPrice) !== prior.unitPrice;
+        return priceChanged || prior.discountPercent !== asNumber(l.discountPercent) || prior.discountAmount !== asNumber(l.discountAmount);
+      });
+      const denied = overrideProblem(changed);
+      if (denied) return denied;
       const errors: Record<string, string[]> = {};
       inputs.forEach((l, i) => {
         if (!(Number(l.quantity) > 0)) errors[`lines[${i}].quantity`] = ["Must be greater than 0 with at most 3 decimals."];
@@ -450,7 +507,11 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
   // ---- Transitions ----
   const gate: Record<string, string> = { submit: "submit", withdraw: "submit", reject: "approve", approve: "approve", cancel: "cancel" };
   if (!gate[action]) return done(json(route, 404, problemBody(404, "resource.not_found")));
-  if (!allowed(role, gate[action])) return forbidden(`orders.${gate[action]}`);
+  const transition = grant(`orders.${gate[action]}`);
+  if (!transition) return forbidden(`orders.${gate[action]}`);
+  if (action === "cancel" && transition.scope !== "all" && !(own && (order.status === "draft" || order.status === "pending_approval"))) {
+    return forbidden("orders.cancel", "Only your own draft or pending-approval orders can be cancelled");
+  }
   if (action === "approve" && !ifMatch) return done(json(route, 428, problemBody(428, "precondition.required")));
   if (checkVersion()) return done(json(route, 412, problemBody(412, "concurrency.version_mismatch")));
 

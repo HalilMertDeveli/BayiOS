@@ -8,8 +8,24 @@ import { linePriceSourceLabels } from "@/lib/orders/labels";
 import { vatModeLabel } from "@/lib/pricing/labels";
 import { formatMoney, formatPercent, formatQuantity } from "@/lib/pricing/money";
 
-/** Unit price as the API resolved it; a line without a price is "Fiyat yok" — never 0. */
+/** Prices withheld by the API for this reader (warehouse staff: `totals` null and line amounts null). */
+export function pricesHidden(detail: OrderDetail): boolean {
+  return detail.order.totals === null;
+}
+
+/**
+ * Unit price as the API resolved it; a line without a price is "Fiyat yok" — never 0. A priced line whose amount the
+ * API withheld (warehouse staff) shows "—".
+ */
 export function LinePrice({ line, currency }: { line: OrderLine; currency: string }) {
+  if (line.priceStatus === "priced" && (line.unitPrice === null || line.unitPrice === undefined)) {
+    return (
+      <span className="text-fg-muted">
+        <span aria-hidden="true">—</span>
+        <span className="sr-only">Fiyat gösterilmiyor</span>
+      </span>
+    );
+  }
   const money = line.priceStatus === "priced" ? formatMoney(line.unitPrice, currency) : null;
   if (money === null) return <Badge tone="danger">Fiyat yok</Badge>;
   return (

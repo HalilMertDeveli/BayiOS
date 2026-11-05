@@ -131,21 +131,25 @@ test.describe("görev listesi (mock)", () => {
     await expectNoSeriousViolations(page);
   });
 
-  test("izleyici: tüm görevleri salt okunur görür, toplama ekranını açamaz, sevkiyat menüsü yok", async ({ page }) => {
+  test("izleyici: tüm görevleri ve ayrıntıyı salt okunur görür (tasks.read.all any-of), sevkiyatlar menüde", async ({ page }) => {
     const api = await signedIn(page, { memberships: [VIEWER], fulfilment: withTasks(makeTask(1)) });
     await page.goto("/depo/gorevler");
     const list = page.getByRole("list", { name: "Tüm görevler" });
     await expect(list.getByRole("listitem")).toHaveCount(1);
     await expect(page.getByRole("tab")).toHaveCount(0);
     await expect(list.getByRole("button")).toHaveCount(0);
-    await expect(list.getByRole("link")).toHaveCount(0);
+    await expect(list.getByRole("link")).toHaveCount(1);
     expect(api.requests.some((r) => r.path === "/api/v1/picking-tasks/mine")).toBe(false);
-    await page.goto(`/depo/gorevler/${taskId(1)}`);
-    await expect(page.getByText("Görev ayrıntısını görme yetkiniz yok")).toBeVisible();
+    await list.getByRole("link").click();
+    await expect(page).toHaveURL(new RegExp(`/depo/gorevler/${taskId(1)}$`));
+    await expect(page.getByText("MOCK-001").first()).toBeVisible();
+    await expect(page.getByRole("textbox", { name: /Raf barkodu|Ürün barkodu veya SKU/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Üstlen" })).toHaveCount(0);
+    expect(api.requests.filter((r) => r.method === "POST")).toHaveLength(0);
     await page.getByRole("button", { name: "Menüyü aç" }).click();
     const nav = page.getByRole("dialog", { name: "Menü" }).getByRole("navigation");
     await expect(nav.getByRole("link", { name: "Görevler" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Sevkiyatlar" })).toHaveCount(0);
+    await expect(nav.getByRole("link", { name: "Sevkiyatlar" })).toBeVisible();
   });
 });
 
@@ -270,8 +274,8 @@ test.describe("sevkiyat (mock)", () => {
     await page.getByRole("link", { name: shipment.number }).click();
     await expect(page.getByRole("heading", { name: `Sevkiyat ${shipment.number}` })).toBeVisible();
     await expect(page.getByText("Taslak", { exact: true }).filter({ visible: true })).toBeVisible();
-    // Staff cannot read orders: the order number is plain text, no link; no movement history.
-    await expect(page.getByRole("link", { name: "SIP-2026-000001" })).toHaveCount(0);
+    // Staff read the orders behind their tasks (orders.read K⁸): the order number links to the order (prices hidden there).
+    await expect(page.getByRole("link", { name: "SIP-2026-000001" })).toHaveAttribute("href", /\/siparisler\//);
 
     const save = page.getByRole("button", { name: /Paket kontrolünü kaydet/ });
     await expect(save).toBeDisabled();
@@ -303,7 +307,8 @@ test.describe("sevkiyat (mock)", () => {
     await page.getByRole("alertdialog").getByRole("button", { name: "Sevk et" }).click();
     await expect(page.getByText("Sevk edildi", { exact: true }).filter({ visible: true }).first()).toBeVisible();
     expect(posts(api, "/confirm")[0].body).toEqual({ carrier: "Mock Kargo", trackingNumber: null, packageCount: 2 });
-    await expect(page.getByRole("heading", { name: "Stok hareketleri" })).toHaveCount(0);
+    // inventory.movements.read K⁵: the movements of their own task's shipment are in the task context.
+    await expect(page.getByRole("heading", { name: "Stok hareketleri" })).toBeVisible();
     await expectNoSeriousViolations(page);
   });
 

@@ -155,8 +155,8 @@ function CustomerForm({
   onAddresses: (addresses: Address[]) => void;
   onReload: () => void;
 }) {
-  const { api, role } = useSession();
-  const permissions = customerPermissions(role);
+  const { api, access } = useSession();
+  const permissions = customerPermissions(access);
   const router = useRouter();
   const { toast } = useToast();
   const { state: reference } = useCustomerReference();
@@ -393,7 +393,7 @@ function CustomerForm({
               Ticari koşullar
             </h2>
             {!permissions.assignPriceLists ? (
-              <p className="text-caption text-fg-muted">Bayi grubu ve fiyat listesini işletme sahibi, yönetici veya operasyon müdürü atayabilir.</p>
+              <p className="text-caption text-fg-muted">Bayi grubu ve fiyat listesi atama yetkiniz yok; atama için işletme yöneticinizle görüşün.</p>
             ) : null}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Select

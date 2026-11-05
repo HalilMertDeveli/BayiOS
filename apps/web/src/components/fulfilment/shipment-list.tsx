@@ -29,8 +29,8 @@ type Keyed = { key: string; value: ListData };
 
 /** /depo/sevkiyatlar: shipments created from completed picking tasks (staff: only their own tasks'). */
 export function ShipmentList() {
-  const { api, role } = useSession();
-  const permissions = fulfilmentPermissions(role);
+  const { api, access } = useSession();
+  const permissions = fulfilmentPermissions(access);
   const [filter, setFilter] = useState<Filter>("open");
   const [attempt, setAttempt] = useState(0);
   const [keyed, setKeyed] = useState<Keyed | null>(null);
@@ -41,20 +41,20 @@ export function ShipmentList() {
 
   useEffect(() => {
     const key = `${filter}|${attempt}`;
-    if (!permissions.readOwn) return;
+    if (!permissions.readDetail) return;
     const controller = new AbortController();
     listShipments(api, shipmentListQuery({ statuses: STATUSES[filter] }), controller.signal)
       .then((page) => !controller.signal.aborted && setKeyed({ key, value: { status: "ready", items: page.items, nextCursor: page.page.nextCursor ?? null, hasMore: page.page.hasMore } }))
       .catch((error: unknown) => !controller.signal.aborted && setKeyed({ key, value: { status: "error", message: fulfilmentErrorMessage(error) } }));
     return () => controller.abort();
-  }, [api, filter, attempt, permissions.readOwn]);
+  }, [api, filter, attempt, permissions.readDetail]);
 
-  if (!permissions.readOwn) {
+  if (!permissions.readDetail) {
     return (
       <>
         <PageHeader title="Sevkiyatlar" />
         <section aria-label="Sevkiyatlar" className="rounded-lg border border-line bg-card shadow-e1">
-          <EmptyState icon={<Lock className="size-6" />} title="Sevkiyatları görme yetkiniz yok" description="Sevkiyatlar depo personeli ve yöneticiler içindir." />
+          <EmptyState icon={<Lock className="size-6" />} title="Sevkiyatları görme yetkiniz yok" description="Rolünüz sevkiyatları görmeye izin vermiyor. Gerekirse işletme yöneticinizle görüşün." />
         </section>
       </>
     );
