@@ -8,7 +8,8 @@ yalnızca kimlik (oturum çerezleri) içindir.
 npm ci
 npm run lint && npm run typecheck && npm test && npm run build
 npm run test:e2e          # Playwright — Supabase ve API page.route ile MOCK (CI'da çalışan)
-npm run test:e2e:local    # Playwright — gerçek yerel yığın, mock yok (CI'da yok)
+npm run test:e2e:real     # Playwright — gerçek yığın, mock yok (CI: e2e-real); yığın aşağıda
+npm run test:e2e:local    # aynı klasörün tamamı + docs/screenshots yenileme (yalnızca yerel)
 npm run gen:api           # packages/contracts/openapi.json → src/lib/api/schema.d.ts
 ```
 
@@ -37,32 +38,23 @@ sırlar asla buraya konmaz.
   (`PATCH /tenant`). Her adım için deneme başına sabit `Idempotency-Key`; başarısız alt adımlar tenant
   yeniden oluşturulmadan tekrar denenir.
 
-## Yerel uçtan uca (gerçek Supabase + API + web, mock yok)
-Repo kökünden:
+## Gerçek yığın E2E (Supabase Auth + API + PostgreSQL 17 + web, mock yok)
+CI'da `.github/workflows/e2e-real.yml` (`e2e real stack`) ile her ilgili PR'da koşar. Yerelde aynı betik, repo kökünden
+(bash, Docker, .NET SDK, Node 24):
 ```bash
-# 1) Yerel Supabase (ES256 imza anahtarı) — ayrıntı: infra/supabase/local/README.md
-npx -y supabase@2.122.1 start --workdir infra/supabase/local
-
-# 2) API veritabanı + migration'lar
-docker compose -f infra/docker/compose.yml up -d
-OUT_DIR=/tmp/bayios-mig bash infra/ci/ef-migrations.sh      # idempotent SQL betiklerini üretir
-for f in /tmp/bayios-mig/*Platform*.sql /tmp/bayios-mig/*Identity*.sql /tmp/bayios-mig/*Catalog*.sql; do
-  docker exec -i -e PGPASSWORD=<migrator şifresi> bayios-postgres-1 \
-    psql -h 127.0.0.1 -U bayios_migrator -d bayios -v ON_ERROR_STOP=1 -q -f - < "$f"
-done
-
-# 3) API — yerel Supabase JWKS ile
-Auth__Authority=http://127.0.0.1:54321/auth/v1 Auth__Audience=authenticated Auth__RequireHttpsMetadata=false \
-ConnectionStrings__Default="Host=127.0.0.1;Port=5432;Database=bayios;Username=bayios_app;Password=<app şifresi>" \
-dotnet run --project services/api/src/BayiOS.Api --launch-profile http
-
-# 4) Web (apps/web/.env.local yukarıdaki gibi)
-npm --prefix apps/web run build && npm --prefix apps/web run start -- -p 3200
-
-# 5) Gerçek E2E: kayıt → Mailpit'ten doğrulama → onboarding → pano → çıkış → giriş
-npm --prefix apps/web run test:e2e:local
+bash infra/ci/e2e-stack.sh up            # Supabase Auth (CLI, ES256 anahtarı yoksa üretir) + boş postgres:17 (55432)
+                                         # + EF migration'ları + API (Release, :5280) + web (next build, :3200)
+npm --prefix apps/web run test:e2e:real  # real-stack + order-to-shipment
+bash infra/ci/e2e-stack.sh down          # API/web süreçleri, Postgres konteyneri, Supabase (yerel Auth verisi korunur)
 ```
-
-CI'ya eklemek için gerekenler (bu PR'da eklenmedi): Docker'lı runner'da Supabase CLI yığını (~1–2 dk
-imaj çekme), imza anahtarı üretimi, Postgres + EF migration'ları, .NET API süreci ve web build'i;
-`test:e2e:local` ayrı, isteğe bağlı/gece çalışan bir iş olarak.
+- Şifreler her çalıştırmada üretilir; hiçbir sır gerekmez. Supabase anahtarları CLI'ın herkese açık yerel anahtarlarıdır.
+- Kimlik doğrulama gerçektir: kayıt → Mailpit'teki doğrulama bağlantısı → oturum; API token'ı JWKS ile doğrular
+  (yalnız yapılandırma farkı: http yerel issuer için `Auth__RequireHttpsMetadata=false`). Test anahtarı/bypass yoktur.
+- Tüm iş adımları (toplama, paket kontrolü, sevk onayı dahil) web arayüzünden yapılır. API'ye doğrudan yalnızca ek
+  kontroller (çift onay, izolasyon) için, oturum açmış kullanıcının web'in isteklerinden alınan kendi Bearer token'ı ve
+  `X-Tenant-Id`'si ile gidilir.
+- Süreç günlükleri: `$E2E_STATE_DIR` (varsayılan `${TMPDIR:-/tmp}/bayios-e2e`) altında `api.log`, `web.log`.
+- Portlar: `E2E_PG_PORT`, `E2E_API_PORT`, `E2E_WEB_PORT`. Web'i yeniden derlemeden başlatmak: `E2E_SKIP_WEB_BUILD=1`;
+  migration betiklerini yeniden üretmemek: `E2E_REUSE_MIGRATIONS=1`. Port 3200 Supabase yönlendirme izin listesindedir.
+- Test verisi sentetik ve çalıştırma başına benzersizdir; yeniden deneme yoktur (`retries: 0`). Kapsam:
+  `docs/testing/test-strategy.md` §4.1.

@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * REAL END-TO-END — no mocks. Needs the local stack running (see apps/web/README.md "Yerel uçtan uca"):
- * local Supabase CLI (ES256 signing key) + BayiOS API validating its JWKS + this web app on :3200.
- * Not part of CI (`npm run test:e2e` only runs ./e2e). Run with `npm run test:e2e:local`.
+ * REAL END-TO-END — no mocks. Needs the real stack running (`bash infra/ci/e2e-stack.sh up`, apps/web/README.md
+ * "Gerçek yığın E2E"): local Supabase CLI (ES256 signing key) + BayiOS API validating its JWKS + this web app on :3200.
+ * CI: .github/workflows/e2e-real.yml (`npm run test:e2e:real`).
  */
 const MAILPIT = process.env.MAILPIT_URL ?? "http://127.0.0.1:54324";
 
