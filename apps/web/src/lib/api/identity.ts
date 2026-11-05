@@ -1,10 +1,12 @@
 import type { ApiClient } from "./client";
+import type { Permission } from "@/lib/session/access";
 import type { components } from "./schema";
 
 export type Me = components["schemas"]["MeResponse"];
 export type TenantResponse = components["schemas"]["TenantResponse"];
 export type CreateTenantRequest = components["schemas"]["CreateTenantRequest"];
 export type TenantSettings = components["schemas"]["TenantSettingsResponse"];
+export type UpdateTenantSettingsRequest = components["schemas"]["UpdateTenantSettingsRequest"];
 export type UpdateTenantRequest = components["schemas"]["UpdateTenantRequest"];
 export type ApplySectorTemplateResponse = components["schemas"]["ApplySectorTemplateResponse"];
 
@@ -33,13 +35,20 @@ export function memberLabel(m: Pick<Member, "displayName" | "fullName" | "email"
 
 /**
  * Active members of the active tenant (GET /members, members.read), every page (keyset, capped), sorted by name on the
- * client (Turkish collation) for the staff picker.
+ * client (Turkish collation) for the staff picker. `permissions` (#111, `?permission=a,b`) keeps only members whose role
+ * holds every one of them under the tenant's rules — e.g. tasks.pick for the people a picking task can be assigned to.
  */
-export async function listActiveMembers(api: ApiClient, signal?: AbortSignal, maxPages = 10): Promise<Member[]> {
+export async function listActiveMembers(
+  api: ApiClient,
+  signal?: AbortSignal,
+  options: { permissions?: readonly Permission[]; maxPages?: number } = {},
+): Promise<Member[]> {
+  const { permissions = [], maxPages = 10 } = options;
   const members: Member[] = [];
   let cursor: string | null = null;
   for (let page = 0; page < maxPages; page++) {
     const params = new URLSearchParams({ status: "active", limit: "200" });
+    if (permissions.length > 0) params.set("permission", permissions.join(","));
     if (cursor) params.set("cursor", cursor);
     const data: MemberPage = (await api.request<MemberPage>(`/api/v1/members?${params}`, { tenant: true, signal })).data;
     members.push(...data.items);
@@ -94,11 +103,12 @@ export async function getTenantSettings(api: ApiClient): Promise<{ settings: Ten
   return { settings: response.data, etag: response.etag };
 }
 
+/** PATCH /api/v1/tenant/settings (JSON merge patch, If-Match; 412 when someone else saved first). Returns the new ETag. */
 export async function updateTenantSettings(
   api: ApiClient,
-  patch: Partial<TenantSettings>,
+  patch: Partial<UpdateTenantSettingsRequest>,
   etag: string,
-): Promise<TenantSettings> {
+): Promise<{ settings: TenantSettings; etag: string | null }> {
   const response = await api.request<TenantSettings>("/api/v1/tenant/settings", {
     method: "PATCH",
     tenant: true,
@@ -106,5 +116,5 @@ export async function updateTenantSettings(
     ifMatch: etag,
     contentType: "application/merge-patch+json",
   });
-  return response.data;
+  return { settings: response.data, etag: response.etag };
 }

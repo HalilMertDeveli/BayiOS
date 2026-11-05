@@ -49,9 +49,39 @@ const BY_STATUS: Record<number, string> = {
 export const NETWORK_ERROR_MESSAGE = "Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.";
 export const SERVER_ERROR_MESSAGE = "Beklenmeyen bir hata oluştu. Lütfen biraz sonra tekrar deneyin.";
 
+/**
+ * 403 `auth.disabled_by_tenant_rule` (#111): the role holds the permission conditionally and the business switched the
+ * rule off. The `permission` extension says which one; an unknown permission gets the generic text.
+ */
+const DISABLED_BY_RULE: Record<string, string> = {
+  "orders.approve": "Satış personelinin sipariş onaylaması işletme ayarlarında kapalı. Siparişi onay için yöneticinize iletin.",
+  "orders.price.override":
+    "İşletmenizde satış personeli için iskonto sınırı %0; iskonto ve manuel fiyat giremezsiniz. Fiyatları fiyat listesinden bırakın.",
+  "catalog.barcode.assign": "Depo personelinin barkod ataması işletme ayarlarında kapalı. Barkodu bir yöneticiye atatın.",
+  "inventory.receive.approve": "Depo personelinin mal kabulünü onaylaması işletme ayarlarında kapalı. Onay için yöneticinize başvurun.",
+};
+export const DISABLED_BY_RULE_MESSAGE = "Bu işlem işletmenizin ayarlarında rolünüz için kapatılmış. Gerekirse işletme yöneticinizle görüşün.";
+
+/** A string extension member of a problem (e.g. `permission`), or null. */
+export function problemString(problem: ProblemDetails | null | undefined, name: string): string | null {
+  const value = problem?.[name];
+  return typeof value === "string" && value ? value : null;
+}
+
+/** A numeric extension member (e.g. `limitPercent`; the API writes decimals as JSON numbers), or null. */
+export function problemNumber(problem: ProblemDetails | null | undefined, name: string): number | null {
+  const value = problem?.[name];
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
 /** Turkish message for a failed response: by `code` first, then by HTTP status. */
 export function problemMessage(status: number, problem?: ProblemDetails | null): string {
   const code = problem?.code ?? undefined;
+  if (code === "auth.disabled_by_tenant_rule") {
+    const permission = problemString(problem, "permission");
+    return (permission && DISABLED_BY_RULE[permission]) || DISABLED_BY_RULE_MESSAGE;
+  }
   if (code && MESSAGES[code]) return MESSAGES[code];
   if (status >= 500) return SERVER_ERROR_MESSAGE;
   return BY_STATUS[status] ?? SERVER_ERROR_MESSAGE;

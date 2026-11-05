@@ -1,6 +1,9 @@
 import { ApiError } from "@/lib/api/client";
+import { problemNumber, problemString } from "@/lib/api/problems";
 import { translateFieldMessage } from "@/lib/catalog/errors";
 import { readShortages, type Shortage } from "@/lib/inventory/errors";
+import { formatPercent } from "@/lib/pricing/money";
+import { orderStatusLabel } from "./labels";
 
 export { readShortages, type Shortage };
 
@@ -26,6 +29,9 @@ const KNOWN: [RegExp, string][] = [
   [/^The line amount is too large or the discount exceeds the line subtotal\.$/, "Satır tutarı çok büyük ya da iskonto satır tutarını aşıyor."],
   [/^The order total is too large\.$/, "Sipariş toplamı izin verilen sınırı aşıyor."],
   [/^At most (\d+) characters\.$/, "Metin çok uzun; kısaltın."],
+  [/^Not a shipping address of this customer\.$/, "Bu adres seçili müşterinin teslimat adresi değil. Listeden bir adres seçin."],
+  [/^Not a billing address of this customer\.$/, "Bu adres seçili müşterinin fatura adresi değil. Listeden bir adres seçin."],
+  [/^The chosen address no longer exists/, "Seçili adres müşteriden silinmiş. Başka bir adres seçip taslağı kaydedin."],
 ];
 
 export function translateOrderFieldMessage(message: string | undefined): string {
@@ -56,8 +62,6 @@ export const ORDER_MESSAGES: Record<string, string> = {
 /** Shown when `order.busy` / `inventory.busy` persists after the single automatic retry. */
 export const ORDER_BUSY_FINAL_MESSAGE =
   "Sipariş hâlâ başka bir işlem tarafından kullanılıyor. Birkaç saniye sonra yeniden deneyin; aynı işlem gönderilir, çift kayıt oluşmaz.";
-
-const PRICE_OVERRIDE_MESSAGE = "Manuel fiyat ve iskonto girme yetkiniz yok. Fiyatları fiyat listesinden bırakın veya yetkili bir kullanıcıya başvurun.";
 
 /** 409 `order.busy` or `inventory.busy` (lock timeout / deadlock; the API sends Retry-After: 1). */
 export function isOrderBusy(error: unknown): boolean {
@@ -99,25 +103,56 @@ export function unpricedLineIndexes(error: unknown): number[] {
   return result.sort((a, b) => a - b);
 }
 
-const DISCOUNT_LIMIT_MESSAGE =
-  "İskonto, işletmenizin satış personeli için belirlediği iskonto sınırını aşıyor. Daha düşük bir iskonto girin veya yöneticinizden onay isteyin.";
-const MANUAL_PRICE_LIMITED_MESSAGE = "Manuel birim fiyat giremezsiniz; yalnızca iskonto sınırınız içinde iskonto uygulayabilirsiniz.";
-const OWN_DRAFT_MESSAGE = "Bu taslağı yalnızca oluşturan kişi veya yetkili bir yönetici düzenleyebilir.";
-const OWN_CANCEL_MESSAGE = "Yalnızca kendi oluşturduğunuz taslak veya onay bekleyen siparişleri iptal edebilirsiniz.";
+/**
+ * Submit answered with an order that is already approved: the tenant does not require approval and the submitter may
+ * approve (#92), so the API reserved the stock in the same transaction.
+ */
+export function isAutoApproved(statusAfterSubmit: string): boolean {
+  return statusAfterSubmit !== "pending_approval" && statusAfterSubmit !== "draft";
+}
+
+/** 422 on submit/save naming the shipping / billing address (removed meanwhile, or not the customer's): Turkish text, else null. */
+export function addressErrorText(error: unknown): string | null {
+  if (!(error instanceof ApiError) || error.status !== 422) return null;
+  const messages = ["shippingAddressId", "billingAddressId"]
+    .filter((key) => error.fieldErrors[key]?.length)
+    .map((key) => `${key === "shippingAddressId" ? "Teslimat adresi" : "Fatura adresi"}: ${translateOrderFieldMessage(error.fieldErrors[key][0])}`);
+  return messages.length > 0 ? messages.join(" ") : null;
+}
+
+/** `%12,5` for a percentage from a problem extension (Turkish decimal comma). */
+const percentText = (value: number | null): string | null => (value === null ? null : formatPercent(value));
 
 /**
- * 403 `auth.forbidden` for a record a conditional / own-records grant does not cover (the API names the permission in
- * the problem title — no dedicated code yet). Returns null for other errors.
+ * Orders' dedicated 403 codes (#111), chosen by `code` and their extension members — never by the problem title, which
+ * is a developer aid. Returns null for other errors (the plain `auth.forbidden` keeps the generic message).
  */
 export function recordForbiddenMessage(error: unknown): string | null {
-  if (!(error instanceof ApiError) || error.status !== 403 || error.code !== "auth.forbidden") return null;
-  const title = error.problem?.title ?? "";
-  if (/^orders\.price\.override:.*sales limit/.test(title)) return DISCOUNT_LIMIT_MESSAGE;
-  if (/^orders\.price\.override:.*manual unit price/.test(title)) return MANUAL_PRICE_LIMITED_MESSAGE;
-  if (/^orders\.edit\.draft:/.test(title)) return OWN_DRAFT_MESSAGE;
-  if (/^orders\.cancel:/.test(title)) return OWN_CANCEL_MESSAGE;
-  if (/orders\.price\.override/.test(title)) return PRICE_OVERRIDE_MESSAGE;
-  return null;
+  if (!(error instanceof ApiError) || error.status !== 403) return null;
+  const problem = error.problem;
+  switch (error.code) {
+    case "orders.discount_limit_exceeded": {
+      const limit = percentText(problemNumber(problem, "limitPercent"));
+      return limit
+        ? `İskonto en fazla ${limit} olabilir. Daha düşük bir iskonto girin veya daha yüksek iskonto için yöneticinizden onay isteyin.`
+        : "İskonto, işletmenizin satış personeli için belirlediği sınırı aşıyor. Daha düşük bir iskonto girin veya yöneticinizden onay isteyin.";
+    }
+    case "orders.manual_price_not_allowed": {
+      const limit = percentText(problemNumber(problem, "limitPercent"));
+      return `Manuel birim fiyat giremezsiniz; yalnızca ${limit ? `en fazla ${limit}` : "iskonto sınırınız içinde"} iskonto uygulayabilirsiniz. Birim fiyatı boş bırakın.`;
+    }
+    case "orders.not_owner":
+      return problemString(problem, "permission") === "orders.cancel"
+        ? "Yalnızca kendi oluşturduğunuz siparişleri iptal edebilirsiniz. Bu sipariş için yöneticinize başvurun."
+        : "Bu taslağı yalnızca oluşturan kişi veya yetkili bir yönetici düzenleyebilir.";
+    case "orders.cancel_not_allowed_in_status": {
+      const status = problemString(problem, "orderStatus");
+      const where = status ? `; bu sipariş “${orderStatusLabel(status)}” durumunda` : "";
+      return `Kendi siparişlerinizi yalnızca Taslak veya Onay bekliyor durumundayken iptal edebilirsiniz${where}. İptal için yöneticinize başvurun.`;
+    }
+    default:
+      return null;
+  }
 }
 
 /** User-facing message for any failed orders call. */

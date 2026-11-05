@@ -23,6 +23,8 @@ import {
   isPriceMissing,
   isStaleState,
   needsStockConfirmation,
+  addressErrorText,
+  isAutoApproved,
   orderErrorMessage,
   readShortages,
   unpricedLineIndexes,
@@ -33,12 +35,18 @@ import { orderPermissions, type OrderPermissions } from "@/lib/orders/permission
 import { useSession } from "@/lib/session/session-context";
 import { FulfillmentBadge, OrderStatus } from "./order-badges";
 import { ReasonDialog } from "./order-actions";
+import { OrderAddresses } from "./order-addresses";
 import { OrderDraftEditor } from "./order-draft-editor";
 import { FulfilmentSection, OrderLinesTable, OrderTotalsPanel, ShortagesPanel, pricesHidden } from "./order-lines";
 import { OrderTimeline } from "./order-timeline";
 import { useWarehouses, warehouseLabel } from "./use-order-reference";
 
 type LoadState = { status: "loading" } | { status: "error"; message: string; notFound: boolean } | { status: "ready"; loaded: LoadedOrder };
+
+/** Transitions that may reserve stock: approve, and submit when the API approves at once. */
+type StockAction = "approve" | "submit";
+
+const AUTO_APPROVED = "Sipariş otomatik onaylandı; stok ayrıldı";
 
 const SUCCESS: Record<OrderTransition, string> = {
   submit: "Sipariş onaya gönderildi",
@@ -155,9 +163,11 @@ function OrderView({
   onLoaded: (loaded: LoadedOrder) => void;
   onReload: () => void;
 }) {
-  const { api, state } = useSession();
+  const { api, state, access } = useSession();
   const { toast } = useToast();
   const { order } = loaded.detail;
+  // Addresses come only to readers with customers.read (#92).
+  const showAddresses = access.canSome("customers.read");
   const warehouses = useWarehouses();
   const hidePrices = pricesHidden(loaded.detail);
   const currentUserId = state.status === "ready" ? state.user.id : null;
@@ -167,8 +177,8 @@ function OrderView({
   const [retrying, setRetrying] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [conflict, setConflict] = useState(false);
-  const [shortages, setShortages] = useState<Shortage[] | null>(null);
-  const [confirmShortages, setConfirmShortages] = useState<Shortage[] | null>(null);
+  const [shortages, setShortages] = useState<{ action: StockAction; items: Shortage[] } | null>(null);
+  const [confirmShortages, setConfirmShortages] = useState<{ action: StockAction; items: Shortage[] } | null>(null);
   const [reasonFor, setReasonFor] = useState<"reject" | "cancel" | null>(null);
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [unpriced, setUnpriced] = useState<number[]>([]);
@@ -213,7 +223,12 @@ function OrderView({
       setReasonFor(null);
       setUnpriced([]);
       setConflict(false);
-      toast({ tone: "success", title: `${next.detail.order.number}: ${SUCCESS[action]}` });
+      const autoApproved = action === "submit" && isAutoApproved(next.detail.order.status);
+      toast({
+        tone: "success",
+        title: `${next.detail.order.number}: ${autoApproved ? AUTO_APPROVED : SUCCESS[action]}`,
+        description: autoApproved ? "İşletmenizde sipariş onayı zorunlu değil; stok ayrıldı ve toplama görevi oluşturuldu." : undefined,
+      });
       onLoaded(next);
     } catch (error) {
       handleError(action, error);
@@ -224,13 +239,14 @@ function OrderView({
   };
 
   const handleError = (action: OrderTransition, error: unknown) => {
-    if (action === "approve" && needsStockConfirmation(error)) {
-      setConfirmShortages(readShortages(error));
+    // Approve, and a submit the API approves at once (no approval required, #92), reserve stock all or nothing.
+    if ((action === "approve" || action === "submit") && needsStockConfirmation(error)) {
+      setConfirmShortages({ action, items: readShortages(error) });
       return;
     }
     setConfirmShortages(null);
     if (isInsufficientStock(error)) {
-      setShortages(readShortages(error));
+      setShortages({ action: action === "submit" ? "submit" : "approve", items: readShortages(error) });
       requestAnimationFrame(() => shortagesRef.current?.querySelector("h2")?.focus());
       return;
     }
@@ -253,6 +269,11 @@ function OrderView({
       return;
     }
     if (isPriceMissing(error)) setUnpriced(unpricedLineIndexes(error));
+    const addressProblem = addressErrorText(error);
+    if (addressProblem) {
+      show({ tone: "error", title: "Adres geçersiz", text: addressProblem });
+      return;
+    }
     show({ tone: "error", title: "İşlem tamamlanamadı", text: orderErrorMessage(error) });
   };
 
@@ -312,7 +333,7 @@ function OrderView({
       ) : null}
       {shortages ? (
         <div ref={shortagesRef}>
-          <ShortagesPanel shortages={shortages} lines={loaded.detail.lines} onDismiss={() => setShortages(null)} />
+          <ShortagesPanel action={shortages.action} shortages={shortages.items} lines={loaded.detail.lines} onDismiss={() => setShortages(null)} />
         </div>
       ) : null}
 
@@ -339,6 +360,10 @@ function OrderView({
           {order.notes && !editable ? <Info label="Not" value={order.notes} /> : null}
         </dl>
       </section>
+
+      {showAddresses ? (
+        <OrderAddresses shipping={order.shippingAddress ?? null} billing={order.billingAddress ?? null} snapshot={order.addressesAreSnapshot === true} />
+      ) : null}
 
       {actions.length > 0 ? (
         <section aria-labelledby="order-actions" className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
@@ -417,13 +442,17 @@ function OrderView({
       />
       <NegativeStockDialog
         open={confirmShortages !== null}
-        shortages={confirmShortages ?? []}
+        shortages={confirmShortages?.items ?? []}
         skuOf={skuOf}
-        confirming={pending === "approve"}
+        confirming={pending !== null && pending === confirmShortages?.action}
         onCancel={() => setConfirmShortages(null)}
-        onConfirm={() => void run("approve", { confirmNegativeStock: true })}
-        description="Bazı satırlarda satılabilir stok yetmiyor. İşletmenizin negatif stok ayarı “uyar” olduğu için onay ancak açık teyidinizle yapılır."
-        confirmLabel="Yine de onayla"
+        onConfirm={() => confirmShortages && void run(confirmShortages.action, { confirmNegativeStock: true })}
+        description={
+          confirmShortages?.action === "submit"
+            ? "İşletmenizde sipariş onayı zorunlu olmadığından sipariş gönderilince hemen onaylanır ve stok ayrılır. Bazı satırlarda satılabilir stok yetmiyor; negatif stok ayarı “uyar” olduğu için bu ancak açık teyidinizle yapılır."
+            : "Bazı satırlarda satılabilir stok yetmiyor. İşletmenizin negatif stok ayarı “uyar” olduğu için onay ancak açık teyidinizle yapılır."
+        }
+        confirmLabel={confirmShortages?.action === "submit" ? "Yine de gönder ve onayla" : "Yine de onayla"}
         footnote="Onaylarsanız tüm satırlar için stok ayrılır ve satılabilir stok eksiye düşer."
       />
     </>

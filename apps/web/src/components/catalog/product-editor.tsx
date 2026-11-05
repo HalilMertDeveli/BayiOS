@@ -42,6 +42,7 @@ import {
   type ProductFormValues,
 } from "@/lib/catalog/product-form";
 import { useSession } from "@/lib/session/session-context";
+import { useResetAfterCreate } from "@/lib/use-reset-after-create";
 import { AttributeInput } from "./attribute-input";
 import { FormAlert } from "./form-alert";
 import { ProductStatusBadge } from "./product-status-badge";
@@ -58,6 +59,7 @@ export function ProductEditor({ productId }: { productId?: string }) {
   const { state: reference, reload: reloadReference } = useCatalogReference();
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const { generation, markCreated } = useResetAfterCreate();
 
   useEffect(() => {
     if (!productId) return;
@@ -161,7 +163,7 @@ export function ProductEditor({ productId }: { productId?: string }) {
   return (
     <ProductForm
       // Remount with fresh values whenever a different version of the product is loaded.
-      key={loaded ? `${loaded.product.id}:${loaded.product.version}` : "new"}
+      key={loaded ? `${loaded.product.id}:${loaded.product.version}` : `new-${generation}`}
       reference={reference}
       loaded={loaded}
       onSaved={onSaved}
@@ -170,6 +172,7 @@ export function ProductEditor({ productId }: { productId?: string }) {
         reloadProduct();
       }}
       onVariantsChanged={reloadProduct}
+      onCreated={markCreated}
     />
   );
 }
@@ -194,9 +197,11 @@ type ProductFormProps = {
   onSaved: (loaded: Loaded) => void;
   onReload: () => void;
   onVariantsChanged: () => void;
+  /** A new product was created: the page starts the next visit from an empty form (#96). */
+  onCreated: () => void;
 };
 
-function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged }: ProductFormProps) {
+function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, onCreated }: ProductFormProps) {
   const { api, access } = useSession();
   const permissions = catalogPermissions(access);
   const readOnly = !permissions.write;
@@ -287,6 +292,7 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged }
       try {
         const created = await createProduct(api, body, keys.keyFor(body));
         keys.reset();
+        onCreated();
         toast({ tone: "success", title: "Ürün oluşturuldu", description: created.name });
         router.replace(productHref(created.id));
       } catch (error) {

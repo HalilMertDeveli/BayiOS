@@ -54,6 +54,18 @@ describe("buildLineInputs / buildCreateRequest", () => {
     });
   });
 
+  it("the /me discount cap (maxDiscountPercent) is checked before the API is asked", () => {
+    const capped = { ...limitedSales, maxDiscountPercent: 10 };
+    expect(validateDraft(withLine({ discountMode: "percent", discount: "10" }), capped)).toEqual({});
+    expect(validateDraft(withLine({ discountMode: "percent", discount: "10,5" }), capped)).toEqual({ "lines[0].discountPercent": "İskonto en fazla %10 olabilir." });
+    // Amounts depend on the line total (API-side check only).
+    expect(validateDraft(withLine({ discountMode: "amount", discount: "500" }), capped)).toEqual({});
+  });
+
+  it("sends the chosen addresses; '' (the customer's default) is null", () => {
+    expect(buildCreateRequest({ ...withLine(), shippingAddressId: "adr-2" }, sales)).toMatchObject({ shippingAddressId: "adr-2", billingAddressId: null });
+  });
+
   it("creates a manual draft; empty optional fields are null", () => {
     expect(buildCreateRequest(withLine(), sales)).toEqual({
       customerId: "cus-1",
@@ -65,6 +77,8 @@ describe("buildLineInputs / buildCreateRequest", () => {
       requestedDeliveryDate: null,
       notes: null,
       lines: [{ id: null, variantId: "var-9", quantity: "1", unitPrice: null, discountPercent: null, discountAmount: null }],
+      shippingAddressId: null,
+      billingAddressId: null,
     });
   });
 });
@@ -96,6 +110,16 @@ describe("draft edit (merge patch)", () => {
       notes: "Kapıda teslim",
       requestedDeliveryDate: "2026-11-10",
     });
+  });
+
+  it("address choices: loaded from the order, patched only when changed, back to the default as null", () => {
+    const pinned = orderDetail([orderLine()], { shippingAddressId: "adr-2", billingAddressId: null });
+    const original = draftValuesFromDetail(pinned);
+    expect([original.shippingAddressId, original.billingAddressId]).toEqual(["adr-2", ""]);
+    expect(buildUpdatePatch(original, { ...original, billingAddressId: "adr-9" }, manager)).toEqual({ billingAddressId: "adr-9" });
+    // Another customer: the form clears both choices; the API then uses that customer's defaults.
+    const otherCustomer = { ...original, customer: { id: "cus-2", name: null, code: null }, shippingAddressId: "", billingAddressId: "" };
+    expect(buildUpdatePatch(original, otherCustomer, manager)).toEqual({ customerId: "cus-2", shippingAddressId: null });
   });
 
   it("a changed line sends every line with its id (lines replace all)", () => {

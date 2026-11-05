@@ -6,9 +6,11 @@
  * Idempotency-Key required on create and transitions (replayed on reuse), draft-only PATCH (409 order.not_editable),
  * the order-desk transitions with 409 order.invalid_transition, 422 order.price_missing on submit/approve, all-or-nothing
  * approve with 409 inventory.insufficient_stock + `shortages` (+ `confirmationRequired` under the warn policy), and the
- * permission gates from the same MOCK /me grants the web receives (src/test/me-fixtures.ts): sales edits / cancels only
- * its own drafts (403 with the API's title otherwise), discounts within the tenant limit without manual prices, warehouse
- * staff read only task-linked orders with prices withheld (others 404).
+ * permission gates from the same MOCK /me grants the web receives (src/test/me-fixtures.ts) with the API's dedicated 403
+ * codes (#111): orders.not_owner, orders.cancel_not_allowed_in_status, orders.discount_limit_exceeded /
+ * orders.manual_price_not_allowed (limitPercent), auth.disabled_by_tenant_rule; warehouse staff read only task-linked
+ * orders with prices withheld (others 404). Tenant settings (#92): requireOrderApproval off → submit approves at once
+ * (owner/admin/manager), order addresses (preview on drafts, snapshot from submit; only for customers.read).
  * Prices come from the mock default price list only (no customer/dealer lists, no tiers); totals use simplified
  * rounding. Tests inject single responses with `overrides` (one-shot, keyed "METHOD /path"). All values are invented.
  */
@@ -78,6 +80,11 @@ export type MockOrder = {
   /** Creator (own-records grants): orders created through the mock API belong to the signed-in mock user. */
   createdBy: string;
   version: number;
+  /** Chosen customer addresses (null = the customer's default) and the snapshot copied at submit (#92). */
+  shippingAddressId: string | null;
+  billingAddressId: string | null;
+  shippingSnapshot: Json | null;
+  billingSnapshot: Json | null;
   lines: MockOrderLine[];
   history: MockHistory[];
 };
@@ -107,6 +114,8 @@ type Ctx = {
   taskOrderIds?: () => string[];
   /** Tenant rules behind the conditional grants (MOCK /me). */
   rules?: Partial<FixtureRules>;
+  /** Tenant settings (mock-backend's GET/PATCH /tenant/settings): requireOrderApproval drives submit (#92). */
+  settings?: () => { requireOrderApproval?: boolean };
 };
 
 function variantInfo(ctx: Ctx, variantId: string) {
@@ -176,8 +185,48 @@ const WAREHOUSE_NAMES: Record<string, string> = { [WAREHOUSE_IDS.main]: "Ana Dep
 let namesCtx: Ctx | null = null;
 const customerNameOf = (id: string) => namesCtx?.commerce?.customers.find((c) => c.id === id)?.name ?? null;
 
-function orderResponse(order: MockOrder) {
+const addressOut = (a: Json | null) =>
+  a
+    ? {
+        addressId: a.id ?? a.addressId,
+        title: a.title ?? null,
+        line1: a.line1,
+        line2: a.line2 ?? null,
+        district: a.district ?? null,
+        city: a.city,
+        postalCode: a.postalCode ?? null,
+        country: a.country,
+        contactName: a.contactName ?? null,
+        contactPhone: a.contactPhone ?? null,
+      }
+    : null;
+
+/** The chosen (else default) address of the customer, as the API previews it on drafts and copies it at submit. */
+function pickAddress(order: MockOrder, type: "shipping" | "billing"): Json | null {
+  const chosen = type === "shipping" ? order.shippingAddressId : order.billingAddressId;
+  const all = (namesCtx?.commerce?.addresses ?? []).filter((a) => a.customerId === order.customerId && a.type === type);
+  const found = chosen ? all.find((a) => a.id === chosen) : all.find((a) => a.isDefault);
+  // A copy: the snapshot must not follow later edits of the customer card.
+  return found ? ({ ...found } as unknown as Json) : null;
+}
+
+function addressMembers(order: MockOrder, withAddresses: boolean) {
+  const snapshot = order.status !== "draft";
+  if (!withAddresses) {
+    return { shippingAddressId: order.shippingAddressId, billingAddressId: order.billingAddressId, shippingAddress: null, billingAddress: null, addressesAreSnapshot: snapshot };
+  }
   return {
+    shippingAddressId: order.shippingAddressId,
+    billingAddressId: order.billingAddressId,
+    shippingAddress: addressOut(snapshot ? order.shippingSnapshot : pickAddress(order, "shipping")),
+    billingAddress: addressOut(snapshot ? order.billingSnapshot : pickAddress(order, "billing")),
+    addressesAreSnapshot: snapshot,
+  };
+}
+
+function orderResponse(order: MockOrder, withAddresses = true) {
+  return {
+    ...addressMembers(order, withAddresses),
     id: order.id,
     number: order.number,
     customerId: order.customerId,
@@ -211,7 +260,8 @@ function orderResponse(order: MockOrder) {
 
 export function orderDetailBody(order: MockOrder, hidePrices = false) {
   const history = order.history.map((h) => ({ ...h, changedByName: userName(h.changedBy) }));
-  const body = { order: orderResponse(order), lines: order.lines, history, shipments: [] as unknown[] };
+  // Readers without customers.read (warehouse staff, the same readers whose prices are withheld) get no addresses.
+  const body = { order: orderResponse(order, !hidePrices), lines: order.lines, history, shipments: [] as unknown[] };
   if (!hidePrices) return body;
   // orders.read K⁸ (warehouse staff): totals and every line amount withheld, as the API does.
   return {
@@ -301,6 +351,10 @@ export function makeOrder(
     hasShortage: options.hasShortage ?? false,
     createdBy: options.createdBy ?? OTHER_USER_ID,
     version: 1,
+    shippingAddressId: null,
+    billingAddressId: null,
+    shippingSnapshot: null,
+    billingSnapshot: null,
     lines: [],
     history: [],
   };
@@ -310,6 +364,9 @@ export function makeOrder(
   if (status !== "draft") {
     const from = order.status;
     order.status = status;
+    namesCtx = ctx;
+    order.shippingSnapshot = pickAddress(order, "shipping");
+    order.billingSnapshot = pickAddress(order, "billing");
     if (["approved", "picking", "packed", "shipped", "completed"].includes(status)) {
       order.approvedAt = "2026-11-05T10:00:00Z";
       for (const l of order.lines) l.reservedQuantity = l.quantity;
@@ -380,6 +437,18 @@ export function orderBusyResponse(route: Route) {
 const grantOf = (role: string, rules: Partial<FixtureRules> | undefined, permission: string): FixtureGrant | undefined =>
   grantsForRoleName(role, rules).find((g) => g.permission === permission);
 
+/** 422 field errors for chosen addresses that are not the customer's addresses of that type (null when fine). */
+function addressErrors(order: MockOrder, message?: string): Record<string, string[]> | null {
+  const all = namesCtx?.commerce?.addresses ?? [];
+  const errors: Record<string, string[]> = {};
+  const check = (id: string | null, type: string, field: string, text: string) => {
+    if (id && !all.some((a) => a.id === id && a.customerId === order.customerId && a.type === type)) errors[field] = [message ?? text];
+  };
+  check(order.shippingAddressId, "shipping", "shippingAddressId", "Not a shipping address of this customer.");
+  check(order.billingAddressId, "billing", "billingAddressId", "Not a billing address of this customer.");
+  return Object.keys(errors).length ? errors : null;
+}
+
 /** Handles an Orders request; returns false when the path is not one of them. */
 export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, role: string): Promise<boolean> {
   const request = route.request();
@@ -398,8 +467,20 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
   }
 
   const grant = (permission: string) => grantOf(role, ctx.rules, permission);
-  const forbidden = (permission: string, reason?: string) =>
-    done(json(route, 403, problemBody(403, "auth.forbidden", { title: reason ? `${permission}: ${reason}` : `Missing permission: ${permission}` })));
+/** 403 as the API sends it (#111): the dedicated code with its extension members; titles are developer text only. */
+  const deny = (code: string, title: string, extra: Json = {}) => done(json(route, 403, problemBody(403, code, { title, ...extra })));
+  const forbidden = (permission: string) => {
+    // A K grant switched off by its tenant rule (sales: approve — footnote 9; discounts with a 0 % limit — footnote 10).
+    const condition =
+      role === "sales" && permission === "orders.approve"
+        ? "tenant_rule.sales_can_approve_orders"
+        : role === "sales" && permission === "orders.price.override"
+          ? "orders.discount_within_limit"
+          : null;
+    return condition
+      ? deny("auth.disabled_by_tenant_rule", `Missing permission: ${permission}`, { permission, condition })
+      : deny("auth.forbidden", `Missing permission: ${permission}`);
+  };
   const read = grant("orders.read");
   if (!read) return forbidden("orders.read");
   // K⁸: warehouse staff see only the orders behind tasks, without prices.
@@ -413,9 +494,16 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
     if (!manual && !discount) return null;
     if (!override) return forbidden("orders.price.override");
     if (override.scope === "all") return null;
-    if (manual) return forbidden("orders.price.override", "A manual unit price is not allowed; only a discount within the sales limit");
     const limit = ctx.rules?.salesMaxDiscountPercent ?? 0;
-    if (lines.some((l) => Number(l.discountPercent ?? 0) > limit)) return forbidden("orders.price.override", `The discount exceeds the sales limit of ${limit} %`);
+    if (manual) {
+      return deny("orders.manual_price_not_allowed", "orders.price.override: A manual unit price is not allowed", { permission: "orders.price.override", limitPercent: limit });
+    }
+    if (lines.some((l) => Number(l.discountPercent ?? 0) > limit)) {
+      return deny("orders.discount_limit_exceeded", `orders.price.override: The discount exceeds the sales limit of ${limit} %`, {
+        permission: "orders.price.override",
+        limitPercent: limit,
+      });
+    }
     return null;
   };
 
@@ -467,6 +555,10 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
     order.notes = (body.notes as string | null) ?? null;
     order.requestedDeliveryDate = (body.requestedDeliveryDate as string | null) ?? null;
     order.pricesIncludeTax = body.pricesIncludeTax === true;
+    order.shippingAddressId = (body.shippingAddressId as string | null) ?? null;
+    order.billingAddressId = (body.billingAddressId as string | null) ?? null;
+    const invalid = addressErrors(order);
+    if (invalid) return done(json(route, 422, problemBody(422, "validation.failed", { errors: invalid })));
     order.lines = lines.map((l, i) => buildLine(ctx, order, i, l));
     mock.orders.push(order);
     return succeed(201, order);
@@ -487,11 +579,20 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
   if (!action && method === "PATCH") {
     const edit = grant("orders.edit.draft");
     if (!edit) return forbidden("orders.edit.draft");
-    if (edit.scope !== "all" && !own) return forbidden("orders.edit.draft", "Only drafts you created can be edited");
+    if (edit.scope !== "all" && !own) return deny("orders.not_owner", "orders.edit.draft: Only drafts you created can be edited", { permission: "orders.edit.draft" });
     if (!ifMatch) return done(json(route, 428, problemBody(428, "precondition.required")));
     if (checkVersion()) return done(json(route, 412, problemBody(412, "concurrency.version_mismatch")));
     if (order.status !== "draft") return done(json(route, 409, problemBody(409, "order.not_editable")));
-    if (body && "customerId" in body) order.customerId = String(body.customerId);
+    if (body && "customerId" in body && String(body.customerId) !== order.customerId) {
+      order.customerId = String(body.customerId);
+      // A new customer without explicit choices falls back to that customer's defaults (as the API).
+      order.shippingAddressId = null;
+      order.billingAddressId = null;
+    }
+    if (body && "shippingAddressId" in body) order.shippingAddressId = (body.shippingAddressId as string | null) ?? null;
+    if (body && "billingAddressId" in body) order.billingAddressId = (body.billingAddressId as string | null) ?? null;
+    const invalid = addressErrors(order);
+    if (invalid) return done(json(route, 422, problemBody(422, "validation.failed", { errors: invalid })));
     if (body && "warehouseId" in body) order.warehouseId = String(body.warehouseId);
     if (body && "notes" in body) order.notes = (body.notes as string | null) ?? null;
     if (body && "requestedDeliveryDate" in body) order.requestedDeliveryDate = (body.requestedDeliveryDate as string | null) ?? null;
@@ -525,8 +626,14 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
   if (!gate[action]) return done(json(route, 404, problemBody(404, "resource.not_found")));
   const transition = grant(`orders.${gate[action]}`);
   if (!transition) return forbidden(`orders.${gate[action]}`);
-  if (action === "cancel" && transition.scope !== "all" && !(own && (order.status === "draft" || order.status === "pending_approval"))) {
-    return forbidden("orders.cancel", "Only your own draft or pending-approval orders can be cancelled");
+  if (action === "cancel" && transition.scope !== "all") {
+    if (!own) return deny("orders.not_owner", "orders.cancel: Only your own orders can be cancelled", { permission: "orders.cancel" });
+    if (order.status !== "draft" && order.status !== "pending_approval") {
+      return deny("orders.cancel_not_allowed_in_status", "orders.cancel: Only your own draft or pending-approval orders can be cancelled", {
+        permission: "orders.cancel",
+        orderStatus: order.status,
+      });
+    }
   }
   if (action === "approve" && !ifMatch) return done(json(route, 428, problemBody(428, "precondition.required")));
   if (checkVersion()) return done(json(route, 412, problemBody(412, "concurrency.version_mismatch")));
@@ -559,7 +666,14 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
       );
     }
   }
-  if (action === "approve") {
+  if (action === "submit") {
+    const gone = addressErrors(order, "The chosen address no longer exists for this customer; choose another one.");
+    if (gone) return done(json(route, 422, problemBody(422, "validation.failed", { errors: gone })));
+  }
+  // #92: without required approval the submit of an unconditional approver (not WhatsApp AI) approves at once.
+  const autoApprove =
+    action === "submit" && ctx.settings?.().requireOrderApproval === false && order.source !== "whatsapp_ai" && grant("orders.approve")?.scope === "all";
+  if (action === "approve" || autoApprove) {
     const shortages = order.lines
       .filter((l) => mock.available.has(l.variantId) && l.quantity > mock.available.get(l.variantId)!)
       .map((l) => ({ variantId: l.variantId, sku: l.sku, warehouseId: order.warehouseId, locationId: null, requested: l.quantity, available: mock.available.get(l.variantId)! }));
@@ -579,8 +693,13 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
     order.cancelReason = reason;
     for (const l of order.lines) l.reservedQuantity = 0;
   }
-  order.status = target;
+  if (action === "submit") {
+    order.shippingSnapshot = pickAddress(order, "shipping");
+    order.billingSnapshot = pickAddress(order, "billing");
+  }
+  order.status = autoApprove ? "approved" : target;
   order.version += 1;
   addHistory(order, action, from, reason || null);
+  if (autoApprove) addHistory(order, "approve", "pending_approval");
   return succeed(200, order);
 }

@@ -40,6 +40,18 @@ export function activeMemberships(me: Pick<Me, "memberships">): Membership[] {
   return me.memberships.filter((m) => m.status === "active");
 }
 
+/** Status of the business behind a membership (MembershipResponse.tenantStatus, #111): active, suspended or closed. */
+export function isTenantUsable(m: Pick<Membership, "tenantStatus">): boolean {
+  return !m.tenantStatus || m.tenantStatus === "active";
+}
+
+export const tenantStatusLabels: Record<string, string> = { suspended: "Askıya alındı", closed: "Kapatıldı" };
+
+/** "Askıya alındı" / "Kapatıldı" for an unusable business (unknown statuses: "Kullanılamıyor"); null when active. */
+export function tenantStatusLabel(m: Pick<Membership, "tenantStatus">): string | null {
+  return isTenantUsable(m) ? null : (tenantStatusLabels[m.tenantStatus] ?? "Kullanılamıyor");
+}
+
 export type TenantResolution =
   | { kind: "onboarding" }
   | { kind: "pick"; memberships: Membership[] }

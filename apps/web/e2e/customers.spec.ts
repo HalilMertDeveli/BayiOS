@@ -118,6 +118,14 @@ test.describe("müşteri oluşturma ve düzenleme (mock)", () => {
     await page.getByRole("button", { name: "Yeniden yükle" }).click();
     await expect(page.getByText("Kayıt başkası tarafından değiştirildi")).toBeHidden();
     await expect(page.getByRole("textbox", { name: "Yetkili kişi" })).toHaveValue("");
+
+    // #96: back to "Yeni müşteri" client-side (the route was kept mounted): the form is empty, no accidental duplicate.
+    await page.getByRole("link", { name: "Müşteriler", exact: true }).first().click();
+    await page.getByRole("link", { name: "Yeni müşteri" }).click();
+    await expect(page).toHaveURL(/\/musteriler\/yeni$/);
+    await expect(page.getByRole("textbox", { name: "Müşteri kodu" })).toHaveValue("");
+    await expect(page.getByRole("textbox", { name: "Firma / müşteri adı" })).toHaveValue("");
+    await expect(page.getByRole("textbox", { name: "Kredi limiti" })).toHaveValue("");
   });
 
   test("422 alan hataları ilgili alana Türkçe yazılır", async ({ page }) => {

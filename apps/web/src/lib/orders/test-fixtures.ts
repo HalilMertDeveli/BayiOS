@@ -1,3 +1,4 @@
+import type { Address } from "@/lib/customers/api";
 import type { OrderDetail, OrderLine } from "./api";
 
 /** Synthetic order data for unit tests (invented values). */
@@ -79,5 +80,27 @@ export function orderDetail(lines: OrderLine[] = [orderLine()], overrides: Parti
     lines,
     history: [],
     shipments: [],
+  };
+}
+
+/** A synthetic customer address (invented). */
+export function customerAddress(id: string, type: string, isDefault: boolean, title: string | null, line1 = `${title ?? "Adres"} Cd. 1`): Address {
+  return {
+    id,
+    customerId: "cus-1",
+    type,
+    isDefault,
+    title,
+    line1,
+    line2: null,
+    district: "Kadıköy",
+    city: "İstanbul",
+    postalCode: null,
+    country: "TR",
+    contactName: null,
+    contactPhone: null,
+    version: 1,
+    createdAt: "2026-11-01T00:00:00Z",
+    updatedAt: null,
   };
 }

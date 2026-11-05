@@ -18,6 +18,7 @@ describe("orderPermissions — derived from GET /me effective permissions", () =
       overridePrice: true,
       discount: true,
       discountLimited: false,
+      maxDiscountPercent: null,
     });
   });
 
@@ -35,7 +36,7 @@ describe("orderPermissions — derived from GET /me effective permissions", () =
   });
 
   it("sales with a tenant discount limit gets discounts but no manual price (K¹⁰)", () => {
-    expect(orderPermissions(accessFor("sales", { salesMaxDiscountPercent: 10 }))).toMatchObject({ overridePrice: false, discount: true, discountLimited: true });
+    expect(orderPermissions(accessFor("sales", { salesMaxDiscountPercent: 10 }))).toMatchObject({ overridePrice: false, discount: true, discountLimited: true, maxDiscountPercent: 10 });
   });
 
   it("warehouse_staff reads task-linked orders only (K⁸) and has no order-desk action", () => {

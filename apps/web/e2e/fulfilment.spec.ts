@@ -123,7 +123,9 @@ test.describe("görev listesi (mock)", () => {
     const who = dialog.getByLabel("Kime");
     await expect(who.locator("option", { hasText: "Deniz Depocu (mock)" })).toHaveCount(1);
     const labels = (await who.locator("option").allInnerTexts()).filter((t) => t.includes("(mock)"));
+    // Only people who may pick (GET /members?permission=tasks.pick, #111): the mock's sales member is filtered out.
     expect(labels).toEqual(["Ali Toplayıcı (mock) · Depo personeli", "Deniz Depocu (mock) · Depo personeli"]);
+    expect(api.requests.some((r) => r.path === "/api/v1/members" && new URLSearchParams(r.search).get("permission") === "tasks.pick")).toBe(true);
     await who.selectOption({ label: "Deniz Depocu (mock) · Depo personeli" });
     await dialog.getByRole("button", { name: "Ata" }).click();
     await expect(dialog).toBeHidden();

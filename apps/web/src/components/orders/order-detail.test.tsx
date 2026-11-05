@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { ToastProvider } from "@/components/ui/toast";
-import { ApiError, type ApiClient } from "@/lib/api/client";
+import userEvent from "@testing-library/user-event";
+import { ApiError, type ApiClient, type RequestOptions } from "@/lib/api/client";
 import type { OrderDetail } from "@/lib/orders/api";
 import { orderDetail, orderLine } from "@/lib/orders/test-fixtures";
 import { SessionContext } from "@/lib/session/session-context";
@@ -63,7 +64,8 @@ describe("OrderDetailPage per role (MOCK /me permissions)", () => {
   it("sales under a discount limit gets the discount field but still no manual price (K¹⁰)", async () => {
     renderAs("sales", draft(ME), { salesMaxDiscountPercent: 10 });
     expect(await screen.findByLabelText("LED-1 iskonto türü")).toBeTruthy();
-    expect(screen.getByText("İşletmenizin iskonto sınırı içinde.")).toBeTruthy();
+    // The cap comes from /me (permissions[].parameters.maxDiscountPercent, #111).
+    expect(screen.getByText("İskonto en fazla %10")).toBeTruthy();
     expect(screen.queryByLabelText("LED-1 manuel birim fiyat")).toBeNull();
   });
 
@@ -119,5 +121,109 @@ describe("OrderDetailPage per role (MOCK /me permissions)", () => {
     expect(await screen.findByRole("heading", { name: "Satırlar" })).toBeTruthy();
     expect(screen.queryByRole("form", { name: "Taslak sipariş" })).toBeNull();
     expect(actionNames()).toEqual([]);
+  });
+});
+
+/** MOCK API for transitions: GET the order; POST submit answers with `onSubmit(body, call)` (or throws). */
+function transitionApi(detail: OrderDetail, onSubmit: (body: unknown, call: number) => OrderDetail) {
+  const posts: { path: string; body: unknown; key: string | undefined }[] = [];
+  const api: ApiClient = {
+    async request<T>(path: string, options: RequestOptions = {}) {
+      if (options.method === "POST") {
+        posts.push({ path, body: options.body, key: options.idempotencyKey });
+        return { data: onSubmit(options.body, posts.length) as T, status: 200, etag: 'W/"4"' };
+      }
+      if (path === "/api/v1/orders/ord-1") return { data: detail as T, status: 200, etag: 'W/"3"' };
+      throw new ApiError("not mocked", 404, { code: "resource.not_found" });
+    },
+  };
+  return { api, posts };
+}
+
+function renderWith(api: ApiClient, role: FixtureRole = "owner") {
+  render(
+    <SessionContext value={mockSession(role, { api })}>
+      <ToastProvider>
+        <OrderDetailPage orderId="ord-1" />
+      </ToastProvider>
+    </SessionContext>,
+  );
+}
+
+const SHORTAGE = { variantId: "var-1", sku: "LED-1", warehouseId: "wh-1", locationId: null, requested: 2, available: 1 };
+
+describe("submit when the tenant needs no approval (#92)", () => {
+  it("an approved answer is shown as 'otomatik onaylandı' with the approved state", async () => {
+    const approved = orderDetail([orderLine({ reservedQuantity: 2 })], { status: "approved", approvedAt: "2026-11-05T10:00:00Z", version: 4 });
+    const { api, posts } = transitionApi(draft(ME), () => approved);
+    renderWith(api);
+    await userEvent.click(await screen.findByRole("button", { name: "Onaya gönder" }));
+    expect(await screen.findByText("SIP-2026-000001: Sipariş otomatik onaylandı; stok ayrıldı")).toBeTruthy();
+    expect(screen.getByText(/sipariş onayı zorunlu değil/)).toBeTruthy();
+    expect(screen.getAllByText("Onaylandı").length).toBeGreaterThan(0);
+    expect(posts.map((p) => p.path)).toEqual(["/api/v1/orders/ord-1/submit"]);
+  });
+
+  it("warn policy: the shortage is confirmed in a dialog and the submit repeated with confirmNegativeStock", async () => {
+    const approved = orderDetail([orderLine()], { status: "approved", version: 4 });
+    const { api, posts } = transitionApi(draft(ME), (_body, call) => {
+      if (call === 1) throw new ApiError("x", 409, { code: "inventory.insufficient_stock", confirmationRequired: true, shortages: [SHORTAGE] });
+      return approved;
+    });
+    renderWith(api);
+    await userEvent.click(await screen.findByRole("button", { name: "Onaya gönder" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Stok eksiye düşecek" });
+    expect(dialog.textContent).toContain("sipariş gönderilince hemen onaylanır");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Yine de gönder ve onayla" }));
+    expect(await screen.findByText(/otomatik onaylandı/)).toBeTruthy();
+    expect(posts.map((p) => p.body)).toEqual([undefined, { confirmNegativeStock: true }]);
+    expect(posts[1].key).not.toBe(posts[0].key);
+  });
+
+  it("block policy: the shortages panel says the order stayed a draft", async () => {
+    const { api } = transitionApi(draft(ME), () => {
+      throw new ApiError("x", 409, { code: "inventory.insufficient_stock", shortages: [SHORTAGE] });
+    });
+    renderWith(api);
+    await userEvent.click(await screen.findByRole("button", { name: "Onaya gönder" }));
+    expect(await screen.findByRole("heading", { name: "Gönderilemedi: stok yetersiz" })).toBeTruthy();
+    expect(screen.getByText(/taslak olarak kaldı/)).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Stoğu yetmeyen satırlar" }).textContent).toContain("istenen 2, satılabilir 1");
+  });
+});
+
+describe("order addresses (#92)", () => {
+  const address = { addressId: "s1", title: "Merkez", line1: "Örnek Cd. 1", line2: null, district: "Kadıköy", city: "İstanbul", postalCode: null, country: "TR", contactName: null, contactPhone: null };
+  const noPost = () => {
+    throw new Error("no post");
+  };
+
+  it("shows the snapshot copied at submit", async () => {
+    const { api } = transitionApi(
+      orderDetail([orderLine()], { status: "pending_approval", shippingAddress: address, billingAddress: null, addressesAreSnapshot: true }),
+      noPost,
+    );
+    renderWith(api);
+    const section = await screen.findByRole("region", { name: "Adresler" });
+    expect(section.textContent).toContain("Sipariş gönderildiğinde kaydedilen adresler");
+    expect(section.textContent).toContain("Örnek Cd. 1");
+    expect(section.textContent).toContain("Siparişte kayıtlı adres yok.");
+  });
+
+  it("a snapshot masked after the customer was anonymized (#115) is shown with a note", async () => {
+    const masked = { ...address, title: null, line1: "Silinmiş adres", line2: null, postalCode: null, contactName: null, contactPhone: null };
+    const { api } = transitionApi(orderDetail([orderLine()], { status: "approved", shippingAddress: masked, billingAddress: masked, addressesAreSnapshot: true }), noPost);
+    renderWith(api);
+    const section = await screen.findByRole("region", { name: "Adresler" });
+    expect(section.textContent).toContain("Silinmiş adres");
+    expect(section.textContent).toContain("Kadıköy İstanbul, TR");
+    expect(within(section).getAllByText(/adres maskelendi/)).toHaveLength(2);
+  });
+
+  it("warehouse staff (no customers.read) gets no address section", async () => {
+    const { api } = transitionApi(orderDetail([orderLine()], { status: "approved", totals: null }), noPost);
+    renderWith(api, "warehouse_staff");
+    expect(await screen.findByRole("heading", { name: "Satırlar" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Adresler" })).toBeNull();
   });
 });

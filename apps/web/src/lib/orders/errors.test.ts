@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import {
+  addressErrorText,
+  isAutoApproved,
   isInsufficientStock,
   isOrderBusy,
   isOrderVersionConflict,
@@ -66,9 +68,33 @@ describe("orderErrorMessage", () => {
     expect(orderErrorMessage(apiError(422, { code: "order.price_missing" }))).toMatch(/Fiyatı olmayan satırlar/);
   });
 
-  it("explains a missing price-override permission", () => {
-    expect(orderErrorMessage(apiError(403, { code: "auth.forbidden", title: "Missing permission: orders.price.override" }))).toMatch(/Manuel fiyat ve iskonto/);
-    expect(orderErrorMessage(apiError(403, { code: "auth.forbidden", title: "x" }))).toMatch(/yetkiniz yok/);
+  it("maps the dedicated 403 codes (#111) with their extension values, never the title", () => {
+    // Titles are the old developer text; they must not change the message.
+    const limit = apiError(403, { code: "orders.discount_limit_exceeded", title: "anything", permission: "orders.price.override", limitPercent: 12.5 });
+    expect(orderErrorMessage(limit)).toMatch(/^İskonto en fazla %12,5 olabilir./);
+    expect(orderErrorMessage(apiError(403, { code: "orders.discount_limit_exceeded" }))).toMatch(/sınırı aşıyor/);
+    expect(orderErrorMessage(apiError(403, { code: "orders.manual_price_not_allowed", limitPercent: 10 }))).toMatch(/Manuel birim fiyat giremezsiniz; yalnızca en fazla %10 iskonto/);
+    expect(orderErrorMessage(apiError(403, { code: "orders.not_owner", permission: "orders.edit.draft" }))).toMatch(/yalnızca oluşturan kişi/);
+    expect(orderErrorMessage(apiError(403, { code: "orders.not_owner", permission: "orders.cancel" }))).toMatch(/kendi oluşturduğunuz siparişleri iptal/);
+    expect(orderErrorMessage(apiError(403, { code: "orders.cancel_not_allowed_in_status", orderStatus: "approved" }))).toMatch(/“Onaylandı” durumunda/);
+  });
+
+  it("auth.disabled_by_tenant_rule names the switched-off rule by permission; plain auth.forbidden stays generic", () => {
+    expect(orderErrorMessage(apiError(403, { code: "auth.disabled_by_tenant_rule", permission: "orders.approve", condition: "tenant_rule.sales_can_approve_orders" }))).toMatch(
+      /sipariş onaylaması işletme ayarlarında kapalı/,
+    );
+    expect(orderErrorMessage(apiError(403, { code: "auth.disabled_by_tenant_rule", permission: "orders.price.override" }))).toMatch(/iskonto sınırı %0/);
+    expect(orderErrorMessage(apiError(403, { code: "auth.disabled_by_tenant_rule", permission: "future.permission" }))).toMatch(/ayarlarında rolünüz için kapatılmış/);
+    // Before #111 the web parsed this title; it is ignored now.
+    expect(orderErrorMessage(apiError(403, { code: "auth.forbidden", title: "orders.price.override: The discount exceeds the sales limit of 10 %" }))).toMatch(/yetkiniz yok/);
+  });
+
+  it("submit: an approved result means auto-approval; address 422s are explained per field", () => {
+    expect(isAutoApproved("approved")).toBe(true);
+    expect(isAutoApproved("pending_approval")).toBe(false);
+    const gone = apiError(422, { code: "validation.failed", errors: { shippingAddressId: ["The chosen address no longer exists for this customer; choose another one."] } });
+    expect(addressErrorText(gone)).toBe("Teslimat adresi: Seçili adres müşteriden silinmiş. Başka bir adres seçip taslağı kaydedin.");
+    expect(addressErrorText(apiError(422, { code: "validation.failed", errors: { notes: ["x"] } }))).toBeNull();
   });
 
   it("falls back to the generic message for anything else", () => {

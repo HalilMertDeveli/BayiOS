@@ -179,6 +179,13 @@ test.describe("ürün oluştur / düzenle (mock)", () => {
     // Saved values come back into the form.
     await expect(page.getByLabel("Güç")).toHaveValue("36,5");
     await expect(page.getByRole("table", { name: "Varyantlar" })).toContainText("PNL-6060");
+
+    // #96: back to "Yeni ürün" client-side (the route was kept mounted): an empty form, not the product just created.
+    await page.getByRole("link", { name: "Ürünler", exact: true }).first().click();
+    await page.getByRole("link", { name: "Yeni ürün" }).click();
+    const fresh = page.getByRole("form", { name: "Yeni ürün" });
+    await expect(fresh.getByRole("textbox", { name: "Ürün adı" })).toHaveValue("");
+    await expect(fresh.getByRole("textbox", { name: "SKU (stok kodu)" })).toHaveValue("");
   });
 
   test("istemci doğrulaması: zorunlu alanlar işaretlenir, istek gönderilmez", async ({ page }) => {

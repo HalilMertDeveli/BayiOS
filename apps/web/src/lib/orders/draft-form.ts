@@ -1,5 +1,5 @@
 import type { VariantRef } from "@/lib/inventory/receipt-form";
-import { isZeroDecimal, parseDecimalInput, toDecimalInput } from "@/lib/pricing/money";
+import { formatPercent, isZeroDecimal, parseDecimalInput, toDecimalInput } from "@/lib/pricing/money";
 import type { CreateOrderRequest, OrderDetail, OrderLineInput, UpdateOrderRequest } from "./api";
 
 /**
@@ -33,6 +33,9 @@ export type DraftValues = {
   taxMode: TaxMode;
   requestedDeliveryDate: string;
   notes: string;
+  /** Chosen shipping / billing address of the customer; "" = the customer's default (null to the API). */
+  shippingAddressId: string;
+  billingAddressId: string;
   lines: DraftLine[];
 };
 
@@ -41,13 +44,15 @@ export type DraftOptions = {
   manualPrice: boolean;
   /** orders.price.override in any scope: line discounts may be sent (a limited grant is capped by the API). */
   discount: boolean;
+  /** Cap of a limited discount grant (sales, K¹⁰) from /me; percentages above it are refused before the API is asked. */
+  maxDiscountPercent?: number | null;
 };
 
 let lineCounter = 0;
 export const nextLineKey = () => `l-${++lineCounter}`;
 
 export function newDraftValues(warehouseId = ""): DraftValues {
-  return { customer: null, warehouseId, taxMode: "", requestedDeliveryDate: "", notes: "", lines: [] };
+  return { customer: null, warehouseId, taxMode: "", requestedDeliveryDate: "", notes: "", shippingAddressId: "", billingAddressId: "", lines: [] };
 }
 
 export function newDraftLine(variant: VariantRef): DraftLine {
@@ -63,6 +68,8 @@ export function draftValuesFromDetail(detail: OrderDetail, customer?: { name: st
     taxMode: order.totals?.pricesIncludeTax ? "included" : "excluded",
     requestedDeliveryDate: order.requestedDeliveryDate ?? "",
     notes: order.notes ?? "",
+    shippingAddressId: order.shippingAddressId ?? "",
+    billingAddressId: order.billingAddressId ?? "",
     lines: detail.lines.map((l) => {
       const percent = l.discountPercent ?? null;
       const amount = l.discountAmount ?? null;
@@ -83,6 +90,11 @@ const QUANTITY_MESSAGE = "0'dan büyük, en fazla 3 ondalıklı bir miktar girin
 const PRICE_MESSAGE = "0 veya daha büyük, en fazla 4 ondalıklı bir fiyat girin.";
 const PERCENT_MESSAGE = "0 ile 100 arasında, en fazla 2 ondalıklı bir oran girin.";
 const AMOUNT_MESSAGE = "0 veya daha büyük, en fazla 2 ondalıklı bir tutar girin.";
+
+/** "İskonto en fazla %10 olabilir." — the same wording as the API's 403 orders.discount_limit_exceeded. */
+export function discountLimitMessage(limitPercent: number): string {
+  return `İskonto en fazla ${formatPercent(limitPercent)} olabilir.`;
+}
 
 /** Error key of a line's discount input (matches the API's `lines[i].discountPercent` / `.discountAmount`). */
 export function discountKey(index: number, mode: DiscountMode): string {
@@ -109,6 +121,9 @@ export function validateDraft(values: DraftValues, options: DraftOptions): Recor
       const d = parseDecimalInput(line.discount, 2);
       if (!d.ok) errors[discountKey(i, line.discountMode)] = line.discountMode === "percent" ? PERCENT_MESSAGE : AMOUNT_MESSAGE;
       else if (line.discountMode === "percent" && !percentInRange(d.value)) errors[discountKey(i, "percent")] = PERCENT_MESSAGE;
+      else if (line.discountMode === "percent" && options.maxDiscountPercent != null && Number(d.value) > options.maxDiscountPercent) {
+        errors[discountKey(i, "percent")] = discountLimitMessage(options.maxDiscountPercent);
+      }
     }
   });
   return errors;
@@ -152,6 +167,8 @@ export function buildCreateRequest(values: DraftValues, options: DraftOptions): 
     requestedDeliveryDate: values.requestedDeliveryDate || null,
     notes: values.notes.trim() || null,
     lines: buildLineInputs(values, options),
+    shippingAddressId: values.shippingAddressId || null,
+    billingAddressId: values.billingAddressId || null,
   };
 }
 
@@ -166,6 +183,9 @@ export function buildUpdatePatch(original: DraftValues, values: DraftValues, opt
   if (values.taxMode !== original.taxMode && values.taxMode !== "") patch.pricesIncludeTax = values.taxMode === "included";
   if (values.requestedDeliveryDate !== original.requestedDeliveryDate) patch.requestedDeliveryDate = values.requestedDeliveryDate || null;
   if (values.notes.trim() !== original.notes.trim()) patch.notes = values.notes.trim() || null;
+  // A new customer without explicit choices falls back to that customer's defaults on the API side (the form clears both).
+  if (values.shippingAddressId !== original.shippingAddressId) patch.shippingAddressId = values.shippingAddressId || null;
+  if (values.billingAddressId !== original.billingAddressId) patch.billingAddressId = values.billingAddressId || null;
   const before = JSON.stringify(buildLineInputs(original, options));
   const after = JSON.stringify(buildLineInputs(values, options));
   if (before !== after) patch.lines = buildLineInputs(values, options);

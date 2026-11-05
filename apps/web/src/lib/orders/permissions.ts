@@ -25,6 +25,8 @@ export type OrderPermissions = {
   discount: boolean;
   /** Discounts are capped by the tenant's sales limit and manual unit prices are not allowed. */
   discountLimited: boolean;
+  /** The cap of a limited discount grant in percent (/me `parameters.maxDiscountPercent`, #111); null when unknown or uncapped. */
+  maxDiscountPercent: number | null;
 };
 
 /**
@@ -49,5 +51,6 @@ export function orderPermissions(access: Access): OrderPermissions {
     overridePrice,
     discount,
     discountLimited: discount && !overridePrice,
+    maxDiscountPercent: discount && !overridePrice ? access.maxDiscountPercent("orders.price.override") : null,
   };
 }
