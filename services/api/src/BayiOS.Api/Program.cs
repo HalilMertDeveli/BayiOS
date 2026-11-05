@@ -30,7 +30,7 @@ builder.Services.AddCors(options =>
         .WithOrigins(allowedOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
-        .WithExposedHeaders(CorrelationId.HeaderName, "ETag", "Location", "Idempotent-Replayed", "Retry-After")));
+        .WithExposedHeaders(CorrelationId.HeaderName, "ETag", "Location", "Idempotent-Replayed", "Retry-After", "Content-Disposition")));
 
 builder.Services.AddDatabase();
 builder.Services.AddBayiOsAuthentication();
