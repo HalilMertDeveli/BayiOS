@@ -87,11 +87,6 @@ internal sealed class PriceListService(
             errors["basePriceListId"] = ["Only sales lists can derive from a base list."];
         }
 
-        if (request.IsDefault == false)
-        {
-            errors["isDefault"] = ["Only true is accepted."];
-        }
-
         if (errors.Count > 0)
         {
             return AppError.Validation(errors);

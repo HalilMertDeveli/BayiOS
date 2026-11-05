@@ -88,9 +88,8 @@ test("sipariş → rezervasyon → toplama → paket → sevkiyat; stok ledger'd
   await page.getByRole("button", { name: "Yeni liste" }).click();
   const dialog = page.getByRole("dialog", { name: "Yeni fiyat listesi" });
   await dialog.getByLabel("Liste adı").fill(PRICE_LIST);
-  // Ticked explicitly: with the box unticked the web sends isDefault:false, which POST /price-lists rejects (422,
-  // "Only true is accepted") — product bug found by this suite, reported separately. Ticking it is a valid user path.
-  await dialog.getByRole("checkbox", { name: "TRY için varsayılan satış listesi yap" }).check();
+  // Left unticked on purpose (regression for #102): the web sends isDefault:false, and the first TRY sales list still
+  // becomes the default.
   await dialog.getByRole("button", { name: "Listeyi oluştur" }).click();
   await expect(page).toHaveURL(/\/fiyat-listeleri\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { level: 1, name: PRICE_LIST })).toBeVisible();
