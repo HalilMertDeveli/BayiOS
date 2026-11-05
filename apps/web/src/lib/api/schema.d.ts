@@ -108,6 +108,23 @@ export interface paths {
         patch: operations["Identity_UpdateTenantSettings"];
         trace?: never;
     };
+    "/api/v1/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Aktif tenant'ın üyeleri (personel seçici): görünen ad, e-posta, rol, durum; rol/durum filtresi, keyset sayfalama */
+        get: operations["Identity_ListMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/units": {
         parameters: {
             query?: never;
@@ -422,7 +439,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Stok bakiyeleri (fiziksel, rezerve, satılabilir): keyset sayfalama; variantId/warehouseId/locationId filtresi */
+        /** Stok bakiyeleri (fiziksel, rezerve, satılabilir): keyset sayfalama; variantId/warehouseId/locationId filtresi, q = SKU/ad metin araması veya tam barkod */
         get: operations["Inventory_ListBalances"];
         put?: never;
         post?: never;
@@ -821,6 +838,23 @@ export interface paths {
         put?: never;
         /** Sevkiyat onayı: rezerve stoktan tek seferlik çıkış (shipment_out), sipariş Sevk edildi veya kısmi sevk */
         post: operations["Shipments_Confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shipments/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Onaylanmamış (taslak/paketlenmiş) sevkiyatı iptal eder: stok hareketi yok, rezervasyon ve sipariş durumu değişmez, toplananlar için yerine koyma (putaway) görevi */
+        post: operations["Shipments_Cancel"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1499,6 +1533,14 @@ export interface components {
             /** Format: date-time */
             updatedAt: null | string;
         };
+        CancelShipmentRequest: {
+            reason: null | string;
+        };
+        CancelShipmentResponse: {
+            shipment: components["schemas"]["ShipmentResponse"];
+            /** Format: uuid */
+            putawayTaskId: null | string;
+        };
         CategoryResponse: {
             /** Format: uuid */
             id: string;
@@ -2011,6 +2053,27 @@ export interface components {
             /** Format: date-time */
             updatedAt: null | string;
         };
+        MemberPageInfo: {
+            nextCursor: null | string;
+            hasMore: boolean;
+            /** Format: int32 */
+            limit: number | string;
+        };
+        MemberPageResponse: {
+            items: components["schemas"]["MemberResponse"][];
+            page: components["schemas"]["MemberPageInfo"];
+        };
+        MemberResponse: {
+            /** Format: uuid */
+            userId: string;
+            displayName: null | string;
+            fullName: null | string;
+            email: null | string;
+            role: string;
+            status: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
         MembershipResponse: {
             /** Format: uuid */
             tenantId: string;
@@ -2083,6 +2146,7 @@ export interface components {
             reason: null | string;
             /** Format: uuid */
             changedBy: null | string;
+            changedByName: null | string;
             /** Format: date-time */
             changedAt: string;
         };
@@ -2159,8 +2223,10 @@ export interface components {
             number: string;
             /** Format: uuid */
             customerId: string;
+            customerName: null | string;
             /** Format: uuid */
             warehouseId: string;
+            warehouseName: null | string;
             status: string;
             fulfillmentStatus: string;
             source: string;
@@ -2177,12 +2243,14 @@ export interface components {
             createdAt: string;
             /** Format: uuid */
             createdBy: null | string;
+            createdByName: null | string;
             /** Format: date-time */
             submittedAt: null | string;
             /** Format: date-time */
             approvedAt: null | string;
             /** Format: uuid */
             approvedBy: null | string;
+            approvedByName: null | string;
             /** Format: date-time */
             shippedAt: null | string;
             /** Format: date-time */
@@ -2217,6 +2285,7 @@ export interface components {
             shippedAt: string;
             /** Format: uuid */
             shippedBy: null | string;
+            shippedByName: null | string;
             lines: components["schemas"]["OrderShipmentLineResponse"][];
         };
         OrderSummaryResponse: {
@@ -2225,8 +2294,10 @@ export interface components {
             number: string;
             /** Format: uuid */
             customerId: string;
+            customerName: null | string;
             /** Format: uuid */
             warehouseId: string;
+            warehouseName: null | string;
             status: string;
             fulfillmentStatus: string;
             source: string;
@@ -2337,6 +2408,7 @@ export interface components {
             warehouseId: string;
             /** Format: uuid */
             assignedTo: null | string;
+            assigneeName: null | string;
             /** Format: int32 */
             lineCount: number | string;
             /** Format: double */
@@ -2612,6 +2684,7 @@ export interface components {
             sku: string;
             name: string;
             unit: string;
+            barcode: null | string;
             /** Format: uuid */
             locationId: null | string;
             locationCode: null | string;
@@ -3433,6 +3506,61 @@ export interface operations {
             };
             /** @description Precondition Required */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Identity_ListMembers: {
+        parameters: {
+            query?: {
+                role?: string;
+                status?: string;
+                limit?: string;
+                cursor?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberPageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5852,6 +5980,7 @@ export interface operations {
                 variantId?: string;
                 warehouseId?: string;
                 locationId?: string;
+                q?: string;
                 limit?: string;
                 cursor?: string;
             };
@@ -5893,6 +6022,15 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8174,6 +8312,112 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Shipments_Cancel: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelShipmentRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelShipmentResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
                 };
             };
             /** @description Precondition Required */

@@ -6,6 +6,7 @@ using System.Text.Json;
 using BayiOS.IntegrationTests.Catalog;
 using BayiOS.IntegrationTests.Infrastructure;
 using BayiOS.SharedKernel.Authorization;
+using Npgsql;
 
 namespace BayiOS.IntegrationTests.Performance;
 
@@ -166,6 +167,110 @@ public sealed class CatalogPerformanceTests(ApiFixture fixture)
         await HttpAssert.ProblemAsync(
             await viewer.PatchAsync($"/api/v1/products/{someProduct}", new { name = "X" }, CatalogClient.ETag(1)), HttpStatusCode.Forbidden, "auth.forbidden");
     }
+
+    /// <summary>
+    /// #86: <c>GET /inventory/balances?q=</c> on the 10k catalog with one balance per active variant (stocked through
+    /// receipts, i.e. the ledger). The term is resolved by the Catalog port into variant ids that filter the balances;
+    /// results must equal the SQL truth, page exactly once, stay within the same p95 budget, and an over-broad term is
+    /// refused instead of truncated.
+    /// </summary>
+    [Fact]
+    public async Task Balance_search_returns_exactly_the_matching_stock_within_the_p95_budget()
+    {
+        var catalog = await CatalogAsync();
+        var owner = catalog.Owner;
+        await StockEveryActiveVariantAsync(catalog);
+
+        const string Truth =
+            """
+            SELECT b.id FROM inventory.inventory_balances b
+            JOIN catalog.product_variants v ON v.tenant_id = b.tenant_id AND v.id = b.variant_id
+            JOIN catalog.products p ON p.tenant_id = v.tenant_id AND p.id = v.product_id
+            WHERE b.tenant_id = $1 AND (v.sku ILIKE $2 OR v.name ILIKE $2 OR p.name ILIKE $2 OR v.barcode = $3)
+            """;
+        foreach (var term in new[] { "Balata", "MTR-012", "pcx160", SyntheticCatalog.Barcode(4244, 2) })
+        {
+            await AssertExactlyOnceAsync(owner, "/api/v1/inventory/balances?limit=200&q=" + Uri.EscapeDataString(term), await catalog.IdsAsync(fixture, Truth, $"%{term}%", term));
+        }
+
+        await HttpAssert.ProblemAsync(await owner.GetAsync("/api/v1/inventory/balances?q=-"), HttpStatusCode.UnprocessableEntity, "inventory.search_too_broad");
+
+        string[] names = ["Balata", "debriyaj", "cg125", "Filtre", "amortis", "Panel", "220V", "pcx160", "Rulman", "Ampul"];
+        int N(int run) => 1 + (run * 7919 % SyntheticCatalog.ProductCount);
+        var scenarios = new (string Name, Func<int, string> Url)[]
+        {
+            ("Balances: default page (50)", _ => "/api/v1/inventory/balances"),
+            ("Balances: name substring (q)", r => "/api/v1/inventory/balances?q=" + Uri.EscapeDataString(names[r % names.Length])),
+            ("Balances: SKU substring (q)", r => $"/api/v1/inventory/balances?q=MTR-0{r * 37 % 999:D3}"),
+            ("Balances: barcode (q)", r => "/api/v1/inventory/balances?q=" + SyntheticCatalog.Barcode(N(r))),
+            ("Balances: broad term, 5k+ matches (q=LED)", _ => "/api/v1/inventory/balances?q=LED"),
+        };
+
+        var results = new List<(string Name, double P50, double P95, double Max)>();
+        foreach (var (name, url) in scenarios)
+        {
+            var samples = new List<double>();
+            for (var run = 0; run < Warmup + Runs; run++)
+            {
+                var watch = Stopwatch.StartNew();
+                var response = await owner.GetAsync(url(run));
+                await response.Content.ReadAsByteArrayAsync(Ct);
+                var elapsed = watch.Elapsed.TotalMilliseconds;
+                Assert.True(response.StatusCode == HttpStatusCode.OK, $"{name}: GET {url(run)} → {(int)response.StatusCode}");
+                if (run >= Warmup)
+                {
+                    samples.Add(elapsed);
+                }
+            }
+
+            results.Add((name, Percentile(samples, 50), Percentile(samples, 95), samples.Max()));
+        }
+
+        Report(catalog, results);
+        var over = results.Where(r => r.P95 >= BudgetMs).Select(r => $"{r.Name}: p95 {r.P95:F1} ms").ToList();
+        Assert.True(over.Count == 0, $"p95 budget {BudgetMs} ms exceeded:\n{string.Join('\n', over)}\n\nAll results:\n{Table(results)}");
+    }
+
+    /// <summary>One receipt line per active variant (500 lines per receipt) into the default warehouse; once per run.</summary>
+    private async Task StockEveryActiveVariantAsync(SyntheticCatalog catalog)
+    {
+        await Gate.WaitAsync(Ct);
+        try
+        {
+            if (_stocked)
+            {
+                return;
+            }
+
+            var variants = await catalog.IdsAsync(
+                fixture,
+                """
+                SELECT v.id FROM catalog.product_variants v JOIN catalog.products p ON p.tenant_id = v.tenant_id AND p.id = v.product_id
+                WHERE v.tenant_id = $1 AND v.status = 'active' AND p.status = 'active' ORDER BY v.id
+                """);
+            foreach (var chunk in variants.Chunk(500))
+            {
+                var response = await catalog.Owner.PostAsync("/api/v1/inventory/receipts", new
+                {
+                    reference = "Sentetik açılış stoğu",
+                    lines = chunk.Select((id, i) => new { variantId = id, quantity = 1m + (i % 7) }),
+                });
+                Assert.True(response.StatusCode == HttpStatusCode.Created, $"receipt: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
+            }
+
+            await using var analyze = new NpgsqlConnection(fixture.MigratorConnectionString);
+            await analyze.OpenAsync(Ct);
+            await using var command = new NpgsqlCommand("ANALYZE inventory.inventory_balances; ANALYZE inventory.inventory_movements;", analyze);
+            await command.ExecuteNonQueryAsync(Ct);
+            _stocked = true;
+        }
+        finally
+        {
+            Gate.Release();
+        }
+    }
+
+    private static bool _stocked;
 
     private async Task<SyntheticCatalog> CatalogAsync()
     {

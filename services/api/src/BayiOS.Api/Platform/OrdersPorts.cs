@@ -1,5 +1,8 @@
 using BayiOS.Modules.Catalog.Infrastructure.Persistence;
+using BayiOS.Modules.Customers.Infrastructure.Persistence;
+using BayiOS.Modules.Identity.Contracts;
 using BayiOS.Modules.Orders.Contracts;
+using BayiOS.Modules.Warehouse.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace BayiOS.Api.Platform;
@@ -14,8 +17,33 @@ internal static class OrdersPorts
     public static IServiceCollection AddOrdersPorts(this IServiceCollection services)
     {
         services.AddScoped<IOrderVariantDirectory, CatalogOrderVariantDirectory>();
+        services.AddScoped<IOrderReferenceNames, OrderReferenceNames>();
         return services;
     }
+}
+
+/// <summary>
+/// Names for order responses: customers and warehouses through their modules' DbContexts (tenant query filters plus
+/// RLS, request connection and transaction), users through Identity's <see cref="IUserDirectory"/>. One query per batch.
+/// </summary>
+internal sealed class OrderReferenceNames(CustomersDbContext customers, WarehouseDbContext warehouses, IUserDirectory users) : IOrderReferenceNames
+{
+    public async Task<IReadOnlyDictionary<Guid, string>> CustomerNamesAsync(IReadOnlyCollection<Guid> customerIds, CancellationToken cancellationToken) =>
+        customerIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await customers.Customers.AsNoTracking()
+                .Where(c => customerIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.Name, cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, string>> WarehouseNamesAsync(IReadOnlyCollection<Guid> warehouseIds, CancellationToken cancellationToken) =>
+        warehouseIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await warehouses.Warehouses.AsNoTracking()
+                .Where(w => warehouseIds.Contains(w.Id))
+                .ToDictionaryAsync(w => w.Id, w => w.Name, cancellationToken);
+
+    public Task<IReadOnlyDictionary<Guid, string>> UserNamesAsync(IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken) =>
+        users.DisplayNamesAsync(userIds, cancellationToken);
 }
 
 /// <summary>Line snapshot source: SKU, variant (else product) name, unit code; active = variant and product active.</summary>

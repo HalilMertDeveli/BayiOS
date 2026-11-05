@@ -58,7 +58,8 @@ internal static class SecurityProbes
             "PUT /api/v1/import-mapping-templates/{id}" => new { name = hack, type = "products", columns = ImportColumns },
             "POST /api/v1/orders" => new { customerId = own.Id("customer"), warehouseId = own.Id("warehouse"), lines = new[] { new { variantId = own.Id("variant"), quantity = 1m } } },
             "PATCH /api/v1/orders/{id}" => new { notes = hack },
-            "POST /api/v1/orders/{id}/reject" or "POST /api/v1/orders/{id}/close-remaining" or "POST /api/v1/orders/{id}/cancel" => new { reason = hack },
+            "POST /api/v1/orders/{id}/reject" or "POST /api/v1/orders/{id}/close-remaining" or "POST /api/v1/orders/{id}/cancel"
+                or "POST /api/v1/shipments/{id}/cancel" => new { reason = hack },
             "POST /api/v1/orders/{id}/shipments" => new
             {
                 lines = new[] { new { orderLineId = victim.OrderLineId, quantity = 1m, locationId = (Guid?)victim.Id("location") } },

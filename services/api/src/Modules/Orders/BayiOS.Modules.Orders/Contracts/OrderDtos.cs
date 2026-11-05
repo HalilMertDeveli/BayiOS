@@ -63,11 +63,17 @@ public sealed record OrderTotalsResponse(
     bool HasUnpricedLines);
 
 /// <param name="Totals">Null when the caller may not see prices (warehouse_staff, roles-permissions footnote 8).</param>
+/// <param name="CustomerName">Current customer name; null when the caller lacks <c>customers.read</c> (warehouse_staff).</param>
+/// <param name="WarehouseName">Current warehouse name.</param>
+/// <param name="CreatedByName">Display name of the creator (full name, else e-mail local part).</param>
+/// <param name="ApprovedByName">Display name of the approver.</param>
 public sealed record OrderResponse(
     Guid Id,
     string Number,
     Guid CustomerId,
+    string? CustomerName,
     Guid WarehouseId,
+    string? WarehouseName,
     string Status,
     string FulfillmentStatus,
     string Source,
@@ -79,9 +85,11 @@ public sealed record OrderResponse(
     OrderTotalsResponse? Totals,
     DateTimeOffset CreatedAt,
     Guid? CreatedBy,
+    string? CreatedByName,
     DateTimeOffset? SubmittedAt,
     DateTimeOffset? ApprovedAt,
     Guid? ApprovedBy,
+    string? ApprovedByName,
     DateTimeOffset? ShippedAt,
     DateTimeOffset? CompletedAt,
     DateTimeOffset? CancelledAt,
@@ -115,6 +123,7 @@ public sealed record OrderLineResponse(
     decimal CancelledQuantity,
     decimal OpenQuantity);
 
+/// <param name="ChangedByName">Display name of <paramref name="ChangedBy"/> (full name, else e-mail local part).</param>
 public sealed record OrderHistoryResponse(
     Guid Id,
     string Action,
@@ -123,6 +132,7 @@ public sealed record OrderHistoryResponse(
     string FulfillmentStatus,
     string? Reason,
     Guid? ChangedBy,
+    string? ChangedByName,
     DateTimeOffset ChangedAt);
 
 public sealed record OrderShipmentLineResponse(Guid Id, Guid OrderLineId, Guid VariantId, Guid? LocationId, decimal Quantity);
@@ -134,6 +144,7 @@ public sealed record OrderShipmentResponse(
     int? PackageCount,
     DateTimeOffset ShippedAt,
     Guid? ShippedBy,
+    string? ShippedByName,
     IReadOnlyList<OrderShipmentLineResponse> Lines);
 
 public sealed record OrderDetailResponse(
@@ -143,11 +154,15 @@ public sealed record OrderDetailResponse(
     IReadOnlyList<OrderShipmentResponse> Shipments);
 
 /// <param name="GrandTotal">Null when the caller may not see prices (warehouse_staff, roles-permissions footnote 8).</param>
+/// <param name="CustomerName">Current customer name; null when the caller lacks <c>customers.read</c> (warehouse_staff).</param>
+/// <param name="WarehouseName">Current warehouse name.</param>
 public sealed record OrderSummaryResponse(
     Guid Id,
     string Number,
     Guid CustomerId,
+    string? CustomerName,
     Guid WarehouseId,
+    string? WarehouseName,
     string Status,
     string FulfillmentStatus,
     string Source,
