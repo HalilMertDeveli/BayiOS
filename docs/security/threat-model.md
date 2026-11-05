@@ -288,7 +288,9 @@ profili; vergi no/telefon yalnızca `changed`), `inventory.receipt_posted`, `inv
 token sayıları), `ai.draft_created` (sipariş id/no, seçim sayıları: proposed/candidate/manual/skipped),
 `ai.draft_rejected` — AI olaylarında **mesaj metni, ürün metni veya müşteri bilgisi yoktur**
 (`ai.line_flagged_ambiguous` ayrı olay yerine `ai.parse_requested.ambiguous` sayısı; `ai.draft_approved` = Orders'ın
-`order.approved` olayı). Kaynak: `SharedKernel/Platform/Audit/AuditLog.cs`
+`order.approved` olayı), `billing.trial_started`, `billing.trial_expired`, `billing.module_activated`,
+`billing.module_deactivated`, `billing.module_trial_expired` (#124; ödeme bilgisi yok), `export.downloaded` (#125; yalnızca
+rapor, biçim ve satır sayısı — dışa aktarılan veri yoktur). Kaynak: `SharedKernel/Platform/Audit/AuditLog.cs`
 (`AuditActions`) ve modül sabitleri (`ImportAuditActions`, `CustomerAuditActions`, `AssistantAuditActions`). Tablodaki diğer kodlar henüz uygulanmadı; özellikle
 `member.*` ve `auth.*` (erişim reddi) olayları #89'da açık kalır (Identity uçlarına bağlı).
 

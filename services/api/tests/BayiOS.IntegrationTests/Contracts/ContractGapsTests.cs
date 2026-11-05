@@ -31,6 +31,7 @@ public sealed class ContractGapsTests(ApiFixture fixture)
         Assert.Contains("Retry-After", exposed, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("Idempotent-Replayed", exposed, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("ETag", exposed, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("Content-Disposition", exposed, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
