@@ -53,6 +53,11 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         ["imports.import_rows"] = Full,
         ["imports.mapping_templates"] = Full,
 
+        // AI parse requests are history (text cleared after retention by integrations.purge_expired_parse_texts);
+        // usage counters are upserted, never deleted (#47, #50).
+        ["integrations.ai_parse_requests"] = ArchiveOnly,
+        ["integrations.ai_usage"] = ArchiveOnly,
+
         ["inventory.inventory_balances"] = ArchiveOnly, // derived; never deleted
         ["inventory.inventory_movements"] = AppendOnly, // the ledger
         ["inventory.stock_reservations"] = ArchiveOnly,
@@ -125,6 +130,10 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         // read, to find inactive imports that finished before the retention floor.
         ["imports.import_files"] = ["import_files_purge_select", "import_files_purge_delete"],
         ["imports.import_jobs"] = ["import_jobs_purge_select"],
+
+        // WhatsApp message text past retention (integrations.purge_expired_parse_texts, data-policy §4, #47): the owner
+        // may read rows older than one day and only set their text columns to NULL.
+        ["integrations.ai_parse_requests"] = ["ai_parse_requests_purge_select", "ai_parse_requests_purge_update"],
     };
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -140,11 +149,26 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task Parse_text_purge_is_reachable_only_through_its_definer_function()
+    {
+        // The runtime role can neither delete parse requests nor see other tenants' rows; the retention job clears the
+        // text through the owner's function, which only NULLs the text columns of rows past the one-day floor.
+        Assert.True(await ScalarAsync<bool>($"SELECT has_function_privilege('{App}', 'integrations.purge_expired_parse_texts(interval, integer)', 'EXECUTE')"));
+        Assert.False(await ScalarAsync<bool>("SELECT has_function_privilege('public', 'integrations.purge_expired_parse_texts(interval, integer)', 'EXECUTE')"));
+        Assert.False(await ScalarAsync<bool>($"SELECT has_table_privilege('{App}', 'integrations.ai_parse_requests', 'DELETE')"));
+        Assert.Equal(
+            "raw_text IS NULL AND parsed_payload IS NULL AND review IS NULL AND text_purged_at IS NOT NULL",
+            (await ScalarAsync<string>(
+                "SELECT with_check FROM pg_policies WHERE schemaname = 'integrations' AND policyname = 'ai_parse_requests_purge_update'"))
+                .Replace("(", string.Empty, StringComparison.Ordinal).Replace(")", string.Empty, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Business_schemas_are_the_known_modules_and_nothing_lives_in_public()
     {
         var schemas = await StringsAsync(DatabaseCatalog.BusinessSchemasSql + " ORDER BY 1");
         Assert.Superset(
-            new HashSet<string> { "audit", "catalog", "customers", "identity", "imports", "inventory", "orders", "platform", "pricing", "warehouse" },
+            new HashSet<string> { "audit", "catalog", "customers", "identity", "imports", "integrations", "inventory", "orders", "platform", "pricing", "warehouse" },
             schemas.ToHashSet());
 
         Assert.Empty(await StringsAsync(
@@ -225,9 +249,11 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
                 {
                     violations.Add($"{table}.{name}: policy for unexpected role(s) {string.Join(',', roles)}");
                 }
-                else if (cmd is not ("SELECT" or "DELETE") || !qual.Contains("now()", StringComparison.Ordinal))
+                else if (!qual.Contains("now()", StringComparison.Ordinal)
+                    || !(cmd is "SELECT" or "DELETE" || (cmd == "UPDATE" && check.Contains("IS NULL", StringComparison.Ordinal))))
                 {
-                    violations.Add($"{table}.{name}: purge policy must be SELECT/DELETE of expired rows only ({cmd}: {qual})");
+                    // UPDATE only for redaction: its WITH CHECK may only let columns become NULL (AI parse texts, #47).
+                    violations.Add($"{table}.{name}: purge policy must be SELECT/DELETE (or a NULL-only UPDATE) of expired rows ({cmd}: {qual} / {check})");
                 }
 
                 continue;

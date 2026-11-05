@@ -157,7 +157,7 @@ public class PlatformMaintenanceTests(ApiFixture fixture)
     {
         var registry = fixture.Services.GetRequiredService<JobHandlerRegistry>();
         Assert.Equal(
-            new[] { IdempotencyCleanupJob.Type, QueueCleanupJob.Type, AuditRetentionJob.Type },
+            new[] { IdempotencyCleanupJob.Type, QueueCleanupJob.Type, AuditRetentionJob.Type, BayiOS.Modules.Integrations.IntegrationsModule.TextRetentionJobType },
             PlatformWorker.MaintenanceJobTypes);
         Assert.All(PlatformWorker.MaintenanceJobTypes, type => Assert.True(registry.IsRegistered(type), type));
     }

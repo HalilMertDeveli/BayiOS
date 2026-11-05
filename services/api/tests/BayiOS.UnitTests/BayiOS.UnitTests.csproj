@@ -18,6 +18,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Synthetic WhatsApp evaluation set (#46): catalog, messages and expected results. -->
+    <None Include="Integrations\EvalData\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Synthetic spreadsheet builder shared with the integration tests. -->
     <Compile Include="..\BayiOS.IntegrationTests\Imports\SyntheticFiles.cs" Link="Imports\SyntheticFiles.cs" />
   </ItemGroup>

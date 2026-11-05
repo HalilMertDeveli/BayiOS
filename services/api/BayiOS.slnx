@@ -16,6 +16,9 @@
   <Folder Name="/src/Modules/Imports/">
     <Project Path="src/Modules/Imports/BayiOS.Modules.Imports/BayiOS.Modules.Imports.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Integrations/">
+    <Project Path="src/Modules/Integrations/BayiOS.Modules.Integrations/BayiOS.Modules.Integrations.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Inventory/">
     <Project Path="src/Modules/Inventory/BayiOS.Modules.Inventory/BayiOS.Modules.Inventory.csproj" />
   </Folder>

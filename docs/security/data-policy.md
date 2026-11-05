@@ -36,6 +36,10 @@ ve maskeli gösterilir.
 - Telefon personel için opsiyonel; push yeterliyse SMS yok.
 - AI'ya yalnızca ayrıştırma için gerekli metin gider (katalog/fiyat verisi gönderilmez, eşleştirme sunucuda — ADR 0010); müşteri adres/telefonu gönderilmez. Metindeki
   telefon numaraları gönderim öncesi maskelenir (`+90 5** *** ** 12`).
+  Uygulanan (#47): `TurkishText.MaskPersonalData` Türk mobil numaralarını (son 2 hane kalır) ve e-posta adreslerini
+  (`[e-posta]`) maskeler; barkodlara dokunmaz. Sağlayıcıya ve veritabanına giden metin maskelenmiş metindir. Kişi
+  adları maskelenmez (eşleştirme kalitesi/ürün kararı — threat-model §9 açık soru). AI özelliği varsayılan kapalıdır
+  (`Ai:Enabled=false`); tenant bazında opt-in ayarı henüz yoktur (ürün sahibi kararı + Identity ayarı gerekir).
 - Bildirim yükünde kişi adı/fiyat yok.
 - Log ve hata izlemede gövde loglanmaz; yalnızca allowlist alanlar.
 - Preview/dev ortamlarında **yalnızca sentetik veri** (gerçek müşteri verisi kopyalanmaz, prod dump'ı alınmaz).
@@ -48,7 +52,7 @@ ve maskeli gösterilir.
 | Sipariş ve stok hareketleri | Abonelik + tenant talebine göre; fatura ile ilişkili kayıtlar için ticari/vergi mevzuatı süreleri tenant sorumluluğundadır | VUK/TTK saklama yükümlülükleri tenant'ındır; BayiOS export sağlar |
 | Tenant kapanışı sonrası | 30 gün geri alma penceresi → kalıcı silme | Yanlışlıkla kapatmaya karşı |
 | Yedekler | Sağlayıcı yedek rotasyonu (Supabase planına göre) — silinen veri yedeklerden rotasyonla düşer | Plan seçiminde doğrulanacak |
-| AI ayrıştırma ham metni | 30 gün (sonra yalnızca yapılandırılmış taslak kalır) | Minimizasyon |
+| AI ayrıştırma ham metni | 30 gün (sonra yalnızca yapılandırılmış taslak kalır) — uygulanan: `integrations.ai_parse_requests` maskelenmiş metni, ayrıştırma çıktısını ve inceleme satırlarını saatlik `integrations.ai_text_retention` job'ı `Ai:TextRetentionDays` (varsayılan 30, en az 1) sonra NULL'lar; sayılar, token'lar ve sipariş bağı kalır. Idempotency yanıt kopyası 24 saatte silinir | Minimizasyon |
 | Import dosyaları | İş tamamlandıktan 30 gün sonra | Hata ayıklama |
 | Export dosyaları | 7 gün | Tek seferlik indirme |
 | Audit olayları | 2 yıl (değerlendirilecek) — uygulanan: veritabanı tabanı 2 yıl, `Audit:Retention` (varsayılan/en az 730 gün) ile uzatılabilir; saatlik `platform.audit_retention` job'ı siler | Güvenlik. Append-only kuralının tek istisnası; tasarım: data-model §5.11, threat-model §7 |

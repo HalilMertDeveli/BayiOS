@@ -165,6 +165,24 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 | D | Maliyet saldırısı (çok uzun metin, çok istek) | M | Girdi uzunluk limiti, tenant başına günlük kota, bütçe alarmı | Integration: kota aşımı → 429 |
 | E | Modelin onaysız sipariş kesinleştirmesi | C | AI yalnızca `draft` üretir; onay ayrı endpoint, ayrı yetki | E2E #10 + RBAC testi |
 
+**Uygulanan önlemler (#46–#50, JOB 12):**
+- *Injection:* sabit, sürümlü sistem talimatı (`order-parse.system-prompt.md`); mesaj kullanıcı turunda
+  `<untrusted_message>` bloğunda, `<`/`>` nötrlenmiş (kapanış etiketi taklit edilemez); model aracı yok, yalnızca
+  structured output. Çıktı sunucuda yeniden doğrulanır (`ParsedOrderValidator`: tam alan kümesi, şema dışı alan —
+  ör. `price`, `stock`, `approve` — tüm çıktıyı reddeder; sınırlar). Grounding: mesajda geçmeyen satır atılır,
+  mesajda geçmeyen ürün kodu silinir. Kural ayrıştırıcı da talimat/fiyat/JSON/markup içeren parçaları satır yapmaz.
+  Testler: `AnthropicOrderParserTests` (kayıtlı-biçimli kötü niyetli çıktılar: fiyat alanı, uydurma satır/kod,
+  "ONAYLANDI fiyat 0" notu, sınır ihlalleri), `OrderParsingEvaluationTests.Injection_messages_have_no_effect_on_the_result`
+  (21 injection örneği: hepsi işaretli, yalnızca gerçek satırlar, müşterinin yazdığı miktarlar).
+- *Halüsinasyon:* eşleştirme deterministik ve yalnızca tenant kataloğu; belirsiz satırda öneri yok (≤ 5 aday); onayda
+  her satır için açık `variantId`; fiyat Pricing'den. Değerlendirme kümesinde yanlış eşleşme oranı = 0 CI'da zorunlu.
+- *Veri sızıntısı:* istek gövdesinde yalnızca maskelenmiş mesaj + sabit talimat (katalog, fiyat, müşteri adı, tenant
+  kimliği yok — `AssistantApiTests.Ai_path_…`); anahtar yalnızca sunucu yapılandırmasında (`Anthropic__ApiKey`), loglanmaz.
+- *Maliyet saldırısı:* girdi ≤ 4.000 karakter / 150 satır; saatlik 30 ayrıştırma/tenant (429 + Retry-After, çoklu
+  instance'ta kesin — testli); günlük AI çağrı ve token kotası (aşımda ücretsiz kural ayrıştırıcı).
+- *Onaysız sipariş:* `whatsapp_ai` kaynaklı taslak `require_order_approval = false` olsa da submit'te
+  `pending_approval`'da bekler (testli).
+
 ### 3.8 CI/CD (GitHub Actions, public repo)
 | STRIDE | Tehdit | Ciddiyet | Önlem | Doğrulama testi |
 |---|---|---|---|---|
@@ -265,8 +283,13 @@ profili; vergi no/telefon yalnızca `changed`), `inventory.receipt_posted`, `inv
 `order.remaining_closed`, `order.price_overridden`, `order.pick_progress`, `picking.task_created`, `picking.task_assigned`,
 `picking.task_cancelled`, `picking.shortage_reported`, `shipment.packed`, `shipment.confirmed`, `shipment.cancelled`,
 `import.started`, `import.completed`, `import.failed`, `import.cancelled`, `import.rollback_requested`, `import.rolled_back`,
-`import.rollback_failed`, `customer.anonymized` (yalnızca sayılar: silinen adres, maskelenen sipariş; kişisel veri yok). Kaynak: `SharedKernel/Platform/Audit/AuditLog.cs`
-(`AuditActions`) ve modül sabitleri (`ImportAuditActions`, `CustomerAuditActions`). Tablodaki diğer kodlar henüz uygulanmadı; özellikle
+`import.rollback_failed`, `customer.anonymized` (yalnızca sayılar: silinen adres, maskelenen sipariş; kişisel veri yok),
+`ai.parse_requested` (ayrıştırıcı, model, prompt sürümü, geri dönüş nedeni, satır/eşleşme sayıları, uyarı kodları,
+token sayıları), `ai.draft_created` (sipariş id/no, seçim sayıları: proposed/candidate/manual/skipped),
+`ai.draft_rejected` — AI olaylarında **mesaj metni, ürün metni veya müşteri bilgisi yoktur**
+(`ai.line_flagged_ambiguous` ayrı olay yerine `ai.parse_requested.ambiguous` sayısı; `ai.draft_approved` = Orders'ın
+`order.approved` olayı). Kaynak: `SharedKernel/Platform/Audit/AuditLog.cs`
+(`AuditActions`) ve modül sabitleri (`ImportAuditActions`, `CustomerAuditActions`, `AssistantAuditActions`). Tablodaki diğer kodlar henüz uygulanmadı; özellikle
 `member.*` ve `auth.*` (erişim reddi) olayları #89'da açık kalır (Identity uçlarına bağlı).
 
 Audit tablosu append-only; okuma yalnızca owner/admin; saklama süresi `data-policy.md` §4 (2 yıl).

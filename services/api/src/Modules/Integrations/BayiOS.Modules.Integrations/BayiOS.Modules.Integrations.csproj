@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>BayiOS.Modules.Integrations</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Anthropic" />
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BayiOS.SharedKernel\BayiOS.SharedKernel.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The JSON schema sent to the model and the versioned system prompt (prompt_version is recorded per parse). -->
+    <EmbeddedResource Include="Parsing\order-parse.schema.json" LogicalName="BayiOS.Integrations.order-parse.schema.json" />
+    <EmbeddedResource Include="Parsing\order-parse.system-prompt.md" LogicalName="BayiOS.Integrations.order-parse.system-prompt.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BayiOS.Api" />
+    <InternalsVisibleTo Include="BayiOS.UnitTests" />
+    <InternalsVisibleTo Include="BayiOS.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

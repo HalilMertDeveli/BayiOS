@@ -41,6 +41,7 @@ internal sealed class TenantWorld
         ["picking-tasks/lines"] = "pickingTaskLine",
         ["shipments"] = "shipment",
         ["shipments/lines"] = "shipmentLine",
+        ["order-parses"] = "orderParse",
     };
 
     private readonly ApiFixture _fixture;
@@ -164,6 +165,9 @@ internal sealed class TenantWorld
         OrderLineId = order.GetProperty("lines")[0].GetProperty("id").GetGuid();
         _ids["orderLine"] = OrderLineId;
         await FulfilAsync();
+
+        // A WhatsApp parse awaiting review (AI off: rules parser), naming the tenant's own product.
+        await CreateAsync("orderParse", "/api/v1/ai/order-parses", new { text = $"2 adet fren balatası {Token}", customerId = Id("customer") });
 
         // Versions may have moved while children were added (ETag of the current state is used by the probes).
         await RefreshAsync("product", $"/api/v1/products/{Id("product")}");

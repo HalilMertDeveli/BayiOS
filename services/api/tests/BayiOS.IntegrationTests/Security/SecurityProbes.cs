@@ -74,6 +74,12 @@ internal static class SecurityProbes
             "POST /api/v1/shipments/{id}/pack" => new { packages = new[] { new { items = new[] { new { code = victim.Sku, quantity = 1m } } } } },
             "POST /api/v1/shipments/{id}/confirm" => new { carrier = hack, trackingNumber = hack },
             "POST /api/v1/import-jobs" => "multipart",
+            "POST /api/v1/ai/order-parses" => new { text = "2 adet fren balatası " + hack, customerId = own.Id("customer") },
+            "POST /api/v1/ai/order-parses/{id}/approve" => new
+            {
+                customerId = own.Id("customer"),
+                lines = new[] { new { lineNo = 1, include = true, variantId = own.Id("variant"), quantity = 1m } },
+            },
             _ when route.RequestContentTypes.Count == 0 && route.Method == "POST" => new { },
             _ when route.RequestContentTypes.Count == 0 => null,
             "POST /api/v1/orders/{id}/approve" or "POST /api/v1/orders/{id}/submit" => new { },
