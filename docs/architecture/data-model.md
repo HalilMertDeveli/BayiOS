@@ -446,6 +446,29 @@ Not: hacim büyüdüğünde `occurred_at` üzerinden aylık partitioning değerl
 | error | text NULL | |
 | IX | (tenant_id, status, created_at DESC) | inceleme kuyruğu |
 
+> **Uygulanan durum (migration `InitialIntegrations`, #46–#50):** modül `BayiOS.Modules.Integrations`, iki tablo; ikisinde
+> de ENABLE + FORCE RLS (std), EF global query filter. **`integrations.ai_parse_requests`** — taslaktan farklar:
+> `sender_phone` yok (telefon maskelenir, ayrı saklanmaz); `raw_text` **maskelenmiş** metindir; `text_hash bytea` yerine
+> `text_sha256 char(64)` (boşluk normalize, hex); `status` yalnızca `needs_review`, `approved`, `rejected` (ayrıştırma
+> senkron); ek kolonlar `parser` (ai, rules), `fallback_reason` (disabled, quota_exceeded, provider_error, timeout,
+> refused, truncated, invalid_output), `review jsonb` (satırlar + adaylar + onaydaki seçim; `match_result` yerine),
+> `warnings jsonb` (yalnızca kodlar), `line_count` / `matched_count` / `ambiguous_count` / `unmatched_count`,
+> `cache_read_tokens`, `cache_write_tokens`, `duration_ms`, `text_length`, `text_purged_at`, `row_version`, `created_by`,
+> `updated_*`; `error` yok. CHECK: durum/kanal/ayrıştırıcı/geri dönüş listeleri, sayaçlar ≥ 0 ve
+> matched + ambiguous + unmatched = line_count, `(status = 'approved') = (order_id IS NOT NULL)`, temizlenmiş satırda
+> metin kolonları NULL. Index: (tenant_id, created_at DESC), (tenant_id, status, created_at DESC), (tenant_id, text_sha256),
+> kısmi (created_at) WHERE text_purged_at IS NULL. `bayios_app`: SELECT/INSERT/UPDATE (**DELETE yok**).
+> **`integrations.ai_usage`** (yeni): PK (tenant_id, usage_hour) — saatlik `parse_requests`, `ai_calls`, `ai_failures`,
+> `fallbacks`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens` (varsayılan 0, CHECK ≥ 0);
+> yalnızca atomik upsert ile, istekten ayrı kısa transaction'larda yazılır (çoklu instance güvenli; günlük kota tenant
+> başına `pg_advisory_xact_lock` altında). `bayios_app`: SELECT/INSERT/UPDATE. Saklama (data-policy §4):
+> `integrations.purge_expired_parse_texts(interval, integer)` SECURITY DEFINER (search_path sabit, PUBLIC'e kapalı,
+> `bayios_app` EXECUTE) `p_retention ≥ 1 gün` olan satırlarda `raw_text`, `parsed_payload`, `review` → NULL,
+> `text_purged_at` = now(); sahip için yalnızca `ai_parse_requests_purge_select` / `_purge_update` politikaları
+> (created_at < now() − 1 gün; UPDATE'in WITH CHECK'i yalnızca metin kolonlarının NULL olmasına izin verir). Çalıştıran:
+> tenant'sız `integrations.ai_text_retention` job'ı (`PlatformWorker.MaintenanceJobTypes`, saatlik). `integrations.integrations`
+> tablosu henüz yok.
+
 ### 5.11 `audit` ve `notifications`
 
 **audit.audit_events** — RLS: std · append-only (yalnızca INSERT/SELECT) — #79

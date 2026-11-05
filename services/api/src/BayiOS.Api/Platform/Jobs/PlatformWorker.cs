@@ -50,9 +50,12 @@ internal sealed partial class PlatformWorker(
     TimeProvider clock,
     ILogger<PlatformWorker> logger) : BackgroundService
 {
-    /// <summary>Tenant-less platform jobs enqueued once per maintenance interval (threat-model §3.6 allowlist).</summary>
+    /// <summary>
+    /// Tenant-less jobs enqueued once per maintenance interval (threat-model §3.6 allowlist): the platform cleanups and
+    /// the AI parse text retention of the Integrations module (data-policy §4).
+    /// </summary>
     public static readonly IReadOnlyList<string> MaintenanceJobTypes =
-        [IdempotencyCleanupJob.Type, QueueCleanupJob.Type, AuditRetentionJob.Type];
+        [IdempotencyCleanupJob.Type, QueueCleanupJob.Type, AuditRetentionJob.Type, BayiOS.Modules.Integrations.IntegrationsModule.TextRetentionJobType];
 
     private JobsOptions _options = null!;
     private JobStore _store = null!;

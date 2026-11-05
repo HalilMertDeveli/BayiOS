@@ -302,6 +302,16 @@ flowchart LR
 | POST | `/ai/order-parses/{id}/approve` (İ) | `ai.review` | Draft sipariş oluşturur → `orderId` |
 | POST | `/ai/order-parses/{id}/reject` (İ) | `ai.review` | |
 
+> **Uygulanan durum (#47/#48/#50, JOB 12):** izin `whatsapp.parse` (matris §3.5; `ai.parse`/`ai.review` gruplarının
+> karşılığı), onay ayrıca `orders.create` ister (servis kontrol eder). `POST /ai/order-parses` (İ) senkron çalışır ve
+> `201` + inceleme yükü döner (`202` değil; ADR 0010 uygulama notları); gövde `{ text, customerId? }` (`senderPhone`
+> yok — telefon zaten maskelenir). `GET /ai/order-parses?status=&limit=` (metinsiz liste), `GET /ai/order-parses/{id}`
+> (ETag), `POST /ai/order-parses/{id}/approve` (İ, If-Match isteğe bağlı; satır seçimleri gövdede — ayrı `PUT …/lines`
+> yok) → güncel ayrıştırma + `orderId`, `POST /ai/order-parses/{id}/reject` (İ), `GET /ai/usage` (bugünkü kullanım ve
+> limitler). Kodlar: `429 ai.rate_limited` (+ `Retry-After`), `409 ai.parse_not_reviewable`, `409 ai.parse_text_purged`;
+> Orders doğrulama hataları aynen iletilir. Entitlement (`ai_order_parsing`) henüz uygulanmadı (entitlement altyapısı
+> yok); özellik `Ai:Enabled` bayrağı ve tenant limitleriyle sınırlıdır.
+
 ### 12.11 Audit & Notifications
 | GET | `/audit-events` (entityType, entityId, actor, from, to) | `audit.read` |
 | POST | `/devices` (İ) | (üyelik) | FCM token kaydı/yenileme |

@@ -1,0 +1,75 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["lines", "unparsedFragments", "warnings"],
+  "properties": {
+    "lines": {
+      "type": "array",
+      "description": "Order lines in the order they appear in the message. At most 100.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rawText", "productCode", "productText", "quantity", "unit", "brandModel", "confidence", "notes"],
+        "properties": {
+          "rawText": {
+            "type": "string",
+            "description": "The exact span of the message this line was read from, copied verbatim (at most 500 characters)."
+          },
+          "productCode": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "description": "A product code, SKU or barcode only if it is literally written in the message; otherwise null. Never invent or complete a code."
+          },
+          "productText": {
+            "type": "string",
+            "description": "The product as described in the message (name, specification, model), without the quantity and unit. 1-200 characters."
+          },
+          "quantity": {
+            "anyOf": [{ "type": "number" }, { "type": "null" }],
+            "description": "Positive quantity as written (number words like 'iki' become 2). Null when the message gives no quantity for this line."
+          },
+          "unit": {
+            "anyOf": [
+              { "type": "string", "enum": ["adet", "koli", "kutu", "paket", "takim", "set", "metre", "rulo", "cift", "kg", "litre"] },
+              { "type": "null" }
+            ],
+            "description": "Unit written for the quantity, normalised (tane/ad -> adet, takım/tk -> takim, mt/m -> metre, çift -> cift, lt -> litre). Null when no unit is written."
+          },
+          "brandModel": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "description": "Brand, vehicle model or series mentioned for this product (for example 'CG 125'), else null."
+          },
+          "confidence": {
+            "type": "number",
+            "description": "Your certainty from 0 to 1 that this is an order line and was read correctly."
+          },
+          "notes": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "description": "Short remark for the human reviewer (for example a price expression or 'as last time'), else null. At most 300 characters."
+          }
+        }
+      }
+    },
+    "unparsedFragments": {
+      "type": "array",
+      "description": "Parts of the message that may matter but are not order lines (questions, instructions, unclear text). Greetings can be left out. At most 50.",
+      "items": { "type": "string" }
+    },
+    "warnings": {
+      "type": "array",
+      "description": "Codes describing notable content of the message.",
+      "items": {
+        "type": "string",
+        "enum": [
+          "price_mentioned",
+          "instruction_ignored",
+          "quantity_missing",
+          "unit_unclear",
+          "customer_info_present",
+          "delivery_note",
+          "reference_to_previous_order",
+          "unreadable_text"
+        ]
+      }
+    }
+  }
+}
