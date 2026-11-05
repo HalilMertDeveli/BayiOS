@@ -4,7 +4,8 @@ using BayiOS.Modules.Imports.Contracts;
 
 namespace BayiOS.Modules.Imports.Application;
 
-internal sealed record AppError(int Status, string Code, string Title, IDictionary<string, string[]>? Errors = null)
+/// <param name="RetryAfterSeconds">For 429: sent as the <c>Retry-After</c> header.</param>
+internal sealed record AppError(int Status, string Code, string Title, IDictionary<string, string[]>? Errors = null, int? RetryAfterSeconds = null)
 {
     public static AppError NotFound() => new(404, "resource.not_found", "Resource not found");
 
@@ -20,6 +21,8 @@ internal sealed record AppError(int Status, string Code, string Title, IDictiona
         Conflict("imports.invalid_state", $"The import is '{status}' and cannot be {action} now");
 
     public static AppError Forbidden(string title) => new(403, "auth.forbidden", title);
+
+    public static AppError RateLimited(string title, int retryAfterSeconds) => new(429, "rate_limit.exceeded", title, RetryAfterSeconds: retryAfterSeconds);
 }
 
 internal sealed record AppResult<T>(T? Value, AppError? Error)
@@ -102,10 +105,14 @@ internal static class ImportAuditActions
     public const string Completed = "import.completed";
     public const string Failed = "import.failed";
     public const string Cancelled = "import.cancelled";
+    public const string RollbackRequested = "import.rollback_requested";
+    public const string RolledBack = "import.rolled_back";
+    public const string RollbackFailed = "import.rollback_failed";
 }
 
 /// <summary>Integration event published when an import finishes (domain-model §11, consumed by Notifications later).</summary>
 internal static class ImportEvents
 {
     public const string Completed = "imports.import_completed.v1";
+    public const string RolledBack = "imports.import_rolled_back.v1";
 }
