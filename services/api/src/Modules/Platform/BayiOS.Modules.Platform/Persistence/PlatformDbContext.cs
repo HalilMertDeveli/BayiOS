@@ -83,6 +83,9 @@ internal sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> opti
             entity.HasIndex(e => new { e.TenantId, e.EntityType, e.EntityId, e.OccurredAt })
                 .IsDescending(false, false, false, true)
                 .HasDatabaseName("ix_audit_events_tenant_entity");
+
+            // Retention purge (data-policy §4, #89): oldest rows first across tenants.
+            entity.HasIndex(e => e.OccurredAt).HasDatabaseName("ix_audit_events_occurred_at");
         });
 
         modelBuilder.Entity<JobRecord>(entity =>

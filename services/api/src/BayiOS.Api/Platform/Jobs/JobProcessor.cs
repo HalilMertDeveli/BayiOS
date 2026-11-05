@@ -86,7 +86,7 @@ internal sealed partial class JobProcessor(
         {
             await TryRollbackAsync(unitOfWork);
             var status = await store.FailAsync(
-                job.Id, WorkerId, $"{ex.GetType().Name}: {ex.Message}", options.Backoff(job.Attempts), CancellationToken.None);
+                job.Id, WorkerId, JobErrorSanitizer.Sanitize(ex), options.Backoff(job.Attempts), CancellationToken.None);
             if (status == "dead")
             {
                 LogJobDead(logger, ex, job.Id, job.Type, job.Attempts);

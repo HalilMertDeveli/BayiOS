@@ -110,6 +110,18 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         ["platform.idempotency_keys"] = "tenant_id = app.tenant_id OR (tenant_id IS NULL AND user_id = app.user_id); migrator purge policies",
     };
 
+    /// <summary>
+    /// Owner-only policies of the purge functions (data-model §5.11/§5.12). Each one only exposes rows past a fixed
+    /// expiry: expired idempotency keys (<c>platform.purge_expired_idempotency_keys</c>) and audit events older than
+    /// the 2-year retention floor (<c>audit.purge_expired_audit_events</c>, #89 — the append-only trigger still lets
+    /// only that function's DELETE through).
+    /// </summary>
+    private static readonly Dictionary<string, string[]> MigratorPurgePolicies = new Dictionary<string, string[]>
+    {
+        ["platform.idempotency_keys"] = ["idempotency_purge_select", "idempotency_purge_delete"],
+        ["audit.audit_events"] = ["audit_retention_select", "audit_retention_delete"],
+    };
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -192,10 +204,15 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
 
             if (!roles.Contains(App))
             {
-                // Only the documented migrator purge policies on idempotency keys may target another role.
-                if (!(table == "platform.idempotency_keys" && roles.SequenceEqual(["bayios_migrator"])))
+                // Only the documented migrator purge policies may target another role: they are what the SECURITY
+                // DEFINER purge functions (running as the owner, under FORCE RLS) can see and delete.
+                if (!(MigratorPurgePolicies.TryGetValue(table, out var allowed) && allowed.Contains(name) && roles.SequenceEqual(["bayios_migrator"])))
                 {
                     violations.Add($"{table}.{name}: policy for unexpected role(s) {string.Join(',', roles)}");
+                }
+                else if (cmd is not ("SELECT" or "DELETE") || !qual.Contains("now()", StringComparison.Ordinal))
+                {
+                    violations.Add($"{table}.{name}: purge policy must be SELECT/DELETE of expired rows only ({cmd}: {qual})");
                 }
 
                 continue;
