@@ -1,0 +1,91 @@
+name: e2e-real
+
+# Real-stack end-to-end (issue #40): the production web build against the real API, a real PostgreSQL 17 (EF migrations,
+# bayios_app runtime role, RLS) and real Supabase Auth (CLI local stack, ES256 tokens validated through JWKS). Nothing is
+# mocked. Order → reservation → pick → pack → ship, verified on the stock screen, plus tenant isolation.
+# Logic lives in infra/ci/e2e-stack.sh so the same stack runs on a laptop (apps/web/README.md).
+# No secrets: every password is generated per run inside the runner; Supabase keys are the public local-dev keys.
+# ci-gate picks this workflow up automatically.
+
+on:
+  pull_request:
+    branches: [preview, main]
+    paths:
+      - "services/api/**"
+      - "apps/web/**"
+      - "packages/contracts/**"
+      - "infra/**"
+      - ".github/workflows/e2e-real.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    # Keep this name stable; ci-gate aggregates it.
+    name: e2e real stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+      SUPABASE_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: services/api/global.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: apps/web
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+
+      - name: Start the real stack (Supabase Auth, Postgres 17 + migrations, API, web build)
+        run: bash infra/ci/e2e-stack.sh up
+
+      - name: Real-stack E2E (Playwright, no mocks)
+        run: npm run test:e2e:real
+        working-directory: apps/web
+
+      - name: Collect stack logs
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/bayios-e2e/logs"
+          cp "$RUNNER_TEMP/bayios-e2e"/*.log "$RUNNER_TEMP/bayios-e2e/logs/" 2>/dev/null || true
+          docker logs supabase_auth_bayios >"$RUNNER_TEMP/bayios-e2e/logs/supabase-auth.log" 2>&1 || true
+          docker logs supabase_kong_bayios >"$RUNNER_TEMP/bayios-e2e/logs/supabase-kong.log" 2>&1 || true
+          docker logs bayios-e2e-postgres >"$RUNNER_TEMP/bayios-e2e/logs/postgres.log" 2>&1 || true
+
+      - name: Upload Playwright traces, screenshots and stack logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-real-${{ github.run_attempt }}
+          path: |
+            apps/web/test-results/real
+            apps/web/playwright-report/real
+            ${{ runner.temp }}/bayios-e2e/logs
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Stop the stack
+        if: always()
+        run: bash infra/ci/e2e-stack.sh down
