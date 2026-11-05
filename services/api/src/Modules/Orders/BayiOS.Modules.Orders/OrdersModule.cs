@@ -12,7 +12,8 @@ namespace BayiOS.Modules.Orders;
 public static class OrdersModule
 {
     /// <summary>
-    /// Registers orders. The host must also provide <see cref="IOrderVariantDirectory"/> (Catalog adapter) and the
+    /// Registers orders. The host must also provide <see cref="IOrderVariantDirectory"/> (Catalog adapter),
+    /// <see cref="IOrderTaskVisibility"/> (Warehouse) and the
     /// Inventory / Pricing modules with their ports (Orders uses their contracts and Pricing's customer port).
     /// </summary>
     public static IServiceCollection AddOrdersModule(this IServiceCollection services)
@@ -22,6 +23,7 @@ public static class OrdersModule
             OrdersDbContext.Configure(options, sp.GetRequiredService<UnitOfWork>().Connection));
         services.AddScoped<OrderQueries>();
         services.AddScoped<OrderService>();
+        services.AddScoped<IOrderOwnership, OrderOwnership>();
         // Warehouse drives picking/packing/shipping through this contract; it must provide IOrderFulfillmentListener.
         services.AddScoped<IOrderFulfillment>(sp => sp.GetRequiredService<OrderService>());
         services.TryAddSingleton(TimeProvider.System);

@@ -106,8 +106,8 @@ public static class RolePermissions
         role is not null && Grants.TryGetValue((role, permission), out var grant) ? grant : PermissionGrant.None;
 
     /// <summary>
-    /// Endpoint-level gate. Only unconditional (✓) grants pass. Conditional (K) and own-records (O) grants
-    /// stay fail-closed here until the tenant-rule / record-ownership evaluation for those endpoints exists.
+    /// Unconditional (✓) grants only. Conditional (K) and own-records (O) grants are evaluated per tenant rule and
+    /// record by <see cref="IAuthorizationContext"/>; use that wherever a K / O cell can apply.
     /// </summary>
     public static bool IsGranted(string? role, string permission) =>
         GetGrant(role, permission) == PermissionGrant.Allowed;

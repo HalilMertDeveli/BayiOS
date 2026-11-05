@@ -37,6 +37,10 @@ internal sealed record AppError(
     public static AppError Forbidden(string permission) =>
         new(403, "auth.forbidden", $"Missing permission: {permission}");
 
+    /// <summary>A conditional / own-records grant (roles-permissions §3 footnotes) does not cover this record.</summary>
+    public static AppError NotPermitted(string permission, string reason) =>
+        new(403, "auth.forbidden", $"{permission}: {reason}");
+
     public static AppError FromInventory(InventoryError error) =>
         new(error.Status, error.Code, error.Title, error.Errors, error.Shortages, error.ConfirmationRequired);
 }

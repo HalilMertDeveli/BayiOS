@@ -26,6 +26,7 @@ internal sealed class OrderService(
     OrdersDbContext db,
     OrderQueries queries,
     IRequestContext requestContext,
+    IAuthorizationContext authorization,
     IPriceResolver prices,
     ICustomerPricingDirectory customers,
     ITenantCurrencyProvider tenantCurrency,
@@ -150,6 +151,12 @@ internal sealed class OrderService(
 
         return await WithLockedOrderAsync(id, expectedVersion, async order =>
         {
+            // orders.edit.draft is "own records" (O) for sales: only drafts the caller created.
+            if (!await authorization.CanAsync(Permissions.OrdersEditDraft, order.CreatedBy == UserId, cancellationToken))
+            {
+                return AppError.NotPermitted(Permissions.OrdersEditDraft, "Only drafts you created can be edited");
+            }
+
             if (!OrderStateMachine.IsEditable(order.Status))
             {
                 return AppError.NotEditable(order.Status);
@@ -300,6 +307,14 @@ internal sealed class OrderService(
             : TransitionAsync(id, expectedVersion, OrderActions.Cancel, OrderText.Clean(reason), correlationId, async order =>
             {
                 var from = order.Status;
+
+                // Footnote 11: sales cancels only its own draft / pending-approval orders.
+                var ownOpen = order.CreatedBy == UserId && from is OrderStatuses.Draft or OrderStatuses.PendingApproval;
+                if (!await authorization.CanAsync(Permissions.OrdersCancel, ownOpen, cancellationToken))
+                {
+                    return AppError.NotPermitted(Permissions.OrdersCancel, "Only your own draft or pending-approval orders can be cancelled");
+                }
+
                 decimal released = 0;
                 if (OrderStateMachine.HoldsReservations(from))
                 {
@@ -770,7 +785,11 @@ internal sealed class OrderService(
                 : order.PricesIncludeTax);
 
         var groupDiscount = quote?.DealerGroupDiscountPercent is > 0 ? quote.DealerGroupDiscountPercent : null;
-        var canOverride = RolePermissions.IsGranted(requestContext.Role, Permissions.OrdersPriceOverride);
+        // Footnote 10: sales may override only within the tenant's discount limit (no manual unit price).
+        var overrideScope = await authorization.ScopeAsync(Permissions.OrdersPriceOverride, cancellationToken);
+        var discountLimit = overrideScope == PermissionScope.Restricted
+            ? (await authorization.RulesAsync(cancellationToken)).SalesMaxDiscountPercent
+            : (decimal?)null;
         var result = new List<OrderLine>(inputs.Count);
         var overrides = new List<(OrderLine Line, decimal? PriorPrice, decimal? PriorPercent, decimal? PriorAmount)>();
         for (var i = 0; i < inputs.Count; i++)
@@ -794,9 +813,14 @@ internal sealed class OrderService(
                 && (percent ?? amount) != 0m
                 && !(amount is null && percent == groupDiscount)
                 && !(prior is not null && prior.DiscountPercent == percent && prior.DiscountAmount == amount);
-            if ((priceOverride || discountOverride) && !canOverride)
+            if ((priceOverride || discountOverride) && overrideScope == PermissionScope.None)
             {
                 return AppError.Forbidden(Permissions.OrdersPriceOverride);
+            }
+
+            if (priceOverride && discountLimit is not null)
+            {
+                return AppError.NotPermitted(Permissions.OrdersPriceOverride, "A manual unit price is not allowed; only a discount within the sales limit");
             }
 
             var line = prior ?? OrderLine.Create(order.TenantId, order.Id, UserId, now);
@@ -839,6 +863,11 @@ internal sealed class OrderService(
                 {
                     errors[$"lines[{i}]"] = ["The line amount is too large or the discount exceeds the line subtotal."];
                     continue;
+                }
+
+                if (discountOverride && discountLimit is { } limit && amounts.Discount * 100m > amounts.Subtotal * limit)
+                {
+                    return AppError.NotPermitted(Permissions.OrdersPriceOverride, $"The discount exceeds the sales limit of {limit} %");
                 }
 
                 line.LineSubtotal = amounts.Subtotal;

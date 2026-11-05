@@ -1,8 +1,11 @@
+using BayiOS.SharedKernel.Authorization;
 using BayiOS.SharedKernel.Persistence;
 using BayiOS.SharedKernel.Platform.Idempotency;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace BayiOS.SharedKernel.Web;
 
@@ -12,15 +15,29 @@ public sealed class UnitOfWorkMetadata;
 /// <summary>Endpoint runs inside a tenant: <c>X-Tenant-Id</c> is required and checked against memberships.</summary>
 public sealed class TenantScopedMetadata;
 
-/// <summary>Permission the endpoint requires (also emitted as <c>x-permission</c> in OpenAPI).</summary>
-public sealed record PermissionMetadata(string Permission);
+/// <summary>
+/// Endpoint may run inside a tenant: when <c>X-Tenant-Id</c> names one of the caller's active memberships the tenant
+/// is resolved, otherwise the request runs without one (never an error). Used by <c>GET /me</c>.
+/// </summary>
+public sealed class TenantOptionalMetadata;
 
-public static class PermissionPolicy
+/// <summary>
+/// Permission(s) the endpoint requires: any one of <see cref="AnyOf"/> (emitted as <c>x-permission</c> and, for more
+/// than one, <c>x-permission-any-of</c> in OpenAPI).
+/// </summary>
+public sealed record PermissionMetadata(IReadOnlyList<string> AnyOf)
 {
-    public const string Prefix = "permission:";
-
-    public static string Name(string permission) => Prefix + permission;
+    public string Permission => AnyOf[0];
 }
+
+/// <summary>409 codes of the endpoint that are transient lock conflicts answered with <c>Retry-After</c> (OpenAPI).</summary>
+public sealed record RetryableConflictMetadata(IReadOnlyList<string> Codes);
+
+/// <summary>Problem responses of the endpoint may carry <c>shortages</c> / <c>confirmationRequired</c> (OpenAPI).</summary>
+public sealed class StockProblemMetadata;
+
+/// <summary>409 problems of the endpoint may carry a <c>conflict</c> member naming the clashing record (OpenAPI).</summary>
+public sealed class ConflictDetailMetadata;
 
 public static class EndpointConventionExtensions
 {
@@ -46,22 +63,56 @@ public static class EndpointConventionExtensions
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status428PreconditionRequired);
 
-    /// <summary>Tenant-scoped endpoint guarded by a permission from the role → permission matrix.</summary>
-    public static RouteHandlerBuilder RequirePermission(this RouteHandlerBuilder builder, string permission) =>
-        builder
-            .WithMetadata(new TenantScopedMetadata(), new PermissionMetadata(permission))
-            .RequireAuthorization(PermissionPolicy.Name(permission));
+    /// <summary>
+    /// Tenant-scoped endpoint guarded by the role → permission matrix: the caller needs <b>any one</b> of
+    /// <paramref name="anyOf"/>. Unconditional grants pass as is; conditional (K) grants whose tenant rule is off are
+    /// denied; record-level K / O grants pass the gate but the service must apply the condition through
+    /// <see cref="IAuthorizationContext"/>, or the request is rolled back with 403 (see <see cref="UnitOfWorkFilter"/>).
+    /// </summary>
+    public static RouteHandlerBuilder RequirePermission(this RouteHandlerBuilder builder, params string[] anyOf)
+    {
+        if (anyOf.Length == 0)
+        {
+            throw new ArgumentException("At least one permission is required.", nameof(anyOf));
+        }
+
+        var policy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .AddRequirements(new PermissionRequirement([.. anyOf]))
+            .Build();
+        return builder
+            .WithMetadata(new TenantScopedMetadata(), new PermissionMetadata([.. anyOf]))
+            .RequireAuthorization(policy);
+    }
+
+    /// <summary>Documents 409 <paramref name="codes"/> as transient lock conflicts that come with <c>Retry-After</c>.</summary>
+    public static RouteHandlerBuilder ProducesRetryableConflict(this RouteHandlerBuilder builder, params string[] codes) =>
+        builder.WithMetadata(new RetryableConflictMetadata([.. codes])).ProducesProblem(StatusCodes.Status409Conflict);
+
+    /// <summary>Documents the stock problem extensions <c>shortages</c> and <c>confirmationRequired</c>.</summary>
+    public static RouteHandlerBuilder ProducesStockProblems(this RouteHandlerBuilder builder) =>
+        builder.WithMetadata(new StockProblemMetadata()).ProducesProblem(StatusCodes.Status409Conflict);
 }
 
 /// <summary>
 /// Commits the request transaction before the result is written (so a reported success is durable) and rolls it
 /// back for error results. Exceptions leave it uncommitted; disposal rolls it back.
+/// <para>
+/// Fail-closed for K / O grants (#69): when the endpoint gate let the caller through on a record-level grant and no
+/// application service evaluated that permission through <see cref="IAuthorizationContext"/>, a success result is
+/// replaced by 403 <c>auth.forbidden</c> and the transaction is rolled back. Idempotent replays are exempt: the stored
+/// response was produced by a request that passed the check.
+/// </para>
 /// </summary>
-internal static class UnitOfWorkFilter
+internal static partial class UnitOfWorkFilter
 {
+    [LoggerMessage(Level = LogLevel.Error, Message = "Endpoint {Endpoint} passed the gate on record-level grant(s) {Permissions} that no service evaluated; denied (fail-closed)")]
+    private static partial void LogUncheckedGrant(ILogger logger, string? endpoint, string permissions);
+
     public static async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {
-        var unitOfWork = context.HttpContext.RequestServices.GetRequiredService<UnitOfWork>();
+        var services = context.HttpContext.RequestServices;
+        var unitOfWork = services.GetRequiredService<UnitOfWork>();
         if (!unitOfWork.IsActive)
         {
             throw new InvalidOperationException("The request unit of work was not started.");
@@ -70,6 +121,19 @@ internal static class UnitOfWorkFilter
         var result = await next(context);
         // Not tied to RequestAborted: once the handler finished, completing the transaction must not be half-cancelled.
         var cancellationToken = CancellationToken.None;
+
+        if (EndpointResults.StatusCodeOf(result) < 400
+            && result is not StoredHttpResult { Replayed: true }
+            && services.GetService<IAuthorizationContext>() is { UncheckedRestrictedGrants: { Count: > 0 } pending })
+        {
+            LogUncheckedGrant(
+                services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(UnitOfWorkFilter)),
+                context.HttpContext.GetEndpoint()?.DisplayName,
+                string.Join(", ", pending));
+            context.HttpContext.Response.Headers.Remove("ETag");
+            context.HttpContext.Response.Headers.Remove("Location");
+            result = TypedResults.Problem(ApiProblems.Create(StatusCodes.Status403Forbidden, "auth.forbidden", "Not allowed"));
+        }
 
         if (EndpointResults.StatusCodeOf(result) >= 400)
         {

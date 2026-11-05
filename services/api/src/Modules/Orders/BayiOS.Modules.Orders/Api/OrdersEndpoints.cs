@@ -160,7 +160,7 @@ internal static class OrdersEndpoints
 
     private static async Task<Results<Ok<OrderDetailResponse>, ProblemHttpResult>> Get(
         Guid id, OrderQueries queries, HttpContext http, CancellationToken cancellationToken) =>
-        Ok(http, await queries.DetailAsync(id, cancellationToken) is { } detail ? detail : AppError.NotFound());
+        Ok(http, await queries.ReadAsync(id, cancellationToken) is { } detail ? detail : AppError.NotFound());
 
     private static async Task<Results<Created<OrderDetailResponse>, ProblemHttpResult>> Create(
         CreateOrderRequest request, OrderService service, HttpContext http, CancellationToken cancellationToken)

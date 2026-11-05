@@ -1,10 +1,12 @@
 using BayiOS.Api.Platform.Auth;
 using BayiOS.Modules.Identity.Contracts;
+using BayiOS.Modules.Identity.Infrastructure.Persistence;
 using BayiOS.SharedKernel.Authorization;
 using BayiOS.SharedKernel.Persistence;
 using BayiOS.SharedKernel.Tenancy;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 
 namespace BayiOS.Api.Platform.Tenancy;
 
@@ -59,6 +61,17 @@ internal sealed partial class TenantContextMiddleware(RequestDelegate next, ILog
             await unitOfWork.SetTenantAsync(tenantId, cancellationToken);
             requestContext.Role = role;
         }
+        else if (endpoint.Metadata.GetMetadata<TenantOptionalMetadata>() is not null
+            && Guid.TryParse(context.Request.Headers[TenantHeader], out var optionalTenantId))
+        {
+            // Optional selection (GET /me): an unknown or inactive tenant simply leaves the request tenant-less.
+            var lookup = context.RequestServices.GetRequiredService<IMembershipLookup>();
+            if (await lookup.FindActiveRoleAsync(userId, optionalTenantId, cancellationToken) is { } role)
+            {
+                await unitOfWork.SetTenantAsync(optionalTenantId, cancellationToken);
+                requestContext.Role = role;
+            }
+        }
 
         await next(context);
     }
@@ -67,40 +80,34 @@ internal sealed partial class TenantContextMiddleware(RequestDelegate next, ILog
     private static partial void LogTenantAccessDenied(ILogger logger, Guid userId, Guid tenantId);
 }
 
-internal sealed record PermissionRequirement(string Permission) : IAuthorizationRequirement;
-
-/// <summary>Grants a permission policy from the caller's membership role via the code-defined matrix.</summary>
-internal sealed class PermissionAuthorizationHandler(IRequestContext requestContext) : AuthorizationHandler<PermissionRequirement>
+internal static class PermissionAuthorizationSetup
 {
-    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, PermissionRequirement requirement)
+    /// <summary>
+    /// The endpoint gate (<see cref="PermissionAuthorizationHandler"/>) and the request-scoped
+    /// <see cref="IAuthorizationContext"/> that services use for K / O grants; tenant rules come from Identity.
+    /// </summary>
+    public static IServiceCollection AddPermissionAuthorization(this IServiceCollection services)
     {
-        if (requestContext.TenantId is not null && RolePermissions.IsGranted(requestContext.Role, requirement.Permission))
-        {
-            context.Succeed(requirement);
-        }
-
-        return Task.CompletedTask;
+        services.AddAuthorization();
+        services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+        services.AddScoped<IAuthorizationContext, AuthorizationContext>();
+        services.AddScoped<ITenantAccessRules, TenantSettingsAccessRules>();
+        return services;
     }
 }
 
-internal static class PermissionAuthorizationSetup
+/// <summary>Tenant rules (roles-permissions §4) from <c>identity.tenant_settings</c> (RLS: the request's tenant).</summary>
+internal sealed class TenantSettingsAccessRules(IdentityDbContext identity) : ITenantAccessRules
 {
-    public static IServiceCollection AddPermissionAuthorization(this IServiceCollection services)
-    {
-        services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
-        services.AddAuthorizationBuilder().AddPermissionPolicies();
-        return services;
-    }
-
-    private static AuthorizationBuilder AddPermissionPolicies(this AuthorizationBuilder builder)
-    {
-        foreach (var permission in RolePermissions.AllPermissions)
-        {
-            builder.AddPolicy(PermissionPolicy.Name(permission), policy => policy
-                .RequireAuthenticatedUser()
-                .AddRequirements(new PermissionRequirement(permission)));
-        }
-
-        return builder;
-    }
+    public async Task<TenantAccessRules> GetAsync(CancellationToken cancellationToken) =>
+        await identity.TenantSettings.AsNoTracking()
+            .Select(s => new TenantAccessRules(
+                s.SalesCanApproveOrders,
+                s.SalesMaxDiscountPercent,
+                s.ShowCostToManager,
+                s.ShowCostToViewer,
+                s.StaffCanAssignBarcode,
+                s.StaffCanApproveReceipt))
+            .SingleOrDefaultAsync(cancellationToken)
+        ?? TenantAccessRules.Defaults;
 }
