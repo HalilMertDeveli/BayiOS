@@ -10580,6 +10580,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -11322,12 +11332,148 @@
         "x-permission": "imports.run"
       }
     },
+    "/api/v1/import-jobs/{id}/rollback": {
+      "post": {
+        "tags": [
+          "Imports"
+        ],
+        "summary": "Tamamlanan i\u00E7e aktarmay\u0131 geri al\u0131r (7 g\u00FCn i\u00E7inde, bir kez; If-Match zorunlu): olu\u015Fturulan \u00FCr\u00FCnler ar\u015Fivlenir, de\u011Fi\u015Fen alanlar/fiyatlar \u00F6nceki de\u011Ferine d\u00F6ner \u2014 kay\u0131t sonradan de\u011Fi\u015Ftiyse sat\u0131r \u0027conflict\u0027 olur ve dokunulmaz",
+        "operationId": "Imports_Rollback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours.",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportJobResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Precondition Failed",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "imports.rollback"
+      }
+    },
     "/api/v1/import-jobs/{id}/rows": {
       "get": {
         "tags": [
           "Imports"
         ],
-        "summary": "Sat\u0131rlar: status (error = invalid \u002B failed) ve action filtresi, sat\u0131r no ile keyset",
+        "summary": "Sat\u0131rlar: status (error = invalid \u002B failed), action ve rollbackStatus filtresi, sat\u0131r no ile keyset",
         "operationId": "Imports_Rows",
         "parameters": [
           {
@@ -11348,6 +11494,13 @@
           },
           {
             "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rollbackStatus",
             "in": "query",
             "schema": {
               "type": "string"
@@ -15834,7 +15987,9 @@
           "validatedAt",
           "startedAt",
           "startedBy",
-          "finishedAt"
+          "finishedAt",
+          "rollbackDeadline",
+          "rollback"
         ],
         "type": "object",
         "properties": {
@@ -15997,6 +16152,23 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "rollbackDeadline": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "rollback": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ImportRollbackInfo"
+              }
+            ]
           }
         }
       },
@@ -16140,6 +16312,79 @@
           }
         }
       },
+      "ImportRollbackInfo": {
+        "required": [
+          "requestedAt",
+          "requestedBy",
+          "finishedAt",
+          "planned",
+          "rolledBack",
+          "conflicts",
+          "failed",
+          "skipped"
+        ],
+        "type": "object",
+        "properties": {
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestedBy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "finishedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "planned": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "rolledBack": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "conflicts": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "failed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "skipped": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "ImportRowError": {
         "required": [
           "field",
@@ -16197,7 +16442,8 @@
           "values",
           "errors",
           "matchedVariantId",
-          "targetId"
+          "targetId",
+          "rollbackStatus"
         ],
         "type": "object",
         "properties": {
@@ -16252,6 +16498,12 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "rollbackStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

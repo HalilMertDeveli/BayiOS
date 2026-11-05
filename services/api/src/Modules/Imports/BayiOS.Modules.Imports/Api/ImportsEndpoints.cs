@@ -54,7 +54,8 @@ internal static class ImportsEndpoints
             .Accepts<UploadImportForm>("multipart/form-data")
             .ProducesProblem(StatusCodes.Status413PayloadTooLarge)
             .ProducesProblem(StatusCodes.Status415UnsupportedMediaType)
-            .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity);
+            .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
         group.MapGet("/import-jobs", List).WithName("Imports_List")
             .WithSummary("İçe aktarma geçmişi (yeniden eskiye, keyset sayfalama)").RequirePermission(Permissions.ImportsRun);
         group.MapGet("/import-jobs/{id:guid}", Get).WithName("Imports_Get")
@@ -80,8 +81,17 @@ internal static class ImportsEndpoints
             .WithSummary("İptal eder; işlenmiş parçalar kalır, kalan satırlar işlenmez").RequirePermission(Permissions.ImportsRun)
             .RequireIdempotencyKey()
             .ProducesProblem(StatusCodes.Status404NotFound);
+        group.MapPost("/import-jobs/{id:guid}/rollback", Rollback).WithName("Imports_Rollback")
+            .WithSummary("Tamamlanan içe aktarmayı geri alır (7 gün içinde, bir kez; If-Match zorunlu): oluşturulan ürünler arşivlenir, "
+                + "değişen alanlar/fiyatlar önceki değerine döner — kayıt sonradan değiştiyse satır 'conflict' olur ve dokunulmaz")
+            .RequirePermission(Permissions.ImportsRollback)
+            .RequireIdempotencyKey()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status412PreconditionFailed)
+            .ProducesProblem(StatusCodes.Status428PreconditionRequired);
         group.MapGet("/import-jobs/{id:guid}/rows", Rows).WithName("Imports_Rows")
-            .WithSummary("Satırlar: status (error = invalid + failed) ve action filtresi, satır no ile keyset").RequirePermission(Permissions.ImportsRun)
+            .WithSummary("Satırlar: status (error = invalid + failed), action ve rollbackStatus filtresi, satır no ile keyset").RequirePermission(Permissions.ImportsRun)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity);
         group.MapGet("/import-jobs/{id:guid}/error-report", ErrorReport).WithName("Imports_ErrorReport")
@@ -156,6 +166,11 @@ internal static class ImportsEndpoints
         try
         {
             var result = await service.UploadAsync(form["type"].ToString() is { Length: > 0 } type ? type : null, SafeFileName(file.FileName), file.ContentType, content, cancellationToken);
+            if (result.Error is { RetryAfterSeconds: { } retryAfter })
+            {
+                request.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString(CultureInfo.InvariantCulture);
+            }
+
             return result.Error is { } error ? Problem(error) : TypedResults.Created($"/api/v1/import-jobs/{result.Value!.Id}", result.Value);
         }
         catch (ImportFileRejectedException ex)
@@ -210,10 +225,29 @@ internal static class ImportsEndpoints
     private static async Task<Results<Ok<ImportJobResponse>, ProblemHttpResult>> Cancel(Guid id, ImportService service, CancellationToken cancellationToken) =>
         Ok(await service.CancelAsync(id, cancellationToken));
 
-    private static async Task<Results<Ok<ImportRowPageResponse>, ProblemHttpResult>> Rows(
-        Guid id, HttpRequest http, ImportService service, string? status, string? action, string? limit, string? cursor, CancellationToken cancellationToken)
+    private static async Task<Results<Accepted<ImportJobResponse>, ProblemHttpResult>> Rollback(
+        Guid id, [FromHeader(Name = "If-Match")] string? ifMatch, ImportService service, CancellationToken cancellationToken)
     {
-        if (RejectUnknownQuery(http, "status", "action", "limit", "cursor") is { } unknown)
+        if (IfMatch(ifMatch, out var version) is { } precondition)
+        {
+            return precondition;
+        }
+
+        return Accepted(await service.RollbackAsync(id, version, cancellationToken));
+    }
+
+    private static async Task<Results<Ok<ImportRowPageResponse>, ProblemHttpResult>> Rows(
+        Guid id,
+        HttpRequest http,
+        ImportService service,
+        string? status,
+        string? action,
+        string? rollbackStatus,
+        string? limit,
+        string? cursor,
+        CancellationToken cancellationToken)
+    {
+        if (RejectUnknownQuery(http, "status", "action", "rollbackStatus", "limit", "cursor") is { } unknown)
         {
             return unknown;
         }
@@ -229,7 +263,7 @@ internal static class ImportsEndpoints
             return Malformed("cursor is invalid for this query");
         }
 
-        return Ok(await service.ListRowsAsync(id, status, action, pageSize, after, cancellationToken));
+        return Ok(await service.ListRowsAsync(id, status, action, rollbackStatus, pageSize, after, cancellationToken));
     }
 
     private static async Task<Results<FileContentHttpResult, ProblemHttpResult>> ErrorReport(Guid id, ImportService service, CancellationToken cancellationToken)

@@ -19,6 +19,7 @@ namespace BayiOS.IntegrationTests.BulkImport;
 /// 10k rows, cancel/resume, price-only import, actor re-check. The tests of this class run sequentially, so no other
 /// import chunk is in flight while one of them counts chunks.
 /// </summary>
+[Collection(ImportJobsTestGroup.Name)]
 public class ImportsApiTests(ApiFixture fixture)
 {
     private static readonly Dictionary<string, string> ProductColumns = new()
