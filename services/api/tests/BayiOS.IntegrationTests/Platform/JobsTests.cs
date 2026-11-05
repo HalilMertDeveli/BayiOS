@@ -18,8 +18,10 @@ namespace BayiOS.IntegrationTests.Platform;
 /// <summary>
 /// Job queue and transactional outbox (ADR 0006). The shared test host runs with <c>Jobs:Enabled=false</c>; these
 /// tests drive <see cref="JobProcessor"/> / <see cref="OutboxDispatcher"/> directly with test-only job types. Tests in
-/// this class run sequentially, so only one dispatcher at a time sees the (global) outbox.
+/// this class run sequentially and outside the parallel tests (<see cref="GlobalWorkersTestGroup"/>), so only one
+/// dispatcher at a time sees the (global) outbox and no other test's processor claims these jobs.
 /// </summary>
+[Collection(GlobalWorkersTestGroup.Name)]
 public class JobsTests(ApiFixture fixture)
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
