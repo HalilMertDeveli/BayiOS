@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const PORT = 3200;
+/** E2E_PORT lets parallel worktrees run their own server; CI uses the default. */
+const PORT = Number(process.env.E2E_PORT ?? 3200);
 const baseURL = `http://localhost:${PORT}`;
 
 /**

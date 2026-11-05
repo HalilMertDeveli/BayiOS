@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useModalDialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/cn";
-import { navForRole } from "@/lib/navigation";
+import { homeFor, navForRole } from "@/lib/navigation";
 import { useSession } from "@/lib/session/session-context";
 import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
 import { NavMenu } from "./nav-menu";
@@ -15,8 +15,9 @@ import { UserMenu } from "./user-menu";
 const MOBILE_NAV_ID = "mobile-nav";
 
 function Brand({ compact = false }: { compact?: boolean }) {
+  const { role } = useSession();
   return (
-    <Link href="/pano" className="flex items-center gap-2 rounded-md text-h3 text-fg">
+    <Link href={homeFor(role)} className="flex items-center gap-2 rounded-md text-h3 text-fg">
       <span
         aria-hidden="true"
         className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand text-caption font-bold text-on-brand"
