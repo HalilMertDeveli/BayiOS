@@ -77,7 +77,7 @@ vardır: `.github/workflows/e2e-real.yml` → iş adı `e2e real stack` (ci-gate
 | Senaryo | Kapsam |
 |---|---|
 | Kayıt → doğrulama e-postası → onboarding (motosiklet şablonu) → pano → çıkış → giriş | `real-stack.spec.ts` |
-| Ürün + varyant + barkod → mal kabul (barkod okutma) → fiyat listesi + fiyat → müşteri → taslak sipariş (fiyat API'den) → onaya gönder → onay (rezervasyon; /stok'ta ayrılmış) → toplama/paket/sevkiyat (web ekranı yokken kullanıcının kendi token'ıyla API'den) → sipariş "Sevk Edildi", /stok'ta rafta azaldı, ledger'da tek `shipment_out`; ikinci onay stok oynatmaz | `order-to-shipment.spec.ts` (#3, #5) |
+| Ürün + varyant + barkod → mal kabul (barkod okutma) → fiyat listesi + fiyat → müşteri → taslak sipariş (fiyat API'den) → onaya gönder → onay (rezervasyon; /stok'ta ayrılmış) → /depo/gorevler'de "Bana ata" + barkodla toplama + tamamla → /depo/sevkiyatlar'da paket kontrolü + sevk onayı (sevkiyatta tek stok hareketi) → sipariş "Sevk Edildi", /stok'ta rafta azaldı, ledger'da tek `shipment_out`; ikinci onay (API) 409, stok oynamaz | `order-to-shipment.spec.ts` (#3, #5) |
 | İkinci işletme (ayrı kayıt) A'nın ürününü UI'da (liste, detay, stok) ve API'de (404, boş arama, sahte `X-Tenant-Id` → 403) göremez; A pozitif kontrol | `order-to-shipment.spec.ts` (#8 smoke) |
 
 Yeniden deneme yok (`retries: 0`); veriler çalıştırma başına benzersiz ve sentetik. Yerelde çalıştırma: `apps/web/README.md`.

@@ -6,8 +6,9 @@ import { api, apiOk, captureApiSession, logApiErrors, newAccount, signUpAndOnboa
  * CI: .github/workflows/e2e-real.yml. Locally: apps/web/README.md "Gerçek yığın E2E".
  *
  * Order → reservation → picking → pack → shipment, verified on the ledger-backed stock screen, then tenant isolation
- * with a second, independently signed-up business. Picking/packing/shipping have no web screens on this branch yet, so
- * those steps go through the API with the signed-in user's own Supabase token (captured from the web app's requests).
+ * with a second, independently signed-up business. Every business step goes through the web UI (picking, pack check and
+ * shipment confirmation on /depo/gorevler and /depo/sevkiyatlar); the API is called directly only for extra checks
+ * (ledger, double-confirm, isolation) with the signed-in user's own Supabase token captured from the web app's requests.
  */
 test.describe.configure({ mode: "serial" });
 
@@ -141,36 +142,54 @@ test("sipariş → rezervasyon → toplama → paket → sevkiyat; stok ledger'd
   // Reservation: on hand unchanged, reserved = ordered, available reduced.
   await expectStock(page, RECEIVED, ORDERED, RECEIVED - ORDERED);
 
-  // ---- Picking, pack check, shipment confirmation — through the API as the signed-in owner.
-  sessionA = await captureApiSession(page, () => page.goto(`/siparisler/${orderId}`));
-  const tasks = await apiOk<{ items: { id: string; status: string }[] }>(sessionA, "GET", `/api/v1/picking-tasks?orderId=${orderId}`);
-  expect(tasks.items, "approval creates exactly one pick task").toHaveLength(1);
-  const taskId = tasks.items[0].id;
-  // The owner is a supervisor (tasks.assign): acts on pool tasks without claiming (claim is the staff path).
-  await apiOk(sessionA, "POST", `/api/v1/picking-tasks/${taskId}/start`, {});
-  const scan = await apiOk<{ openLineCount: number }>(sessionA, "POST", `/api/v1/picking-tasks/${taskId}/scans`, {
-    code: PRODUCT.barcode,
-    quantity: ORDERED,
-  });
-  expect(scan.openLineCount).toBe(0);
-  const completed = await apiOk<{ shipmentId: string | null }>(sessionA, "POST", `/api/v1/picking-tasks/${taskId}/complete`, {});
-  expect(completed.shipmentId).toBeTruthy();
-  const shipmentId = completed.shipmentId!;
-  await apiOk(sessionA, "POST", `/api/v1/shipments/${shipmentId}/pack`, {
-    packages: [{ items: [{ code: PRODUCT.barcode, quantity: ORDERED }] }],
-  });
-  const confirmed = await apiOk<{ orderStatus: string; orderFulfillmentStatus: string; movementIds: string[] }>(
-    sessionA,
-    "POST",
-    `/api/v1/shipments/${shipmentId}/confirm`,
-    { carrier: "E2E Kargo", trackingNumber: `TRK-${stamp}`, packageCount: 1 },
-  );
-  expect(confirmed).toMatchObject({ orderStatus: "shipped", orderFulfillmentStatus: "full" });
-  expect(confirmed.movementIds).toHaveLength(1);
+  // ---- Picking in the web app (/depo/gorevler). The owner is a supervisor (tasks.assign, no tasks.claim):
+  // takes the pool task with "Bana ata", then picks by barcode (keyboard-wedge: code + Enter).
+  sessionA = await captureApiSession(page, () => page.goto("/depo/gorevler"));
+  await page.getByRole("tab", { name: "Tüm görevler" }).click();
+  const taskItem = page.getByRole("list", { name: "Tüm görevler" }).getByRole("listitem").filter({ hasText: `Sipariş ${orderNumber}` });
+  await expect(taskItem, "approval creates exactly one pick task").toHaveCount(1);
+  await taskItem.getByRole("button", { name: "Bana ata" }).click();
+  await expect(taskItem.getByText("Bana atandı")).toBeVisible();
+  await taskItem.getByRole("link", { name: "Toplamaya başla" }).click();
+  await expect(page).toHaveURL(/\/depo\/gorevler\/[0-9a-f-]{36}$/);
+  // Default warehouse "Ana Depo" has no shelves: straight to the product.
+  await expect(page.getByTestId("pick-step")).toHaveText(`Ürünü okutun: ${PRODUCT.sku}`);
+  const pickBox = page.getByRole("textbox", { name: /Raf barkodu|Ürün barkodu veya SKU/ });
+  for (let i = 1; i <= ORDERED; i++) {
+    await expect(pickBox).toBeFocused();
+    await pickBox.fill(PRODUCT.barcode);
+    await pickBox.press("Enter");
+    await expect(page.getByTestId("scan-feedback")).toContainText(i < ORDERED ? `${PRODUCT.sku} +1` : "Tüm satırlar bitti");
+  }
+  await page.getByRole("button", { name: "Görevi tamamla" }).click();
+  await expect(page.getByText("Toplama tamamlandı", { exact: true })).toBeVisible();
 
-  // A replayed confirmation (same shipment, already shipped) must not move stock twice.
+  // ---- Pack check: every picked unit scanned again into a package, then confirm the shipment.
+  await page.getByRole("link", { name: "Sevkiyata git" }).click();
+  await expect(page).toHaveURL(/\/depo\/sevkiyatlar\/[0-9a-f-]{36}$/);
+  const shipmentId = new URL(page.url()).pathname.split("/").at(-1)!;
+  await expect(page.getByRole("heading", { level: 1, name: new RegExp(`Sevkiyat ${orderNumber}`) })).toBeVisible();
+  const packBox = page.getByRole("textbox", { name: "Ürün barkodu veya SKU" });
+  for (let i = 1; i <= ORDERED; i++) {
+    await packBox.fill(PRODUCT.barcode);
+    await packBox.press("Enter");
+    await expect(page.getByTestId("scan-feedback")).toContainText(`${PRODUCT.sku} → Koli 1`);
+  }
+  await expect(page.getByTestId(`pack-line-${PRODUCT.sku}`)).toContainText("Tamam");
+  await page.getByRole("button", { name: /Paket kontrolünü kaydet/ }).click();
+  await expect(page.getByText("Paketlendi", { exact: true }).filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByLabel("Koli sayısı")).toHaveValue("1");
+  await page.getByLabel("Kargo firması").fill("E2E Kargo");
+  await page.getByRole("button", { name: "Sevkiyatı onayla" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Sevk et" }).click();
+  await expect(page.getByText("Sevk edildi", { exact: true }).filter({ visible: true }).first()).toBeVisible();
+  // Owner sees the ledger movements of the shipment: exactly one shipment_out.
+  const movementsSection = page.locator("section", { has: page.getByRole("heading", { name: "Stok hareketleri" }) });
+  await expect(movementsSection.getByRole("listitem")).toHaveCount(1);
+
+  // A second confirmation (new attempt, already shipped) must not move stock twice.
   const again = await api(sessionA, "POST", `/api/v1/shipments/${shipmentId}/confirm`, {});
-  expect(again.status).toBeGreaterThanOrEqual(400);
+  expect(again.status).toBe(409);
 
   // ---- Back in the web app: order shipped, stock left the shelf and the reservation is consumed.
   await page.goto(`/siparisler/${orderId}`);

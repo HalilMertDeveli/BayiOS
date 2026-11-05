@@ -50,8 +50,9 @@ bash infra/ci/e2e-stack.sh down          # API/web süreçleri, Postgres konteyn
 - Şifreler her çalıştırmada üretilir; hiçbir sır gerekmez. Supabase anahtarları CLI'ın herkese açık yerel anahtarlarıdır.
 - Kimlik doğrulama gerçektir: kayıt → Mailpit'teki doğrulama bağlantısı → oturum; API token'ı JWKS ile doğrular
   (yalnız yapılandırma farkı: http yerel issuer için `Auth__RequireHttpsMetadata=false`). Test anahtarı/bypass yoktur.
-- Web'de ekranı olmayan adımlar (toplama, paket, sevkiyat) testte, oturum açmış kullanıcının web'in API isteklerinden
-  alınan kendi Bearer token'ı ve `X-Tenant-Id`'si ile API'den sürülür.
+- Tüm iş adımları (toplama, paket kontrolü, sevk onayı dahil) web arayüzünden yapılır. API'ye doğrudan yalnızca ek
+  kontroller (çift onay, izolasyon) için, oturum açmış kullanıcının web'in isteklerinden alınan kendi Bearer token'ı ve
+  `X-Tenant-Id`'si ile gidilir.
 - Süreç günlükleri: `$E2E_STATE_DIR` (varsayılan `${TMPDIR:-/tmp}/bayios-e2e`) altında `api.log`, `web.log`.
 - Portlar: `E2E_PG_PORT`, `E2E_API_PORT`, `E2E_WEB_PORT`. Web'i yeniden derlemeden başlatmak: `E2E_SKIP_WEB_BUILD=1`;
   migration betiklerini yeniden üretmemek: `E2E_REUSE_MIGRATIONS=1`. Port 3200 Supabase yönlendirme izin listesindedir.
