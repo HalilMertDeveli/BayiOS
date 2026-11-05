@@ -264,8 +264,9 @@ profili; vergi no/telefon yalnızca `changed`), `inventory.receipt_posted`, `inv
 `inventory.negative_stock_confirmed`, `order.created`, `order.approved`, `order.cancelled`, `order.shipped`,
 `order.remaining_closed`, `order.price_overridden`, `order.pick_progress`, `picking.task_created`, `picking.task_assigned`,
 `picking.task_cancelled`, `picking.shortage_reported`, `shipment.packed`, `shipment.confirmed`, `shipment.cancelled`,
-`import.started`, `import.completed`, `import.failed`, `import.cancelled`. Kaynak: `SharedKernel/Platform/Audit/AuditLog.cs`
-(`AuditActions`) ve modül sabitleri (`ImportAuditActions`). Tablodaki diğer kodlar henüz uygulanmadı; özellikle
+`import.started`, `import.completed`, `import.failed`, `import.cancelled`, `import.rollback_requested`, `import.rolled_back`,
+`import.rollback_failed`, `customer.anonymized` (yalnızca sayılar: silinen adres, maskelenen sipariş; kişisel veri yok). Kaynak: `SharedKernel/Platform/Audit/AuditLog.cs`
+(`AuditActions`) ve modül sabitleri (`ImportAuditActions`, `CustomerAuditActions`). Tablodaki diğer kodlar henüz uygulanmadı; özellikle
 `member.*` ve `auth.*` (erişim reddi) olayları #89'da açık kalır (Identity uçlarına bağlı).
 
 Audit tablosu append-only; okuma yalnızca owner/admin; saklama süresi `data-policy.md` §4 (2 yıl).
@@ -288,7 +289,7 @@ Yük yalnızca kimlik/durum içerir (kişisel veri yok); teslim en az bir kez, t
 |---|---|
 | Orders | `orders.approved.v1`, `orders.cancelled.v1`, `orders.shipped.v1` |
 | Warehouse | `warehouse.picking_task_created.v1`, `warehouse.picking_task_assigned.v1`, `warehouse.picking_completed.v1`, `warehouse.shortage_reported.v1`, `warehouse.shipment_confirmed.v1`, `warehouse.shipment_cancelled.v1`, `warehouse.putaway_created.v1` |
-| Imports | `imports.import_completed.v1` |
+| Imports | `imports.import_completed.v1`, `imports.import_rolled_back.v1` |
 
 Henüz abonesi olan tip yok (Notifications modülü gelince); abonesiz mesaj yalnızca işlenmiş işaretlenir ve 7 gün sonra silinir.
 
