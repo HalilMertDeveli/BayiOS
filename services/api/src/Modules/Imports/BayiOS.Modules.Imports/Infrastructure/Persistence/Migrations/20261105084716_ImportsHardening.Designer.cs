@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ImportsDbContext))]
-    [Migration("20261105084000_ImportsHardening")]
+    [Migration("20261105084716_ImportsHardening")]
     partial class ImportsHardening
     {
         /// <inheritdoc />
@@ -110,10 +110,6 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("file_name");
-
-                    b.Property<DateTimeOffset?>("FilePurgedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("file_purged_at");
 
                     b.Property<string>("FileSha256")
                         .IsRequired()

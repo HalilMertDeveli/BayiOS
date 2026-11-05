@@ -12,11 +12,26 @@ namespace BayiOS.Api.Platform.Audit;
 
 internal sealed class AuditOptions
 {
+    public const string Section = "Audit";
+
+    /// <summary>HMAC-SHA-256 key floor: at least the hash output size (32 bytes, UTF-8).</summary>
+    public const int MinIpHashKeyBytes = 32;
+
+    /// <summary>The database refuses anything shorter (data-policy §4); 730 days ≥ the SQL <c>interval '2 years'</c> floor.</summary>
+    public static readonly TimeSpan MinRetention = TimeSpan.FromDays(730);
+
     /// <summary>
-    /// <c>Audit:IpHashKey</c> — server-side secret for the client IP HMAC (data-policy §8.5). When empty, no IP
-    /// hash is stored: an unkeyed SHA-256 of an IPv4 address is trivially reversible.
+    /// <c>Audit:IpHashKey</c> — server-side secret for the client IP HMAC (data-policy §8.5). Fail-safe: when empty,
+    /// no IP hash is stored (an unkeyed SHA-256 of an IPv4 address is trivially reversible). When set it must be at
+    /// least <see cref="MinIpHashKeyBytes"/> bytes, checked at startup.
     /// </summary>
     public string? IpHashKey { get; set; }
+
+    /// <summary><c>Audit:Retention</c> — events older than this are purged (default and minimum 730 days).</summary>
+    public TimeSpan Retention { get; set; } = MinRetention;
+
+    public static bool IsValidIpHashKey(string? key) =>
+        string.IsNullOrEmpty(key) || Encoding.UTF8.GetByteCount(key) >= MinIpHashKeyBytes;
 }
 
 /// <summary>Raw SQL insert into <c>audit.audit_events</c> on the request/job transaction (RLS applies).</summary>

@@ -8,6 +8,7 @@ using BayiOS.SharedKernel.Platform.Audit;
 using BayiOS.SharedKernel.Platform.Jobs;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -134,7 +135,8 @@ public class JobsTests(ApiFixture fixture)
         var tenantA = await CatalogClient.NewTenantOwnerAsync(fixture);
         var tenantB = await CatalogClient.NewTenantOwnerAsync(fixture);
         var type = NewType();
-        var jobA = await EnqueueAsAsync(tenantA, new JobRequest(type, new { purpose = "tenant-context" }));
+        await using var host = HostKnowing(type);
+        var jobA = await EnqueueAsAsync(host.Services, tenantA, new JobRequest(type, new { purpose = "tenant-context" }));
         var system = (await fixture.Services.GetRequiredService<JobStore>().InsertAsync(new NewJob(null, type, "{}", null, 0, 1, null, null), Ct))!.Value;
 
         var seen = new ConcurrentDictionary<Guid, (Guid? ContextTenant, string Setting, Guid[] VisibleTenants)>();
@@ -176,8 +178,9 @@ public class JobsTests(ApiFixture fixture)
         var tenantA = await CatalogClient.NewTenantOwnerAsync(fixture);
         var tenantB = await CatalogClient.NewTenantOwnerAsync(fixture);
         var type = NewType();
+        await using var host = HostKnowing(type);
 
-        await using (var scope = fixture.Services.CreateAsyncScope())
+        await using (var scope = host.Services.CreateAsyncScope())
         {
             var unitOfWork = await BeginAsync(scope.ServiceProvider, tenantA);
             var jobs = scope.ServiceProvider.GetRequiredService<IBackgroundJobs>();
@@ -188,7 +191,7 @@ public class JobsTests(ApiFixture fixture)
 
         Assert.Equal(0L, await ScalarAsync<long>("SELECT count(*) FROM platform.jobs WHERE type = $1", type));
 
-        var committed = await EnqueueAsAsync(tenantA, new JobRequest(type, DedupeKey: "once"));
+        var committed = await EnqueueAsAsync(host.Services, tenantA, new JobRequest(type, DedupeKey: "once"));
         Assert.Equal(tenantA.TenantId, await ScalarAsync<Guid>("SELECT tenant_id FROM platform.jobs WHERE id = $1", committed));
 
         await using var app = new NpgsqlConnection(fixture.AppConnectionString);
@@ -352,9 +355,13 @@ public class JobsTests(ApiFixture fixture)
         }
     }
 
-    private async Task<Guid> EnqueueAsAsync(CatalogClient member, JobRequest job)
+    /// <summary>A host whose registry knows <paramref name="type"/>: <see cref="IBackgroundJobs"/> rejects unregistered types (#89).</summary>
+    private WebApplicationFactory<Program> HostKnowing(string type) =>
+        fixture.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddJobHandler<HostedProbe>(type)));
+
+    private static async Task<Guid> EnqueueAsAsync(IServiceProvider services, CatalogClient member, JobRequest job)
     {
-        await using var scope = fixture.Services.CreateAsyncScope();
+        await using var scope = services.CreateAsyncScope();
         var unitOfWork = await BeginAsync(scope.ServiceProvider, member);
         var id = await scope.ServiceProvider.GetRequiredService<IBackgroundJobs>().EnqueueAsync(job, Ct);
         await unitOfWork.CommitAsync(Ct);

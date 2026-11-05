@@ -50,7 +50,6 @@ public sealed record ImportJobResponse(
     DateTimeOffset? StartedAt,
     Guid? StartedBy,
     DateTimeOffset? FinishedAt,
-    DateTimeOffset? FilePurgedAt,
     DateTimeOffset? RollbackDeadline,
     ImportRollbackInfo? Rollback);
 

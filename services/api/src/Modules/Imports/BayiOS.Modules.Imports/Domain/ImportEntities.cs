@@ -224,9 +224,6 @@ internal sealed class ImportJob : ImportsEntity
 
     public DateTimeOffset? FinishedAt { get; set; }
 
-    /// <summary>When the raw file bytes were deleted after the retention window (data-policy §4); metadata stays.</summary>
-    public DateTimeOffset? FilePurgedAt { get; private init; }
-
     public DateTimeOffset? RollbackRequestedAt { get; set; }
 
     /// <summary>The user whose permissions the rollback runs with (re-checked on every chunk).</summary>

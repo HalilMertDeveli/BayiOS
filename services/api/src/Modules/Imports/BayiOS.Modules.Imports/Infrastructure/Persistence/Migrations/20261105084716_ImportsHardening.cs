@@ -37,13 +37,6 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
                 type: "timestamp with time zone",
                 nullable: true);
 
-            migrationBuilder.AddColumn<DateTimeOffset>(
-                name: "file_purged_at",
-                schema: "imports",
-                table: "import_jobs",
-                type: "timestamp with time zone",
-                nullable: true);
-
             migrationBuilder.AddColumn<int>(
                 name: "rollback_conflict_rows",
                 schema: "imports",
@@ -117,9 +110,9 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
 
             // --- Raw file retention (data-policy §4: import files 30 days after the import finished). The purge runs
             // in a tenant-less maintenance job, which sees nothing under RLS. Instead of loosening tenant_isolation for
-            // bayios_app, a SECURITY DEFINER function runs as the owner, and only the owner may see/delete files and
-            // mark their jobs — and only rows already past a 1-day floor of inactivity (same pattern as
-            // platform.purge_expired_idempotency_keys). Metadata and row results stay; rollback never needs the file. ---
+            // bayios_app, a SECURITY DEFINER function runs as the owner, and the owner may only see/delete files (and
+            // read their jobs) past a 1-day floor of inactivity — same pattern as platform.purge_expired_idempotency_keys.
+            // Job metadata and row results stay; rollback never needs the file. ---
             migrationBuilder.Sql("""
                 CREATE POLICY import_files_purge_select ON imports.import_files FOR SELECT TO bayios_migrator
                     USING (created_at < now() - interval '1 day');
@@ -128,10 +121,6 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
                 CREATE POLICY import_jobs_purge_select ON imports.import_jobs FOR SELECT TO bayios_migrator
                     USING (status NOT IN ('validating', 'running', 'rolling_back')
                            AND coalesce(finished_at, created_at) < now() - interval '1 day');
-                CREATE POLICY import_jobs_purge_update ON imports.import_jobs FOR UPDATE TO bayios_migrator
-                    USING (file_purged_at IS NULL AND status NOT IN ('validating', 'running', 'rolling_back')
-                           AND coalesce(finished_at, created_at) < now() - interval '1 day')
-                    WITH CHECK (file_purged_at IS NOT NULL);
 
                 CREATE FUNCTION imports.purge_expired_files(p_retention interval, p_limit integer) RETURNS integer
                     LANGUAGE plpgsql
@@ -148,24 +137,17 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
                         RAISE EXCEPTION 'p_retention must be at least 1 day';
                     END IF;
 
-                    WITH expired AS (
-                        SELECT f.tenant_id, f.import_job_id
-                        FROM imports.import_files f
-                        JOIN imports.import_jobs j ON j.tenant_id = f.tenant_id AND j.id = f.import_job_id
+                    DELETE FROM imports.import_files f
+                    USING (
+                        SELECT x.tenant_id, x.import_job_id
+                        FROM imports.import_files x
+                        JOIN imports.import_jobs j ON j.tenant_id = x.tenant_id AND j.id = x.import_job_id
                         WHERE j.status NOT IN ('validating', 'running', 'rolling_back')
                           AND coalesce(j.finished_at, j.created_at) < now() - p_retention
                         ORDER BY coalesce(j.finished_at, j.created_at)
                         LIMIT p_limit
-                    ), deleted AS (
-                        DELETE FROM imports.import_files f
-                        USING expired e
-                        WHERE f.tenant_id = e.tenant_id AND f.import_job_id = e.import_job_id
-                        RETURNING f.tenant_id, f.import_job_id
-                    )
-                    UPDATE imports.import_jobs j
-                    SET file_purged_at = now(), row_version = j.row_version + 1
-                    FROM deleted d
-                    WHERE j.tenant_id = d.tenant_id AND j.id = d.import_job_id;
+                    ) e
+                    WHERE f.tenant_id = e.tenant_id AND f.import_job_id = e.import_job_id;
                     GET DIAGNOSTICS purged = ROW_COUNT;
                     RETURN purged;
                 END;
@@ -181,7 +163,6 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.Sql("""
                 DROP FUNCTION IF EXISTS imports.purge_expired_files(interval, integer);
-                DROP POLICY IF EXISTS import_jobs_purge_update ON imports.import_jobs;
                 DROP POLICY IF EXISTS import_jobs_purge_select ON imports.import_jobs;
                 DROP POLICY IF EXISTS import_files_purge_delete ON imports.import_files;
                 DROP POLICY IF EXISTS import_files_purge_select ON imports.import_files;
@@ -216,11 +197,6 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
                 name: "rolled_back_at",
                 schema: "imports",
                 table: "import_rows");
-
-            migrationBuilder.DropColumn(
-                name: "file_purged_at",
-                schema: "imports",
-                table: "import_jobs");
 
             migrationBuilder.DropColumn(
                 name: "rollback_conflict_rows",

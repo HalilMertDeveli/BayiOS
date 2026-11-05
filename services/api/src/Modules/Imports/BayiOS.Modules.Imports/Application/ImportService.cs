@@ -422,7 +422,7 @@ internal sealed class ImportService(
             return denied;
         }
 
-        if (job.FilePurgedAt is not null)
+        if (!await db.Files.AnyAsync(f => f.ImportJobId == job.Id, cancellationToken))
         {
             return AppError.Conflict("imports.file_purged", "The uploaded file was deleted after the retention period; upload it again");
         }
@@ -840,7 +840,6 @@ internal sealed class ImportService(
             j.StartedAt,
             j.StartedBy,
             j.FinishedAt,
-            j.FilePurgedAt,
             j.Status == ImportStatuses.Completed ? j.FinishedAt + rollbackWindow : null,
             j.RollbackRequestedAt is { } requestedAt
                 ? new ImportRollbackInfo(

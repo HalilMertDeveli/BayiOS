@@ -111,36 +111,32 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
     };
 
     /// <summary>
-    /// Tables with documented <c>bayios_migrator</c> policies: a tenant-less maintenance job calls a SECURITY DEFINER
-    /// function that runs as the owner, and FORCE RLS still limits the owner to rows past retention.
+    /// Owner-only policies of the purge functions (data-model §5.11/§5.12). Each one only exposes rows past a fixed
+    /// expiry: expired idempotency keys (<c>platform.purge_expired_idempotency_keys</c>) and audit events older than
+    /// the 2-year retention floor (<c>audit.purge_expired_audit_events</c>, #89 — the append-only trigger still lets
+    /// only that function's DELETE through).
     /// </summary>
-    private static readonly HashSet<string> MigratorPurgePolicyTables =
-        ["platform.idempotency_keys", "imports.import_files", "imports.import_jobs"];
+    private static readonly Dictionary<string, string[]> MigratorPurgePolicies = new Dictionary<string, string[]>
+    {
+        ["platform.idempotency_keys"] = ["idempotency_purge_select", "idempotency_purge_delete"],
+        ["audit.audit_events"] = ["audit_retention_select", "audit_retention_delete"],
+
+        // Raw import files past retention (imports.purge_expired_files, data-policy §4, #94); import jobs are only
+        // read, to find inactive imports that finished before the retention floor.
+        ["imports.import_files"] = ["import_files_purge_select", "import_files_purge_delete"],
+        ["imports.import_jobs"] = ["import_jobs_purge_select"],
+    };
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task Migrator_purge_policies_never_reach_live_rows()
+    public async Task Import_file_purge_is_reachable_only_through_its_definer_function()
     {
-        // Every migrator policy keeps a time floor, so even the owner (through the purge functions) cannot touch a
-        // row that is still in use.
-        var rows = await RowsAsync(
-            $"""
-            SELECT quote_ident(p.schemaname) || '.' || quote_ident(p.tablename), p.policyname, coalesce(p.qual, '') || ' ' || coalesce(p.with_check, '')
-            FROM pg_policies p
-            WHERE p.schemaname IN ({DatabaseCatalog.BusinessSchemasSql}) AND p.roles::text[] = ARRAY['bayios_migrator']
-            ORDER BY 1, 2
-            """);
-        Assert.Contains(rows, r => (string)r[0] == "imports.import_files");
-        foreach (var row in rows)
-        {
-            var (table, name, expression) = ((string)row[0], (string)row[1], (string)row[2]);
-            Assert.True(MigratorPurgePolicyTables.Contains(table), $"{table}.{name}: undocumented migrator policy");
-            Assert.True(expression.Contains("now()", StringComparison.Ordinal) || expression.Contains("file_purged_at IS NOT NULL", StringComparison.Ordinal), $"{table}.{name}: no time floor: {expression}");
-        }
-
-        // The import purge function is the only way in for the runtime role.
+        // The runtime role cannot see other tenants' files; the purge goes through the owner's function (and the
+        // owner-only policies checked in the policy sweep), which bayios_app may execute but PUBLIC may not.
         Assert.True(await ScalarAsync<bool>($"SELECT has_function_privilege('{App}', 'imports.purge_expired_files(interval, integer)', 'EXECUTE')"));
+        Assert.Equal(3L, await ScalarAsync<long>(
+            "SELECT count(*) FROM pg_policies WHERE schemaname = 'imports' AND roles::text[] = ARRAY['bayios_migrator'] AND cmd IN ('SELECT', 'DELETE')"));
     }
 
     [Fact]
@@ -223,11 +219,15 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
 
             if (!roles.Contains(App))
             {
-                // Only the documented migrator purge policies (used by SECURITY DEFINER purge functions) may target
-                // another role: expired idempotency keys, and import raw files past retention (imports.purge_expired_files).
-                if (!(MigratorPurgePolicyTables.Contains(table) && roles.SequenceEqual(["bayios_migrator"])))
+                // Only the documented migrator purge policies may target another role: they are what the SECURITY
+                // DEFINER purge functions (running as the owner, under FORCE RLS) can see and delete.
+                if (!(MigratorPurgePolicies.TryGetValue(table, out var allowed) && allowed.Contains(name) && roles.SequenceEqual(["bayios_migrator"])))
                 {
                     violations.Add($"{table}.{name}: policy for unexpected role(s) {string.Join(',', roles)}");
+                }
+                else if (cmd is not ("SELECT" or "DELETE") || !qual.Contains("now()", StringComparison.Ordinal))
+                {
+                    violations.Add($"{table}.{name}: purge policy must be SELECT/DELETE of expired rows only ({cmd}: {qual})");
                 }
 
                 continue;

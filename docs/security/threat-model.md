@@ -151,6 +151,9 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 | T | Aynı işin iki kez işlenmesi | H | `FOR UPDATE SKIP LOCKED`, idempotent handler, outbox `processed_at` | Concurrency: 2 worker, 1 iş → 1 etki |
 | D | Zehirli iş (sürekli hata) | M | Maks deneme + dead-letter durumu | Unit: `max_attempts` sonrası `dead` (ADR 0006) |
 | R | İş sonuçlarının izlenmemesi | L | İş başlangıç/bitiş audit + metrik | — |
+| I | `last_error` alanına kişisel veri / SQL değeri / sır sızması (operatörler tüm tenant'ları görür) | M | Yalnızca `JobErrorSanitizer` çıktısı: tip + temizlenmiş mesaj, PostgreSQL'de SQLSTATE + kısıt adı; `Detail`/parametre yok (#89) | `JobErrorSanitizerTests`, `PlatformMaintenanceTests.Failed_job_stores_a_sanitized_error_without_values` |
+| T/D | Hiçbir worker'ın almayacağı (kayıtsız) tipte iş kuyruğa yazılır, iş değişikliği "başarılı" görünür | L | `EnqueueAsync` kayıtsız tipi transaction içinde reddeder (`UnknownJobTypeException`) | `PlatformMaintenanceTests.Enqueue_of_an_unregistered_job_type_fails_inside_the_transaction`, `Every_job_handler_shipped_in_the_product_is_registered_under_its_type` |
+| D | Biten job/outbox satırlarının sınırsız büyümesi | L | `platform.queue_cleanup` (7/30/7 gün, partili) | `PlatformMaintenanceTests.Queue_cleanup_…` |
 
 ### 3.7 AI entegrasyonu (WhatsApp ayrıştırma, Claude API)
 | STRIDE | Tehdit | Ciddiyet | Önlem | Doğrulama testi |
@@ -248,14 +251,46 @@ Her olay: `id, tenant_id, actor_user_id, actor_role, action, entity_type, entity
 | Kimlik/üyelik | `member.invited`, `member.joined`, `member.role_changed`, `member.removed`, `tenant.created`, `tenant.settings_changed` |
 | Erişim | `auth.forbidden_tenant_access` (başka tenant denemesi), `auth.rbac_denied`, `rate_limit.exceeded` |
 | Katalog/fiyat | `product.created/updated/archived`, `price_list.updated`, `price_list.imported` |
-| Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.transfer_posted`, `inventory.count_posted` |
-| Sipariş | `order.created`, `order.approved` (rezervasyon), `order.cancelled` (release), `order.pick_progress`, `order.shipped` |
-| Import/Export | `import.started/completed/failed`, `export.requested/downloaded` |
+| Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.negative_stock_confirmed` (`warn` politikasında açık onayla eksiye düşüş), `inventory.transfer_posted`, `inventory.count_posted` |
+| Sipariş | `order.created`, `order.approved` (rezervasyon), `order.cancelled` (release), `order.pick_progress`, `order.shipped`, `order.remaining_closed` (short-close, kalan rezervasyonlar bırakılır), `order.price_overridden` (liste fiyatı dışı fiyat/iskonto) |
+| Depo hazırlama/sevkiyat | `picking.task_created`, `picking.task_assigned`, `picking.task_cancelled`, `picking.shortage_reported`, `shipment.packed`, `shipment.confirmed` (stok çıkışı), `shipment.cancelled` (onaylanmamış sevkiyat iptali; stok hareketi yok, toplananlar putaway'e) |
+| Import/Export | `import.started/completed/failed/cancelled`, `export.requested/downloaded` |
 | AI | `ai.parse_requested`, `ai.draft_created`, `ai.line_flagged_ambiguous`, `ai.draft_approved/rejected` |
 | Veri hakları | `data_export.tenant_requested`, `data_deletion.tenant_requested/completed` |
 | Güvenlik | `api_key.created/revoked` (ileride), `integration.webhook_changed` |
 
-Audit tablosu append-only; okuma yalnızca owner/admin; saklama süresi `data-policy.md`'de.
+**Uygulanan eylem kodları (2026-11-05, #89 denetimi):** `tenant.created`, `tenant.settings_changed` (iş ayarları ve firma
+profili; vergi no/telefon yalnızca `changed`), `inventory.receipt_posted`, `inventory.adjustment_posted`,
+`inventory.negative_stock_confirmed`, `order.created`, `order.approved`, `order.cancelled`, `order.shipped`,
+`order.remaining_closed`, `order.price_overridden`, `order.pick_progress`, `picking.task_created`, `picking.task_assigned`,
+`picking.task_cancelled`, `picking.shortage_reported`, `shipment.packed`, `shipment.confirmed`, `shipment.cancelled`,
+`import.started`, `import.completed`, `import.failed`, `import.cancelled`. Kaynak: `SharedKernel/Platform/Audit/AuditLog.cs`
+(`AuditActions`) ve modül sabitleri (`ImportAuditActions`). Tablodaki diğer kodlar henüz uygulanmadı; özellikle
+`member.*` ve `auth.*` (erişim reddi) olayları #89'da açık kalır (Identity uçlarına bağlı).
+
+Audit tablosu append-only; okuma yalnızca owner/admin; saklama süresi `data-policy.md` §4 (2 yıl).
+
+**Saklama istisnası (#89) — append-only kuralının tek, gözden geçirilmiş istisnası:** 2 yıldan eski olaylar saatlik
+tenant'sız `platform.audit_retention` job'ıyla silinir. Silme yalnızca `audit.purge_expired_audit_events(retention, limit)`
+üzerinden olur (SECURITY DEFINER, sahibi `bayios_migrator`, sabit `search_path`, PUBLIC'e kapalı). Append-only tetikleyicisi
+yalnızca *sahip* rolüyle, fonksiyonun koyduğu transaction-yerel işaretle ve `occurred_at < now() - 2 yıl` olan satırın
+DELETE'ine izin verir; UPDATE/TRUNCATE her zaman reddedilir. `bayios_app`'in UPDATE/DELETE yetkisi yoktur (işaret koysa da);
+süper kullanıcı sahip olmadığından reddedilir; sahip FORCE RLS altında yalnızca 2 yıldan eski satırları görür. Tabanı
+kısaltmak migration + güvenlik incelemesi gerektirir; uzatmak `Audit:Retention` yapılandırmasıdır. Kalan risk: sahip rolü
+(`bayios_migrator`, yalnızca CI/deploy migration adımında) tetikleyiciyi zaten değiştirebilir — bu, istisnadan bağımsız
+mevcut bir güven varsayımıdır. Doğrulama: `PlatformMaintenanceTests` (yalnızca eski satırlar silinir; app/sahip/süper
+kullanıcı doğrudan silemez/değiştiremez), `DatabaseSecurityGuardTests` (yetkiler, politika allowlist'i, SECURITY DEFINER).
+
+### 7.1 Outbox olay tipleri (uygulanan)
+Yük yalnızca kimlik/durum içerir (kişisel veri yok); teslim en az bir kez, tüketici `message_id` ile idempotent (ADR 0006).
+
+| Modül | Olay tipleri |
+|---|---|
+| Orders | `orders.approved.v1`, `orders.cancelled.v1`, `orders.shipped.v1` |
+| Warehouse | `warehouse.picking_task_created.v1`, `warehouse.picking_task_assigned.v1`, `warehouse.picking_completed.v1`, `warehouse.shortage_reported.v1`, `warehouse.shipment_confirmed.v1`, `warehouse.shipment_cancelled.v1`, `warehouse.putaway_created.v1` |
+| Imports | `imports.import_completed.v1` |
+
+Henüz abonesi olan tip yok (Notifications modülü gelince); abonesiz mesaj yalnızca işlenmiş işaretlenir ve 7 gün sonra silinir.
 
 ## 8. En önemli riskler ve doğrulama
 

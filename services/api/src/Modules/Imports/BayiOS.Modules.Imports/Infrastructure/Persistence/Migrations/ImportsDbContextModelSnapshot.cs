@@ -108,10 +108,6 @@ namespace BayiOS.Modules.Imports.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("file_name");
 
-                    b.Property<DateTimeOffset?>("FilePurgedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("file_purged_at");
-
                     b.Property<string>("FileSha256")
                         .IsRequired()
                         .HasColumnType("char(64)")

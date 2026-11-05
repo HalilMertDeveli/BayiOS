@@ -464,8 +464,11 @@ internal sealed class ImportSystemJobs(IServiceProvider services, UnitOfWork uni
         }
     }
 
-    public async Task EnqueueSystemAsync(string type, string dedupeKey, CancellationToken cancellationToken) =>
+    public async Task EnqueueSystemAsync(string type, string dedupeKey, CancellationToken cancellationToken)
+    {
+        EnsureRegistered(type);
         await services.GetRequiredService<JobStore>().InsertAsync(new NewJob(null, type, "{}", null, -1, 3, dedupeKey, null), cancellationToken);
+    }
 
     public async Task<IReadOnlyList<DeadImportJob>> FindDeadJobsAsync(
         IReadOnlyCollection<string> types, TimeSpan lookback, int limit, CancellationToken cancellationToken)
@@ -503,6 +506,7 @@ internal sealed class ImportSystemJobs(IServiceProvider services, UnitOfWork uni
     public async Task EnqueueForTenantAsync(Guid tenantId, JobRequest job, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(job);
+        EnsureRegistered(job.Type);
         var transaction = unitOfWork.Transaction
             ?? throw new InvalidOperationException("Jobs are enqueued inside the unit of work transaction.");
         await JobStore.InsertAsync(
@@ -510,5 +514,14 @@ internal sealed class ImportSystemJobs(IServiceProvider services, UnitOfWork uni
             transaction,
             new NewJob(tenantId, job.Type, JobStore.Serialize(job.Payload), job.RunAfter, job.Priority, job.MaxAttempts, job.DedupeKey, null),
             cancellationToken);
+    }
+
+    /// <summary>Same rule as <c>IBackgroundJobs</c> (#89): a type without a registered handler is never enqueued.</summary>
+    private void EnsureRegistered(string type)
+    {
+        if (!services.GetRequiredService<JobHandlerRegistry>().IsRegistered(type))
+        {
+            throw new UnknownJobTypeException(type);
+        }
     }
 }

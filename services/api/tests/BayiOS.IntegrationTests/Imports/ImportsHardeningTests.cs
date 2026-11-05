@@ -246,12 +246,10 @@ public class ImportsHardeningTests(ApiFixture fixture)
                 id);
         }
 
-        await RunMaintenanceAsync(kit, old.Id, j => j.FilePurgedAt is not null);
-        await kit.WaitAsync(abandoned.Id, j => j.FilePurgedAt is not null);
+        var filesSql = $"SELECT count(*) FROM imports.import_files WHERE tenant_id = $1 AND import_job_id IN ('{old.Id}', '{abandoned.Id}')";
+        await RunMaintenanceUntilAsync(async () => await CountAsync(kit, filesSql) == 0);
 
-        Assert.Equal(0L, await CountAsync(kit, $"SELECT count(*) FROM imports.import_files WHERE tenant_id = $1 AND import_job_id IN ('{old.Id}', '{abandoned.Id}')"));
         Assert.Equal(1L, await CountAsync(kit, $"SELECT count(*) FROM imports.import_files WHERE tenant_id = $1 AND import_job_id = '{fresh.Id}'"));
-        Assert.Null((await kit.GetAsync(fresh.Id)).FilePurgedAt);
         var purged = await kit.GetAsync(old.Id);
         Assert.Equal(("completed", 1, "eski.csv"), (purged.Status, purged.Progress.Created, purged.FileName)); // metadata and results stay
         Assert.Single((await kit.RowsAsync(old.Id)).Items);
@@ -289,14 +287,15 @@ public class ImportsHardeningTests(ApiFixture fixture)
             """,
             kit.TenantId, job.Id, runId);
 
-        // Recent progress: the sweep leaves it alone.
-        await RunMaintenanceAsync(kit, job.Id, _ => true);
-        await DrainAsync();
+        // Recent progress: the sweep job runs for this run and leaves the import alone.
+        var sweeps = $"SELECT count(*) FROM platform.jobs WHERE tenant_id = $1 AND type = 'imports.sweep_stalled' AND status = 'succeeded' AND payload->>'runId' = '{runId}'";
+        await RunMaintenanceUntilAsync(async () => await CountAsync(kit, sweeps) >= 1);
         Assert.Equal("running", (await kit.GetAsync(job.Id)).Status);
 
         // No progress for longer than the stall timeout (30 min): failed, resumable, audited.
         await kit.ScalarAsync<int>("WITH u AS (UPDATE imports.import_jobs SET updated_at = now() - interval '31 minutes' WHERE id = $1 RETURNING 1) SELECT count(*)::int FROM u", job.Id);
-        var failed = await RunMaintenanceAsync(kit, job.Id, j => j.Status == "failed");
+        await RunMaintenanceUntilAsync(async () => (await kit.GetAsync(job.Id)).Status == "failed");
+        var failed = await kit.GetAsync(job.Id);
         Assert.Equal("imports.stalled", failed.Failure!.Code);
         Assert.Equal(1L, await CountAsync(kit, "SELECT count(*) FROM audit.audit_events WHERE tenant_id = $1 AND action = 'import.failed' AND changes::text LIKE '%imports.stalled%'"));
 
@@ -425,7 +424,7 @@ public class ImportsHardeningTests(ApiFixture fixture)
     private static async Task<string?> TarafAsync(ImportsKit kit, Guid productId) =>
         (await kit.Owner.OkAsync<ProductResponse>(await kit.Owner.GetAsync($"/api/v1/products/{productId}"))).Attributes.GetValueOrDefault("taraf").GetString();
 
-    private async Task<HttpResponseMessage> UploadViaAsync(HttpClient http, ImportsKit kit, int n)
+    private static async Task<HttpResponseMessage> UploadViaAsync(HttpClient http, ImportsKit kit, int n)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/import-jobs");
         request.Headers.Add("X-Tenant-Id", kit.TenantId.ToString());
@@ -435,38 +434,25 @@ public class ImportsHardeningTests(ApiFixture fixture)
         request.Content = new MultipartFormDataContent { { part, "file", $"rl-{n}.csv" }, { new StringContent("products"), "type" } };
         var response = await http.SendAsync(request, Ct);
         await response.Content.LoadIntoBufferAsync(Ct);
-        _ = fixture;
         return response;
     }
 
-    /// <summary>Enqueues the tenant-less maintenance job (what the scheduler does) and runs jobs until the condition holds.</summary>
-    private async Task<ImportJobResponse> RunMaintenanceAsync(ImportsKit kit, Guid importId, Func<ImportJobResponse, bool> condition)
+    /// <summary>
+    /// Enqueues the tenant-less <c>imports.maintenance</c> job (what the scheduler does each interval) and runs the
+    /// real job processor until the condition holds.
+    /// </summary>
+    private async Task RunMaintenanceUntilAsync(Func<Task<bool>> condition)
     {
         await fixture.Services.GetRequiredService<JobStore>().InsertAsync(new NewJob(null, "imports.maintenance", "{}", null, 0, 3, null, null), Ct);
-        return await kit.WaitAsync(importId, j => condition(j) && MaintenanceDone().GetAwaiter().GetResult());
-    }
-
-    private async Task<bool> MaintenanceDone() =>
-        await new ImportsKitProbe(fixture).NoQueuedAsync(["imports.maintenance", "imports.sweep_stalled"]);
-
-    private async Task DrainAsync()
-    {
         var processor = fixture.Services.GetRequiredService<JobProcessor>();
-        while (await processor.RunOnceAsync(Ct) > 0 || !await MaintenanceDone())
+        var deadline = DateTime.UtcNow.AddMinutes(2);
+        while (!await condition())
         {
-            await Task.Delay(20, Ct);
-        }
-    }
-
-    private sealed class ImportsKitProbe(ApiFixture fixture)
-    {
-        public async Task<bool> NoQueuedAsync(string[] types)
-        {
-            await using var connection = new Npgsql.NpgsqlConnection(fixture.SuperuserConnectionString);
-            await connection.OpenAsync(Ct);
-            await using var command = new Npgsql.NpgsqlCommand("SELECT NOT EXISTS (SELECT 1 FROM platform.jobs WHERE type = ANY($1) AND status IN ('queued', 'running'))", connection);
-            command.Parameters.Add(new Npgsql.NpgsqlParameter { Value = types });
-            return (bool)(await command.ExecuteScalarAsync(Ct))!;
+            Assert.True(DateTime.UtcNow < deadline, "Maintenance did not reach the expected state.");
+            if (await processor.RunOnceAsync(Ct) == 0)
+            {
+                await Task.Delay(20, Ct);
+            }
         }
     }
 }

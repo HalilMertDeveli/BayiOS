@@ -88,7 +88,7 @@ internal sealed partial class OutboxDispatcher(
                     $"UPDATE platform.outbox_messages SET attempts = attempts + 1, next_attempt_at = now() + @backoff, last_error = left(@error, {JobStore.MaxErrorLength}) WHERE id = @id",
                     message.Id,
                     options.Backoff(message.Attempts + 1),
-                    $"{ex.GetType().Name}: {ex.Message}",
+                    JobErrorSanitizer.Sanitize(ex),
                     CancellationToken.None);
                 LogDispatchFailed(logger, ex, message.Id, message.Type);
             }
