@@ -85,7 +85,7 @@ public class CustomersApiTests(ApiFixture fixture)
 
         var shipping1 = await owner.CreatedAsync<AddressResponse>(path, new { title = "Merkez", line1 = "Sanayi Sitesi 1. Blok No: 1", district = "Ümraniye", city = "İstanbul" });
         Assert.Equal(("shipping", true, "TR"), (shipping1.Type, shipping1.IsDefault, shipping1.Country));
-        var shipping2 = await owner.CreatedAsync<AddressResponse>(path, new { line1 = "Depo Cad. No: 2", city = "Kocaeli", country = "tr" });
+        var shipping2 = await owner.CreatedAsync<AddressResponse>(path, new { line1 = "Depo Cad. No: 2", city = "Kocaeli", country = "tr", isDefault = false });
         Assert.False(shipping2.IsDefault);
         var billing = await owner.CreatedAsync<AddressResponse>(path, new { type = "billing", line1 = "Fatura Sok. 3", city = "İstanbul" });
         Assert.True(billing.IsDefault);

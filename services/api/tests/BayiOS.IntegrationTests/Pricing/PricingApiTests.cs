@@ -22,6 +22,9 @@ public class PricingApiTests(ApiFixture fixture)
         Assert.Equal(("TRY", true, "sales", false, 1L), (retail.Currency, retail.IsDefault, retail.Kind, retail.PricesIncludeTax, retail.Version));
         var dealerA = await kit.PriceListAsync("Bayi A");
         Assert.False(dealerA.IsDefault);
+        // #102: an explicit false on create means "not the default", it is not rejected.
+        var explicitNotDefault = await kit.PriceListAsync("Bayi C", isDefault: false);
+        Assert.False(explicitNotDefault.IsDefault);
         var dealerB = await kit.PriceListAsync("Bayi B", retail.Id, 12.5m);
         Assert.Equal((retail.Id, 12.5m), (dealerB.BasePriceListId!.Value, dealerB.DiscountPercent!.Value));
 

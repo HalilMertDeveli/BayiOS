@@ -177,11 +177,6 @@ internal sealed class CustomerService(
             request.Type ?? AddressTypes.Shipping, request.IsDefault, request.Title, request.Line1, request.Line2, request.District, request.City,
             request.PostalCode, request.Country ?? "TR", request.ContactName, request.ContactPhone);
         var errors = ValidateAddress(new Patch<UpdateAddressRequest>(values, AddressMembers), isNew: true);
-        if (request.IsDefault == false)
-        {
-            errors["isDefault"] = ["Only true is accepted."];
-        }
-
         if (errors.Count > 0)
         {
             return AppError.Validation(errors);
