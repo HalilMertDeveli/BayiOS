@@ -123,3 +123,12 @@ internal sealed record NameCursor(string Name, Guid Id)
 
     private sealed record Payload(string N, Guid I);
 }
+
+/// <summary>Audit action codes of this module (threat-model §7 "Veri hakları"). Changes carry counts only, never PII.</summary>
+internal static class CustomerAuditActions
+{
+    public const string EntityType = "customer";
+
+    /// <summary>KVKK data-subject erasure (data-policy §5), including the masking of order address snapshots (#115).</summary>
+    public const string Anonymized = "customer.anonymized";
+}

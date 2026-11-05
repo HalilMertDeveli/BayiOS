@@ -3,6 +3,7 @@ using BayiOS.Modules.Customers.Domain;
 using BayiOS.Modules.Customers.Infrastructure.Persistence;
 using BayiOS.Modules.Pricing.Contracts;
 using BayiOS.SharedKernel.Authorization;
+using BayiOS.SharedKernel.Platform.Audit;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -19,6 +20,8 @@ internal sealed record CustomerListQuery(string? Q, Guid? DealerGroupId, IReadOn
 internal sealed class CustomerService(
     CustomersDbContext db,
     IPriceListDirectory priceLists,
+    ICustomerOrderPersonalData orderPersonalData,
+    IAuditLog audit,
     IRequestContext requestContext,
     TimeProvider clock)
 {
@@ -140,8 +143,12 @@ internal sealed class CustomerService(
     }
 
     /// <summary>
-    /// Data-subject erasure (data-policy §5): personal fields cleared, addresses removed, customer archived. The row
-    /// (id, code) stays so order history keeps its integrity. Irreversible.
+    /// Data-subject erasure (data-policy §5): personal fields cleared, addresses removed, customer archived, and the
+    /// personal fields of every order address snapshot of the customer masked through Orders (#115) — all in the
+    /// request transaction. The row (id, code) stays so order history keeps its integrity. Irreversible. Idempotent:
+    /// a repeat call on an anonymized customer re-runs only the order masking (catching orders anonymized before
+    /// #115) and returns the customer unchanged. Audit <c>customer.anonymized</c> (counts only, no PII) whenever
+    /// something changed.
     /// </summary>
     public async Task<AppResult<CustomerDetailResponse>> AnonymizeAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -151,16 +158,32 @@ internal sealed class CustomerService(
             return AppError.NotFound();
         }
 
-        if (customer.AnonymizedAt is not null)
+        var firstTime = customer.AnonymizedAt is null;
+        var addressesRemoved = 0;
+        if (firstTime)
         {
-            return AppError.Conflict("customers.anonymized", "The customer is already anonymized");
+            var now = Now();
+            var addresses = await db.Addresses.Where(a => a.CustomerId == id).ToListAsync(cancellationToken);
+            addressesRemoved = addresses.Count;
+            db.Addresses.RemoveRange(addresses);
+            customer.Anonymize(now);
+            customer.Touch(UserId, now);
         }
 
-        var now = Now();
-        db.Addresses.RemoveRange(await db.Addresses.Where(a => a.CustomerId == id).ToListAsync(cancellationToken));
-        customer.Anonymize(now);
-        customer.Touch(UserId, now);
-        // TODO(#79): record an audit event (customer.anonymized) once the audit module lands.
+        // Orders first locks every order header of the customer, so no concurrent submit / approve can snapshot the
+        // addresses removed above after this transaction commits.
+        var ordersMasked = await orderPersonalData.AnonymizeOrderSnapshotsAsync(id, cancellationToken);
+        if (firstTime || ordersMasked > 0)
+        {
+            await audit.RecordAsync(
+                new AuditEvent(CustomerAuditActions.Anonymized, CustomerAuditActions.EntityType, id, new AuditChanges()
+                    .Value("repeat", !firstTime)
+                    .Value("addressesRemoved", addressesRemoved)
+                    .Value("ordersMasked", ordersMasked)
+                    .ToDictionary()),
+                cancellationToken);
+        }
+
         return await SaveAsync(() => new CustomerDetailResponse(ToResponse(customer, maskTaxNumber: false), []), cancellationToken);
     }
 

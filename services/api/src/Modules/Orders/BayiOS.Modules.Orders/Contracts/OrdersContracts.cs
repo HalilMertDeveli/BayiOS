@@ -71,6 +71,21 @@ public interface IOrderOwnership
 }
 
 /// <summary>
+/// Implemented by Orders for the Customers module (#115, data-policy §5): KVKK erasure of the personal fields Orders
+/// keeps about a customer. Runs on the request UnitOfWork connection, inside the caller's transaction.
+/// </summary>
+public interface IOrderPersonalData
+{
+    /// <summary>
+    /// Masks the personal fields of every shipping / billing address snapshot on the customer's orders, whatever the
+    /// order status (the one exception the post-approval immutability trigger allows). Locks all of the customer's
+    /// order headers first so a concurrent submit / approve cannot write a fresh, unmasked snapshot afterwards.
+    /// Idempotent: returns the number of orders changed by this call (0 when everything was already masked).
+    /// </summary>
+    Task<int> AnonymizeCustomerSnapshotsAsync(Guid customerId, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Display names for order responses, implemented by the host over Customers, Warehouse and Identity. Each call is one
 /// batch query for every id of a response (no N+1); unknown or foreign ids are simply absent.
 /// </summary>
