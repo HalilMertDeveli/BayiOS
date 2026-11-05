@@ -170,7 +170,8 @@ internal sealed class Order : ITenantOwned
 
     /// <summary>
     /// Snapshot (jsonb) taken at submit — or at approval when missing — and never changed after approval (database
-    /// trigger <c>trg_orders_address_snapshot_immutable</c>).
+    /// trigger <c>trg_orders_address_snapshot_immutable</c>). Sole exception: customer anonymization masks its
+    /// personal fields to <c>orders.anonymize_address_snapshot</c> (#115, KVKK erasure).
     /// </summary>
     public OrderAddressSnapshot? ShippingAddress { get; set; }
 

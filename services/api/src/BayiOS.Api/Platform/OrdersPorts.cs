@@ -1,4 +1,5 @@
 using BayiOS.Modules.Catalog.Infrastructure.Persistence;
+using BayiOS.Modules.Customers.Contracts;
 using BayiOS.Modules.Customers.Infrastructure.Persistence;
 using BayiOS.Modules.Identity.Contracts;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
@@ -21,8 +22,17 @@ internal static class OrdersPorts
         services.AddScoped<IOrderReferenceNames, OrderReferenceNames>();
         services.AddScoped<IOrderSettingsProvider, TenantOrderSettings>();
         services.AddScoped<IOrderCustomerAddresses, CustomerOrderAddresses>();
+        // The other direction: Customers' anonymization reaches the order snapshots through Orders' contract (#115).
+        services.AddScoped<ICustomerOrderPersonalData, OrderSnapshotErasure>();
         return services;
     }
+}
+
+/// <summary>Customers → Orders: masks the customer's order address snapshots in the same request transaction (#115).</summary>
+internal sealed class OrderSnapshotErasure(IOrderPersonalData orders) : ICustomerOrderPersonalData
+{
+    public Task<int> AnonymizeOrderSnapshotsAsync(Guid customerId, CancellationToken cancellationToken) =>
+        orders.AnonymizeCustomerSnapshotsAsync(customerId, cancellationToken);
 }
 
 /// <summary>Order settings from <c>identity.tenant_settings</c> (request tenant: query filter + RLS); defaults without a row.</summary>

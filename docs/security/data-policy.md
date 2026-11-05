@@ -63,6 +63,14 @@ ve maskeli gösterilir.
 - **Tekil kişi talebi (ilgili kişi başvurusu):** Tenant (veri sorumlusu) başvuruyu alır; BayiOS araçları ile müşteri/personel
   kaydını bulur, dışa aktarır, düzeltir veya anonimleştirir. Sipariş geçmişi bütünlüğü için silme yerine **anonimleştirme**
   (ad → "Silinmiş müşteri #<kısa id>", iletişim alanları null).
+  Uygulanan (#115): `POST /customers/{id}/anonymize` aynı transaction'da müşterinin **tüm** siparişlerindeki (taslak,
+  onay bekleyen, onaylı, sevk edilmiş, kapanmış) teslimat/fatura adres snapshot'larını da maskeler: adres başlığı, adres
+  satırı 2, posta kodu, iletişim adı ve telefonu → null; adres satırı 1 → "Silinmiş adres". İlçe, il ve ülke korunur
+  (kaba konum; tek başına kişiyi belirlemez, bölgesel satış geçmişi ve sevkiyat istatistiği için gerekir). Onay
+  sonrası değişmezlik trigger'ı yalnızca bu maskelemeye izin verir (data-model §5.8). Tekrar çağrı idempotenttir.
+  Audit `customer.anonymized` yalnızca sayıları içerir (kaldırılan adres, maskelenen sipariş), kişisel veri içermez.
+  Kapsam dışı (bilinen): sipariş notu (`orders.notes`) gibi serbest metinler otomatik taranmaz; içlerindeki kişisel
+  veri tenant tarafından elle düzeltilmelidir.
 - **Tenant silme:** owner talebi + e-posta doğrulama → 30 gün bekleme → kalıcı silme işi (tüm tenant satırları + storage
   önekleri) → tamamlandı audit kaydı (tenant dışı sistem audit'inde, PII'siz). Gerçek veri silme ürün sahibi onayı gerektiren
   işlemler listesindedir; otomasyon yalnızca tenant'ın kendi talebiyle ve test edilmiş iş akışıyla çalışır.

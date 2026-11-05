@@ -24,6 +24,8 @@ public static class OrdersModule
         services.AddScoped<OrderQueries>();
         services.AddScoped<OrderService>();
         services.AddScoped<IOrderOwnership, OrderOwnership>();
+        // Customers' anonymization masks the order address snapshots through this contract (#115).
+        services.AddScoped<IOrderPersonalData, OrderPersonalData>();
         // Warehouse drives picking/packing/shipping through this contract; it must provide IOrderFulfillmentListener.
         services.AddScoped<IOrderFulfillment>(sp => sp.GetRequiredService<OrderService>());
         services.TryAddSingleton(TimeProvider.System);

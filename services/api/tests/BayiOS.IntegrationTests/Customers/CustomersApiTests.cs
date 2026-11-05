@@ -272,8 +272,10 @@ public class CustomersApiTests(ApiFixture fixture)
             await owner.PatchAsync($"/api/v1/customers/{created.Customer.Id}", new { phone = "+90 532 000 00 03" }, $"W/\"{anonymized.Version}\""),
             HttpStatusCode.Conflict,
             "customers.anonymized");
-        await HttpAssert.ProblemAsync(
-            await owner.PostAsync($"/api/v1/customers/{created.Customer.Id}/anonymize", new { }), HttpStatusCode.Conflict, "customers.anonymized");
+
+        // Idempotent (#115): a repeat returns the anonymized customer unchanged (same version, same erasure time).
+        var again = (await owner.OkAsync<CustomerDetailResponse>(await owner.PostAsync($"/api/v1/customers/{created.Customer.Id}/anonymize", new { }))).Customer;
+        Assert.Equal((anonymized.Name, anonymized.Version, anonymized.AnonymizedAt), (again.Name, again.Version, again.AnonymizedAt));
     }
 
     [Fact]
