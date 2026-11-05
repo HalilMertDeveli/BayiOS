@@ -337,9 +337,12 @@ public class FulfillmentApiTests(ApiFixture fixture)
         Assert.Empty((await Fulfillment.ReadAsync<ShipmentPageResponse>(await other.GetAsync("/api/v1/shipments"))).Items);
         Assert.Equal(HttpStatusCode.Forbidden, (await Fulfillment.ConfirmAsync(sales, shipmentId)).StatusCode);
 
-        // Fail-closed until #69: warehouse_staff holds orders.read (K⁸) and inventory.movements.read (O⁵) conditionally.
-        Assert.Equal(HttpStatusCode.Forbidden, (await picker.GetAsync($"/api/v1/orders/{approved.Order.Id}")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await picker.GetAsync($"/api/v1/inventory/movements?sourceId={shipmentId}")).StatusCode);
+        // #69: the picker reads the order behind its task without prices (K⁸) and the movement history of its task's
+        // products (O⁵); the shipment is not confirmed yet, so it has no movements.
+        var seen = await OrdersKit.ReadAsync(await picker.GetAsync($"/api/v1/orders/{approved.Order.Id}"));
+        Assert.Null(seen.Order.Totals);
+        Assert.All(seen.Lines, l => Assert.Null(l.UnitPrice));
+        Assert.Equal(HttpStatusCode.OK, (await picker.GetAsync($"/api/v1/inventory/movements?sourceId={shipmentId}")).StatusCode);
 
         Assert.Equal(HttpStatusCode.OK, (await Fulfillment.ConfirmAsync(picker, shipmentId)).StatusCode);
         await kit.AssertConsistentAsync();

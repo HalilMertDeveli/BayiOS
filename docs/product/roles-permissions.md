@@ -117,6 +117,13 @@ Gösterim: **✓** izinli · **–** izin yok · **K** koşullu (dipnot) · **O*
 11. sales yalnızca kendi oluşturduğu Taslak / Onay Bekliyor siparişleri iptal edebilir.
 12. sales, kendi siparişlerine bağlı görevlerin durumunu görür.
 
+**Uygulama yorumu (#69, matris değişikliği değildir):**
+- Dipnot 5 "görev bağlamı": kullanıcıya atanmış veya havuzdaki **aktif** (open / in_progress) toplama görevlerinin satırlarındaki ürünler.
+- Dipnot 8: kullanıcıya atanmış (iptal hariç her durumda) veya havuzdaki aktif görevlerin siparişleri; liste ve detayda tüm fiyat alanları boş (`totals`, `grandTotal`, satır fiyat/iskonto/tutarları `null`).
+- Dipnot 10: sınır > %0 iken sales yalnızca iskonto (yüzde veya tutar; satır iskontosu ≤ satır ara toplamının %X'i) uygulayabilir, manuel birim fiyat giremez.
+- Dipnot 12: sales, oluşturduğu siparişlerin görevlerini ve sevkiyatlarını görür. `tasks.read.all` veya `tasks.read.own` sahibi görev detayı ve sevkiyat okuma uçlarına erişir (biri yeterli).
+- Görünürlük koşulu dışındaki kayıt 404 (varlık ipucu yok); görünür ama koşul dışı işlem 403 `auth.forbidden`.
+
 ## 4. Ayarlanabilir kurallar (tenant düzeyi)
 | Kural | Varsayılan | Etkilediği izin |
 |---|---|---|

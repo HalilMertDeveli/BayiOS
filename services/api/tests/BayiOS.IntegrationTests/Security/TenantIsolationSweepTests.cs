@@ -10,8 +10,17 @@ namespace BayiOS.IntegrationTests.Security;
 /// IDOR, #15). Routes come from <c>/openapi/v1.json</c>: a new endpoint is swept automatically, and one the sweep
 /// cannot build a probe for fails until it is classified here or in <see cref="TenantWorld.SegmentKinds"/> /
 /// <see cref="SecurityProbes.TryBody"/>. Tenant A is the victim, B the attacker; both are complete tenants built through
-/// the API, and A's rows in every tenant table are fingerprinted before and after each attack.
+/// the API, and A's rows in every tenant table are snapshotted before and after each attack; any difference is
+/// reported row by row (table, primary key, changed columns).
+/// <para>
+/// The class runs in a non-parallel collection: other tests legitimately run global actors over the shared database —
+/// <c>JobsTests</c> drives an <c>OutboxDispatcher</c> that marks every tenant's pending outbox messages processed
+/// (<c>attempts</c>, <c>processed_at</c>), including the ones A's order approvals published. Run concurrently, that
+/// changed A's snapshot and failed the sweep intermittently in CI (#103, #106) although no probe wrote anything.
+/// Isolating the class keeps the check exact instead of excluding any table or column.
+/// </para>
 /// </summary>
+[Collection(TenantSnapshotTestGroup.Name)]
 [Trait("Category", "Security")]
 public sealed class TenantIsolationSweepTests(ApiFixture fixture)
 {
@@ -30,6 +39,7 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
         ["brandId"] = "brand",
         ["productId"] = "product",
         ["variantId"] = "variant",
+        ["ids"] = "variant",
         ["warehouseId"] = "warehouse",
         ["locationId"] = "location",
         ["customerId"] = "customer",
@@ -57,7 +67,7 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
         await SecurityProbes.AddMembershipAsync(fixture, b.TenantId, a.Owner.UserId, Roles.Owner);
         var attackers = new (string Name, CatalogClient Client)[] { ("B owner", b.Owner), ("A owner via B header", a.Owner.Targeting(b.TenantId)) };
 
-        var before = await a.FingerprintAsync();
+        var before = await a.SnapshotAsync();
         var failures = new List<string>();
         var probed = 0;
         foreach (var route in routes.Where(r => r.IsTenantScoped && r.PathParameters.Count > 0))
@@ -129,7 +139,7 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
 
         failures.AddRange(StaleEntries(NotIdorTargets.Keys, routes));
         SecurityProbes.AssertNone(failures);
-        Assert.Equal(before, await a.FingerprintAsync());
+        SecurityProbes.AssertNone(before.Diff(await a.SnapshotAsync()));
         Assert.True(probed >= 100, $"Only {probed} probes ran — is the OpenAPI scan broken?");
         TestContext.Current.TestOutputHelper?.WriteLine($"IDOR sweep: {probed} probes over {routes.Count(r => r.IsTenantScoped && r.PathParameters.Count > 0) - NotIdorTargets.Count} id routes.");
     }
@@ -194,7 +204,7 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
     {
         var a = await TenantWorld.CreateAsync(fixture, "RFA");
         var b = await TenantWorld.CreateAsync(fixture, "RFB");
-        var before = await a.FingerprintAsync();
+        var before = await a.SnapshotAsync();
         string Hack() => "HACK-" + Guid.NewGuid().ToString("N")[..8];
 
         // Each probe is valid with B's own ids; exactly one reference points into tenant A.
@@ -244,7 +254,7 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
         }
 
         SecurityProbes.AssertNone(failures);
-        Assert.Equal(before, await a.FingerprintAsync());
+        SecurityProbes.AssertNone(before.Diff(await a.SnapshotAsync()));
     }
 
     [Fact]
@@ -268,7 +278,7 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
             ("owner of another tenant, unknown tenant id", b.Targeting(Guid.NewGuid())),
         };
 
-        var before = await a.FingerprintAsync();
+        var before = await a.SnapshotAsync();
         var failures = new List<string>();
         var tenantScoped = routes.Where(r => r.IsTenantScoped).ToList();
         foreach (var route in tenantScoped)
@@ -288,7 +298,7 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
         }
 
         SecurityProbes.AssertNone(failures);
-        Assert.Equal(before, await a.FingerprintAsync());
+        SecurityProbes.AssertNone(before.Diff(await a.SnapshotAsync()));
         Assert.True(tenantScoped.Count >= 90, $"Only {tenantScoped.Count} tenant-scoped routes found");
     }
 

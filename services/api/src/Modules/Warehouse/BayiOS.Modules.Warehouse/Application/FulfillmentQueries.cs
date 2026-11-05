@@ -1,6 +1,8 @@
+using BayiOS.Modules.Orders.Contracts;
 using BayiOS.Modules.Warehouse.Contracts;
 using BayiOS.Modules.Warehouse.Domain;
 using BayiOS.Modules.Warehouse.Infrastructure.Persistence;
+using BayiOS.SharedKernel.Authorization;
 using Microsoft.EntityFrameworkCore;
 
 namespace BayiOS.Modules.Warehouse.Application;
@@ -20,16 +22,24 @@ internal sealed record ShipmentListQuery(IReadOnlyList<string> Statuses, Guid? O
 
 /// <summary>
 /// Read side of picking and shipping: tenant-filtered EF queries (RLS underneath), oldest first (work queue order),
-/// keyset on (created_at, id). Visibility for staff is applied here, not by the caller.
+/// keyset on (created_at, id). Visibility is applied here, not by the caller (roles-permissions §3.6):
+/// <c>tasks.read.all</c> ✓ sees everything; sales (K¹²) sees the tasks and shipments of orders it created;
+/// <c>tasks.read.own</c> (warehouse_staff) sees tasks assigned to them plus the active pool, and the shipments of
+/// their tasks.
 /// </summary>
-internal sealed class FulfillmentQueries(WarehouseDbContext db, FulfillmentAccess access, IFulfillmentCatalog catalog)
+internal sealed class FulfillmentQueries(
+    WarehouseDbContext db,
+    FulfillmentAccess access,
+    IFulfillmentCatalog catalog,
+    IAuthorizationContext authorization,
+    IOrderOwnership ownership)
 {
     public const int DefaultPageSize = 50;
     public const int MaxPageSize = 200;
 
     public async Task<PickingTaskPageResponse> ListTasksAsync(PickingTaskListQuery query, CancellationToken cancellationToken)
     {
-        var tasks = db.PickingTasks.AsNoTracking();
+        var tasks = Visible(db.PickingTasks.AsNoTracking(), await ReadVisibilityAsync(cancellationToken));
         if (query.Statuses.Count > 0)
         {
             tasks = tasks.Where(t => query.Statuses.Contains(t.Status));
@@ -98,8 +108,9 @@ internal sealed class FulfillmentQueries(WarehouseDbContext db, FulfillmentAcces
     /// <returns>Null when the task does not exist or the caller may not see it.</returns>
     public async Task<PickingTaskResponse?> TaskAsync(Guid id, CancellationToken cancellationToken)
     {
-        var summary = await Summaries(db.PickingTasks.AsNoTracking().Where(t => t.Id == id)).SingleOrDefaultAsync(cancellationToken);
-        if (summary is null || !access.CanSee(summary.AssignedTo, summary.Status))
+        var visible = Visible(db.PickingTasks.AsNoTracking(), await ReadVisibilityAsync(cancellationToken));
+        var summary = await Summaries(visible.Where(t => t.Id == id)).SingleOrDefaultAsync(cancellationToken);
+        if (summary is null)
         {
             return null;
         }
@@ -141,7 +152,7 @@ internal sealed class FulfillmentQueries(WarehouseDbContext db, FulfillmentAcces
 
     public async Task<ShipmentPageResponse> ListShipmentsAsync(ShipmentListQuery query, CancellationToken cancellationToken)
     {
-        var shipments = VisibleShipments();
+        var shipments = await VisibleShipmentsAsync(cancellationToken);
         if (query.Statuses.Count > 0)
         {
             shipments = shipments.Where(s => query.Statuses.Contains(s.Status));
@@ -174,7 +185,7 @@ internal sealed class FulfillmentQueries(WarehouseDbContext db, FulfillmentAcces
     /// <returns>Null when the shipment does not exist or the caller may not see it.</returns>
     public async Task<ShipmentResponse?> ShipmentAsync(Guid id, CancellationToken cancellationToken)
     {
-        var shipment = await VisibleShipments()
+        var shipment = await (await VisibleShipmentsAsync(cancellationToken))
             .Include(s => s.Lines)
             .Include(s => s.Packages).ThenInclude(p => p.Items)
             .AsSplitQuery()
@@ -220,18 +231,54 @@ internal sealed class FulfillmentQueries(WarehouseDbContext db, FulfillmentAcces
                 p.Id, p.PackageNo, [.. p.Items.OrderBy(i => i.Id).Select(i => new ShipmentPackageItemResponse(i.ShipmentLineId, i.Quantity))]))]);
     }
 
-    /// <summary>Supervisors see every shipment; staff only those of pick tasks assigned to them.</summary>
-    private IQueryable<Shipment> VisibleShipments()
+    /// <summary>
+    /// Read visibility of the caller. Always evaluates both task-read permissions through the authorization context
+    /// (this is the record-level check for sales' conditional <c>tasks.read.all</c>).
+    /// </summary>
+    private async Task<ReadVisibility> ReadVisibilityAsync(CancellationToken cancellationToken)
+    {
+        var all = await authorization.ScopeAsync(Permissions.TasksReadAll, cancellationToken);
+        var own = await authorization.ScopeAsync(Permissions.TasksReadOwn, cancellationToken);
+        if (all == PermissionScope.All)
+        {
+            return new ReadVisibility(true, access.UserId, [], false);
+        }
+
+        IReadOnlyList<Guid> ownOrders = all == PermissionScope.Restricted
+            ? await ownership.OrdersCreatedByAsync(access.UserId, cancellationToken)
+            : [];
+        return new ReadVisibility(false, access.UserId, [.. ownOrders], own != PermissionScope.None);
+    }
+
+    private static IQueryable<PickingTask> Visible(IQueryable<PickingTask> tasks, ReadVisibility visibility)
+    {
+        if (visibility.All)
+        {
+            return tasks;
+        }
+
+        var (me, orders, ownTasks) = (visibility.UserId, visibility.OwnOrders, visibility.OwnTasks);
+        return tasks.Where(t => orders.Contains(t.OrderId)
+            || (ownTasks && (t.AssignedTo == me
+                || (t.AssignedTo == null && (t.Status == PickingTaskStatuses.Open || t.Status == PickingTaskStatuses.InProgress)))));
+    }
+
+    /// <summary>Everything for <c>tasks.read.all</c>; sales: shipments of its orders; staff: shipments of their tasks.</summary>
+    private async Task<IQueryable<Shipment>> VisibleShipmentsAsync(CancellationToken cancellationToken)
     {
         var shipments = db.Shipments.AsNoTracking();
-        if (access.IsSupervisor)
+        var visibility = await ReadVisibilityAsync(cancellationToken);
+        if (visibility.All)
         {
             return shipments;
         }
 
-        var me = access.UserId;
-        return shipments.Where(s => db.PickingTasks.Any(t => t.Id == s.PickingTaskId && t.AssignedTo == me));
+        var (me, orders, ownTasks) = (visibility.UserId, visibility.OwnOrders, visibility.OwnTasks);
+        return shipments.Where(s => orders.Contains(s.OrderId)
+            || (ownTasks && db.PickingTasks.Any(t => t.Id == s.PickingTaskId && t.AssignedTo == me)));
     }
+
+    private sealed record ReadVisibility(bool All, Guid UserId, List<Guid> OwnOrders, bool OwnTasks);
 
     private static IQueryable<PickingTaskSummaryResponse> Summaries(IQueryable<PickingTask> tasks) =>
         tasks.Select(t => new PickingTaskSummaryResponse(

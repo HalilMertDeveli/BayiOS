@@ -223,3 +223,14 @@ public sealed record ApplySectorTemplateResponse(
     IReadOnlyList<string> CategoriesCreated,
     IReadOnlyList<string> FieldsCreated,
     int Skipped);
+
+/// <summary>Compact variant for display lookups (<c>GET /variants/batch</c>).</summary>
+/// <param name="Name">Variant name; null when the variant uses the product name.</param>
+public sealed record VariantSummaryResponse(
+    Guid Id,
+    Guid ProductId,
+    string Sku,
+    string? Name,
+    string ProductName,
+    string? Barcode,
+    string Status);

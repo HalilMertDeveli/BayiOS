@@ -205,6 +205,9 @@ internal sealed class StoredHttpResult(int statusCode, IReadOnlyDictionary<strin
 {
     public int? StatusCode => statusCode;
 
+    /// <summary>True when a retried request got the stored response (its handler did not run again).</summary>
+    public bool Replayed => replayed;
+
     public IReadOnlyDictionary<string, string> Headers => headers;
 
     public ReadOnlyMemory<byte> Body => body;

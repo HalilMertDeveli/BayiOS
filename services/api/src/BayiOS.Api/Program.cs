@@ -14,7 +14,7 @@ using BayiOS.Modules.Warehouse;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddOpenApi("v1", options => options.AddBayiOsSecurity());
+builder.Services.AddOpenApi("v1", options => options.AddBayiOsSecurity().AddBayiOsContract());
 builder.Services.AddProblemDetails(options =>
 {
     options.CustomizeProblemDetails = context =>
@@ -27,7 +27,7 @@ builder.Services.AddCors(options =>
         .WithOrigins(allowedOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
-        .WithExposedHeaders(CorrelationId.HeaderName, "ETag", "Location", "Idempotent-Replayed")));
+        .WithExposedHeaders(CorrelationId.HeaderName, "ETag", "Location", "Idempotent-Replayed", "Retry-After")));
 
 builder.Services.AddDatabase();
 builder.Services.AddBayiOsAuthentication();

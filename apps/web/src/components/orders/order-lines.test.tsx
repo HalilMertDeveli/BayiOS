@@ -45,7 +45,7 @@ describe("LinePrice", () => {
 describe("OrderTotalsPanel", () => {
   it("shows the API totals and VAT breakdown and warns about unpriced lines", () => {
     const { order } = orderDetail();
-    render(<OrderTotalsPanel totals={{ ...order.totals, hasUnpricedLines: true }} currency="TRY" />);
+    render(<OrderTotalsPanel totals={{ ...order.totals!, hasUnpricedLines: true }} currency="TRY" />);
     expect(screen.getByTestId("order-grand-total").textContent).toBe("₺240,00");
     expect(screen.getByText(/KDV %20/)).toBeTruthy();
     expect(screen.getByText("Fiyatsız satırlar toplamlara dahil değil")).toBeTruthy();

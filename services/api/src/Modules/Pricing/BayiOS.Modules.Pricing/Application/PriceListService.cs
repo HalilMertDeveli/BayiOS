@@ -24,6 +24,7 @@ internal sealed class PriceListService(
     IPricingVariantDirectory variants,
     ITenantCurrencyProvider tenantCurrency,
     IRequestContext requestContext,
+    IAuthorizationContext authorization,
     TimeProvider clock)
 {
     public const int MaxListSize = 1000;
@@ -35,13 +36,15 @@ internal sealed class PriceListService(
 
     private Guid TenantId => requestContext.TenantId ?? throw new InvalidOperationException("No tenant resolved.");
 
-    private bool CanReadCost => RolePermissions.IsGranted(requestContext.Role, Permissions.PricesReadCost);
+    /// <summary>prices.read.cost: K for manager / viewer, on when the tenant rule "show cost price" is (footnote 3).</summary>
+    private async Task<bool> CanReadCostAsync(CancellationToken cancellationToken) =>
+        await authorization.ScopeAsync(Permissions.PricesReadCost, cancellationToken) == PermissionScope.All;
 
     // ---- Price lists ----
 
     public async Task<IReadOnlyList<PriceListResponse>> ListAsync(bool includeArchived, CancellationToken cancellationToken)
     {
-        var canReadCost = CanReadCost;
+        var canReadCost = await CanReadCostAsync(cancellationToken);
         return (await db.PriceLists.AsNoTracking()
                 .Where(l => includeArchived || l.Status != PriceListStatuses.Archived)
                 .Where(l => canReadCost || l.Kind == PriceListKinds.Sales)
@@ -398,7 +401,7 @@ internal sealed class PriceListService(
 
     private async Task<PriceList?> FindVisibleAsync(Guid id, bool tracked, CancellationToken cancellationToken)
     {
-        var canReadCost = CanReadCost;
+        var canReadCost = await CanReadCostAsync(cancellationToken);
         var source = tracked ? db.PriceLists : db.PriceLists.AsNoTracking();
         return await source.SingleOrDefaultAsync(l => l.Id == id && (canReadCost || l.Kind == PriceListKinds.Sales), cancellationToken);
     }

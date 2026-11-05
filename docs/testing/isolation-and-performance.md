@@ -32,7 +32,7 @@ bayi grubu, müşteri/adres, import işi/şablonu, taslak sipariş, açık topla
 
 | Test | Kapsam |
 |---|---|
-| IDOR | `{id}` içeren her tenant ucu × (B sahibi, B başlığıyla gelen A sahibi) × (A'nın id'si; B'nin üst kaynağı + A'nın alt kaynağı). Geçerli gövde ve güncel If-Match ile → yalnız 404/403, yanıtta A verisi yok; GET uçlarında A sahibiyle pozitif kontrol; A'nın tüm tenant satırlarının parmak izi önce/sonra eşit |
+| IDOR | `{id}` içeren her tenant ucu × (B sahibi, B başlığıyla gelen A sahibi) × (A'nın id'si; B'nin üst kaynağı + A'nın alt kaynağı). Geçerli gövde ve güncel If-Match ile → yalnız 404/403, yanıtta A verisi yok; GET uçlarında A sahibiyle pozitif kontrol; A'nın tüm tenant satırlarının anlık görüntüsü (tablo → birincil anahtar → satır) önce/sonra eşit; fark varsa tablo, satır ve değişen sütunlar (önce → sonra) raporlanır |
 | Liste/arama sızıntısı | Parametresiz her tenant GET'i, A'nın token/SKU/barkod/id'leriyle filtrelenerek B olarak → A verisi dönmez |
 | Gövdede çapraz referans | B'nin geçerli isteğinde tek bir A id'si (birim, kategori, depo, raf, varyant, liste, grup, müşteri…) → 4xx, A değişmez |
 | X-Tenant-Id sahteciliği | Her tenant ucu × (başka tenant sahibi, tenant'sız kullanıcı, `invited`/`disabled` üyelik, bilinmeyen tenant) → 403 `tenant.access_denied` |
@@ -40,6 +40,12 @@ bayi grubu, müşteri/adres, import işi/şablonu, taslak sipariş, açık topla
 | Rol sweep'i (`RolePermissionSweepTests`) | 6 rol × izinli her uç; beklenti `RolePermissions.IsGranted` (belgeyle eşitliği unit test korur): izinli → 401/403/5xx değil, izinsiz → 403 `auth.forbidden`. Her `x-permission` matriste tanımlı |
 
 Bilinçli dışlama: `POST /api/v1/sector-templates/{code}/apply` (`{code}` global şablon, tenant kaynağı değil).
+
+**Paralellik:** `TenantIsolationSweepTests` paralel olmayan `TenantSnapshot` koleksiyonunda, paralel testler bittikten
+sonra tek başına koşar. Neden (2026-11-05, #103/#106 CI flake'i): `JobsTests` paylaşılan veritabanında global bir
+`OutboxDispatcher` çalıştırır; bu, A'nın sipariş onaylarının yayımladığı outbox mesajlarını da işlenmiş işaretler
+(`attempts` 0 → 1, `processed_at` null → zaman). Aynı anda koşunca A'nın görüntüsü değişiyordu — prob kaynaklı yazım
+yoktu. Kontrolden tablo/sütun dışlanmadı; yalnızca eşzamanlılık kaldırıldı.
 
 ## 3. 10k sentetik katalog (`CatalogPerformanceTests`, `Category=Performance`)
 Üreteç: `Performance/SyntheticCatalog.cs` — deterministik (yalnız satır id'leri rastgele), 10.000 ürün (5.000 motor

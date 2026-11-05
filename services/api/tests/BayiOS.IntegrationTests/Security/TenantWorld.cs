@@ -278,33 +278,84 @@ internal sealed class TenantWorld
     }
 
     /// <summary>
-    /// Fingerprint of every row this tenant owns in every table that has a <c>tenant_id</c> (read as superuser,
-    /// catalogue-driven): equal before and after an attack sweep ⇔ the sweep changed nothing of this tenant.
+    /// Snapshot of every row this tenant owns in every table that has a <c>tenant_id</c> (read as superuser,
+    /// catalogue-driven), keyed by table and primary key: equal before and after an attack ⇔ the attack changed nothing
+    /// of this tenant. <see cref="TenantSnapshot.Diff"/> names the exact rows and columns that differ.
     /// </summary>
-    public async Task<IReadOnlyDictionary<string, string>> FingerprintAsync()
+    public async Task<TenantSnapshot> SnapshotAsync()
     {
         await using var connection = new NpgsqlConnection(_fixture.SuperuserConnectionString);
         await connection.OpenAsync(Ct);
-        var tables = new List<string>();
-        await using (var list = new NpgsqlCommand(DatabaseCatalog.TenantTablesSql, connection))
+        var tables = new List<(string Table, string Key)>();
+        await using (var list = new NpgsqlCommand(
+            $"""
+            SELECT t.name, coalesce((
+                SELECT string_agg(format('t.%I::text', a.attname), $$ || '/' || $$ ORDER BY k.ord)
+                FROM pg_index i CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+                JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+                WHERE i.indrelid = t.name::regclass AND i.indisprimary), 't::text')
+            FROM ({DatabaseCatalog.TenantTablesSql}) AS t(name)
+            """,
+            connection))
         await using (var reader = await list.ExecuteReaderAsync(Ct))
         {
             while (await reader.ReadAsync(Ct))
             {
-                tables.Add(reader.GetString(0));
+                tables.Add((reader.GetString(0), reader.GetString(1)));
             }
         }
 
-        var result = new Dictionary<string, string>();
-        foreach (var table in tables)
+        var rows = new Dictionary<string, IReadOnlyDictionary<string, string>>();
+        foreach (var (table, key) in tables)
         {
-            await using var command = new NpgsqlCommand(
-                $"SELECT count(*)::text || ':' || coalesce(md5(string_agg(t::text, '|' ORDER BY t::text)), '') FROM {table} t WHERE t.tenant_id = $1",
-                connection);
+            await using var command = new NpgsqlCommand($"SELECT {key}, to_jsonb(t)::text FROM {table} t WHERE t.tenant_id = $1", connection);
             command.Parameters.Add(new NpgsqlParameter { Value = TenantId });
-            result[table] = (string)(await command.ExecuteScalarAsync(Ct))!;
+            await using var reader = await command.ExecuteReaderAsync(Ct);
+            var byKey = new Dictionary<string, string>();
+            while (await reader.ReadAsync(Ct))
+            {
+                byKey[reader.GetString(0)] = reader.GetString(1);
+            }
+
+            rows[table] = byKey;
         }
 
-        return result;
+        return new TenantSnapshot(rows);
+    }
+}
+
+/// <summary>Rows of one tenant per table (primary key → row as JSON).</summary>
+internal sealed record TenantSnapshot(IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Rows)
+{
+    /// <summary>Every inserted, deleted or changed row, with the changed columns and their before → after values.</summary>
+    public IReadOnlyList<string> Diff(TenantSnapshot after)
+    {
+        var differences = new List<string>();
+        foreach (var table in Rows.Keys.Union(after.Rows.Keys).Order())
+        {
+            var before = Rows.GetValueOrDefault(table) ?? new Dictionary<string, string>();
+            var now = after.Rows.GetValueOrDefault(table) ?? new Dictionary<string, string>();
+            foreach (var key in before.Keys.Except(now.Keys))
+            {
+                differences.Add($"{table} [{key}] deleted: {before[key]}");
+            }
+
+            foreach (var key in now.Keys.Except(before.Keys))
+            {
+                differences.Add($"{table} [{key}] inserted: {now[key]}");
+            }
+
+            foreach (var key in before.Keys.Intersect(now.Keys).Where(k => before[k] != now[k]))
+            {
+                using var old = System.Text.Json.JsonDocument.Parse(before[key]);
+                using var @new = System.Text.Json.JsonDocument.Parse(now[key]);
+                var changed = old.RootElement.EnumerateObject()
+                    .Where(p => !@new.RootElement.TryGetProperty(p.Name, out var v) || v.GetRawText() != p.Value.GetRawText())
+                    .Select(p => $"{p.Name}: {p.Value.GetRawText()} → {(@new.RootElement.TryGetProperty(p.Name, out var v) ? v.GetRawText() : "(missing)")}");
+                differences.Add($"{table} [{key}] updated: {string.Join("; ", changed)}");
+            }
+        }
+
+        return differences;
     }
 }

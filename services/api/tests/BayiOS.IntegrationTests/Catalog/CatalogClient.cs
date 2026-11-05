@@ -18,6 +18,9 @@ internal sealed class CatalogClient(HttpClient http, Guid tenantId, Guid userId)
 
     public Guid UserId { get; } = userId;
 
+    /// <summary>The underlying client (bearer token set, no tenant header), for calls that choose their own headers.</summary>
+    public HttpClient Http => http;
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>New user who creates a new tenant and is its owner.</summary>
