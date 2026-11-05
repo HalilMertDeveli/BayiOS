@@ -14,6 +14,7 @@ namespace BayiOS.IntegrationTests.BulkImport;
 /// Upload hardening over HTTP, permission gates, tenant isolation (API + RLS), mapping validation and mapping
 /// templates (#21, #22). No job is executed here.
 /// </summary>
+[Collection(ImportJobsTestGroup.Name)]
 public class ImportsSecurityTests(ApiFixture fixture)
 {
     private static readonly string[] Headers = ["Stok Kodu", "Ürün Adı", "Birim", "KDV"];

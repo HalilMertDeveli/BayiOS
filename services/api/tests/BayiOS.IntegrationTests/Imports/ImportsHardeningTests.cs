@@ -19,6 +19,7 @@ namespace BayiOS.IntegrationTests.BulkImport;
 /// (threat-model §6.5), raw file retention (data-policy §4), the stalled-import sweep, and custom field
 /// (<c>attr.&lt;key&gt;</c>) columns. Real job processor, real PostgreSQL; synthetic motorcycle-parts data only.
 /// </summary>
+[Collection(ImportJobsTestGroup.Name)]
 public class ImportsHardeningTests(ApiFixture fixture)
 {
     private static readonly Dictionary<string, string> PricedProductColumns = new()
@@ -162,7 +163,7 @@ public class ImportsHardeningTests(ApiFixture fixture)
         // Another tenant cannot even see it.
         var other = await ImportsKit.CreateAsync(fixture);
         await HttpAssert.ProblemAsync(await RollbackAsync(other.Owner, job.Id, job.Version), HttpStatusCode.NotFound, "resource.not_found");
-        await HttpAssert.ProblemAsync(await RollbackAsync(kit.Owner.Targeting(other.TenantId), job.Id, job.Version), HttpStatusCode.Forbidden, "auth.forbidden");
+        await HttpAssert.ProblemAsync(await RollbackAsync(kit.Owner.Targeting(other.TenantId), job.Id, job.Version), HttpStatusCode.Forbidden, "tenant.access_denied");
 
         // The requester loses the permission mid-way: rollback_failed, then another user resumes it.
         var admin = await kit.Owner.AddMemberAsync(fixture, Roles.Admin);
@@ -308,7 +309,18 @@ public class ImportsHardeningTests(ApiFixture fixture)
     [Fact]
     public async Task Custom_field_columns_are_checked_by_the_catalog_validator_imported_and_rolled_back()
     {
-        var kit = await ImportsKit.CreateAsync(fixture); // motorcycle_parts: taraf, model_yili, uyumlu_markalar, parca_tipi (variant)
+        var kit = await ImportsKit.CreateAsync(fixture);
+        foreach (var field in new object[]
+        {
+            new { entityType = "product", key = "taraf", label = "Taraf / konum", dataType = "enum", options = new[] { "Ön", "Arka", "Sağ", "Sol" } },
+            new { entityType = "product", key = "model_yili", label = "Model yılı aralığı", dataType = "range", unit = "yıl" },
+            new { entityType = "product", key = "uyumlu_markalar", label = "Uyumlu motosiklet markaları", dataType = "multi_enum", options = new[] { "Honda", "Yamaha", "Bajaj" } },
+            new { entityType = "variant", key = "parca_tipi", label = "Parça tipi", dataType = "enum", options = new[] { "Orijinal", "Muadil" } },
+        })
+        {
+            await kit.Owner.CreatedAsync<JsonElement>("/api/v1/custom-fields", field);
+        }
+
         var existing = await kit.ProductAsync("AT-UPD", "Mevcut Ürün");
         await kit.Owner.OkAsync<ProductResponse>(
             await kit.Owner.PatchAsync($"/api/v1/products/{existing.Id}", new { attributes = new { taraf = "Ön" } }, CatalogClient.ETag(existing.Version)));
@@ -328,7 +340,8 @@ public class ImportsHardeningTests(ApiFixture fixture)
         Assert.Contains(suggestions.Fields, f => f.Key == "attr.parca_tipi");
         var suggested = suggestions.Suggestions.ToDictionary(s => s.Field, s => s.Header);
         Assert.Equal("Taraf", suggested["attr.taraf"]);
-        Assert.Equal("Uyumlu motosiklet markaları", suggested["attr.uyumlu_markalar"]);
+        Assert.Equal("Parça tipi", suggested["attr.parca_tipi"]);
+        Assert.Equal("Model yılı aralığı", suggested["attr.model_yili"]);
 
         var unknown = new Dictionary<string, string>(Plain()) { ["attr.yok_boyle_alan"] = "Taraf" };
         await HttpAssert.ProblemAsync(await kit.MapResponseAsync(job.Id, unknown), HttpStatusCode.UnprocessableEntity, "validation.failed");
