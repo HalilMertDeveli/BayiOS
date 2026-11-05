@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { ApiError, type ApiClient, type RequestOptions } from "@/lib/api/client";
 import { orderParse } from "@/lib/assistant/test-fixtures";
 import { SessionContext } from "@/lib/session/session-context";
-import type { FixtureRole } from "@/test/me-fixtures";
+import type { FixturePlan, FixtureRole } from "@/test/me-fixtures";
 import { mockSession } from "@/test/session";
 import { WhatsappOrderPage, messageError } from "./whatsapp-order-entry";
 
@@ -14,7 +14,11 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/siparisler/whatsapp", u
 afterEach(() => push.mockReset());
 
 /** MOCK API: the pending list is empty; submit answers with `onSubmit`. */
-function renderEntry(role: FixtureRole, onSubmit: () => unknown = () => ({ data: orderParse(), status: 201, etag: 'W/"1"' })) {
+function renderEntry(
+  role: FixtureRole,
+  onSubmit: () => unknown = () => ({ data: orderParse(), status: 201, etag: 'W/"1"' }),
+  plan: FixturePlan = "trial",
+) {
   const calls: { path: string; options: RequestOptions }[] = [];
   const api: ApiClient = {
     async request<T>(path: string, options: RequestOptions = {}) {
@@ -25,7 +29,7 @@ function renderEntry(role: FixtureRole, onSubmit: () => unknown = () => ({ data:
     },
   };
   render(
-    <SessionContext value={mockSession(role, { api })}>
+    <SessionContext value={mockSession(role, { api, plan })}>
       <WhatsappOrderPage />
     </SessionContext>,
   );
@@ -82,5 +86,32 @@ describe("WhatsappOrderPage", () => {
     expect(screen.getByText("WhatsApp siparişi yetkiniz yok")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Mesajı ayrıştır" })).toBeNull();
     expect(calls).toHaveLength(0);
+  });
+
+  it("without the AI assistant add-on (MOCK plan): parsing is locked, started reviews stay listed", async () => {
+    const { calls } = renderEntry("owner", undefined, "professional");
+    expect(screen.queryByRole("button", { name: "Mesajı ayrıştır" })).toBeNull();
+    const note = screen.getByRole("note");
+    expect(note.textContent).toContain("AI WhatsApp asistanı modülünde");
+    expect(screen.getByRole("link", { name: "Paket ve modülleri gör" }).getAttribute("href")).toBe("/ayarlar/paket");
+    expect(await screen.findByRole("heading", { name: "İnceleme bekleyen mesajlar" })).toBeTruthy();
+    expect(calls.some((c) => c.path.startsWith("/api/v1/ai/order-parses?"))).toBe(true);
+  });
+
+  it("an API 403 entitlement.limit_exceeded (monthly AI quota) is explained", async () => {
+    const user = userEvent.setup();
+    renderEntry("owner", () => {
+      throw new ApiError("quota", 403, {
+        code: "entitlement.limit_exceeded",
+        feature: "ai_parses_per_month",
+        limit: 1000,
+        current: 1000,
+        suggestedPlan: null,
+        suggestedModule: "ai_assistant",
+      });
+    });
+    await user.type(screen.getByRole("textbox", { name: /WhatsApp mesajı/ }), "2 adet H4 ampul");
+    await user.click(screen.getByRole("button", { name: "Mesajı ayrıştır" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Aylık AI ayrıştırma sınırına ulaşıldı (1.000/1.000).");
   });
 });

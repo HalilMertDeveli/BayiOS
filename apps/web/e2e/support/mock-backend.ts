@@ -11,6 +11,8 @@
  */
 import type { BrowserContext, Page, Route } from "@playwright/test";
 import { createMockAssistant, handleAssistant, type MockAssistant } from "./mock-assistant";
+import { createMockBilling, handleBilling, mockEntitlements, type MockBilling } from "./mock-billing";
+import { createMockReports, handleReports, type MockReports } from "./mock-reports";
 import { createMockCatalog, handleCatalog, type MockCatalog } from "./mock-catalog";
 import { createMockCommerce, handleCommerce, type MockCommerce } from "./mock-commerce";
 import { createMockFulfilment, handleFulfilment, type MockFulfilment } from "./mock-fulfilment";
@@ -150,6 +152,13 @@ export type ApiMockOptions = {
   inactiveTenants?: string[];
   /** Initial tenant settings (GET/PATCH /tenant/settings, ETag/If-Match → 412); defaults to `defaultSettings`. */
   settings?: Partial<MockSettings>;
+  /**
+   * Billing (mock-billing.ts): plan + add-ons behind GET /me `entitlements` and /billing/*. Defaults to a new tenant's
+   * 30-day Profesyonel trial (25 days left, every add-on) — nothing is locked, no trial banner.
+   */
+  billing?: MockBilling;
+  /** Reports API (mock-reports.ts). Defaults to synthetic numbers; null disables it. */
+  reports?: MockReports | null;
 };
 
 /** MOCK default tenant rules for /me (see ApiMockOptions.rules). */
@@ -163,6 +172,9 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
   const orders = options.orders === undefined ? createMockOrders() : options.orders;
   const fulfilment = options.fulfilment === undefined ? createMockFulfilment() : options.fulfilment;
   const assistant = options.assistant === undefined ? createMockAssistant() : options.assistant;
+  const billing = options.billing ?? createMockBilling();
+  const reports = options.reports === undefined ? createMockReports() : options.reports;
+  if (inventory) billing.activeWarehouses = () => inventory.warehouses.filter((w) => w.status === "active").length;
   const state = {
     memberships: options.memberships ?? [TENANT_A],
     rules: { ...MOCK_RULES, ...options.rules },
@@ -175,6 +187,8 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
     orders,
     fulfilment,
     assistant,
+    billing,
+    reports,
     requests: [] as { method: string; path: string; search: string; headers: Record<string, string>; body: unknown }[],
   };
 
@@ -203,7 +217,7 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
       const m = state.memberships.find((x) => x.tenantId === tenantHeader && x.status === "active");
       const activeTenant =
         m && !state.inactiveTenants.includes(m.tenantId)
-          ? { tenantId: m.tenantId, role: m.role, permissions: grantsForRoleName(m.role, state.rules) }
+          ? { tenantId: m.tenantId, role: m.role, permissions: grantsForRoleName(m.role, state.rules), entitlements: mockEntitlements(billing) }
           : null;
       // MembershipResponse.tenantStatus (#111): the picker greys suspended/closed businesses out.
       const memberships = state.memberships.map((x) => ({
@@ -277,6 +291,11 @@ if (path === "/api/v1/tenant/settings" && (method === "GET" || method === "PATCH
       state.settings = { ...state.settings, ...body };
       state.settingsVersion += 1;
       return json(route, 200, state.settings, { ETag: etag() });
+    }
+    {
+      const role = state.memberships.find((m) => m.tenantId === tenantHeader)?.role ?? "viewer";
+      if (await handleBilling(route, billing, role, state.rules)) return;
+      if (reports && (await handleReports(route, reports, role, state.rules))) return;
     }
     if (assistant) {
       const role = state.memberships.find((m) => m.tenantId === tenantHeader)?.role ?? "viewer";

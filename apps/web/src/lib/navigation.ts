@@ -48,7 +48,7 @@ const tasks = (a: Access) => a.canSome("tasks.read.all") || a.canSome("tasks.rea
  * Pano → orders.read (unconditional) or reports.read; Siparişler → orders.read; Ürünler → catalog.read;
  * Stok → inventory.read; Depo → inventory.read or tasks; Görevler and Sevkiyatlar → tasks.read.all | tasks.read.own
  * (x-permission-any-of); Müşteriler → customers.read; Fiyat listeleri → prices.read.sell; Raporlar → reports.read;
- * İçe aktarma → imports.run | imports.run.stock; Ayarlar → tenant.settings.manage | members.read.
+ * İçe aktarma → imports.run | imports.run.stock; Ayarlar → tenant.settings.manage | members.read | billing.read.
  */
 export const navSections: readonly NavSection[] = [
   {
@@ -127,7 +127,7 @@ export const navSections: readonly NavSection[] = [
       {
         href: "/raporlar",
         label: "Raporlar",
-        description: "Satış, stok ve sipariş raporları burada olacak.",
+        description: "Sipariş, stok, depo ve AI kullanım raporları; CSV/Excel dışa aktarma.",
         Icon: ChartColumn,
         visible: (a) => a.canSome("reports.read"),
       },
@@ -143,7 +143,7 @@ export const navSections: readonly NavSection[] = [
         label: "Ayarlar",
         description: "İşletme, ticari ayarlar, ekip ve roller burada olacak.",
         Icon: Settings,
-        visible: (a) => a.canSome("tenant.settings.manage") || a.canSome("members.read"),
+        visible: (a) => a.canSome("tenant.settings.manage") || a.canSome("members.read") || a.canSome("billing.read"),
       },
     ],
   },

@@ -15,6 +15,8 @@ export type Permission =
   | "members.read"
   | "members.invite"
   | "members.manage"
+  | "billing.read"
+  | "billing.manage"
   | "catalog.read"
   | "catalog.write"
   | "catalog.barcode.assign"
@@ -26,6 +28,7 @@ export type Permission =
   | "imports.run"
   | "imports.run.stock"
   | "reports.read"
+  | "reports.export"
   | "inventory.read"
   | "inventory.movements.read"
   | "inventory.receive"
@@ -68,6 +71,8 @@ export const CONDITIONS = {
   movementsOwn: "movements.own_or_task_context",
   /** tasks.read.all (K¹²): tasks of the caller's own orders. */
   tasksOwnOrders: "tasks.own_orders",
+  /** reports.read / reports.export (K⁴): order and customer reports only (sales). */
+  reportsOrdersOnly: "reports.orders_and_customers_only",
 } as const;
 
 export type Access = {

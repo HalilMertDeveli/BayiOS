@@ -3,7 +3,8 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CircleAlert, MapPin, PackagePlus, Pencil, Plus, Star, Warehouse as WarehouseIcon } from "lucide-react";
+import { CircleAlert, Lock, MapPin, PackagePlus, Pencil, Plus, Star, Warehouse as WarehouseIcon } from "lucide-react";
+import { LockedFeature } from "@/components/billing/locked-feature";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api/client";
+import { FEATURES, featureGate, warehouseGate, type Gate } from "@/lib/billing/entitlements";
 import { isVersionConflict } from "@/lib/catalog/errors";
 import { IdempotencyKeys } from "@/lib/catalog/idempotency";
 import { createLocation, createWarehouse, updateLocation, updateWarehouse, type Location, type Warehouse } from "@/lib/inventory/api";
@@ -51,9 +53,13 @@ function mutationError(error: unknown): { fields: Record<string, string>; messag
 
 /** /depo: warehouses and their shelf/bin locations (create, edit, deactivate) + entry to goods receipt. */
 export function WarehouseAdmin() {
-  const { access } = useSession();
+  const { access, entitlements } = useSession();
   const permissions = inventoryPermissions(access);
   const { state, reload, upsert } = useWarehouses();
+  // Entitlement gates (#51): Temel allows one active warehouse and no shelf/bin locations. Visibility only; existing
+  // warehouses and locations stay visible, only new ones are locked (the API enforces it again).
+  const newWarehouseGate = state.status === "ready" ? warehouseGate(entitlements, state.data) : ({ locked: false } as const);
+  const locationsGate = featureGate(entitlements, FEATURES.warehouseLocations);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -110,7 +116,13 @@ export function WarehouseAdmin() {
         actions={
           <>
             {permissions.manageWarehouses ? (
-              <Button variant="secondary" icon={<Plus className="size-4" />} onClick={() => setEditing("new")}>
+              <Button
+                variant="secondary"
+                icon={newWarehouseGate.locked ? <Lock className="size-4" /> : <Plus className="size-4" />}
+                disabled={newWarehouseGate.locked}
+                aria-describedby={newWarehouseGate.locked ? "warehouse-limit" : undefined}
+                onClick={() => setEditing("new")}
+              >
                 Yeni depo
               </Button>
             ) : null}
@@ -123,6 +135,12 @@ export function WarehouseAdmin() {
           </>
         }
       />
+
+      {permissions.manageWarehouses && newWarehouseGate.locked ? (
+        <div id="warehouse-limit">
+          <LockedFeature gate={newWarehouseGate} title="Yeni aktif depo eklenemiyor" />
+        </div>
+      ) : null}
 
       {!permissions.manageWarehouses ? (
         <FormAlert tone="info" title="Salt okunur görünüm">
@@ -199,10 +217,13 @@ export function WarehouseAdmin() {
         )}
       </section>
 
-      {selected ? <LocationsPanel key={selected.id} warehouse={selected} canManage={permissions.manageWarehouses} /> : null}
+      {selected ? (
+        <LocationsPanel key={selected.id} warehouse={selected} canManage={permissions.manageWarehouses} locationsGate={locationsGate} />
+      ) : null}
 
       {editing ? (
         <WarehouseDialog
+          locationsGate={locationsGate}
           warehouse={editing === "new" ? null : editing}
           onClose={() => setEditing(null)}
           onSaved={(w) => {
@@ -227,7 +248,17 @@ function CheckboxField({ label, hint, checked, disabled, onChange }: { label: st
   );
 }
 
-function WarehouseDialog({ warehouse, onClose, onSaved }: { warehouse: Warehouse | null; onClose: () => void; onSaved: (w: Warehouse) => void }) {
+function WarehouseDialog({
+  warehouse,
+  locationsGate,
+  onClose,
+  onSaved,
+}: {
+  warehouse: Warehouse | null;
+  locationsGate: Gate;
+  onClose: () => void;
+  onSaved: (w: Warehouse) => void;
+}) {
   const { api } = useSession();
   const { toast } = useToast();
   const mode = warehouse ? "edit" : "create";
@@ -314,12 +345,15 @@ function WarehouseDialog({ warehouse, onClose, onSaved }: { warehouse: Warehouse
         <CheckboxField
           label="Raf/göz (lokasyon) takibi"
           checked={values.usesLocations}
+          // Turning tracking on needs the warehouse_locations entitlement; turning it off never does.
+          disabled={locationsGate.locked && !warehouse?.usesLocations}
           onChange={(v) => set({ usesLocations: v })}
           hint={
             errors.usesLocations ??
             (warehouse ? "Yalnızca depoda stok yokken değiştirilebilir. Açıkken mal kabul ve düzeltmede raf seçmek zorunludur." : "Açıkken mal kabul ve düzeltmede raf seçmek zorunludur.")
           }
         />
+        {locationsGate.locked && !warehouse?.usesLocations ? <LockedFeature gate={locationsGate} compact /> : null}
         {warehouse ? (
           <>
             <CheckboxField
@@ -344,7 +378,9 @@ function WarehouseDialog({ warehouse, onClose, onSaved }: { warehouse: Warehouse
   );
 }
 
-function LocationsPanel({ warehouse, canManage }: { warehouse: Warehouse; canManage: boolean }) {
+function LocationsPanel({ warehouse, canManage: canManageRole, locationsGate }: { warehouse: Warehouse; canManage: boolean; locationsGate: Gate }) {
+  // Without warehouse_locations, existing locations stay listed (read-only); adding or editing them is locked.
+  const canManage = canManageRole && !locationsGate.locked;
   const [includeInactive, setIncludeInactive] = useState(true);
   const { state, reload } = useLocations(warehouse.id, { includeInactive, enabled: warehouse.usesLocations });
   const [editing, setEditing] = useState<Location | "new" | null>(null);
@@ -392,6 +428,8 @@ function LocationsPanel({ warehouse, canManage }: { warehouse: Warehouse; canMan
           </div>
         ) : null}
       </div>
+
+      {canManageRole && locationsGate.locked ? <LockedFeature gate={locationsGate} title="Yeni lokasyon eklenemiyor" /> : null}
 
       {!warehouse.usesLocations ? (
         <div className="rounded-lg border border-line bg-card shadow-e1">

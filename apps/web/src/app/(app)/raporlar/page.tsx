@@ -1,7 +1,7 @@
-import { ModulePlaceholder, placeholderMetadata } from "@/components/shell/module-placeholder";
+import { ReportHub } from "@/components/reports/report-hub";
 
-export const metadata = placeholderMetadata("/raporlar");
+export const metadata = { title: "Raporlar" };
 
 export default function RaporlarPage() {
-  return <ModulePlaceholder href="/raporlar" />;
+  return <ReportHub />;
 }

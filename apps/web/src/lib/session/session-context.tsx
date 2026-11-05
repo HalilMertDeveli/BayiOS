@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { usePathname, useRouter } from "next/navigation";
 import { ApiError, createApiClient, type ApiClient } from "@/lib/api/client";
 import { getMe } from "@/lib/api/identity";
+import { createEntitlements, type Entitlements, type TenantEntitlements } from "@/lib/billing/entitlements";
 import { ROUTES, signInUrl } from "@/lib/auth/routes";
 import type { Role } from "@/lib/navigation";
 import { getAccessToken, getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -30,6 +31,8 @@ export type SessionState =
       active: Membership | null;
       /** Effective permissions of `active` from GET /me (`activeTenant.permissions`); NO_ACCESS without a tenant. */
       access: Access;
+      /** Plan / features / limits of `active` from GET /me (`activeTenant.entitlements`, #51); absent without a tenant. */
+      entitlements?: TenantEntitlements | null;
     }
   /** The selected business is suspended or closed (403 `tenant.inactive`, or /me returned no activeTenant for it). */
   | { status: "inactive"; user: SessionUser; memberships: Membership[]; tenant: Membership };
@@ -42,6 +45,11 @@ export type SessionContextValue = {
   role: Role | null;
   /** What the UI may show for the active tenant (GET /me effective permissions). Visibility only — the API authorizes. */
   access: Access;
+  /**
+   * What the active tenant's plan includes (GET /me `activeTenant.entitlements`). Visibility only — the API enforces
+   * entitlements; UNKNOWN_ENTITLEMENTS (nothing locked) until loaded.
+   */
+  entitlements: Entitlements;
   selectTenant: (tenantId: string) => void;
   /** Reloads /me (e.g. after creating a tenant). Resolves with the new memberships. */
   reload: () => Promise<Membership[]>;
@@ -168,7 +176,14 @@ export function SessionProvider({ require, children }: SessionProviderProps) {
           return { state: { status: "inactive", user, memberships, tenant: active }, memberships };
         }
         return {
-          state: { status: "ready", user, memberships, active: { ...active, role: granted.role }, access: createAccess(granted.permissions) },
+          state: {
+            status: "ready",
+            user,
+            memberships,
+            active: { ...active, role: granted.role },
+            access: createAccess(granted.permissions),
+            entitlements: granted.entitlements ?? null,
+          },
           memberships,
         };
       } catch (error) {
@@ -231,10 +246,12 @@ export function SessionProvider({ require, children }: SessionProviderProps) {
 
   const role = state.status === "ready" && state.active ? toRole(state.active.role) : null;
   const access = state.status === "ready" ? state.access : NO_ACCESS;
+  const rawEntitlements = state.status === "ready" ? (state.entitlements ?? null) : null;
+  const entitlements = useMemo(() => createEntitlements(rawEntitlements), [rawEntitlements]);
 
   const value = useMemo<SessionContextValue>(
-    () => ({ state, api, role, access, selectTenant, reload, signOut }),
-    [state, api, role, access, selectTenant, reload, signOut],
+    () => ({ state, api, role, access, entitlements, selectTenant, reload, signOut }),
+    [state, api, role, access, entitlements, selectTenant, reload, signOut],
   );
 
   return <SessionContext value={value}>{children}</SessionContext>;

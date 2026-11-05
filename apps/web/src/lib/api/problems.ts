@@ -3,6 +3,7 @@
  * The API's stable `code` is the localisation key (api-strategy §6); `title`/`detail` are developer aids
  * in English and are never shown to users.
  */
+import { featureLabel, limitLabel, whereAvailable } from "@/lib/billing/labels";
 export type ProblemDetails = {
   type?: string | null;
   title?: string | null;
@@ -29,10 +30,39 @@ const MESSAGES: Record<string, string> = {
   "idempotency.key_reused": "Bu işlem daha önce farklı bilgilerle gönderilmiş. Sayfayı yenileyip tekrar deneyin.",
   "concurrency.version_mismatch": "Kayıt siz düzenlerken değişti. Sayfayı yenileyip tekrar deneyin.",
   "precondition.required": "Kayıt sürümü doğrulanamadı. Sayfayı yenileyip tekrar deneyin.",
-  "entitlement.required": "Bu özellik mevcut planınızda bulunmuyor.",
-  "entitlement.limit_exceeded": "Planınızın sınırına ulaştınız.",
+  "entitlement.required": "Bu özellik mevcut paketinizde bulunmuyor.",
+  "entitlement.limit_exceeded": "Paketinizin sınırına ulaştınız.",
   "rate_limit.exceeded": "Çok sayıda istek gönderildi. Lütfen biraz bekleyip tekrar deneyin.",
+  "reports.orders_and_customers_only": "Rolünüz yalnızca sipariş raporlarını (sipariş durumları, en çok sipariş edilen ürünler) görebilir.",
+  "reports.export_too_large": "Dosya 20.000 satır sınırını aşıyor. Tarih aralığını veya filtreleri daraltıp tekrar deneyin.",
 };
+
+/** Where plan details live, for the entitlement messages (the page itself is for owner/admin). */
+const PLAN_HINT = "Ayrıntılar Ayarlar → Paket ve modüller sayfasında (işletme sahibi ve yöneticiler). Mevcut verileriniz silinmez, görüntülenmeye devam eder.";
+
+const count = (n: number) => n.toLocaleString("tr-TR");
+
+/**
+ * 403 `entitlement.required` / `entitlement.limit_exceeded` (#51) → a Turkish sentence naming the feature or limit and,
+ * when the catalog has one, the plan or add-on that grants it (`suggestedPlan` / `suggestedModule`).
+ */
+export function entitlementMessage(problem: ProblemDetails | null | undefined): string | null {
+  const code = problem?.code;
+  if (code !== "entitlement.required" && code !== "entitlement.limit_exceeded") return null;
+  const feature = problemString(problem, "feature");
+  const where = whereAvailable(problemString(problem, "suggestedPlan"), problemString(problem, "suggestedModule"));
+  if (code === "entitlement.required") {
+    const head = `${featureLabel(feature)} mevcut paketinizde yok.`;
+    return [head, where ? `${upperFirst(where)} bulunur.` : null, PLAN_HINT].filter(Boolean).join(" ");
+  }
+  const limit = problemNumber(problem, "limit");
+  const current = problemNumber(problem, "current");
+  const numbers = limit !== null && current !== null ? ` (${count(current)}/${count(limit)})` : "";
+  const head = `${limitLabel(feature)} sınırına ulaşıldı${numbers}.`;
+  return [head, where ? `Daha yüksek sınır ${where}.` : null, PLAN_HINT].filter(Boolean).join(" ");
+}
+
+const upperFirst = (text: string) => text.charAt(0).toLocaleUpperCase("tr-TR") + text.slice(1);
 
 const BY_STATUS: Record<number, string> = {
   400: MESSAGES["request.malformed"],
@@ -82,6 +112,8 @@ export function problemMessage(status: number, problem?: ProblemDetails | null):
     const permission = problemString(problem, "permission");
     return (permission && DISABLED_BY_RULE[permission]) || DISABLED_BY_RULE_MESSAGE;
   }
+  const entitlement = entitlementMessage(problem);
+  if (entitlement) return entitlement;
   if (code && MESSAGES[code]) return MESSAGES[code];
   if (status >= 500) return SERVER_ERROR_MESSAGE;
   return BY_STATUS[status] ?? SERVER_ERROR_MESSAGE;
