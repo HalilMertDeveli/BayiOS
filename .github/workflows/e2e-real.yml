@@ -32,7 +32,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      E2E_STATE_DIR: ${{ runner.temp }}/bayios-e2e
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_NOLOGO: "1"
       SUPABASE_TELEMETRY_DISABLED: "1"
@@ -69,11 +68,11 @@ jobs:
       - name: Collect stack logs
         if: failure()
         run: |
-          mkdir -p "$E2E_STATE_DIR/logs"
-          cp "$E2E_STATE_DIR"/*.log "$E2E_STATE_DIR/logs/" 2>/dev/null || true
-          docker logs supabase_auth_bayios >"$E2E_STATE_DIR/logs/supabase-auth.log" 2>&1 || true
-          docker logs supabase_kong_bayios >"$E2E_STATE_DIR/logs/supabase-kong.log" 2>&1 || true
-          docker logs bayios-e2e-postgres >"$E2E_STATE_DIR/logs/postgres.log" 2>&1 || true
+          mkdir -p "$RUNNER_TEMP/bayios-e2e/logs"
+          cp "$RUNNER_TEMP/bayios-e2e"/*.log "$RUNNER_TEMP/bayios-e2e/logs/" 2>/dev/null || true
+          docker logs supabase_auth_bayios >"$RUNNER_TEMP/bayios-e2e/logs/supabase-auth.log" 2>&1 || true
+          docker logs supabase_kong_bayios >"$RUNNER_TEMP/bayios-e2e/logs/supabase-kong.log" 2>&1 || true
+          docker logs bayios-e2e-postgres >"$RUNNER_TEMP/bayios-e2e/logs/postgres.log" 2>&1 || true
 
       - name: Upload Playwright traces, screenshots and stack logs
         if: failure()
