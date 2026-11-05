@@ -35,4 +35,15 @@ describe("withBusyRetry", () => {
     await expect(withBusyRetry(send, { wait: async () => undefined })).rejects.toBe(other);
     expect(send).toHaveBeenCalledTimes(1);
   });
+
+  it("uses a custom busy predicate (orders retry order.busy too)", async () => {
+    const orderBusy = new ApiError("busy", 409, { code: "order.busy" }, undefined, 1);
+    const isBusy = (e: unknown) => e instanceof ApiError && e.code === "order.busy";
+    const send = vi.fn().mockRejectedValueOnce(orderBusy).mockResolvedValueOnce("ok");
+    await expect(withBusyRetry(send, { wait: async () => undefined, isBusy })).resolves.toBe("ok");
+    // Default predicate: order.busy is not inventory.busy, so it is not retried.
+    const once = vi.fn().mockRejectedValue(orderBusy);
+    await expect(withBusyRetry(once, { wait: async () => undefined })).rejects.toBe(orderBusy);
+    expect(once).toHaveBeenCalledTimes(1);
+  });
 });

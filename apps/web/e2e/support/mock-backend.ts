@@ -11,6 +11,7 @@ import type { BrowserContext, Page, Route } from "@playwright/test";
 import { createMockCatalog, handleCatalog, type MockCatalog } from "./mock-catalog";
 import { createMockCommerce, handleCommerce, type MockCommerce } from "./mock-commerce";
 import { createMockInventory, handleInventory, type MockInventory } from "./mock-inventory";
+import { createMockOrders, handleOrders, type MockOrders } from "./mock-orders";
 
 /** Must match the build-time env used for the e2e build (ci-web.yml / README). */
 export const SUPABASE_URL = process.env.E2E_SUPABASE_URL ?? "http://127.0.0.1:54321";
@@ -121,6 +122,8 @@ export type ApiMockOptions = {
   inventory?: MockInventory | null;
   /** In-memory Customers + Pricing API (mock-commerce.ts). Defaults to 3 customers, 2 dealer groups, 3 price lists; null disables it. */
   commerce?: MockCommerce | null;
+  /** In-memory Orders API (mock-orders.ts). Defaults to no orders; null disables it. */
+  orders?: MockOrders | null;
 };
 
 /** Mocked BayiOS API. `state.memberships` can be changed by a test (e.g. after a tenant is created). */
@@ -128,11 +131,13 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
   const catalog = options.catalog === undefined ? createMockCatalog({ products: 3 }) : options.catalog;
   const inventory = options.inventory === undefined ? createMockInventory(catalog) : options.inventory;
   const commerce = options.commerce === undefined ? createMockCommerce(catalog) : options.commerce;
+  const orders = options.orders === undefined ? createMockOrders() : options.orders;
   const state = {
     memberships: options.memberships ?? [TENANT_A],
     catalog,
     inventory,
     commerce,
+    orders,
     requests: [] as { method: string; path: string; search: string; headers: Record<string, string>; body: unknown }[],
   };
 
@@ -178,6 +183,10 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
     }
     if (path === "/api/v1/tenant/settings" && method === "PATCH") {
       return json(route, 200, { ...defaultSettings, ...(request.postDataJSON() as object) }, { ETag: 'W/"1"' });
+    }
+    if (orders) {
+      const role = state.memberships.find((m) => m.tenantId === request.headers()["x-tenant-id"])?.role ?? "viewer";
+      if (await handleOrders(route, orders, { catalog, commerce }, role)) return;
     }
     if (inventory && (await handleInventory(route, inventory, catalog))) return;
     if (commerce) {
