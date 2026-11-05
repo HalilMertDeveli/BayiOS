@@ -1,0 +1,74 @@
+import type { OrderDetail, OrderLine } from "./api";
+
+/** Synthetic order data for unit tests (invented values). */
+export function orderLine(overrides: Partial<OrderLine> = {}): OrderLine {
+  return {
+    id: "line-1",
+    lineNo: 1,
+    variantId: "var-1",
+    sku: "LED-1",
+    name: "Panel 18W",
+    unit: "ADET",
+    quantity: 2,
+    priceStatus: "priced",
+    unitPrice: "100.00",
+    priceSource: "default_price_list",
+    priceListId: "pl-1",
+    priceOverridden: false,
+    discountPercent: null,
+    discountAmount: null,
+    taxRate: 20,
+    lineSubtotal: "200.00",
+    lineDiscount: "0.00",
+    lineTotal: "200.00",
+    reservedQuantity: 0,
+    shippedQuantity: 0,
+    cancelledQuantity: 0,
+    openQuantity: 2,
+    ...overrides,
+  };
+}
+
+export function orderDetail(lines: OrderLine[] = [orderLine()], overrides: Partial<OrderDetail["order"]> = {}): OrderDetail {
+  return {
+    order: {
+      id: "ord-1",
+      number: "SIP-2026-000001",
+      customerId: "cus-1",
+      warehouseId: "wh-1",
+      status: "draft",
+      fulfillmentStatus: "none",
+      source: "manual",
+      sourceReferenceId: null,
+      currency: "TRY",
+      priceDate: "2026-11-05",
+      requestedDeliveryDate: null,
+      notes: null,
+      totals: {
+        pricesIncludeTax: false,
+        subtotal: "200.00",
+        discountTotal: "0.00",
+        taxTotal: "40.00",
+        netTotal: "200.00",
+        grandTotal: "240.00",
+        taxBreakdown: [{ rate: 20, taxBase: "200.00", tax: "40.00", total: "240.00" }],
+        hasUnpricedLines: false,
+      },
+      createdAt: "2026-11-05T09:00:00Z",
+      createdBy: null,
+      submittedAt: null,
+      approvedAt: null,
+      approvedBy: null,
+      shippedAt: null,
+      completedAt: null,
+      cancelledAt: null,
+      cancelReason: null,
+      hasShortage: false,
+      version: 3,
+      ...overrides,
+    },
+    lines,
+    history: [],
+    shipments: [],
+  };
+}
