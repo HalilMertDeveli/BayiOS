@@ -7,7 +7,32 @@ namespace BayiOS.Modules.Identity.Contracts;
 public sealed record MeResponse(Guid UserId, string? Email, string? FullName, IReadOnlyList<MembershipResponse> Memberships, ActiveTenantResponse? ActiveTenant);
 
 /// <summary>Effective permissions in the active tenant: the role matrix with tenant rules (roles-permissions §4) applied.</summary>
-public sealed record ActiveTenantResponse(Guid TenantId, string Role, IReadOnlyList<PermissionGrantResponse> Permissions);
+/// <param name="Entitlements">
+/// What the tenant's plan, add-ons and overrides grant now (#51), so clients can show gates; the API enforces them
+/// regardless. Shown to every role (no prices, no billing details).
+/// </param>
+public sealed record ActiveTenantResponse(
+    Guid TenantId,
+    string Role,
+    IReadOnlyList<PermissionGrantResponse> Permissions,
+    TenantEntitlementsResponse Entitlements);
+
+/// <summary>The active tenant's effective entitlements.</summary>
+/// <param name="Plan">The plan that applies now (the trial plan while <c>trialing</c>).</param>
+/// <param name="Status"><c>trialing</c>, <c>active</c>, <c>expired</c> (fallback plan) or <c>cancelled</c>.</param>
+/// <param name="TrialEndsAt">Only while <c>trialing</c>.</param>
+/// <param name="Features">Granted feature codes (e.g. <c>warehouse_locations</c>, <c>ai_order_parsing</c>).</param>
+/// <param name="Limits">Numeric limits; a null value is unlimited.</param>
+public sealed record TenantEntitlementsResponse(
+    string Plan,
+    string Status,
+    DateTimeOffset? TrialEndsAt,
+    string CatalogVersion,
+    IReadOnlyList<string> Features,
+    IReadOnlyList<EntitlementLimitResponse> Limits);
+
+/// <param name="Value">null = unlimited.</param>
+public sealed record EntitlementLimitResponse(string Code, long? Value);
 
 /// <param name="Scope">
 /// <c>all</c> = every record; <c>conditional</c> = K grant limited per record by <paramref name="Condition"/>;

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using BayiOS.Api.Platform.Tenancy;
+using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Platform.Idempotency;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.Authorization;
@@ -78,6 +79,19 @@ internal static class OpenApiSecurity
                     // Any one of these suffices (x-permission is the first, kept for single-permission consumers).
                     operation.Extensions["x-permission-any-of"] = new JsonNodeExtension(new JsonArray([.. permission.AnyOf.Select(p => (JsonNode)JsonValue.Create(p))]));
                 }
+            }
+
+            // Tenant feature the endpoint needs (403 entitlement.required) and limits it enforces (403 entitlement.limit_exceeded).
+            if (metadata.OfType<EntitlementMetadata>().FirstOrDefault() is { } entitlement)
+            {
+                operation.Extensions ??= new Dictionary<string, IOpenApiExtension>();
+                operation.Extensions["x-entitlement"] = new JsonNodeExtension(JsonValue.Create(entitlement.Feature));
+            }
+
+            if (metadata.OfType<EntitlementLimitMetadata>().Select(l => l.Limit).Distinct().ToList() is { Count: > 0 } limits)
+            {
+                operation.Extensions ??= new Dictionary<string, IOpenApiExtension>();
+                operation.Extensions["x-entitlement-limit"] = new JsonNodeExtension(new JsonArray([.. limits.Select(l => (JsonNode)JsonValue.Create(l))]));
             }
 
             return Task.CompletedTask;

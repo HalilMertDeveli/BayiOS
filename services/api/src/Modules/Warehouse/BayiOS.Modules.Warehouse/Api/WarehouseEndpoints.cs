@@ -2,6 +2,7 @@ using System.Globalization;
 using BayiOS.Modules.Warehouse.Application;
 using BayiOS.Modules.Warehouse.Contracts;
 using BayiOS.SharedKernel.Authorization;
+using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -36,11 +37,20 @@ internal static class WarehouseEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
         group.MapPost("/warehouses", Create).WithName("Warehouse_Create")
             .WithSummary("Depo oluşturur (tenant'ın ilk deposu varsayılan olur)").RequirePermission(Permissions.WarehousesManage)
+            .WithDescription(
+                "403 `entitlement.limit_exceeded` when the plan's active-warehouse limit (`max_warehouses`, Basic: 1) is reached; "
+                + "403 `entitlement.required` (`warehouse_locations`) for usesLocations = true without the Professional plan.")
+            .EnforcesEntitlementLimit(EntitlementCodes.MaxWarehouses)
             .RequireIdempotencyKey()
             .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity);
         Update(group.MapPatch("/warehouses/{id:guid}", UpdateWarehouse).WithName("Warehouse_Update")
             .WithSummary("Depoyu günceller: ad, durum, varsayılan, lokasyon kullanımı (stok yokken) — If-Match zorunlu")
             .RequirePermission(Permissions.WarehousesManage)
+            .WithDescription(
+                "Reactivating a warehouse counts against `max_warehouses` and turning locations on needs `warehouse_locations` "
+                + "(403 `entitlement.limit_exceeded` / `entitlement.required`); renaming, deactivating and turning locations off "
+                + "are open on every plan.")
+            .EnforcesEntitlementLimit(EntitlementCodes.MaxWarehouses)
             .Accepts<UpdateWarehouseRequest>(MergePatch, "application/json"));
 
         group.MapGet("/warehouses/{id:guid}/locations", ListLocations).WithName("Warehouse_ListLocations")
@@ -48,11 +58,13 @@ internal static class WarehouseEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
         group.MapPost("/warehouses/{id:guid}/locations", CreateLocation).WithName("Warehouse_CreateLocation")
             .WithSummary("Lokasyon oluşturur (yalnızca lokasyon kullanan depoda)").RequirePermission(Permissions.WarehousesManage)
+            .RequireEntitlement(EntitlementCodes.WarehouseLocations)
             .RequireIdempotencyKey()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity);
         Update(group.MapPatch("/locations/{id:guid}", UpdateLocation).WithName("Warehouse_UpdateLocation")
             .WithSummary("Lokasyonu günceller (If-Match zorunlu)").RequirePermission(Permissions.WarehousesManage)
+            .RequireEntitlement(EntitlementCodes.WarehouseLocations)
             .Accepts<UpdateLocationRequest>(MergePatch, "application/json"));
 
         return app;

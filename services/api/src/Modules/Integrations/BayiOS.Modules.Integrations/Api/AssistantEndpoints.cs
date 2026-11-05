@@ -3,6 +3,7 @@ using BayiOS.Modules.Integrations.Application;
 using BayiOS.Modules.Integrations.Contracts;
 using BayiOS.Modules.Integrations.Domain;
 using BayiOS.SharedKernel.Authorization;
+using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -36,8 +37,13 @@ internal static class AssistantEndpoints
                 + "and within the tenant's daily quota; otherwise — and on any provider error, timeout, refusal or invalid output — "
                 + "by the deterministic rules parser (fallbackReason + warnings say which and why). Lines are matched only "
                 + "against the tenant's own catalog: matched lines carry one proposal, ambiguous lines up to 5 candidates and no "
-                + "proposal, unmatched lines none. 429 `ai.rate_limited` (with Retry-After) when the hourly parse limit is reached.")
+                + "proposal, unmatched lines none. 429 `ai.rate_limited` (with Retry-After) when the hourly parse limit is reached. "
+                + "Needs the AI assistant add-on (403 `entitlement.required`, feature `ai_order_parsing`); 403 "
+                + "`entitlement.limit_exceeded` when the add-on's monthly parse quota (`ai_parses_per_month`) is used up. Reviewing, "
+                + "approving and rejecting stored parses stay open without the add-on.")
             .RequirePermission(Permissions.WhatsappParse)
+            .RequireEntitlement(EntitlementCodes.AiOrderParsing)
+            .EnforcesEntitlementLimit(EntitlementCodes.AiParsesPerMonth)
             .RequireIdempotencyKey()
             .ProducesProblem(StatusCodes.Status429TooManyRequests)
             .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity);

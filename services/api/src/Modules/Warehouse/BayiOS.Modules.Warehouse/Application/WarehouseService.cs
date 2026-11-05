@@ -2,6 +2,7 @@ using BayiOS.Modules.Inventory.Contracts;
 using BayiOS.Modules.Warehouse.Contracts;
 using BayiOS.Modules.Warehouse.Domain;
 using BayiOS.Modules.Warehouse.Infrastructure.Persistence;
+using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -32,9 +33,12 @@ internal sealed record AppResult<T>(T? Value, AppError? Error)
 /// <summary>
 /// Warehouses and shelf/bin locations (data-model §5.6). The first warehouse of a tenant becomes its default;
 /// receipts without a warehouse create the default ("Ana Depo", MAIN) on first use (<see cref="WarehouseDirectory"/>).
-/// Multi-warehouse/location entitlements (Pro plan) are not enforced here yet.
+/// Entitlements (#51): active warehouses are capped by <c>max_warehouses</c> (Basic: 1; counted under a per-tenant
+/// lock) and turning locations on needs <c>warehouse_locations</c> (Professional). Reads, renames, deactivation and
+/// stock operations on existing warehouses are never gated, so a downgraded tenant keeps working with what it has.
 /// </summary>
-internal sealed class WarehouseService(WarehouseDbContext db, IStockQueries stock, IRequestContext requestContext, TimeProvider clock)
+internal sealed class WarehouseService(
+    WarehouseDbContext db, IStockQueries stock, IEntitlements entitlements, IRequestContext requestContext, TimeProvider clock)
 {
     public const int MaxListSize = 1000;
 
@@ -74,6 +78,12 @@ internal sealed class WarehouseService(WarehouseDbContext db, IStockQueries stoc
             return AppError.Validation(errors);
         }
 
+        if (request.UsesLocations == true)
+        {
+            await entitlements.EnsureFeatureAsync(EntitlementCodes.WarehouseLocations, cancellationToken);
+        }
+
+        await EnsureWarehouseCapacityAsync(cancellationToken);
         var isDefault = !await db.Warehouses.AnyAsync(w => w.IsDefault, cancellationToken);
         var warehouse = WarehouseModel.Create(TenantId, code!, name!, request.UsesLocations ?? false, isDefault, UserId, Now());
         db.Warehouses.Add(warehouse);
@@ -125,6 +135,17 @@ internal sealed class WarehouseService(WarehouseDbContext db, IStockQueries stoc
             && await stock.WarehouseHasStockAsync(warehouse.Id, cancellationToken))
         {
             return AppError.Conflict("warehouse.has_stock", "Location mode cannot change while the warehouse holds stock");
+        }
+
+        // Switching locations off or deactivating stays possible on any plan (way back from a downgrade).
+        if (request.UsesLocations == true && !warehouse.UsesLocations)
+        {
+            await entitlements.EnsureFeatureAsync(EntitlementCodes.WarehouseLocations, cancellationToken);
+        }
+
+        if (status == WarehouseStatuses.Active && warehouse.Status != WarehouseStatuses.Active)
+        {
+            await EnsureWarehouseCapacityAsync(cancellationToken);
         }
 
         var now = Now();
@@ -232,6 +253,20 @@ internal sealed class WarehouseService(WarehouseDbContext db, IStockQueries stoc
     }
 
     // ---- Helpers ----
+
+    /// <summary>
+    /// 403 <c>entitlement.limit_exceeded</c> when one more active warehouse would exceed <c>max_warehouses</c>. A
+    /// per-tenant transaction lock serializes concurrent creates/reactivations so the count cannot be overshot.
+    /// </summary>
+    private async Task EnsureWarehouseCapacityAsync(CancellationToken cancellationToken)
+    {
+        await db.JoinTransactionAsync(cancellationToken);
+        var tenant = TenantId.ToString();
+        await db.Database.ExecuteSqlAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended('warehouse.capacity:' || {tenant}, 0))", cancellationToken);
+        var active = await db.Warehouses.CountAsync(w => w.Status == WarehouseStatuses.Active, cancellationToken);
+        await entitlements.EnsureCapacityAsync(EntitlementCodes.MaxWarehouses, active, cancellationToken);
+    }
 
     private async Task<AppResult<T>> SaveAsync<T>(Func<T> response, CancellationToken cancellationToken)
     {

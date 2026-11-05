@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using BayiOS.IntegrationTests.Billing;
 using BayiOS.IntegrationTests.Catalog;
 using BayiOS.IntegrationTests.Infrastructure;
 using BayiOS.Modules.Inventory.Contracts;
@@ -38,6 +39,9 @@ internal sealed class InventoryKit
     public static async Task<InventoryKit> CreateAsync(ApiFixture fixture)
     {
         var owner = await CatalogClient.NewTenantOwnerAsync(fixture, "motorcycle_parts");
+
+        // Explicit plan (#51): multi-warehouse and locations are Professional features, not just "the trial".
+        await BillingKit.SetPlanAsync(fixture, owner.TenantId, BillingKit.Professional);
         var unit = await owner.CreateUnitAsync("adet", "Adet");
         return new InventoryKit(fixture, owner, unit.Id);
     }

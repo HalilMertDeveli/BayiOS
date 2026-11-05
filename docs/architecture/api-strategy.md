@@ -119,8 +119,10 @@ Uzantılar (OpenAPI şemaları, #86): `StockProblemDetails` — `shortages[]` (v
 | `orders.cancel_not_allowed_in_status` | sales kendi siparişini Taslak / Onay bekliyor dışındaki bir durumda iptal eder (dipnot 11) | `permission`, `orderStatus` |
 | `orders.discount_limit_exceeded` | Satır iskontosu satış iskonto sınırını aşıyor (dipnot 10) | `permission`, `limitPercent` |
 | `orders.manual_price_not_allowed` | İskonto sınırı altındaki sales manuel birim fiyat giriyor (dipnot 10) | `permission`, `limitPercent` |
+| `entitlement.required` | Tenant'ın paketi / ek modülleri / override'ları özelliği vermiyor (#51). İzin kapısı önce değerlendirilir: izni olmayan çağıran `auth.forbidden` alır, paket bilgisi öğrenmez | `feature`, `suggestedPlan`, `suggestedModule` (kataloğun önerisi; yoksa `null`) |
+| `entitlement.limit_exceeded` | Bir tane daha eklemek paket limitini aşar (#51; ör. Temel'de 2. aktif depo, aylık AI ayrıştırma kotası). Transaction geri alınır, mevcut veri okunur kalır | `feature` (limit kodu), `limit`, `current`, `suggestedPlan`, `suggestedModule` |
 
-OpenAPI: ilgili sipariş uçlarının `description` alanı bu kodları listeler.
+OpenAPI: ilgili sipariş uçlarının `description` alanı bu kodları listeler. Entitlement uçları `x-entitlement` (gereken özellik) ve `x-entitlement-limit` (zorlanan limit kodları) uzantılarını ve 403 için `EntitlementProblemDetails` şemasını taşır.
 
 ## 7. Idempotency
 
@@ -205,6 +207,30 @@ flowchart LR
 | GET | `/billing/plans` | (kimlik) | |
 | GET | `/billing/subscription` | `billing.manage` | |
 | GET | `/billing/usage` | `billing.manage` | Sayaçlar |
+
+> **Uygulanan durum (#51/#52, JOB 14):** ödeme yok, ücret alınmaz. `GET /billing/plans` (yalnızca kimlik; tenant ve DB yok):
+> sürümlü katalog (`catalogVersion`, `trialPlan` = professional, `fallbackPlan` = basic, `trialDays`, `moduleTrialDays`,
+> planlar ve ek modüller; özellik/limit kodlarıyla, fiyatsız). Okumalar `billing.read` (owner, admin — matris §3.1):
+> `GET /billing/subscription` (etkin paket, durum `trialing|active|expired|cancelled`, `trialEndsAt`, özellikler,
+> limitler, modüller), `GET /billing/modules` (modül mağazası: `included_in_trial|trialing|active|cancelled|expired|available|unavailable`,
+> `canActivate`, `canDeactivate`), `GET /billing/usage` (limit başına `limit` / `current` / `remaining`; `ai_parses_per_month`
+> için `period = month`). Değişiklikler `billing.manage` (owner) + Idempotency-Key, denetim kaydıyla:
+> `POST /billing/modules/{code}/activate` (ücretsiz, süreli etkinleştirme — modül ve tenant başına bir kez; tenant
+> denemesi sırasında başlatılırsa süre deneme bitiminde başlar; kapatılan modül süre bitene kadar yeniden açılabilir) ve
+> `POST /billing/modules/{code}/deactivate` (veri silinmez). Kodlar: `409 billing.module_unavailable` (henüz yapılmadı),
+> `billing.module_already_active`, `billing.trial_used`, `billing.module_not_active`; bilinmeyen modül `404`. Paket
+> değişikliği (Temel ↔ Profesyonel) API'de yok: ödeme entegrasyonu ürün sahibi onayı gerektirir; pilot/operatör
+> değişiklikleri `billing.tenant_entitlements` override'ı ile yapılır (SUB-08).
+>
+> `GET /me` aktif tenant için `activeTenant.entitlements` döner (plan, status, trialEndsAt, catalogVersion, features,
+> limits — `null` = sınırsız); her rol görür (fiyat/ödeme bilgisi yok). Ayrı `/me/permissions` yok.
+>
+> Uç kuralı: `.RequireEntitlement("feature")` (SharedKernel) izin kapısıyla aynı yetkilendirme adımında çalışır, fail-closed
+> (tenant yok / entitlement servisi yok / özellik yok → red); limitler servislerde `IEntitlements.EnsureCapacityAsync`
+> ile, sayım tenant başına transaction kilidiyle kontrol edilir. Okuma uçları ve dışa aktarmalar asla kapılanmaz (SUB-06, REP-08).
+> Uygulanan kapılar: `POST /warehouses/{id}/locations`, `PATCH /locations/{id}` (`warehouse_locations`); `POST /warehouses`
+> ve `PATCH /warehouses/{id}` (aktif depo sayısı `max_warehouses`; `usesLocations = true` → `warehouse_locations`);
+> `POST /ai/order-parses` (`ai_order_parsing` + aylık `ai_parses_per_month`).
 
 ### 12.3 Catalog
 | Metot | Yol | İzin |
@@ -309,8 +335,11 @@ flowchart LR
 > (ETag), `POST /ai/order-parses/{id}/approve` (İ, If-Match isteğe bağlı; satır seçimleri gövdede — ayrı `PUT …/lines`
 > yok) → güncel ayrıştırma + `orderId`, `POST /ai/order-parses/{id}/reject` (İ), `GET /ai/usage` (bugünkü kullanım ve
 > limitler). Kodlar: `429 ai.rate_limited` (+ `Retry-After`), `409 ai.parse_not_reviewable`, `409 ai.parse_text_purged`;
-> Orders doğrulama hataları aynen iletilir. Entitlement (`ai_order_parsing`) henüz uygulanmadı (entitlement altyapısı
-> yok); özellik `Ai:Enabled` bayrağı ve tenant limitleriyle sınırlıdır.
+> Orders doğrulama hataları aynen iletilir. Entitlement (#51): `POST /ai/order-parses` `ai_order_parsing` ister (AI
+> WhatsApp asistanı ek modülü; tenant denemesinde açık) — yoksa `403 entitlement.required`; ek modülün aylık kotası
+> `ai_parses_per_month` dolunca `403 entitlement.limit_exceeded` (saatlik `429 ai.rate_limited` ile aynı sayaçta, tenant
+> başına kilitle). Liste/okuma, onay ve red ek modül kapalıyken de açıktır (mevcut ayrıştırmalar sipariş akışında takılı
+> kalmaz). AI sağlayıcı çağrısı ayrıca `Ai:Enabled` bayrağı ve günlük limitlerle sınırlıdır.
 
 ### 12.11 Audit & Notifications
 | GET | `/audit-events` (entityType, entityId, actor, from, to) | `audit.read` |
