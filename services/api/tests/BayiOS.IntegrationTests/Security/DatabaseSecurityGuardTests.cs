@@ -32,6 +32,12 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
     {
         ["audit.audit_events"] = AppendOnly,
 
+        // Subscriptions and add-on activations change state, never get deleted (PRD SUB-06); operator overrides are
+        // written by operators through the migrator role only (SUB-08, #51).
+        ["billing.tenant_entitlements"] = [Select],
+        ["billing.tenant_modules"] = ArchiveOnly,
+        ["billing.tenant_subscriptions"] = ArchiveOnly,
+
         ["catalog.brands"] = ArchiveOnly,
         ["catalog.categories"] = ArchiveOnly,
         ["catalog.custom_field_definitions"] = ArchiveOnly,
@@ -134,6 +140,11 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         // WhatsApp message text past retention (integrations.purge_expired_parse_texts, data-policy §4, #47): the owner
         // may read rows older than one day and only set their text columns to NULL.
         ["integrations.ai_parse_requests"] = ["ai_parse_requests_purge_select", "ai_parse_requests_purge_update"],
+
+        // Trial expiry sweep (billing.due_subscription_tenants, #51): the owner may only read trialing rows whose end has
+        // passed, to list their tenant ids; the update itself runs per tenant under the runtime role's RLS.
+        ["billing.tenant_subscriptions"] = ["tenant_subscriptions_expiry_select"],
+        ["billing.tenant_modules"] = ["tenant_modules_expiry_select"],
     };
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -168,7 +179,7 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
     {
         var schemas = await StringsAsync(DatabaseCatalog.BusinessSchemasSql + " ORDER BY 1");
         Assert.Superset(
-            new HashSet<string> { "audit", "catalog", "customers", "identity", "imports", "integrations", "inventory", "orders", "platform", "pricing", "warehouse" },
+            new HashSet<string> { "audit", "billing", "catalog", "customers", "identity", "imports", "integrations", "inventory", "orders", "platform", "pricing", "warehouse" },
             schemas.ToHashSet());
 
         Assert.Empty(await StringsAsync(

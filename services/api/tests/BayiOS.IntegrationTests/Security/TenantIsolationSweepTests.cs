@@ -30,6 +30,8 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
     private static readonly Dictionary<string, string> NotIdorTargets = new()
     {
         ["POST /api/v1/sector-templates/{code}/apply"] = "{code} names a global, read-only sector template, not a tenant resource",
+        ["POST /api/v1/billing/modules/{code}/activate"] = "{code} names a global catalog add-on; the change applies to the caller's own tenant only (BillingApiTests)",
+        ["POST /api/v1/billing/modules/{code}/deactivate"] = "{code} names a global catalog add-on; the change applies to the caller's own tenant only (BillingApiTests)",
     };
 
     /// <summary>Query parameters that carry a resource id → the kind of TenantWorld resource to put there.</summary>

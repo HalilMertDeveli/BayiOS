@@ -4925,6 +4925,7 @@
           "Warehouse"
         ],
         "summary": "Depo olu\u015Fturur (tenant\u0027\u0131n ilk deposu varsay\u0131lan olur)",
+        "description": "403 \u0060entitlement.limit_exceeded\u0060 when the plan\u0027s active-warehouse limit (\u0060max_warehouses\u0060, Basic: 1) is reached; 403 \u0060entitlement.required\u0060 (\u0060warehouse_locations\u0060) for usesLocations = true without the Professional plan.",
         "operationId": "Warehouse_Create",
         "parameters": [
           {
@@ -4985,7 +4986,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/EntitlementProblemDetails"
                 }
               }
             }
@@ -5036,7 +5037,10 @@
             "Bearer": []
           }
         ],
-        "x-permission": "warehouses.manage"
+        "x-permission": "warehouses.manage",
+        "x-entitlement-limit": [
+          "max_warehouses"
+        ]
       }
     },
     "/api/v1/warehouses/{id}": {
@@ -5131,6 +5135,7 @@
           "Warehouse"
         ],
         "summary": "Depoyu g\u00FCnceller: ad, durum, varsay\u0131lan, lokasyon kullan\u0131m\u0131 (stok yokken) \u2014 If-Match zorunlu",
+        "description": "Reactivating a warehouse counts against \u0060max_warehouses\u0060 and turning locations on needs \u0060warehouse_locations\u0060 (403 \u0060entitlement.limit_exceeded\u0060 / \u0060entitlement.required\u0060); renaming, deactivating and turning locations off are open on every plan.",
         "operationId": "Warehouse_Update",
         "parameters": [
           {
@@ -5201,7 +5206,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/EntitlementProblemDetails"
                 }
               }
             }
@@ -5272,7 +5277,10 @@
             "Bearer": []
           }
         ],
-        "x-permission": "warehouses.manage"
+        "x-permission": "warehouses.manage",
+        "x-entitlement-limit": [
+          "max_warehouses"
+        ]
       }
     },
     "/api/v1/warehouses/{id}/locations": {
@@ -5443,7 +5451,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/EntitlementProblemDetails"
                 }
               }
             }
@@ -5504,7 +5512,8 @@
             "Bearer": []
           }
         ],
-        "x-permission": "warehouses.manage"
+        "x-permission": "warehouses.manage",
+        "x-entitlement": "warehouse_locations"
       }
     },
     "/api/v1/locations/{id}": {
@@ -5583,7 +5592,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/EntitlementProblemDetails"
                 }
               }
             }
@@ -5654,7 +5663,8 @@
             "Bearer": []
           }
         ],
-        "x-permission": "warehouses.manage"
+        "x-permission": "warehouses.manage",
+        "x-entitlement": "warehouse_locations"
       }
     },
     "/api/v1/picking-tasks": {
@@ -13834,7 +13844,7 @@
           "AI assistant"
         ],
         "summary": "WhatsApp mesaj\u0131n\u0131 ayr\u0131\u015Ft\u0131r\u0131r ve tenant katalo\u011Fuyla e\u015Fle\u015Ftirir; inceleme y\u00FCk\u00FCn\u00FC d\u00F6ner (fiyat/stok i\u00E7ermez)",
-        "description": "The text is masked (phone numbers, e-mail addresses) and parsed by the AI parser when it is enabled, configured and within the tenant\u0027s daily quota; otherwise \u2014 and on any provider error, timeout, refusal or invalid output \u2014 by the deterministic rules parser (fallbackReason \u002B warnings say which and why). Lines are matched only against the tenant\u0027s own catalog: matched lines carry one proposal, ambiguous lines up to 5 candidates and no proposal, unmatched lines none. 429 \u0060ai.rate_limited\u0060 (with Retry-After) when the hourly parse limit is reached.",
+        "description": "The text is masked (phone numbers, e-mail addresses) and parsed by the AI parser when it is enabled, configured and within the tenant\u0027s daily quota; otherwise \u2014 and on any provider error, timeout, refusal or invalid output \u2014 by the deterministic rules parser (fallbackReason \u002B warnings say which and why). Lines are matched only against the tenant\u0027s own catalog: matched lines carry one proposal, ambiguous lines up to 5 candidates and no proposal, unmatched lines none. 429 \u0060ai.rate_limited\u0060 (with Retry-After) when the hourly parse limit is reached. Needs the AI assistant add-on (403 \u0060entitlement.required\u0060, feature \u0060ai_order_parsing\u0060); 403 \u0060entitlement.limit_exceeded\u0060 when the add-on\u0027s monthly parse quota (\u0060ai_parses_per_month\u0060) is used up. Reviewing, approving and rejecting stored parses stay open without the add-on.",
         "operationId": "Ai_OrderParses_Submit",
         "parameters": [
           {
@@ -13895,7 +13905,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/EntitlementProblemDetails"
                 }
               }
             }
@@ -13956,7 +13966,11 @@
             "Bearer": []
           }
         ],
-        "x-permission": "whatsapp.parse"
+        "x-permission": "whatsapp.parse",
+        "x-entitlement": "ai_order_parsing",
+        "x-entitlement-limit": [
+          "ai_parses_per_month"
+        ]
       },
       "get": {
         "tags": [
@@ -14504,6 +14518,487 @@
         ],
         "x-permission": "whatsapp.parse"
       }
+    },
+    "/api/v1/billing/plans": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Paket ve ek mod\u00FCl katalo\u011Fu (s\u00FCr\u00FCml\u00FC; fiyat yok)",
+        "operationId": "Billing_Plans",
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingCatalogResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/billing/subscription": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Aktif tenant\u0027\u0131n etkin paketi, durumu (deneme/aktif/s\u00FCresi doldu), \u00F6zellikleri, limitleri ve mod\u00FClleri",
+        "operationId": "Billing_Subscription",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "billing.read"
+      }
+    },
+    "/api/v1/billing/modules": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Mod\u00FCl ma\u011Fazas\u0131: ek mod\u00FCller ve tenant\u0027taki durumlar\u0131",
+        "operationId": "Billing_Modules",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantModuleListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "billing.read"
+      }
+    },
+    "/api/v1/billing/usage": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Limitlere g\u00F6re g\u00FCncel kullan\u0131m (depo, kullan\u0131c\u0131, ayl\u0131k AI ayr\u0131\u015Ft\u0131rma)",
+        "operationId": "Billing_Usage",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "billing.read"
+      }
+    },
+    "/api/v1/billing/modules/{code}/activate": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Ek mod\u00FCl\u00FC \u00FCcretsiz deneme olarak etkinle\u015Ftirir (\u00F6deme yok; mod\u00FCl ba\u015F\u0131na bir kez, denetim kayd\u0131)",
+        "description": "Starts the free activation of an add-on for the configured number of days (during the tenant trial it starts when the trial ends). Switched-off modules can be switched on again until that date. 409 \u0060billing.module_unavailable\u0060 (not built yet), \u0060billing.module_already_active\u0060, \u0060billing.trial_used\u0060 (free activation used up; paid activation does not exist yet).",
+        "operationId": "Billing_ActivateModule",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours.",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantModuleResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "billing.manage"
+      }
+    },
+    "/api/v1/billing/modules/{code}/deactivate": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Ek mod\u00FCl\u00FC kapat\u0131r; veriler silinmez (denetim kayd\u0131)",
+        "description": "Existing records stay readable; only new use of the feature is refused. 409 \u0060billing.module_not_active\u0060 (not activated, or only included in the tenant trial).",
+        "operationId": "Billing_DeactivateModule",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours.",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantModuleResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "billing.manage"
+      }
     }
   },
   "components": {
@@ -14512,7 +15007,8 @@
         "required": [
           "tenantId",
           "role",
-          "permissions"
+          "permissions",
+          "entitlements"
         ],
         "type": "object",
         "properties": {
@@ -14528,6 +15024,9 @@
             "items": {
               "$ref": "#/components/schemas/PermissionGrantResponse"
             }
+          },
+          "entitlements": {
+            "$ref": "#/components/schemas/TenantEntitlementsResponse"
           }
         }
       },
@@ -15132,6 +15631,57 @@
           }
         }
       },
+      "BillingCatalogResponse": {
+        "required": [
+          "catalogVersion",
+          "trialPlan",
+          "fallbackPlan",
+          "trialDays",
+          "moduleTrialDays",
+          "plans",
+          "modules"
+        ],
+        "type": "object",
+        "properties": {
+          "catalogVersion": {
+            "type": "string"
+          },
+          "trialPlan": {
+            "type": "string"
+          },
+          "fallbackPlan": {
+            "type": "string"
+          },
+          "trialDays": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "moduleTrialDays": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "plans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanResponse"
+            }
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogModuleResponse"
+            }
+          }
+        }
+      },
       "BrandResponse": {
         "required": [
           "id",
@@ -15204,6 +15754,43 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "CatalogModuleResponse": {
+        "required": [
+          "code",
+          "name",
+          "description",
+          "available",
+          "features",
+          "limits"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LimitValueResponse"
+            }
           }
         }
       },
@@ -16694,6 +17281,72 @@
           }
         }
       },
+      "EntitlementLimitResponse": {
+        "required": [
+          "code",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "value": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "EntitlementProblemDetails": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProblemDetails"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "feature": {
+                "type": "string"
+              },
+              "suggestedPlan": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "suggestedModule": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "limit": {
+                "type": [
+                  "null",
+                  "integer"
+                ],
+                "format": "int64"
+              },
+              "current": {
+                "type": [
+                  "null",
+                  "integer"
+                ],
+                "format": "int64"
+              }
+            }
+          }
+        ],
+        "description": "403: auth.forbidden / auth.disabled_by_tenant_rule (permission), or entitlement.required (feature names the missing feature; suggestedPlan / suggestedModule what would grant it, null when nothing in the catalog does) and entitlement.limit_exceeded (feature names the limit; limit and current are the numbers). Existing data stays readable."
+      },
       "FulfillmentPageInfo": {
         "required": [
           "nextCursor",
@@ -17418,6 +18071,27 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "LimitValueResponse": {
+        "required": [
+          "code",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "value": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -19976,6 +20650,39 @@
           }
         }
       },
+      "PlanResponse": {
+        "required": [
+          "code",
+          "name",
+          "description",
+          "features",
+          "limits"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LimitValueResponse"
+            }
+          }
+        }
+      },
       "PriceListItemInput": {
         "required": [
           "variantId",
@@ -21335,6 +22042,64 @@
           }
         }
       },
+      "SubscriptionResponse": {
+        "required": [
+          "plan",
+          "planName",
+          "status",
+          "trialEndsAt",
+          "catalogVersion",
+          "features",
+          "limits",
+          "modules"
+        ],
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "string"
+          },
+          "planName": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "trialing",
+              "active",
+              "expired",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "trialEndsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "catalogVersion": {
+            "type": "string"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LimitValueResponse"
+            }
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TenantModuleResponse"
+            }
+          }
+        }
+      },
       "TaxBreakdownResponse": {
         "required": [
           "rate",
@@ -21375,6 +22140,115 @@
               "string"
             ],
             "format": "double"
+          }
+        }
+      },
+      "TenantEntitlementsResponse": {
+        "required": [
+          "plan",
+          "status",
+          "trialEndsAt",
+          "catalogVersion",
+          "features",
+          "limits"
+        ],
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "trialing",
+              "active",
+              "expired",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "trialEndsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "catalogVersion": {
+            "type": "string"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntitlementLimitResponse"
+            }
+          }
+        }
+      },
+      "TenantModuleListResponse": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TenantModuleResponse"
+            }
+          }
+        }
+      },
+      "TenantModuleResponse": {
+        "required": [
+          "code",
+          "name",
+          "available",
+          "status",
+          "expiresAt",
+          "canActivate",
+          "canDeactivate"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "included_in_trial",
+              "trialing",
+              "active",
+              "expired",
+              "cancelled",
+              "available",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "canActivate": {
+            "type": "boolean"
+          },
+          "canDeactivate": {
+            "type": "boolean"
           }
         }
       },
@@ -22485,6 +23359,81 @@
           }
         }
       },
+      "UsageItemResponse": {
+        "required": [
+          "code",
+          "limit",
+          "current",
+          "remaining",
+          "period"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "limit": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "current": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "remaining": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "period": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "UsageResponse": {
+        "required": [
+          "plan",
+          "status",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "plan": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "trialing",
+              "active",
+              "expired",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageItemResponse"
+            }
+          }
+        }
+      },
       "VariantResponse": {
         "required": [
           "id",
@@ -22738,6 +23687,9 @@
     },
     {
       "name": "AI assistant"
+    },
+    {
+      "name": "Billing"
     }
   ]
 }

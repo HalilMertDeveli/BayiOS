@@ -3,6 +3,7 @@ using BayiOS.Modules.Identity.Contracts;
 using BayiOS.Modules.Identity.Domain;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
 using BayiOS.SharedKernel.Authorization;
+using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Persistence;
 using BayiOS.SharedKernel.Platform.Audit;
 using BayiOS.SharedKernel.Tenancy;
@@ -38,6 +39,8 @@ internal sealed partial class IdentityService(
     UnitOfWork unitOfWork,
     IAuditLog audit,
     IAuthorizationContext authorization,
+    IEntitlements entitlements,
+    ITenantSubscriptionProvisioner subscriptions,
     TimeProvider clock)
 {
     private Guid UserId => requestContext.UserId ?? throw new InvalidOperationException("No authenticated user.");
@@ -60,11 +63,22 @@ internal sealed partial class IdentityService(
         if (requestContext is { TenantId: { } tenantId, Role: { } role })
         {
             var permissions = await authorization.EffectivePermissionsAsync(cancellationToken);
-            active = new ActiveTenantResponse(tenantId, role, [.. permissions.Select(p => new PermissionGrantResponse(
-                p.Permission,
-                p.Scope,
-                p.Condition,
-                p.Parameters is { } parameters ? new GrantParametersResponse(parameters.MaxDiscountPercent) : null))]);
+            var granted = await entitlements.CurrentAsync(cancellationToken);
+            active = new ActiveTenantResponse(
+                tenantId,
+                role,
+                [.. permissions.Select(p => new PermissionGrantResponse(
+                    p.Permission,
+                    p.Scope,
+                    p.Condition,
+                    p.Parameters is { } parameters ? new GrantParametersResponse(parameters.MaxDiscountPercent) : null))],
+                new TenantEntitlementsResponse(
+                    granted.Plan,
+                    granted.Status,
+                    granted.TrialEndsAt,
+                    granted.CatalogVersion,
+                    [.. granted.Features],
+                    [.. granted.Limits.Select(l => new EntitlementLimitResponse(l.Key, l.Value))]));
         }
 
         return new MeResponse(userId, profile?.Email ?? tokenEmail, profile?.FullName, memberships, active);
@@ -121,6 +135,9 @@ internal sealed partial class IdentityService(
         {
             return new AppError(409, "tenant.slug_taken", "Slug is already in use");
         }
+
+        // PRD SUB-05: a new tenant starts on the trial (all modules open for the configured days), same transaction.
+        await subscriptions.StartTrialAsync(cancellationToken);
 
         await audit.RecordAsync(
             new AuditEvent(AuditActions.TenantCreated, "tenant", tenant.Id, new AuditChanges()

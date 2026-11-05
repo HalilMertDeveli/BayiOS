@@ -1,4 +1,5 @@
 using BayiOS.SharedKernel.Authorization;
+using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Persistence;
 using BayiOS.SharedKernel.Platform.Idempotency;
 using Microsoft.AspNetCore.Authorization;
@@ -121,7 +122,19 @@ internal static partial class UnitOfWorkFilter
             throw new InvalidOperationException("The request unit of work was not started.");
         }
 
-        var result = await next(context);
+        object? result;
+        try
+        {
+            result = await next(context);
+        }
+        catch (EntitlementException denial)
+        {
+            // A service found the plan limit reached / feature missing (fail-closed): 403 and roll everything back.
+            context.HttpContext.Response.Headers.Remove("ETag");
+            context.HttpContext.Response.Headers.Remove("Location");
+            result = TypedResults.Problem(denial.ToProblem());
+        }
+
         // Not tied to RequestAborted: once the handler finished, completing the transaction must not be half-cancelled.
         var cancellationToken = CancellationToken.None;
 

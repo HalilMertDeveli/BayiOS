@@ -1,3 +1,4 @@
+using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Tenancy;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.Authorization;
@@ -270,6 +271,18 @@ public sealed class PermissionAuthorizationResultHandler : IAuthorizationMiddlew
             problem.Extensions["permission"] = reason.Permission;
             problem.Extensions["condition"] = reason.Condition;
             await ApiProblems.WriteAsync(context, problem);
+            return;
+        }
+
+        // Entitlement denial only when the permission gate itself passed: a caller without the permission learns
+        // nothing about the tenant's plan (auth.forbidden comes first).
+        if (authorizeResult.Forbidden
+            && authorizeResult.AuthorizationFailure is { FailCalled: false } failure
+            && failure.FailedRequirements.OfType<EntitlementRequirement>().Any()
+            && !failure.FailedRequirements.Any(r => r is not EntitlementRequirement)
+            && EntitlementAuthorizationHandler.DenialOf(context) is { } denial)
+        {
+            await ApiProblems.WriteAsync(context, denial.ToProblem());
             return;
         }
 

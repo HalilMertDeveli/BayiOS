@@ -24,6 +24,9 @@ public sealed class UnitOfWork(NpgsqlDataSource dataSource, RequestContext reque
 
     public bool IsActive => Transaction is not null;
 
+    /// <summary>The transaction was started with <c>SET TRANSACTION READ ONLY</c> (GET/HEAD requests).</summary>
+    public bool IsReadOnly { get; private set; }
+
     public async Task BeginAsync(bool readOnly, CancellationToken cancellationToken)
     {
         if (_completed)
@@ -42,6 +45,7 @@ public sealed class UnitOfWork(NpgsqlDataSource dataSource, RequestContext reque
         }
 
         _transaction = await Connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        IsReadOnly = readOnly;
 
         await using var batch = new NpgsqlBatch(Connection, _transaction);
         if (readOnly)
