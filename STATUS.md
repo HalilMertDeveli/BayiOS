@@ -1,39 +1,38 @@
 # STATUS — Gerçek proje durumu
 
-> Yalnızca doğrulanmış durum. Son güncelleme: 2026-11-05 (Dalga 2b: stok defteri, katalog alanları birleşti).
+> Yalnızca doğrulanmış durum. Son güncelleme: 2026-11-05 (çekirdek akış + izinler + gerçek yığın E2E).
 > İş emirleri, bağımlılık grafiği ve aktif atamalar: `docs/operations/work-orders.md`.
 
 ## Mevcut faz
-Phase 0 **KOŞULLU GEÇTİ** (`docs/operations/phase0-gate.md`). `preview`'de: platform + CI (#62, #64, #73), tasarım sistemi + kabuk (#65), auth + tenancy (#67), Idempotency-Key (#74),
-katalog (#75), sektör şablonları + özel alanlar + işletme ayarları (#77), stok defteri + depo/raf (#80).
-Kritik yolda sıradaki: müşteri + fiyat (#31, #78) → sipariş + rezervasyon (#32, #33).
+Çekirdek iş akışı `preview`'de API + web olarak tamam ve gerçek yığında (web + API + Postgres + Supabase Auth) CI'da
+uçtan uca test ediliyor: kayıt/onboarding → katalog + özel alanlar → toplu içe aktarma → stok defteri + depo/raf →
+müşteri + fiyat listeleri → sipariş + rezervasyon → toplama/paketleme/sevkiyat → stok çıkışı. Web izinleri `/me`'den
+(koşullu/kendi kayıtları dahil). Flutter BLOCKED (SDK). Hosting/preview URL'leri sahip onayına bağlı.
 
 ## GitHub
 - Repo: https://github.com/HalilMertDeveli/BayiOS (public) · dallar: `main`, `preview` (ikisi de ruleset korumalı)
-- Rulesets: PR zorunlu, force-push/silme yasak, review thread çözümü zorunlu, zorunlu kontroller:
-  `api build & test`, `web lint, typecheck, test & build`, `dependency review`. Bypass yok.
+- Rulesets: PR zorunlu, force-push/silme yasak, review thread çözümü zorunlu. Bypass yok.
 - Güvenlik: secret scanning + push protection, CodeQL, Dependabot (hedef `preview`).
-- Birleşen PR'lar (`preview`, squash, tüm kontroller yeşil): #62–#65, #67, #72–#75, #77, #80.
-- Zorunlu kontroller: `api build & test`, `web lint, typecheck, test & build`, `dependency review`, `ci gate` (path-filtreli işleri toplar).
-- Kapalı issue'lar (Phase 0 dışı): #6, #8, #9, #11, #12, #14, #16, #17, #19, #26, #27, #30, #68, #71.
+- Birleşen PR'lar: #62–#65, #67, #72–#75, #77, #80–#82, #84, #85, #88, #90, #91, #93, #95, #97, #99–#101, #103, #104, #106–#110.
+- Zorunlu kontroller: `api build & test`, `web lint, typecheck, test & build`, `dependency review`, `ci gate` (path-filtreli işler dahil: container, migrations, `e2e real stack`).
 
 ## Durum panosu (aktif)
-| Job | Hat | Issue | Branch | Durum |
-|---|---|---|---|---|
-| 05 Web giriş + onboarding | B | #13 | `feature/13-web-auth-onboarding` | IN_PROGRESS (yerel Supabase) |
-| 11 ön koşul: müşteri + fiyat | A | #31, #78 | `feature/31-customers-pricing` | IN_PROGRESS |
-| Platform: audit + iş kuyruğu/outbox | A | #79 | `feature/79-audit-jobs-outbox` | IN_PROGRESS |
-| 06 Flutter temeli | C | #7 | — | BLOCKED (SDK) |
+Aktif ajan yok. Açık takip işleri (öncelik sırasıyla): #89 operasyon boşlukları (release öncesi), #92 sipariş ayarları,
+#94 import devamı (geri alma), #98 depo karşılama devamı, #111 hata kodları/izin ayrıntıları, #83 onboarding devamı,
+#96 form sıfırlama, #76 Supabase bootstrap. Bekleyen büyük işler: AI WhatsApp (#46–#50), raporlar (#53), entitlements (#51–#52),
+Flutter (#7, #41–#45, BLOCKED).
 
-Tamamlanan iş paketleri ve ayrıntı: `docs/operations/work-orders.md`.
+İş emri durumu: `docs/operations/work-orders.md`.
 
 ## Test durumu (`preview`, son CI)
 | Alan | Sonuç |
 |---|---|
-| API (`dotnet test`, Testcontainers Postgres 17) | 202 geçti (39 birim, 163 entegrasyon; JWT, RLS, çapraz tenant, idempotency, stok eşzamanlılığı dahil) |
-| Stok eşzamanlılığı | 20 paralel rezervasyon / 5 stok → tam 5; son birim yarışı; deadlock yok; kayıp güncelleme yok |
-| Migration (5 modül) | idempotent script, iki kez uygulama, model drift yok |
-| Web lint / typecheck / birim / Playwright + axe / build | geçti |
+| API (`dotnet test`, Testcontainers Postgres 17) | 535 geçti (169 birim, 366 entegrasyon) |
+| Güvenlik korumaları | DB guard'ları (RLS/policy/grant/trigger/SECURITY DEFINER), OpenAPI IDOR taraması, X-Tenant-Id sahteciliği, rol + K/O izin taraması — gerçek hata yok |
+| Gerçek yığın E2E (CI) | kayıt → onboarding → ürün → mal kabul → fiyat → müşteri → sipariş → onay → toplama → paketleme → sevkiyat → stok; ikinci tenant izolasyonu (~4 dk) |
+| Performans (10k ürün) | katalog arama p95 ≤ 15 ms, bakiye arama p95 ~20 ms (yerel); CI'da p95 < 500 ms assert |
+| Web lint / typecheck / birim / Playwright + axe / build | geçti (329 birim, 161 e2e — mock) |
+| Migration (9 modül) | idempotent, iki kez uygulama, drift yok |
 | API container (Trivy) | 0 zafiyet |
 | Flutter | BLOCKED (SDK yok) |
 
@@ -51,7 +50,7 @@ Tamamlanan iş paketleri ve ayrıntı: `docs/operations/work-orders.md`.
 | API hosting seçimi (öneri Fly.io fra, ~$10–20/ay) | API preview URL'si |
 | Vercel projesi bağlama / Pro (ticari kullanım) | Web preview URL'si |
 | Lisans | Repo lisansı |
-| OD-01…OD-12 kararları | İlgili işler |
+| OD-01…OD-12 + marka rengi, KVKK metni, anonimleştirme yetkisi, import limitleri, mal kabul notu, sipariş fiyat yeniden çözümü (#92), toplama raf değişimi (#98) | İlgili işler |
 
 ## Sonraki adım
-#31/#78 + #79 birleşince: JOB 11 sipariş + rezervasyon (#32, #33), JOB 08 toplu import (#21–#25, iş kuyruğuna bağlı), web ürün ekranları (#18, #13'e bağlı).
+Ürün sahibi seçimine göre: (a) release öncesi sağlamlaştırma (#89, #94 geri alma, #92, #111) veya (b) AI WhatsApp (#46–#50; canlı test için Anthropic anahtarı onayı). Preview URL'si için Supabase + hosting + Vercel onayı.
