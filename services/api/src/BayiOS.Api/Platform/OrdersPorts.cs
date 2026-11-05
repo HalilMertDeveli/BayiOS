@@ -1,6 +1,7 @@
 using BayiOS.Modules.Catalog.Infrastructure.Persistence;
 using BayiOS.Modules.Customers.Infrastructure.Persistence;
 using BayiOS.Modules.Identity.Contracts;
+using BayiOS.Modules.Identity.Infrastructure.Persistence;
 using BayiOS.Modules.Orders.Contracts;
 using BayiOS.Modules.Warehouse.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -18,8 +19,34 @@ internal static class OrdersPorts
     {
         services.AddScoped<IOrderVariantDirectory, CatalogOrderVariantDirectory>();
         services.AddScoped<IOrderReferenceNames, OrderReferenceNames>();
+        services.AddScoped<IOrderSettingsProvider, TenantOrderSettings>();
+        services.AddScoped<IOrderCustomerAddresses, CustomerOrderAddresses>();
         return services;
     }
+}
+
+/// <summary>Order settings from <c>identity.tenant_settings</c> (request tenant: query filter + RLS); defaults without a row.</summary>
+internal sealed class TenantOrderSettings(IdentityDbContext identity) : IOrderSettingsProvider
+{
+    private OrderSettings? _settings;
+
+    public async Task<OrderSettings> GetAsync(CancellationToken cancellationToken) =>
+        _settings ??= await identity.TenantSettings.AsNoTracking()
+            .Select(s => new OrderSettings(s.RequireOrderApproval, s.OrderNumberPrefix))
+            .SingleOrDefaultAsync(cancellationToken)
+        ?? OrderSettings.Defaults;
+}
+
+/// <summary>Customer addresses through the Customers DbContext (tenant query filter + RLS, request connection).</summary>
+internal sealed class CustomerOrderAddresses(CustomersDbContext customers) : IOrderCustomerAddresses
+{
+    public async Task<IReadOnlyList<OrderCustomerAddress>> ListAsync(Guid customerId, CancellationToken cancellationToken) =>
+        await customers.Addresses.AsNoTracking()
+            .Where(a => a.CustomerId == customerId)
+            .OrderBy(a => a.CreatedAt).ThenBy(a => a.Id)
+            .Select(a => new OrderCustomerAddress(
+                a.Id, a.Type, a.IsDefault, a.Title, a.Line1, a.Line2, a.District, a.City, a.PostalCode, a.Country, a.ContactName, a.ContactPhone))
+            .ToListAsync(cancellationToken);
 }
 
 /// <summary>

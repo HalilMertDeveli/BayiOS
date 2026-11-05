@@ -119,6 +119,7 @@ internal sealed class IdentityDbContext : DbContext, ITenantScopedDbContext
                 t.HasCheckConstraint("ck_tenant_settings_negative_stock_policy", "negative_stock_policy IN ('block', 'warn', 'allow')");
                 t.HasCheckConstraint("ck_tenant_settings_sales_max_discount", "sales_max_discount_percent BETWEEN 0 AND 100");
                 t.HasCheckConstraint("ck_tenant_settings_default_tax_rate", "default_tax_rate BETWEEN 0 AND 100");
+                t.HasCheckConstraint("ck_tenant_settings_order_number_prefix", $"order_number_prefix ~ '{Domain.TenantSettings.OrderNumberPrefixPattern}'");
             });
             settings.HasKey(s => s.TenantId);
             settings.Property(s => s.TenantId).ValueGeneratedNever();
@@ -126,6 +127,10 @@ internal sealed class IdentityDbContext : DbContext, ITenantScopedDbContext
             settings.Property(s => s.SalesMaxDiscountPercent).HasPrecision(5, 2);
             // Default for rows created before this column existed; new rows get the entity default (20).
             settings.Property(s => s.DefaultTaxRate).HasPrecision(5, 2).HasDefaultValue(20m).ValueGeneratedNever();
+            // Defaults for rows created before these columns existed (#92); new rows get the entity defaults.
+            settings.Property(s => s.RequireOrderApproval).HasDefaultValue(true).ValueGeneratedNever();
+            settings.Property(s => s.OrderNumberPrefix).IsRequired()
+                .HasDefaultValue(Domain.TenantSettings.DefaultOrderNumberPrefix).ValueGeneratedNever();
             settings.Property(s => s.RowVersion).IsConcurrencyToken();
             settings.HasQueryFilter(s => s.TenantId == CurrentTenantId);
         });

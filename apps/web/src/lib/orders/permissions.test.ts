@@ -49,7 +49,7 @@ describe("orderPermissions — derived from GET /me effective permissions", () =
   });
 
   it("an unknown condition on a restricted grant still shows the action (the API decides per record)", () => {
-    const p = orderPermissions(createAccess([{ permission: "orders.cancel", scope: "conditional", condition: "future.rule" }]));
+    const p = orderPermissions(createAccess([{ permission: "orders.cancel", scope: "conditional", condition: "future.rule", parameters: null }]));
     expect(p.cancel).toBe(true);
     expect(p.cancelOwnOpenOnly).toBe(false);
   });

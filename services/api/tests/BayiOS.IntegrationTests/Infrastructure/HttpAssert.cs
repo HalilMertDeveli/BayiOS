@@ -6,7 +6,11 @@ namespace BayiOS.IntegrationTests.Infrastructure;
 internal static class HttpAssert
 {
     /// <summary>Asserts an RFC 9457 response with the given status and stable <c>code</c>.</summary>
-    public static async Task ProblemAsync(HttpResponseMessage response, HttpStatusCode status, string code)
+    public static async Task ProblemAsync(HttpResponseMessage response, HttpStatusCode status, string code) =>
+        await ProblemJsonAsync(response, status, code);
+
+    /// <summary>As <see cref="ProblemAsync"/>, returning the problem body for extension checks.</summary>
+    public static async Task<JsonElement> ProblemJsonAsync(HttpResponseMessage response, HttpStatusCode status, string code)
     {
         Assert.Equal(status, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
@@ -14,5 +18,6 @@ internal static class HttpAssert
         Assert.Equal(code, body.RootElement.GetProperty("code").GetString());
         Assert.Equal("https://bayios.app/problems/" + code, body.RootElement.GetProperty("type").GetString());
         Assert.True(body.RootElement.TryGetProperty("correlationId", out _));
+        return body.RootElement.Clone();
     }
 }

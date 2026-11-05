@@ -76,7 +76,7 @@ internal static class SecurityProbes
             "POST /api/v1/import-jobs" => "multipart",
             _ when route.RequestContentTypes.Count == 0 && route.Method == "POST" => new { },
             _ when route.RequestContentTypes.Count == 0 => null,
-            "POST /api/v1/orders/{id}/approve" => new { },
+            "POST /api/v1/orders/{id}/approve" or "POST /api/v1/orders/{id}/submit" => new { },
             _ => Missing,
         };
 

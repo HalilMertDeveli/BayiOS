@@ -17,6 +17,44 @@ public interface IOrderVariantDirectory
     Task<IReadOnlyDictionary<Guid, OrderVariantInfo>> FindVariantsAsync(IReadOnlyCollection<Guid> variantIds, CancellationToken cancellationToken);
 }
 
+/// <summary>Tenant order settings (identity.tenant_settings; PRD ORD-14, inventory-and-orders §3.1 #1a).</summary>
+/// <param name="RequireApproval">False: submit approves at once when allowed (§3.1 #1a).</param>
+/// <param name="NumberPrefix">Prefix of new order numbers, validated by the settings owner.</param>
+public sealed record OrderSettings(bool RequireApproval, string NumberPrefix)
+{
+    public static OrderSettings Defaults { get; } = new(true, "SIP");
+}
+
+/// <summary>Implemented by the host over Identity's tenant settings (request tenant, RLS).</summary>
+public interface IOrderSettingsProvider
+{
+    Task<OrderSettings> GetAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>A customer address as Orders snapshots it (customers.customer_addresses).</summary>
+/// <param name="Type"><c>shipping</c> or <c>billing</c>.</param>
+/// <param name="Country">ISO 3166-1 alpha-2.</param>
+public sealed record OrderCustomerAddress(
+    Guid Id,
+    string Type,
+    bool IsDefault,
+    string? Title,
+    string Line1,
+    string? Line2,
+    string? District,
+    string City,
+    string? PostalCode,
+    string Country,
+    string? ContactName,
+    string? ContactPhone);
+
+/// <summary>Implemented by the host over the Customers module (tenant query filter + RLS, request transaction).</summary>
+public interface IOrderCustomerAddresses
+{
+    /// <summary>Every address of the customer (a customer has a handful); empty for an unknown or foreign customer.</summary>
+    Task<IReadOnlyList<OrderCustomerAddress>> ListAsync(Guid customerId, CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// Implemented by the Warehouse module: which orders a warehouse_staff user may read (roles-permissions footnote 8 —
 /// orders behind picking tasks assigned to them or waiting in the active pool).

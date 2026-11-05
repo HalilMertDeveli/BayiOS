@@ -14,9 +14,21 @@ public sealed record ActiveTenantResponse(Guid TenantId, string Role, IReadOnlyL
 /// <c>own</c> = O grant, own records only. Permissions the caller does not hold (or whose tenant rule is off) are absent.
 /// </param>
 /// <param name="Condition">Stable condition code (roles-permissions §3 footnote), for <c>conditional</c> / <c>own</c>.</param>
-public sealed record PermissionGrantResponse(string Permission, string Scope, string? Condition);
+/// <param name="Parameters">Tenant values of the condition (e.g. the sales discount limit); null when it has none.</param>
+public sealed record PermissionGrantResponse(string Permission, string Scope, string? Condition, GrantParametersResponse? Parameters);
 
-public sealed record MembershipResponse(Guid TenantId, string TenantName, string TenantSlug, string Role, string Status);
+/// <summary>Values a client may show with a conditional grant; a null member does not apply to this condition.</summary>
+/// <param name="MaxDiscountPercent">
+/// <c>orders.discount_within_limit</c> (footnote 10): the largest line discount as a percentage of the line subtotal.
+/// </param>
+public sealed record GrantParametersResponse(decimal? MaxDiscountPercent);
+
+/// <param name="Status">The caller's membership status: invited, active or disabled.</param>
+/// <param name="TenantStatus">
+/// The tenant's own status: active, suspended or closed. Only an active tenant can be selected (others answer
+/// <c>403 tenant.inactive</c>); clients list the rest greyed out.
+/// </param>
+public sealed record MembershipResponse(Guid TenantId, string TenantName, string TenantSlug, string Role, string Status, string TenantStatus);
 
 /// <summary>A member of the active tenant (<c>GET /members</c>, permission <c>members.read</c>).</summary>
 /// <param name="DisplayName">Full name, else the e-mail local part (<see cref="UserDisplayName"/>); null when neither is known.</param>
@@ -86,9 +98,16 @@ public sealed record TenantSettingsResponse(
     bool StaffCanApproveReceipt,
     bool Require2fa,
     decimal DefaultTaxRate,
-    bool PricesIncludeTaxDisplay);
+    bool PricesIncludeTaxDisplay,
+    bool RequireOrderApproval,
+    string OrderNumberPrefix);
 
 /// <summary>JSON merge patch: omitted (null) fields are left unchanged.</summary>
+/// <param name="RequireOrderApproval">
+/// False: a submitted order is approved (and reserved) at once when the submitter may approve and the source is not
+/// whatsapp_ai; otherwise it waits in pending_approval as with true (default).
+/// </param>
+/// <param name="OrderNumberPrefix">Prefix of new order numbers (<c>{prefix}-YYYY-NNNNNN</c>): 1–10 of A–Z and 0–9, starting with a letter (lowercase is upper-cased).</param>
 public sealed record UpdateTenantSettingsRequest(
     string? NegativeStockPolicy,
     bool? SalesCanApproveOrders,
@@ -99,4 +118,6 @@ public sealed record UpdateTenantSettingsRequest(
     bool? StaffCanApproveReceipt,
     bool? Require2fa,
     decimal? DefaultTaxRate = null,
-    bool? PricesIncludeTaxDisplay = null);
+    bool? PricesIncludeTaxDisplay = null,
+    bool? RequireOrderApproval = null,
+    string? OrderNumberPrefix = null);

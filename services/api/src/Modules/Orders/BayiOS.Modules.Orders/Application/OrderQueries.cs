@@ -32,7 +32,8 @@ internal sealed class OrderQueries(
     IAuthorizationContext authorization,
     IRequestContext requestContext,
     IOrderTaskVisibility taskVisibility,
-    IOrderReferenceNames names)
+    IOrderReferenceNames names,
+    IOrderCustomerAddresses customerAddresses)
 {
     public const int DefaultPageSize = 50;
     public const int MaxPageSize = 200;
@@ -174,9 +175,10 @@ internal sealed class OrderQueries(
         Guid?[] actors = [order.CreatedBy, order.ApprovedBy, .. history.Select(h => h.ChangedBy), .. shipments.Select(s => s.ShippedBy)];
         var users = await names.UserNamesAsync([.. actors.OfType<Guid>().Distinct()], cancellationToken);
         string? UserName(Guid? id) => id is { } userId ? users.GetValueOrDefault(userId) : null;
+        var (shipping, billing) = await AddressesAsync(order, cancellationToken);
 
         return new OrderDetailResponse(
-            ToResponse(order, lines, customer, warehouse, UserName(order.CreatedBy), UserName(order.ApprovedBy)),
+            ToResponse(order, lines, customer, warehouse, UserName(order.CreatedBy), UserName(order.ApprovedBy), shipping, billing),
             [.. lines.Select(ToResponse)],
             [.. history.Select(h => h with { ChangedByName = UserName(h.ChangedBy) })],
             [.. shipments.Select(s => new OrderShipmentResponse(
@@ -193,12 +195,47 @@ internal sealed class OrderQueries(
             ? new Dictionary<Guid, string>()
             : await names.CustomerNamesAsync([.. customerIds.Distinct()], cancellationToken);
 
+    /// <summary>
+    /// Addresses are customer data (personal data, data-policy §2): only for <c>customers.read</c> holders. A draft shows
+    /// a live preview of the chosen (else default) address; from submit on the order's own snapshot.
+    /// </summary>
+    private async Task<(OrderAddressResponse? Shipping, OrderAddressResponse? Billing)> AddressesAsync(Order order, CancellationToken cancellationToken)
+    {
+        if (await authorization.ScopeAsync(Permissions.CustomersRead, cancellationToken) == PermissionScope.None)
+        {
+            return (null, null);
+        }
+
+        if (order.Status != OrderStatuses.Draft)
+        {
+            return (ToResponse(order.ShippingAddress), ToResponse(order.BillingAddress));
+        }
+
+        var addresses = await customerAddresses.ListAsync(order.CustomerId, cancellationToken);
+        OrderAddressResponse? Preview(string type, Guid? chosen) =>
+            (chosen is { } id ? addresses.FirstOrDefault(a => a.Id == id && a.Type == type) : addresses.FirstOrDefault(a => a.Type == type && a.IsDefault))
+            is { } a
+                ? new OrderAddressResponse(a.Id, a.Title, a.Line1, a.Line2, a.District, a.City, a.PostalCode, a.Country, a.ContactName, a.ContactPhone)
+                : null;
+        return (Preview(OrderAddressTypes.Shipping, order.ShippingAddressId), Preview(OrderAddressTypes.Billing, order.BillingAddressId));
+    }
+
+    private static OrderAddressResponse? ToResponse(OrderAddressSnapshot? a) =>
+        a is null ? null : new(a.AddressId, a.Title, a.Line1, a.Line2, a.District, a.City, a.PostalCode, a.Country, a.ContactName, a.ContactPhone);
+
     private async Task<HashSet<Guid>> VisibleToStaffAsync(CancellationToken cancellationToken) =>
         [.. await taskVisibility.OrdersVisibleToStaffAsync(
             requestContext.UserId ?? throw new InvalidOperationException("No authenticated user."), cancellationToken)];
 
     private static OrderResponse ToResponse(
-        Order o, IReadOnlyList<OrderLine> lines, string? customerName, string? warehouseName, string? createdByName, string? approvedByName)
+        Order o,
+        IReadOnlyList<OrderLine> lines,
+        string? customerName,
+        string? warehouseName,
+        string? createdByName,
+        string? approvedByName,
+        OrderAddressResponse? shippingAddress,
+        OrderAddressResponse? billingAddress)
     {
         var totals = OrderMath.Totals(lines, o.PricesIncludeTax);
         return new OrderResponse(
@@ -237,7 +274,12 @@ internal sealed class OrderQueries(
             o.CancelledAt,
             o.CancelReason,
             o.HasShortage,
-            o.RowVersion);
+            o.RowVersion,
+            o.ShippingAddressId,
+            o.BillingAddressId,
+            shippingAddress,
+            billingAddress,
+            o.Status != OrderStatuses.Draft);
     }
 
     private static OrderLineResponse ToResponse(OrderLine l) => new(

@@ -1,9 +1,11 @@
 using System.Data.Common;
+using System.Text.Json;
 using BayiOS.Modules.Orders.Domain;
 using BayiOS.SharedKernel.Persistence;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace BayiOS.Modules.Orders.Infrastructure.Persistence;
 
@@ -100,6 +102,8 @@ internal sealed class OrdersDbContext : DbContext, ITenantScopedDbContext
             order.Property(o => o.DiscountTotal).HasPrecision(18, 4);
             order.Property(o => o.TaxTotal).HasPrecision(18, 4);
             order.Property(o => o.GrandTotal).HasPrecision(18, 4);
+            order.Property(o => o.ShippingAddress).HasColumnType("jsonb").HasConversion(AddressJson.Converter);
+            order.Property(o => o.BillingAddress).HasColumnType("jsonb").HasConversion(AddressJson.Converter);
             order.HasMany(o => o.Lines).WithOne()
                 .HasForeignKey(l => new { l.TenantId, l.OrderId })
                 .HasPrincipalKey(o => new { o.TenantId, o.Id })
@@ -209,13 +213,30 @@ internal sealed class OrdersDbContext : DbContext, ITenantScopedDbContext
 
         modelBuilder.Entity<OrderNumberSequence>(sequence =>
         {
-            sequence.ToTable("order_number_sequences", t => t.HasCheckConstraint("ck_order_number_sequences_next_value", "next_value > 0"));
-            sequence.HasKey(s => new { s.TenantId, s.Year });
+            sequence.ToTable("order_number_sequences", t =>
+            {
+                t.HasCheckConstraint("ck_order_number_sequences_next_value", "next_value > 0");
+                // Same rule as identity.tenant_settings.order_number_prefix.
+                t.HasCheckConstraint("ck_order_number_sequences_prefix", "prefix ~ '^[A-Z][A-Z0-9]{0,9}$'");
+            });
+            sequence.HasKey(s => new { s.TenantId, s.Prefix, s.Year });
+            sequence.Property(s => s.Prefix).HasDefaultValue("SIP").ValueGeneratedNever();
             sequence.HasQueryFilter(s => s.TenantId == CurrentTenantId);
         });
     }
 
     private static string Quoted(IEnumerable<string> values) => string.Join(", ", values.Select(v => $"'{v}'"));
+
+    /// <summary>Address snapshots as camelCase jsonb (records compare by value, so change tracking works as is).</summary>
+    private static class AddressJson
+    {
+        private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
+
+        // EF never passes null through a converter (null stays SQL NULL); the nullable signature only matches the property.
+        public static readonly ValueConverter<OrderAddressSnapshot?, string> Converter = new(
+            v => JsonSerializer.Serialize(v, Options),
+            s => JsonSerializer.Deserialize<OrderAddressSnapshot>(s, Options));
+    }
 
     private static void ConfigureNpgsql(Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.NpgsqlDbContextOptionsBuilder npgsql) =>
         npgsql.MigrationsHistoryTable("__ef_migrations_history", Schema);

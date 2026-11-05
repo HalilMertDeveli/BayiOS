@@ -74,7 +74,7 @@ internal static class IdentityEndpoints
 
         group.MapGet("/members", ListMembers)
             .WithName("Identity_ListMembers")
-            .WithSummary("Aktif tenant'ın üyeleri (personel seçici): görünen ad, e-posta, rol, durum; rol/durum filtresi, keyset sayfalama")
+            .WithSummary("Aktif tenant'ın üyeleri (personel seçici): görünen ad, e-posta, rol, durum; rol/durum/izin filtresi, keyset sayfalama")
             .RequirePermission(Permissions.MembersRead)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status403Forbidden);
@@ -86,6 +86,10 @@ internal static class IdentityEndpoints
     /// <param name="status">Virgülle durum listesi (invited, active, disabled); verilmezse tümü.</param>
     /// <param name="limit">1–200 (varsayılan 50).</param>
     /// <param name="cursor">Önceki sayfanın <c>nextCursor</c> değeri.</param>
+    /// <param name="permission">
+    /// Virgülle izin listesi (ör. <c>tasks.pick</c>): yalnızca rolü bu izinlerin hepsini aktif tenant kurallarıyla taşıyan
+    /// üyeler (koşullu izin dahil; kuralı kapalı K hariç). Personel seçiciler için.
+    /// </param>
     private static async Task<Results<Ok<MemberPageResponse>, ProblemHttpResult>> ListMembers(
         HttpRequest http,
         MemberQueries queries,
@@ -93,9 +97,12 @@ internal static class IdentityEndpoints
         string? status,
         string? limit,
         string? cursor,
+        string? permission,
         CancellationToken cancellationToken)
     {
-        var unknown = http.Query.Keys.Where(k => !new[] { "role", "status", "limit", "cursor" }.Contains(k, StringComparer.OrdinalIgnoreCase)).ToList();
+        var unknown = http.Query.Keys
+            .Where(k => !new[] { "role", "status", "limit", "cursor", "permission" }.Contains(k, StringComparer.OrdinalIgnoreCase))
+            .ToList();
         if (unknown.Count > 0)
         {
             return Malformed($"Unknown query parameter(s): {string.Join(", ", unknown)}");
@@ -114,6 +121,12 @@ internal static class IdentityEndpoints
             return Malformed($"status must be a comma-separated subset of: {string.Join(", ", memberStatuses)}");
         }
 
+        var permissions = SplitList(permission);
+        if (permissions.FirstOrDefault(p => !RolePermissions.AllPermissions.Contains(p)) is { } unknownPermission)
+        {
+            return Malformed($"permission '{unknownPermission}' is not a permission id (roles-permissions §3)");
+        }
+
         var pageSize = MemberQueries.DefaultPageSize;
         if (limit is not null
             && (!int.TryParse(limit, NumberStyles.None, CultureInfo.InvariantCulture, out pageSize) || pageSize is < 1 or > MemberQueries.MaxPageSize))
@@ -127,7 +140,7 @@ internal static class IdentityEndpoints
             return Malformed("cursor is invalid for this query");
         }
 
-        return TypedResults.Ok(await queries.ListAsync(new MemberListQuery(roles, statuses, pageSize, after), cancellationToken));
+        return TypedResults.Ok(await queries.ListAsync(new MemberListQuery(roles, statuses, pageSize, after, permissions), cancellationToken));
     }
 
     private static string[] SplitList(string? value) =>

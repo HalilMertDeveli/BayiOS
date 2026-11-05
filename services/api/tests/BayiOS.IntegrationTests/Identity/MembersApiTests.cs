@@ -111,7 +111,49 @@ public sealed class MembersApiTests(ApiFixture fixture)
         await HttpAssert.ProblemAsync(await a.Targeting(b.TenantId).GetAsync("/api/v1/members"), HttpStatusCode.Forbidden, "auth.forbidden");
     }
 
+    [Fact]
+    public async Task Filters_by_permission_through_the_role_matrix_and_tenant_rules()
+    {
+        var owner = await CatalogClient.NewTenantOwnerAsync(fixture);
+        var admin = await owner.AddMemberAsync(fixture, Roles.Admin);
+        var manager = await owner.AddMemberAsync(fixture, Roles.Manager);
+        var sales = await owner.AddMemberAsync(fixture, Roles.Sales);
+        var staff = await owner.AddMemberAsync(fixture, Roles.WarehouseStaff);
+        var viewer = await owner.AddMemberAsync(fixture, Roles.Viewer);
+        var disabledStaff = Guid.NewGuid();
+        await SecurityProbes.AddMembershipAsync(fixture, owner.TenantId, disabledStaff, Roles.WarehouseStaff, "disabled");
+
+        async Task<Guid[]> ListAsync(string query) =>
+            [.. (await owner.OkAsync<MemberPageResponse>(await owner.GetAsync("/api/v1/members" + query))).Items.Select(m => m.UserId).Order()];
+
+        // tasks.pick: owner, admin, manager, warehouse_staff (✓) — never sales or viewer.
+        Assert.Equal(new[] { owner.UserId, admin.UserId, manager.UserId, staff.UserId }.Order(), await ListAsync("?permission=tasks.pick&status=active"));
+        Assert.Equal(
+            new[] { owner.UserId, admin.UserId, manager.UserId, staff.UserId, disabledStaff }.Order(), await ListAsync("?permission=tasks.pick"));
+
+        // Combined with role (intersection) and with several permissions (all required).
+        Assert.Equal(new[] { staff.UserId }, await ListAsync("?permission=tasks.pick&role=warehouse_staff,sales&status=active"));
+        Assert.Equal(new[] { manager.UserId, staff.UserId }.Order(), await ListAsync("?permission=tasks.pick,tasks.claim&status=active"));
+        Assert.Equal(new[] { owner.UserId, admin.UserId }.Order(), await ListAsync("?permission=tasks.pick,tenant.settings.manage"));
+
+        // K grants count only while their tenant rule is on: orders.approve for sales (footnote 9, default on).
+        Assert.Contains(sales.UserId, await ListAsync("?permission=orders.approve"));
+        var settings = await owner.GetAsync("/api/v1/tenant/settings");
+        var patched = await owner.PatchAsync("/api/v1/tenant/settings", new { salesCanApproveOrders = false }, settings.Headers.ETag!.ToString());
+        Assert.Equal(HttpStatusCode.OK, patched.StatusCode);
+        Assert.Equal(new[] { owner.UserId, admin.UserId, manager.UserId }.Order(), await ListAsync("?permission=orders.approve"));
+
+        // Record-level grants count (the member may act on some records): orders.read for warehouse_staff (K⁸).
+        Assert.Contains(staff.UserId, await ListAsync("?permission=orders.read"));
+        Assert.Contains(viewer.UserId, await ListAsync("?permission=orders.read"));
+
+        // Nobody holds it → empty, not an error.
+        Assert.Empty(await ListAsync("?permission=billing.manage&role=manager"));
+    }
+
     [Theory]
+    [InlineData("?permission=tasks.fly")]
+    [InlineData("?permission=tasks.pick,nope")]
     [InlineData("?role=boss")]
     [InlineData("?status=gone")]
     [InlineData("?limit=0")]

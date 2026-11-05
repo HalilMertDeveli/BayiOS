@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using BayiOS.Modules.Identity.Contracts;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
+using BayiOS.SharedKernel.Authorization;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,15 +9,17 @@ namespace BayiOS.Modules.Identity.Application;
 
 /// <param name="Roles">Empty = every role.</param>
 /// <param name="Statuses">Empty = every status.</param>
+/// <param name="Permissions">Empty = no filter; otherwise the member's role must hold every one (any scope) under the tenant's rules.</param>
 /// <param name="After">Membership id of the last row of the previous page.</param>
-internal sealed record MemberListQuery(IReadOnlyList<string> Roles, IReadOnlyList<string> Statuses, int Limit, Guid? After);
+internal sealed record MemberListQuery(
+    IReadOnlyList<string> Roles, IReadOnlyList<string> Statuses, int Limit, Guid? After, IReadOnlyList<string>? Permissions = null);
 
 /// <summary>
 /// Members of the active tenant (personnel picker, team screen). Keyset on the membership id (UUIDv7 ≈ the order in
 /// which people joined). The tenant comes from the request context only; RLS and the query filter sit underneath, and
 /// the explicit tenant predicate keeps the caller's own memberships in other tenants out.
 /// </summary>
-internal sealed class MemberQueries(IdentityDbContext db, IRequestContext requestContext)
+internal sealed class MemberQueries(IdentityDbContext db, IRequestContext requestContext, IAuthorizationContext authorization)
 {
     public const int DefaultPageSize = 50;
     public const int MaxPageSize = 200;
@@ -25,9 +28,18 @@ internal sealed class MemberQueries(IdentityDbContext db, IRequestContext reques
     {
         var tenantId = requestContext.TenantId ?? throw new InvalidOperationException("No tenant resolved.");
         var memberships = db.Memberships.AsNoTracking().Where(m => m.TenantId == tenantId);
-        if (query.Roles.Count > 0)
+        var roles = query.Roles.Count > 0 ? query.Roles : null;
+        if (query.Permissions is { Count: > 0 } permissions)
         {
-            memberships = memberships.Where(m => query.Roles.Contains(m.Role));
+            // Role matrix + this tenant's rules (a K grant whose rule is off does not count; a record-level grant does:
+            // the member may act on some records). Same evaluation as the endpoint gate.
+            var rules = await authorization.RulesAsync(cancellationToken);
+            roles = [.. (roles ?? Roles.All).Where(role => permissions.All(p => AuthorizationContext.Evaluate(role, p, rules) != PermissionScope.None))];
+        }
+
+        if (roles is not null)
+        {
+            memberships = memberships.Where(m => roles.Contains(m.Role));
         }
 
         if (query.Statuses.Count > 0)

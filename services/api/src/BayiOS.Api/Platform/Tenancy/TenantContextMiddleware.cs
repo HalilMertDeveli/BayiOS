@@ -102,6 +102,8 @@ internal static class PermissionAuthorizationSetup
     {
         services.AddAuthorization();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+        // 403 auth.disabled_by_tenant_rule when a tenant rule switched a K grant off; otherwise the default (auth.forbidden).
+        services.AddSingleton<IAuthorizationMiddlewareResultHandler, PermissionAuthorizationResultHandler>();
         services.AddScoped<IAuthorizationContext, AuthorizationContext>();
         services.AddScoped<ITenantAccessRules, TenantSettingsAccessRules>();
         return services;

@@ -195,6 +195,12 @@ namespace BayiOS.Modules.Identity.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("negative_stock_policy");
 
+                    b.Property<string>("OrderNumberPrefix")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasDefaultValue("SIP")
+                        .HasColumnName("order_number_prefix");
+
                     b.Property<bool>("PricesIncludeTaxDisplay")
                         .HasColumnType("boolean")
                         .HasColumnName("prices_include_tax_display");
@@ -202,6 +208,11 @@ namespace BayiOS.Modules.Identity.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Require2fa")
                         .HasColumnType("boolean")
                         .HasColumnName("require2fa");
+
+                    b.Property<bool>("RequireOrderApproval")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("require_order_approval");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
@@ -249,6 +260,8 @@ namespace BayiOS.Modules.Identity.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_tenant_settings_default_tax_rate", "default_tax_rate BETWEEN 0 AND 100");
 
                             t.HasCheckConstraint("ck_tenant_settings_negative_stock_policy", "negative_stock_policy IN ('block', 'warn', 'allow')");
+
+                            t.HasCheckConstraint("ck_tenant_settings_order_number_prefix", "order_number_prefix ~ '^[A-Z][A-Z0-9]{0,9}$'");
 
                             t.HasCheckConstraint("ck_tenant_settings_sales_max_discount", "sales_max_discount_percent BETWEEN 0 AND 100");
                         });

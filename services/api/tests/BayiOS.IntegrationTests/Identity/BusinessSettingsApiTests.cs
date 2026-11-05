@@ -87,6 +87,39 @@ public class BusinessSettingsApiTests(ApiFixture fixture)
     }
 
     [Fact]
+    public async Task Order_settings_live_in_settings_with_validation_and_etag()
+    {
+        var owner = await CatalogClient.NewTenantOwnerAsync(fixture);
+        var manager = await owner.AddMemberAsync(fixture, "manager");
+
+        var defaults = await owner.OkAsync<TenantSettingsResponse>(await owner.GetAsync("/api/v1/tenant/settings"));
+        Assert.Equal((true, "SIP"), (defaults.RequireOrderApproval, defaults.OrderNumberPrefix));
+
+        foreach (var prefix in new[] { "", "1SIP", "SİP", "S-P", "ABCDEFGHIJK", " " })
+        {
+            var invalid = await ValidationErrorsAsync(await owner.PatchAsync("/api/v1/tenant/settings", new { orderNumberPrefix = prefix }, "W/\"1\""));
+            Assert.Equal(["orderNumberPrefix"], invalid.Keys);
+        }
+
+        await HttpAssert.ProblemAsync(
+            await owner.PatchAsync("/api/v1/tenant/settings", new { requireOrderApproval = false }, ifMatch: null), HttpStatusCode.PreconditionRequired, "precondition.required");
+        await HttpAssert.ProblemAsync(
+            await owner.PatchAsync("/api/v1/tenant/settings", new { requireOrderApproval = false }, "W/\"9\""), HttpStatusCode.PreconditionFailed, "concurrency.version_mismatch");
+
+        // Lowercase is upper-cased; omitted fields stay.
+        var response = await owner.PatchAsync("/api/v1/tenant/settings", new { requireOrderApproval = false, orderNumberPrefix = " ab12 " }, "W/\"1\"");
+        Assert.Equal("W/\"2\"", response.Headers.ETag?.ToString());
+        var updated = await owner.OkAsync<TenantSettingsResponse>(response);
+        Assert.Equal((false, "AB12", "block"), (updated.RequireOrderApproval, updated.OrderNumberPrefix, updated.NegativeStockPolicy));
+
+        // tenant.settings.manage only (owner, admin).
+        await HttpAssert.ProblemAsync(
+            await manager.PatchAsync("/api/v1/tenant/settings", new { orderNumberPrefix = "X" }, "W/\"2\""), HttpStatusCode.Forbidden, "auth.forbidden");
+        await HttpAssert.ProblemAsync(await manager.GetAsync("/api/v1/tenant/settings"), HttpStatusCode.Forbidden, "auth.forbidden");
+        Assert.Equal("AB12", (await owner.OkAsync<TenantSettingsResponse>(await owner.GetAsync("/api/v1/tenant/settings"))).OrderNumberPrefix);
+    }
+
+    [Fact]
     public async Task Business_profile_requires_settings_permission_and_stays_in_its_tenant()
     {
         var owner = await CatalogClient.NewTenantOwnerAsync(fixture);

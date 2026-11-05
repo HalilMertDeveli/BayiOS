@@ -43,11 +43,13 @@ internal static class OrdersEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
         group.MapPost("", Create).WithName("Orders_Create")
             .WithSummary("Taslak sipariş oluşturur; fiyatlar fiyat listesinden çözülür (manuel fiyat/iskonto orders.price.override ister)")
+            .WithDescription(PriceOverride403)
             .RequirePermission(Permissions.OrdersCreate)
             .RequireIdempotencyKey()
             .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity);
         group.MapPatch("/{id:guid}", Update).WithName("Orders_Update")
             .WithSummary("Taslağı günceller (merge patch; lines verilirse tüm satırlar değişir ve yeniden fiyatlanır) — If-Match zorunlu")
+            .WithDescription(PriceOverride403 + " `orders.not_owner`: sales edits only drafts it created (O).")
             .RequirePermission(Permissions.OrdersEditDraft)
             .ProducesRetryableConflict("order.busy")
             .Accepts<UpdateOrderRequest>(MergePatch, "application/json")
@@ -58,28 +60,51 @@ internal static class OrdersEndpoints
             .ProducesProblem(StatusCodes.Status428PreconditionRequired);
 
         Transition(group.MapPost("/{id:guid}/submit", Submit).WithName("Orders_Submit")
-            .WithSummary("Taslak → Onay bekliyor (en az bir satır, fiyatsız satır yok)").RequirePermission(Permissions.OrdersSubmit));
+            .WithSummary("Taslak → Onay bekliyor (en az bir satır, fiyatsız satır yok); onay gerekmeyen tenant'ta onaylama yetkisi olan için doğrudan Onaylandı + rezervasyon")
+            .WithDescription(
+                "Copies the shipping / billing address snapshot (422 when a chosen address was removed). When the tenant setting "
+                + "requireOrderApproval is false, the source is not whatsapp_ai and the caller holds orders.approve under the active "
+                + "rules, the order is approved in the same transaction exactly as by approve (all-or-nothing reservation: a "
+                + "shortage answers 409 inventory.insufficient_stock and the order stays a draft; confirmNegativeStock as on "
+                + "approve). Otherwise it goes to pending_approval.")
+            .RequirePermission(Permissions.OrdersSubmit)
+            .ProducesStockProblems());
         Transition(group.MapPost("/{id:guid}/withdraw", Withdraw).WithName("Orders_Withdraw")
             .WithSummary("Onay bekliyor → Taslak").RequirePermission(Permissions.OrdersSubmit));
         Transition(group.MapPost("/{id:guid}/reject", Reject).WithName("Orders_Reject")
-            .WithSummary("Onay bekliyor → Taslak (sebep zorunlu)").RequirePermission(Permissions.OrdersApprove));
+            .WithSummary("Onay bekliyor → Taslak (sebep zorunlu)").WithDescription(ApproveRule403).RequirePermission(Permissions.OrdersApprove));
         Transition(group.MapPost("/{id:guid}/approve", Approve).WithName("Orders_Approve")
             .WithSummary("Onay bekliyor → Onaylandı: fiyat kontrolü ve tüm satırların tek transaction'da rezervasyonu (ya hep ya hiç) — If-Match zorunlu")
+            .WithDescription(ApproveRule403)
             .RequirePermission(Permissions.OrdersApprove)
             .ProducesStockProblems());
         // Picking (approved → picking → packed) and shipping are Warehouse operations: /picking-tasks and /shipments
         // drive the order through IOrderFulfillment (OrderStateMachine stays the single place deciding transitions).
         Transition(group.MapPost("/{id:guid}/close-remaining", CloseRemaining).WithName("Orders_CloseRemaining")
             .WithSummary("Kısmi sevk sonrası kalanı kapatır, kalan rezervasyonu serbest bırakır → Sevk edildi (sebep zorunlu)")
+            .WithDescription(ApproveRule403)
             .RequirePermission(Permissions.OrdersApprove));
         Transition(group.MapPost("/{id:guid}/complete", Complete).WithName("Orders_Complete")
             .WithSummary("Sevk edildi → Tamamlandı").RequirePermission(Permissions.OrdersEditApproved));
         Transition(group.MapPost("/{id:guid}/cancel", Cancel).WithName("Orders_Cancel")
             .WithSummary("İptal (sebep zorunlu); onaylı siparişte rezervasyon serbest bırakılır. Kısmi sevk sonrası iptal yok")
+            .WithDescription(
+                "403 codes: `orders.not_owner` (sales cancels only orders it created, footnote 11), "
+                + "`orders.cancel_not_allowed_in_status` (sales cancels its own orders only while draft or pending_approval).")
             .RequirePermission(Permissions.OrdersCancel));
 
         return app;
     }
+
+    private const string PriceOverride403 =
+        "403 codes (record-level, #111): `orders.discount_limit_exceeded` (a line discount above the sales limit; "
+        + "`limitPercent`), `orders.manual_price_not_allowed` (manual unit price while only discounts within the limit "
+        + "are allowed; `limitPercent`), `auth.disabled_by_tenant_rule` (sales discount limit is 0 %; `permission`, "
+        + "`condition`), `auth.forbidden` (permission missing).";
+
+    private const string ApproveRule403 =
+        "403 `auth.disabled_by_tenant_rule` (with `permission` and `condition`) when the tenant rule "
+        + "'sales may approve orders' (footnote 9) is off for a sales caller.";
 
     private static void Transition(RouteHandlerBuilder builder) => builder
         .RequireIdempotencyKey()
@@ -191,8 +216,9 @@ internal static class OrdersEndpoints
     }
 
     private static async Task<Results<Ok<OrderDetailResponse>, ProblemHttpResult>> Submit(
-        Guid id, [FromHeader(Name = "If-Match")] string? ifMatch, OrderService service, HttpContext http, CancellationToken cancellationToken) =>
-        OptionalIfMatch(ifMatch, out var version) ?? Ok(http, await service.SubmitAsync(id, version, http.TraceIdentifier, cancellationToken));
+        Guid id, SubmitOrderRequest? request, [FromHeader(Name = "If-Match")] string? ifMatch, OrderService service, HttpContext http, CancellationToken cancellationToken) =>
+        OptionalIfMatch(ifMatch, out var version)
+        ?? Ok(http, await service.SubmitAsync(id, version, request?.ConfirmNegativeStock ?? false, http.TraceIdentifier, cancellationToken));
 
     private static async Task<Results<Ok<OrderDetailResponse>, ProblemHttpResult>> Withdraw(
         Guid id, [FromHeader(Name = "If-Match")] string? ifMatch, OrderService service, HttpContext http, CancellationToken cancellationToken) =>
@@ -304,6 +330,11 @@ internal static class OrdersEndpoints
         if (error.ConfirmationRequired)
         {
             problem.Extensions["confirmationRequired"] = true;
+        }
+
+        foreach (var (name, value) in error.Extensions ?? new Dictionary<string, object>())
+        {
+            problem.Extensions[name] = value;
         }
 
         if (error.Code is "inventory.busy" or "order.busy")

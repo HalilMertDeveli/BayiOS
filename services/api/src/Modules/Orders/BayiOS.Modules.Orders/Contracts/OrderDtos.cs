@@ -6,6 +6,8 @@ namespace BayiOS.Modules.Orders.Contracts;
 /// <param name="Source">manual (default), whatsapp_ai, import, mobile.</param>
 /// <param name="Currency">ISO 4217; null = the customer's currency, else the tenant default.</param>
 /// <param name="PricesIncludeTax">Null = the tax mode of the first resolved list price, else false.</param>
+/// <param name="ShippingAddressId">A shipping address of the customer; null = the customer's default shipping address at submit.</param>
+/// <param name="BillingAddressId">A billing address of the customer; null = the customer's default billing address at submit.</param>
 public sealed record CreateOrderRequest(
     Guid? CustomerId,
     Guid? WarehouseId,
@@ -15,7 +17,9 @@ public sealed record CreateOrderRequest(
     bool? PricesIncludeTax,
     DateOnly? RequestedDeliveryDate,
     string? Notes,
-    IReadOnlyList<OrderLineInput>? Lines);
+    IReadOnlyList<OrderLineInput>? Lines,
+    Guid? ShippingAddressId = null,
+    Guid? BillingAddressId = null);
 
 /// <summary>
 /// One complete line. <paramref name="UnitPrice"/> null = the resolved list price; a value is a manual override
@@ -30,17 +34,30 @@ public sealed record OrderLineInput(
     decimal? DiscountPercent,
     decimal? DiscountAmount);
 
-/// <summary>Merge patch of a draft. <c>lines</c>, when present, replaces all lines; prices are resolved again.</summary>
+/// <summary>
+/// Merge patch of a draft. <c>lines</c>, when present, replaces all lines; prices are resolved again.
+/// <c>shippingAddressId</c> / <c>billingAddressId</c>: an address of the (new) customer, or null = the customer's
+/// default; changing the customer without them resets both to the default.
+/// </summary>
 public sealed record UpdateOrderRequest(
     Guid? CustomerId,
     Guid? WarehouseId,
     bool? PricesIncludeTax,
     DateOnly? RequestedDeliveryDate,
     string? Notes,
-    IReadOnlyList<OrderLineInput>? Lines);
+    IReadOnlyList<OrderLineInput>? Lines,
+    Guid? ShippingAddressId = null,
+    Guid? BillingAddressId = null);
 
 /// <param name="ConfirmNegativeStock">Explicit confirmation under the <c>warn</c> negative-stock policy.</param>
 public sealed record ApproveOrderRequest(bool? ConfirmNegativeStock);
+
+/// <summary>Optional body of <c>submit</c>.</summary>
+/// <param name="ConfirmNegativeStock">
+/// Only used when the submit approves at once (tenant <c>requireOrderApproval = false</c>): the <c>warn</c>
+/// negative-stock confirmation, as on approve.
+/// </param>
+public sealed record SubmitOrderRequest(bool? ConfirmNegativeStock);
 
 /// <summary>Reason is required (PRD ORD-07 for cancel; reject and short-close likewise).</summary>
 public sealed record OrderReasonRequest(string? Reason);
@@ -67,6 +84,15 @@ public sealed record OrderTotalsResponse(
 /// <param name="WarehouseName">Current warehouse name.</param>
 /// <param name="CreatedByName">Display name of the creator (full name, else e-mail local part).</param>
 /// <param name="ApprovedByName">Display name of the approver.</param>
+/// <param name="ShippingAddressId">The chosen shipping address (null = the customer's default).</param>
+/// <param name="BillingAddressId">The chosen billing address (null = the customer's default).</param>
+/// <param name="ShippingAddress">
+/// Draft: a live preview of the chosen (or default) address. From submit on: the snapshot taken at submit (or at
+/// approval if the order had none), never changed after approval. Null when the customer has no such address, and
+/// for callers without <c>customers.read</c> (warehouse_staff, footnote 8).
+/// </param>
+/// <param name="BillingAddress">As <paramref name="ShippingAddress"/>, for the billing address.</param>
+/// <param name="AddressesAreSnapshot">True once the addresses are the order's own snapshot (not a draft preview).</param>
 public sealed record OrderResponse(
     Guid Id,
     string Number,
@@ -95,7 +121,27 @@ public sealed record OrderResponse(
     DateTimeOffset? CancelledAt,
     string? CancelReason,
     bool HasShortage,
-    long Version);
+    long Version,
+    Guid? ShippingAddressId,
+    Guid? BillingAddressId,
+    OrderAddressResponse? ShippingAddress,
+    OrderAddressResponse? BillingAddress,
+    bool AddressesAreSnapshot);
+
+/// <summary>An order address (customer address copied onto the order).</summary>
+/// <param name="AddressId">The customer address it was copied from (it may since have changed or been removed).</param>
+/// <param name="Country">ISO 3166-1 alpha-2.</param>
+public sealed record OrderAddressResponse(
+    Guid AddressId,
+    string? Title,
+    string Line1,
+    string? Line2,
+    string? District,
+    string City,
+    string? PostalCode,
+    string Country,
+    string? ContactName,
+    string? ContactPhone);
 
 /// <param name="PriceStatus"><c>priced</c> or <c>no_price</c>.</param>
 /// <param name="OpenQuantity">quantity − shipped − cancelled.</param>
