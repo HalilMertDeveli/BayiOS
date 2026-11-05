@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { isActive, type NavSection } from "@/lib/navigation";
+import { activeHref, type NavSection } from "@/lib/navigation";
 
 export type NavMenuProps = {
   sections: readonly NavSection[];
@@ -17,6 +17,10 @@ export type NavMenuProps = {
 
 export function NavMenu({ sections, collapsed = false, onNavigate, idPrefix }: NavMenuProps) {
   const pathname = usePathname();
+  const current = activeHref(
+    pathname,
+    sections.flatMap((s) => s.items.map((i) => i.href)),
+  );
 
   return (
     <nav aria-label="Ana menü" className="flex flex-col gap-5">
@@ -32,7 +36,7 @@ export function NavMenu({ sections, collapsed = false, onNavigate, idPrefix }: N
             </p>
             <ul aria-labelledby={headingId} className="flex flex-col gap-0.5">
               {section.items.map(({ href, label, Icon }) => {
-                const active = isActive(pathname, href);
+                const active = href === current;
                 return (
                   <li key={href}>
                     <Link
