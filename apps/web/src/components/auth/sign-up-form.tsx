@@ -2,11 +2,11 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authErrorMessage } from "@/lib/auth/auth-errors";
-import { ROUTES } from "@/lib/auth/routes";
+import { ROUTES, safeNextPath, signInUrl } from "@/lib/auth/routes";
 import {
   PASSWORD_MIN_LENGTH,
   compactErrors,
@@ -22,6 +22,9 @@ type Fields = { fullName: string; email: string; password: string; confirm: stri
 
 export function SignUpForm() {
   const router = useRouter();
+  // ?next= (same-origin only): e.g. /davet, so an invitee comes back to accept the invitation; default: onboarding.
+  const next = safeNextPath(useSearchParams().get("next"), ROUTES.onboarding);
+  const forInvitation = next === ROUTES.invitation;
   const [values, setValues] = useState<Fields>({ fullName: "", email: "", password: "", confirm: "" });
   const [errors, setErrors] = useState<Partial<Record<keyof Fields, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -50,8 +53,8 @@ export function SignUpForm() {
       password: values.password,
       options: {
         data: { full_name: values.fullName.trim() },
-        // The confirmation link returns through /auth/callback, which opens the onboarding wizard.
-        emailRedirectTo: `${window.location.origin}${ROUTES.authCallback}?next=${encodeURIComponent(ROUTES.onboarding)}`,
+        // The confirmation link returns through /auth/callback, which opens `next` (the onboarding wizard by default).
+        emailRedirectTo: `${window.location.origin}${ROUTES.authCallback}?next=${encodeURIComponent(next)}`,
       },
     });
     setSubmitting(false);
@@ -61,7 +64,7 @@ export function SignUpForm() {
     }
     if (data.session) {
       // E-mail confirmation disabled for this project: signed in right away.
-      router.replace(ROUTES.onboarding);
+      router.replace(next);
       return;
     }
     // Same answer whether or not the address already had an account (no account enumeration).
@@ -73,11 +76,11 @@ export function SignUpForm() {
       <div className="flex flex-col gap-4">
         <FormMessage tone="success">
           <strong className="font-semibold">{sentTo}</strong> adresine bir doğrulama bağlantısı gönderdik. Bağlantıya
-          tıkladıktan sonra işletmenizi oluşturabilirsiniz.
+          tıkladıktan sonra {forInvitation ? "daveti kabul edebilirsiniz. Bağlantıyı bu tarayıcıda açın." : "işletmenizi oluşturabilirsiniz."}
         </FormMessage>
         <p className="text-body text-fg-muted">
           E-posta gelmediyse istenmeyen klasörünü kontrol edin. Adres doğrulandıysa{" "}
-          <Link href={ROUTES.signIn} className="font-medium text-brand-fg underline-offset-2 hover:underline">
+          <Link href={next === ROUTES.onboarding ? ROUTES.signIn : signInUrl(next)} className="font-medium text-brand-fg underline-offset-2 hover:underline">
             giriş yapın
           </Link>
           .
@@ -117,7 +120,7 @@ export function SignUpForm() {
       </Button>
       <p className="text-center text-body text-fg-muted">
         Zaten hesabınız var mı?{" "}
-        <Link href={ROUTES.signIn} className="font-medium text-brand-fg underline-offset-2 hover:underline">
+        <Link href={next === ROUTES.onboarding ? ROUTES.signIn : signInUrl(next)} className="font-medium text-brand-fg underline-offset-2 hover:underline">
           Giriş yapın
         </Link>
       </p>

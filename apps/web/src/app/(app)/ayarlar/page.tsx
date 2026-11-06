@@ -18,7 +18,7 @@ export default function AyarlarPage() {
           Diğer ayarlar
         </h2>
         <SettingsLinks />
-        <p className="text-caption text-fg-muted">Ekip, roller ve işletme profili ayarları henüz geliştiriliyor.</p>
+        <p className="text-caption text-fg-muted">İşletme profili ayarları henüz geliştiriliyor.</p>
       </section>
     </>
   );

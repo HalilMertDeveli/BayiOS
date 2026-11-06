@@ -82,7 +82,7 @@ export function SignInForm() {
       </Button>
       <p className="text-center text-body text-fg-muted">
         Hesabınız yok mu?{" "}
-        <Link href={ROUTES.signUp} className="font-medium text-brand-fg underline-offset-2 hover:underline">
+        <Link href={next === ROUTES.invitation ? `${ROUTES.signUp}?next=${encodeURIComponent(next)}` : ROUTES.signUp} className="font-medium text-brand-fg underline-offset-2 hover:underline">
           Ücretsiz kayıt olun
         </Link>
       </p>
