@@ -13,7 +13,9 @@
     "gen:api": "openapi-typescript ../../packages/contracts/openapi.json -o src/lib/api/schema.d.ts",
     "test:e2e": "playwright test",
     "test:e2e:local": "playwright test -c playwright.local.config.ts",
-    "test:e2e:real": "playwright test -c playwright.local.config.ts real-stack order-to-shipment"
+    "test:e2e:real": "playwright test -c playwright.local.config.ts real-stack order-to-shipment demo-",
+    "test:e2e:demo": "playwright test -c playwright.local.config.ts demo-",
+    "demo:seed": "node e2e-local/demo/seed.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
