@@ -234,6 +234,7 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
             ("order from A's warehouse", HttpMethod.Post, "/api/v1/orders", new { customerId = b.Id("customer"), warehouseId = a.Id("warehouse"), lines = new[] { new { variantId = b.Id("variant"), quantity = 1m } } }, null),
             ("order of A's variant", HttpMethod.Post, "/api/v1/orders", new { customerId = b.Id("customer"), warehouseId = b.Id("warehouse"), lines = new[] { new { variantId = a.Id("variant"), quantity = 1m, unitPrice = (decimal?)10m } } }, null),
             ("add A's variant to B's draft", HttpMethod.Patch, $"/api/v1/orders/{b.Id("order")}", new { lines = new object[] { new { variantId = a.Id("variant"), quantity = 1m, unitPrice = 10m } } }, b.ETag("order")),
+            ("transfer B's ownership to A's member", HttpMethod.Post, "/api/v1/members/ownership-transfer", new { userId = a.Id("member") }, null),
             ("import mapping onto A's list", HttpMethod.Put, $"/api/v1/import-jobs/{b.Id("importJob")}/mapping", new { columns = new Dictionary<string, string> { ["sku"] = "Stok Kodu", ["name"] = "Ürün Adı", ["unit"] = "Birim", ["taxRate"] = "KDV" }, priceListId = a.Id("priceList") }, null),
         };
 

@@ -21,12 +21,16 @@ public static class IdentityModule
         services.AddScoped<IMembershipLookup, MembershipLookup>();
         services.AddScoped<IdentityService>();
         services.AddScoped<MemberQueries>();
+        services.AddScoped<MemberService>();
         services.AddScoped<IUserDirectory, UserDirectory>();
+        services.AddOptions<InvitationOptions>()
+            .BindConfiguration("Invitations")
+            .Validate(o => o.LifetimeDays is >= 1 and <= 30, "Invitations:LifetimeDays must be between 1 and 30.");
         services.TryAddSingleton(TimeProvider.System);
         return services;
     }
 
-    public static IEndpointRouteBuilder MapIdentityModule(this IEndpointRouteBuilder app) => app.MapIdentityEndpoints();
+    public static IEndpointRouteBuilder MapIdentityModule(this IEndpointRouteBuilder app) => app.MapIdentityEndpoints().MapMemberEndpoints();
 }
 
 internal sealed class MembershipLookup(IdentityDbContext db) : IMembershipLookup
