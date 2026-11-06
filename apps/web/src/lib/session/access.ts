@@ -15,6 +15,7 @@ export type Permission =
   | "members.read"
   | "members.invite"
   | "members.manage"
+  | "ownership.transfer"
   | "billing.read"
   | "billing.manage"
   | "catalog.read"
