@@ -21,6 +21,19 @@ public static class AuditActions
 {
     public const string TenantCreated = "tenant.created";
     public const string TenantSettingsChanged = "tenant.settings_changed";
+
+    /// <summary>An adjustable tenant rule of roles-permissions §4 changed (who may approve, discount limit, cost visibility…).</summary>
+    public const string TenantRulesChanged = "tenant.rules_changed";
+
+    // Members and invitations (#129). No e-mail address and never a token in the payload (data-policy §8).
+    public const string MemberInvited = "member.invited";
+    public const string MemberInviteResent = "member.invite_resent";
+    public const string MemberInviteRevoked = "member.invite_revoked";
+    public const string MemberJoined = "member.joined";
+    public const string MemberRoleChanged = "member.role_changed";
+    public const string MemberDisabled = "member.disabled";
+    public const string MemberEnabled = "member.enabled";
+    public const string MemberOwnershipTransferred = "member.ownership_transferred";
     public const string InventoryReceiptPosted = "inventory.receipt_posted";
     public const string InventoryAdjustmentPosted = "inventory.adjustment_posted";
 

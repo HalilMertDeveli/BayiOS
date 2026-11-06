@@ -52,7 +52,7 @@ public static class EntitlementCodes
     /// <summary>Active warehouses (Basic: one warehouse; Professional: multi-warehouse).</summary>
     public const string MaxWarehouses = "max_warehouses";
 
-    /// <summary>Active members (user seats). Defined and reported; enforced once members can be invited through the API.</summary>
+    /// <summary>User seats: active members plus open invitations; enforced on invite, resend, accept and re-enable (#129).</summary>
     public const string MaxUsers = "max_users";
 
     /// <summary>WhatsApp parse requests per calendar month (Europe/Istanbul), on top of the hourly rate limit (WAI-11).</summary>

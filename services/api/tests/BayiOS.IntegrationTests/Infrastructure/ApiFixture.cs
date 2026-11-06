@@ -155,6 +155,33 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         await _postgres.DisposeAsync();
     }
 
+    /// <summary>
+    /// Runs a repository SQL script with the real <c>psql</c> inside the database container, as <paramref name="user"/>
+    /// (operator tools under <c>infra/ops</c>, #129). Variables are passed with <c>-v name=value</c>.
+    /// </summary>
+    public async Task<(long ExitCode, string Stdout, string Stderr)> PsqlAsync(
+        string repoRelativeScript, string user, IReadOnlyDictionary<string, string> variables, CancellationToken cancellationToken)
+    {
+        var target = $"/tmp/{Guid.NewGuid():N}.sql";
+        await _postgres.CopyAsync(await File.ReadAllBytesAsync(Path.Combine(RepoPaths.Root, repoRelativeScript), cancellationToken), target, ct: cancellationToken);
+        var connection = new NpgsqlConnectionStringBuilder(SuperuserConnectionString);
+        var password = user switch
+        {
+            "bayios_app" => new NpgsqlConnectionStringBuilder(AppConnectionString).Password,
+            "bayios_migrator" => new NpgsqlConnectionStringBuilder(MigratorConnectionString).Password,
+            _ => connection.Password,
+        };
+        var command = new List<string> { "env", $"PGPASSWORD={password}", "psql", "-h", "127.0.0.1", "-U", user, "-d", connection.Database!, "-v", "ON_ERROR_STOP=1" };
+        foreach (var (name, value) in variables)
+        {
+            command.AddRange(["-v", $"{name}={value}"]);
+        }
+
+        command.AddRange(["-f", target]);
+        var result = await _postgres.ExecAsync(command, cancellationToken);
+        return (result.ExitCode ?? -1, result.Stdout, result.Stderr);
+    }
+
     public HttpClient CreateClientFor(Guid userId, string? email = null)
     {
         var client = CreateClient();

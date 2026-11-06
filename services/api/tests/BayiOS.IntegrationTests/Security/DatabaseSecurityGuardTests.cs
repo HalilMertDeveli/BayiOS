@@ -49,6 +49,8 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         ["customers.customers"] = ArchiveOnly,
         ["customers.dealer_groups"] = ArchiveOnly,
 
+        // Invitations are accepted, revoked or expired — never deleted by the app (#129).
+        ["identity.invitations"] = ArchiveOnly,
         ["identity.memberships"] = Full,
         ["identity.tenant_settings"] = Full,
         ["identity.tenants"] = Full,
@@ -148,6 +150,17 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         // passed, to list their tenant ids; the update itself runs per tenant under the runtime role's RLS.
         ["billing.tenant_subscriptions"] = ["tenant_subscriptions_expiry_select"],
         ["billing.tenant_modules"] = ["tenant_modules_expiry_select"],
+    };
+
+    /// <summary>
+    /// Owner-only, read-only lookup policies of SECURITY DEFINER functions that are not about expiry. Invitation
+    /// acceptance (<c>identity.find_invitation_tenant</c>, #129, phase0-gate F-25/C-5): the invitee is no member yet, so
+    /// the owner may read pending invitations only, and the function returns just the tenant id of an exact token-hash
+    /// match; everything else runs under the runtime role's tenant RLS. Value = the exact USING expression.
+    /// </summary>
+    private static readonly Dictionary<string, (string Policy, string Qual)> MigratorLookupPolicies = new Dictionary<string, (string Policy, string Qual)>
+    {
+        ["identity.invitations"] = ("invitations_token_lookup", "(status = 'pending'::text)"),
     };
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -253,6 +266,17 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
             if (roles.Contains("public"))
             {
                 violations.Add($"{table}.{name}: policy applies to PUBLIC");
+            }
+
+            if (!roles.Contains(App)
+                && MigratorLookupPolicies.TryGetValue(table, out var lookup) && lookup.Policy == name && roles.SequenceEqual(["bayios_migrator"]))
+            {
+                if (cmd != "SELECT" || qual != lookup.Qual)
+                {
+                    violations.Add($"{table}.{name}: lookup policy must be the documented read-only SELECT ({cmd}: {qual})");
+                }
+
+                continue;
             }
 
             if (!roles.Contains(App))
