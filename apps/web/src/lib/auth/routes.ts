@@ -8,10 +8,12 @@ export const ROUTES = {
   onboarding: "/isletme-olustur",
   tenantPicker: "/isletme-sec",
   home: "/pano",
+  /** Invitation acceptance (#129): public, so a signed-out invitee keeps the #token fragment on this page. */
+  invitation: "/davet",
 } as const;
 
 /** Reachable without a session. */
-const PUBLIC_PATHS = new Set<string>(["/", ROUTES.signIn, ROUTES.signUp, ROUTES.resetPassword, ROUTES.authCallback]);
+const PUBLIC_PATHS = new Set<string>(["/", ROUTES.signIn, ROUTES.signUp, ROUTES.resetPassword, ROUTES.authCallback, ROUTES.invitation]);
 
 /** Pages a signed-in user has no reason to see; they are sent to the app instead. */
 const GUEST_ONLY_PATHS = new Set<string>([ROUTES.signIn, ROUTES.signUp]);
