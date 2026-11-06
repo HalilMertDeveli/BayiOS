@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { seedDemo } from "./demo/seeder.mjs";
 import { stackConfig } from "./demo/stack.mjs";
@@ -28,9 +29,9 @@ import { logApiErrors } from "./support/real-stack";
 
 test("motor demo: bayi WhatsApp'tan fren seti → inceleme → onay → barkodla toplama → sevk", async ({ page }) => {
   test.setTimeout(300_000);
-  const stamp = `${Date.now()}${Math.floor(Math.random() * 1000)}`.slice(-10); // unique tenant/user per run
+  const stamp = `${Date.now().toString(36)}${randomBytes(2).toString("hex")}`; // unique tenant/user per run
   logApiErrors(page);
-  const owner = { email: `e2e-demo-motor-${stamp}@example.test`, password: `E2e-Demo-Motor-${stamp}`, fullName: "E2E Demo Motor Sahibi" };
+  const owner = { email: `e2e-demo-motor-${stamp}@example.test`, password: `E2e-Demo-Motor-${randomBytes(9).toString("base64url")}`, fullName: "E2E Demo Motor Sahibi" };
   const demo = await seedDemo({
     cfg: stackConfig(),
     demo: "motor",

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { runCatalogImport, seedDemo } from "./demo/seeder.mjs";
 import { stackConfig } from "./demo/stack.mjs";
@@ -34,9 +35,9 @@ const DAMAGED = 3;
 
 test("LED demo: toplu katalog içe aktarma → fiyat kademesi → kademeli fiyatlı sipariş → kısmi sevk + kalanı kapatma → rapor", async ({ page }) => {
   test.setTimeout(300_000);
-  const stamp = `${Date.now()}${Math.floor(Math.random() * 1000)}`.slice(-10); // unique tenant/user per run
+  const stamp = `${Date.now().toString(36)}${randomBytes(2).toString("hex")}`; // unique tenant/user per run
   logApiErrors(page);
-  const owner = { email: `e2e-demo-led-${stamp}@example.test`, password: `E2e-Demo-Led-${stamp}`, fullName: "E2E Demo LED Sahibi" };
+  const owner = { email: `e2e-demo-led-${stamp}@example.test`, password: `E2e-Demo-Led-${randomBytes(9).toString("base64url")}`, fullName: "E2E Demo LED Sahibi" };
   const demo = await seedDemo({
     cfg: stackConfig(),
     demo: "led",
