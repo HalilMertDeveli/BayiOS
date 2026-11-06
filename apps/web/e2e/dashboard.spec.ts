@@ -82,7 +82,7 @@ test.describe("pano — masaüstü (mock)", () => {
     await expect(tile(page, "İncelenecek WhatsApp siparişleri").getByText("mesaj incelemenizi bekliyor")).toBeVisible();
     await expect(tile(page, "Paket")).toContainText("12 gün sonra bitiyor");
     await expect(tile(page, "Paket")).toContainText("Ödeme alınmaz");
-    await expect(page.getByRole("navigation", { name: "Hızlı işlemler" }).getByRole("link")).toHaveText(["Yeni sipariş", "WhatsApp'tan sipariş", "Yeni ürün", "Mal kabul"]);
+    await expect(page.getByRole("navigation", { name: "Hızlı işlemler" }).getByRole("link")).toHaveText(["Sipariş oluştur", "WhatsApp'tan sipariş", "Ürün ekle", "Mal girişi"]);
 
     // Exactly one request per tile (the plan comes from /me).
     const calls = tenantCalls(api).filter((p) => !p.startsWith("/api/v1/tenant"));

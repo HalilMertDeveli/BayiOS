@@ -39,17 +39,21 @@ export function anyTile(tiles: DashboardTiles): boolean {
   return Object.values(tiles).some(Boolean);
 }
 
-/** Shortcuts on the dashboard, each behind the permission of the screen's main action. */
+/**
+ * Shortcuts on the dashboard, each behind the permission of the screen's main action. Labels differ from the target
+ * screens' own buttons ("Yeni ürün", "Mal kabul"): a previously visited route can stay mounted (hidden) after
+ * navigation, and identical link names would then be ambiguous.
+ */
 export type QuickLink = { href: string; label: string };
 
 export function quickLinks(access: Access, entitlements: Entitlements): QuickLink[] {
   const links: QuickLink[] = [];
-  if (access.can("orders.create")) links.push({ href: "/siparisler/yeni", label: "Yeni sipariş" });
+  if (access.can("orders.create")) links.push({ href: "/siparisler/yeni", label: "Sipariş oluştur" });
   if (access.canSome("whatsapp.parse") && !featureGate(entitlements, FEATURES.aiOrderParsing).locked) {
     links.push({ href: "/siparisler/whatsapp", label: "WhatsApp'tan sipariş" });
   }
-  if (access.can("catalog.write")) links.push({ href: "/urunler/yeni", label: "Yeni ürün" });
-  if (access.can("inventory.receive")) links.push({ href: "/depo/mal-kabul", label: "Mal kabul" });
+  if (access.can("catalog.write")) links.push({ href: "/urunler/yeni", label: "Ürün ekle" });
+  if (access.can("inventory.receive")) links.push({ href: "/depo/mal-kabul", label: "Mal girişi" });
   return links;
 }
 
