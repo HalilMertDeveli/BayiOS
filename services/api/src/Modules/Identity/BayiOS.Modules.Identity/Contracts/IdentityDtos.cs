@@ -78,6 +78,54 @@ public sealed record MemberPageInfo(string? NextCursor, bool HasMore, int Limit)
 
 public sealed record MemberPageResponse(IReadOnlyList<MemberResponse> Items, MemberPageInfo Page);
 
+/// <summary>Invite a person to the active tenant (<c>members.invite</c>). No e-mail is sent: share the returned token.</summary>
+/// <param name="Email">The address the invitee will sign in with (Supabase Auth); compared case-insensitively.</param>
+/// <param name="Role">
+/// admin, manager, sales, warehouse_staff or viewer. Only an owner may invite an admin; an admin invites manager and
+/// lower roles (roles-permissions footnote 1). owner is never invited (ownership transfer).
+/// </param>
+public sealed record CreateInvitationRequest(string? Email, string? Role);
+
+/// <summary>An invitation of the active tenant. The token is never part of it.</summary>
+/// <param name="Status">pending, accepted, revoked or expired (a pending invitation past <paramref name="ExpiresAt"/> reads as expired).</param>
+/// <param name="TokenCount">How many tokens were issued (each resend rotates the token; earlier ones stop working).</param>
+public sealed record InvitationResponse(
+    Guid Id,
+    string Email,
+    string Role,
+    string Status,
+    DateTimeOffset ExpiresAt,
+    int TokenCount,
+    DateTimeOffset CreatedAt,
+    Guid InvitedBy,
+    DateTimeOffset? AcceptedAt,
+    Guid? AcceptedBy,
+    DateTimeOffset? RevokedAt);
+
+/// <summary>
+/// A newly issued invitation token. Shown once: the API keeps only its SHA-256 and this response is never stored for
+/// replay. Share it with the invitee (e.g. as <c>https://&lt;web&gt;/davet#&lt;token&gt;</c> — a URL fragment reaches
+/// neither servers nor referrers); they accept it with <c>POST /invitations/accept</c> after signing in with the
+/// invited, verified e-mail address.
+/// </summary>
+public sealed record IssuedInvitationResponse(InvitationResponse Invitation, string Token);
+
+public sealed record InvitationListResponse(IReadOnlyList<InvitationResponse> Items);
+
+/// <param name="Token">The invitation token (43 characters, base64url).</param>
+public sealed record AcceptInvitationRequest(string? Token);
+
+/// <summary>The membership the invitation created; select the tenant with <c>X-Tenant-Id</c> from now on.</summary>
+public sealed record AcceptInvitationResponse(Guid TenantId, string TenantName, string TenantSlug, string Role, string Status);
+
+/// <param name="Role">admin, manager, sales, warehouse_staff or viewer (owner moves only by ownership transfer).</param>
+public sealed record ChangeMemberRoleRequest(string? Role);
+
+/// <param name="UserId">An active member of the tenant who becomes the owner; the caller becomes admin.</param>
+public sealed record TransferOwnershipRequest(Guid? UserId);
+
+public sealed record OwnershipTransferResponse(MemberResponse NewOwner, MemberResponse PreviousOwner);
+
 /// <summary>Create a tenant. The caller becomes its owner. No tenant id is accepted from the client.</summary>
 public sealed record CreateTenantRequest(string? Name, string? Slug, string? Sector);
 

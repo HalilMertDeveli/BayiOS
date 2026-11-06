@@ -32,6 +32,11 @@ internal sealed class IdentityDbContext : DbContext, ITenantScopedDbContext
 
     public DbSet<TenantSettings> TenantSettings => Set<TenantSettings>();
 
+    public DbSet<Invitation> Invitations => Set<Invitation>();
+
+    /// <summary>Partial unique index: one pending invitation per e-mail per tenant.</summary>
+    public const string PendingInvitationIndex = "ux_invitations_pending_email";
+
     public Guid? CurrentTenantId => _requestContext.TenantId;
 
     public Guid? CurrentUserId => _requestContext.UserId;
@@ -49,14 +54,19 @@ internal sealed class IdentityDbContext : DbContext, ITenantScopedDbContext
         Finish(builder);
     }
 
-    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    /// <summary>Joins the request transaction (raw SQL before the first SaveChanges; nested transactions are not supported).</summary>
+    public async Task JoinTransactionAsync(CancellationToken cancellationToken)
     {
-        // Join the request transaction so EF does not try to open its own (nested transactions are not supported).
         if (_unitOfWork?.Transaction is { } transaction && Database.CurrentTransaction is null)
         {
             await Database.UseTransactionAsync(transaction, cancellationToken);
         }
+    }
 
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        // Join the request transaction so EF does not try to open its own (nested transactions are not supported).
+        await JoinTransactionAsync(cancellationToken);
         return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
@@ -134,7 +144,38 @@ internal sealed class IdentityDbContext : DbContext, ITenantScopedDbContext
             settings.Property(s => s.RowVersion).IsConcurrencyToken();
             settings.HasQueryFilter(s => s.TenantId == CurrentTenantId);
         });
+
+        modelBuilder.Entity<Invitation>(invitation =>
+        {
+            invitation.ToTable("invitations", t =>
+            {
+                t.HasCheckConstraint("ck_invitations_role", GrantableRoleCheck());
+                t.HasCheckConstraint("ck_invitations_status", $"status IN ({string.Join(", ", InvitationStatuses.All.Select(s => $"'{s}'"))})");
+                t.HasCheckConstraint("ck_invitations_email", "email = lower(btrim(email)) AND length(email) BETWEEN 3 AND 254 AND position('@' in email) > 1");
+                t.HasCheckConstraint("ck_invitations_token_hash", "octet_length(token_hash) = 32");
+                t.HasCheckConstraint("ck_invitations_token_count", "token_count >= 1");
+                t.HasCheckConstraint("ck_invitations_accepted", "(status = 'accepted') = (accepted_at IS NOT NULL AND accepted_by IS NOT NULL)");
+                t.HasCheckConstraint("ck_invitations_revoked", "(status = 'revoked') = (revoked_at IS NOT NULL AND revoked_by IS NOT NULL)");
+                t.HasCheckConstraint("ck_invitations_expiry", "expires_at > created_at");
+            });
+            invitation.HasKey(i => i.Id);
+            invitation.Property(i => i.Id).ValueGeneratedNever();
+            invitation.HasOne<Tenant>().WithMany().HasForeignKey(i => i.TenantId).OnDelete(DeleteBehavior.Restrict);
+            invitation.Property(i => i.Email).IsRequired();
+            invitation.Property(i => i.Role).IsRequired();
+            invitation.Property(i => i.Status).IsRequired();
+            invitation.Property(i => i.TokenHash).IsRequired();
+            invitation.HasIndex(i => i.TokenHash).IsUnique().HasDatabaseName("ux_invitations_token_hash");
+            invitation.HasIndex(i => new { i.TenantId, i.Email }).IsUnique()
+                .HasFilter("status = 'pending'").HasDatabaseName(PendingInvitationIndex);
+            invitation.HasIndex(i => new { i.TenantId, i.Status, i.ExpiresAt }).HasDatabaseName("ix_invitations_tenant_status_expires");
+            invitation.Property(i => i.RowVersion).IsConcurrencyToken();
+            invitation.HasQueryFilter(i => i.TenantId == CurrentTenantId);
+        });
     }
+
+    private static string GrantableRoleCheck() =>
+        $"role IN ({string.Join(", ", MemberRoleRules.Grantable.Select(r => $"'{r}'"))})";
 
     private static string RoleCheck() =>
         $"role IN ({string.Join(", ", Roles.All.Select(r => $"'{r}'"))})";

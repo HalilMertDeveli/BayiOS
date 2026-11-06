@@ -34,7 +34,8 @@ public static class TestTokens
         DateTime? notBefore = null,
         DateTime? expires = null,
         SecurityKey? key = null,
-        string algorithm = SecurityAlgorithms.RsaSha256)
+        string algorithm = SecurityAlgorithms.RsaSha256,
+        IReadOnlyDictionary<string, object>? extraClaims = null)
     {
         var now = DateTime.UtcNow;
         var claims = new Dictionary<string, object> { ["role"] = "authenticated" };
@@ -48,6 +49,11 @@ public static class TestTokens
             claims["email"] = email;
         }
 
+        foreach (var (name, value) in extraClaims ?? new Dictionary<string, object>())
+        {
+            claims[name] = value;
+        }
+
         return new JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = false }.CreateToken(new SecurityTokenDescriptor
         {
             Issuer = issuer,
@@ -58,6 +64,39 @@ public static class TestTokens
             Expires = expires ?? now.AddMinutes(10),
             SigningCredentials = new SigningCredentials(key ?? SigningKey, algorithm),
         });
+    }
+
+    /// <summary>
+    /// A token shaped like a Supabase Auth access token of an e-mail user, as checked against a live local GoTrue (#129):
+    /// <c>email</c>, <c>user_metadata</c> with <c>email_verified</c> (no top-level <c>email_verified</c>), <c>is_anonymous</c>.
+    /// </summary>
+    public static string CreateSupabase(
+        Guid subject, string? email, bool? metadataEmailVerified = true, bool? topLevelEmailVerified = null, bool isAnonymous = false)
+    {
+        var metadata = new Dictionary<string, object> { ["sub"] = subject.ToString(), ["phone_verified"] = false };
+        if (email is not null)
+        {
+            metadata["email"] = email;
+        }
+
+        if (metadataEmailVerified is { } verified)
+        {
+            metadata["email_verified"] = verified;
+        }
+
+        var extra = new Dictionary<string, object>
+        {
+            ["user_metadata"] = metadata,
+            ["app_metadata"] = new Dictionary<string, object> { ["provider"] = "email" },
+            ["is_anonymous"] = isAnonymous,
+            ["aal"] = "aal1",
+        };
+        if (topLevelEmailVerified is { } topLevel)
+        {
+            extra["email_verified"] = topLevel;
+        }
+
+        return Create(subject, email, extraClaims: extra);
     }
 
     public static string CreateHs256(Guid subject) => Create(

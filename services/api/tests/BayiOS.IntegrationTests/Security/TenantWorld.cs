@@ -42,6 +42,8 @@ internal sealed class TenantWorld
         ["shipments"] = "shipment",
         ["shipments/lines"] = "shipmentLine",
         ["order-parses"] = "orderParse",
+        ["members"] = "member",
+        ["invitations"] = "invitation",
     };
 
     private readonly ApiFixture _fixture;
@@ -168,6 +170,13 @@ internal sealed class TenantWorld
 
         // A WhatsApp parse awaiting review (AI off: rules parser), naming the tenant's own product.
         await CreateAsync("orderParse", "/api/v1/ai/order-parses", new { text = $"2 adet fren balatası {Token}", customerId = Id("customer") });
+
+        // A second member (sales) and a pending invitation (#129): targets of the member-management routes.
+        var member = Guid.NewGuid();
+        await SecurityProbes.AddMembershipAsync(_fixture, TenantId, member, "sales");
+        _ids["member"] = member;
+        var invitation = await CreateAsync(null, "/api/v1/members/invitations", new { email = $"davet-{Token.ToLowerInvariant()}@example.test", role = "viewer" });
+        Remember("invitation", invitation.GetProperty("invitation"));
 
         // Versions may have moved while children were added (ETag of the current state is used by the probes).
         await RefreshAsync("product", $"/api/v1/products/{Id("product")}");

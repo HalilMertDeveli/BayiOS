@@ -73,6 +73,10 @@ internal static class SecurityProbes
             "POST /api/v1/picking-tasks/{id}/lines/{lineId}/shortage" or "POST /api/v1/shipments/{id}/lines/{lineId}/shortage" => new { quantity = 1m, reason = "not_found" },
             "POST /api/v1/shipments/{id}/pack" => new { packages = new[] { new { items = new[] { new { code = victim.Sku, quantity = 1m } } } } },
             "POST /api/v1/shipments/{id}/confirm" => new { carrier = hack, trackingNumber = hack },
+            "POST /api/v1/members/invitations" => new { email = hack.ToLowerInvariant() + "@example.test", role = "viewer" },
+            "PUT /api/v1/members/{userId}/role" => new { role = "viewer" },
+            "POST /api/v1/members/ownership-transfer" => new { userId = victim.Id("member") },
+            "POST /api/v1/invitations/accept" => new { token = hack },
             "POST /api/v1/import-jobs" => "multipart",
             "POST /api/v1/ai/order-parses" => new { text = "2 adet fren balatası " + hack, customerId = own.Id("customer") },
             "POST /api/v1/ai/order-parses/{id}/approve" => new

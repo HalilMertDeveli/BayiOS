@@ -149,6 +149,22 @@ Gösterim: **PK**, FK (modül içi, bileşik tenant FK), UQ = unique, IX = index
 | id **PK** · tenant_id · email citext · role · token_hash bytea UQ · expires_at · accepted_at · invited_by |
 | UQ (tenant_id, email) WHERE accepted_at IS NULL (kısmi) |
 
+> **Uygulanan durum (migration `MemberInvitations`, #129):** `identity.invitations` — `email text` (citext yerine kırpılmış
+> küçük harf + CHECK `email = lower(btrim(email))`), `role` (CHECK: owner hariç 5 rol), `token_hash bytea` (CHECK 32 bayt,
+> UQ `ux_invitations_token_hash`; token = 32 rastgele bayt base64url, düz metin saklanmaz), `status` (pending, accepted,
+> revoked, expired — `expired` yalnızca süresi geçmiş bekleyen davet yenisiyle değiştirilirken yazılır; aksi hâlde
+> `expires_at`'ten türetilir), `expires_at` (varsayılan +7 gün), `token_count`, `accepted_at/by`, `revoked_at/by`,
+> `created_by` (= davet eden), `row_version`. Kısmi UQ `ux_invitations_pending_email (tenant_id, email) WHERE status = 'pending'`;
+> IX `(tenant_id, status, expires_at)`. ENABLE + FORCE RLS (std), `bayios_app` SELECT/INSERT/UPDATE (**DELETE yok**).
+> Kabul yolu (F-25 / C-5): davetli üye olmadığından satırı RLS altında göremez; `identity.find_invitation_tenant(bytea)`
+> (SECURITY DEFINER, sahibi `bayios_migrator`, `search_path = pg_catalog`, PUBLIC'e kapalı, `bayios_app`'e EXECUTE; sahibin
+> yalnızca `pending` satırları okuyan `invitations_token_lookup` politikası) token hash'ini **yalnızca tenant id'ye**
+> çevirir; API sonra o tenant bağlamına geçer ve okuma/yazma/audit normal RLS ile yapılır. **Üyelik kabulde `active`
+> oluşturulur:** `memberships.user_id` NOT NULL ve Supabase kullanıcı id'si davet anında bilinmez, bu yüzden bekleyen davet
+> `memberships`'te `invited` satırı olarak tutulmaz (durum değeri geriye uyumluluk için CHECK'te kalır). `max_users`
+> kullanımı = aktif üyelik + açık davet. Saklama: kapanmış davetlerin e-postası şimdilik silinmez (açık iş: 30 gün sonra
+> temizleme işi, data-policy §4).
+
 ### 5.2 `billing`
 
 **billing.subscription_plans** — tenant'sız, RLS yok

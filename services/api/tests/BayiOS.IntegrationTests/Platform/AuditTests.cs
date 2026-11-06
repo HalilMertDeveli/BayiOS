@@ -28,15 +28,24 @@ public class AuditTests(ApiFixture fixture)
         Assert.Equal(HttpStatusCode.OK, patch.StatusCode);
         var correlationId = Assert.Single(patch.Headers.GetValues("X-Correlation-Id"));
 
+        // One request, two events (#129): the §4 rule as tenant.rules_changed, the business setting as tenant.settings_changed.
         var page = await owner.OkAsync<AuditEventPageResponse>(await owner.GetAsync("/api/v1/audit-events?entityType=tenant_settings"));
-        var audit = Assert.Single(page.Items);
-        Assert.Equal((AuditActions.TenantSettingsChanged, owner.TenantId, owner.UserId, Roles.Owner, correlationId),
-            (audit.Action, audit.EntityId, audit.ActorUserId, audit.ActorRole, audit.CorrelationId));
+        Assert.Equal(2, page.Items.Count);
+        var rules = Assert.Single(page.Items, e => e.Action == AuditActions.TenantRulesChanged);
+        var audit = Assert.Single(page.Items, e => e.Action == AuditActions.TenantSettingsChanged);
+        foreach (var e in new[] { rules, audit })
+        {
+            Assert.Equal((owner.TenantId, owner.UserId, Roles.Owner, correlationId), (e.EntityId, e.ActorUserId, e.ActorRole, e.CorrelationId));
+        }
+
+        var ruleChanges = ChangesOf(rules);
+        Assert.Equal("block", ruleChanges.GetProperty("negativeStockPolicy").GetProperty("from").GetString());
+        Assert.Equal("warn", ruleChanges.GetProperty("negativeStockPolicy").GetProperty("to").GetString());
+        Assert.False(ruleChanges.TryGetProperty("require2fa", out _)); // unchanged fields are not recorded
+        Assert.False(ruleChanges.TryGetProperty("defaultTaxRate", out _));
         var changes = ChangesOf(audit);
-        Assert.Equal("block", changes.GetProperty("negativeStockPolicy").GetProperty("from").GetString());
-        Assert.Equal("warn", changes.GetProperty("negativeStockPolicy").GetProperty("to").GetString());
         Assert.Equal(10m, changes.GetProperty("defaultTaxRate").GetProperty("to").GetDecimal());
-        Assert.False(changes.TryGetProperty("require2fa", out _)); // unchanged fields are not recorded
+        Assert.False(changes.TryGetProperty("negativeStockPolicy", out _));
 
         // The tenant creation itself was audited too.
         var created = await owner.OkAsync<AuditEventPageResponse>(await owner.GetAsync($"/api/v1/audit-events?action={AuditActions.TenantCreated}"));

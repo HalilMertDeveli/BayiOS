@@ -198,10 +198,14 @@ flowchart LR
 | GET/PATCH | `/tenant` | `tenant.manage` (PATCH, M) | Aktif tenant bilgisi |
 | GET/PATCH | `/tenant/settings` | `tenant.manage` (M) | Uygulanan izin `tenant.settings.manage` (owner/admin), ETag/If-Match. #92 ile `requireOrderApproval` (varsayılan `true`) ve `orderNumberPrefix` (varsayılan `SIP`; 1–10 karakter A–Z/0–9, harfle başlar, küçük harf büyütülür) |
 | GET | `/members` (role, status, permission, limit, cursor) | `members.read` | Uygulandı (#86): aktif tenant üyeleri (userId, displayName, fullName, email, role, status), membership id keyset; personel seçici. Okuma matristeki `members.read` ile (owner/admin/manager = `tasks.assign` sahipleriyle aynı küme). `permission` (#111, virgüllü = hepsi): rolü bu izinleri aktif tenant kurallarıyla taşıyan üyeler (kayıt düzeyi K/O sayılır, kuralı kapalı K sayılmaz); `role` ile kesişir; bilinmeyen izin kimliği `400 request.malformed` |
-| PATCH | `/members/{id}` | `members.manage` (M) | Rol/durum |
-| POST | `/invitations` | `members.manage` (İ) | |
-| DELETE | `/invitations/{id}` | `members.manage` | |
-| POST | `/invitations/accept` | (kimlik) (İ) | Token ile |
+| GET | `/members/invitations` (status) | `members.read` | Uygulandı (#129): en yeni 200 davet; `status` = pending, accepted, revoked, expired (süresi geçmiş pending `expired` görünür). Token hiç dönmez |
+| POST | `/members/invitations` | `members.invite` | Uygulandı (#129): `{email, role}` → 201 `{invitation, token}`. Token bir kez gösterilir, yalnızca SHA-256 saklanır; yanıt idempotency deposuna yazılmasın diye **Idempotency-Key almaz** (doğal idempotent: e-posta başına tek bekleyen davet → 409 `invitation.already_pending` + `invitationId`). 403 `members.role_not_grantable`, 409 `members.already_member`, 403 `entitlement.limit_exceeded` (`max_users`) |
+| POST | `/members/invitations/{id}/resend` | `members.invite` | Uygulandı (#129): yeni token + yeni 7 gün; eski token geçersiz. Idempotency-Key almaz (aynı gerekçe). 409 `invitation.not_pending` |
+| POST | `/members/invitations/{id}/revoke` | `members.invite` (İ) | Uygulandı (#129): bekleyen daveti iptal (silmez) |
+| PUT | `/members/{userId}/role` | `members.manage` (İ) | Uygulandı (#129): `{role}`; owner verilemez (devir), 403 `members.not_manageable` / `members.role_not_grantable`, 409 `members.last_owner` |
+| POST | `/members/{userId}/disable`, `/members/{userId}/enable` | `members.manage` (İ) | Uygulandı (#129): erişim bir sonraki istekte kesilir/açılır; 409 `members.cannot_disable_self`, `members.last_owner`; enable `max_users`'a tabi |
+| POST | `/members/ownership-transfer` | `ownership.transfer` (İ) | Uygulandı (#129): `{userId}` aktif üye owner, çağıran admin olur |
+| POST | `/invitations/accept` | (kimlik) (İ) | Uygulandı (#129): `{token}`, `X-Tenant-Id` yok. E-posta ve doğrulama yalnızca token claim'lerinden (`email`; `email_verified` veya Supabase `user_metadata.email_verified`; `is_anonymous` değil). 404 `invitation.not_found` (bilinmeyen/kullanılmış/iptal/yenilenmiş — tek yanıt), 403 `invitation.email_mismatch`, 403 `invitation.email_not_verified`, 410 `invitation.expired`, 409 `invitation.already_member`, 403 `tenant.inactive`, 403 `entitlement.limit_exceeded`. Davetlinin tenant'ı `identity.find_invitation_tenant` (SECURITY DEFINER) ile bulunur, gerisi o tenant bağlamında RLS ile (system-architecture §10 açık noktası, phase0-gate C-5) |
 
 ### 12.2 Billing & Entitlements
 | GET | `/billing/plans` | (kimlik) | |

@@ -14,7 +14,7 @@ namespace BayiOS.IntegrationTests.Identity;
 /// </summary>
 public sealed class TenantIsolationDatabaseTests(ApiFixture fixture) : IAsyncLifetime
 {
-    private static readonly string[] IdentityTables = ["tenants", "memberships", "user_profiles", "tenant_settings"];
+    private static readonly string[] IdentityTables = ["tenants", "memberships", "user_profiles", "tenant_settings", "invitations"];
 
     private readonly Guid _tenantA = Guid.CreateVersion7();
     private readonly Guid _tenantB = Guid.CreateVersion7();

@@ -36,7 +36,7 @@ internal sealed class CatalogClient(HttpClient http, Guid tenantId, Guid userId)
         return new CatalogClient(http, tenant.Id, userId);
     }
 
-    /// <summary>Another user with the given role in the same tenant (seeded directly; no invitation flow yet).</summary>
+    /// <summary>Another user with the given role in the same tenant, seeded directly (fast; the invitation flow is covered by Identity/InvitationsApiTests).</summary>
     public async Task<CatalogClient> AddMemberAsync(ApiFixture fixture, string role)
     {
         var userId = Guid.NewGuid();
