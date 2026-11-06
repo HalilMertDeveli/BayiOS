@@ -5,7 +5,7 @@ export type OrderAction = {
   action: OrderTransition;
   label: string;
   variant: "primary" | "secondary" | "danger";
-  /** Opens a reason dialog first (reject, cancel: the API requires a reason). */
+  /** Opens a reason dialog first (reject, cancel, close-remaining: the API requires a reason). */
   needsReason: boolean;
 };
 
@@ -15,7 +15,16 @@ const ACTIONS: Record<OrderTransition, OrderAction> = {
   withdraw: { action: "withdraw", label: "Onaydan geri çek", variant: "secondary", needsReason: false },
   reject: { action: "reject", label: "Reddet", variant: "secondary", needsReason: true },
   cancel: { action: "cancel", label: "Siparişi iptal et", variant: "danger", needsReason: true },
+  "close-remaining": { action: "close-remaining", label: "Kalanı kapat", variant: "secondary", needsReason: true },
+  complete: { action: "complete", label: "Tamamla", variant: "primary", needsReason: false },
 };
+
+/** Transitions that open the reason dialog first (the API requires a reason). */
+export type ReasonAction = Extract<OrderTransition, "reject" | "cancel" | "close-remaining">;
+
+export function isReasonAction(action: OrderTransition): action is ReasonAction {
+  return ACTIONS[action].needsReason;
+}
 
 export function orderAction(action: OrderTransition): OrderAction {
   return ACTIONS[action];
@@ -39,7 +48,8 @@ function mayCancel(order: OrderRecord, permissions: OrderPermissions, userId: st
 /**
  * Which order-desk transitions apply to an order in this state for this user — a mirror of OrderStateMachine.Next
  * (inventory-and-orders §3.1) restricted to what this screen offers. The API decides; a stale view gets
- * 409 order.invalid_transition and a record the user may not touch gets 403. Fulfilment is not offered here.
+ * 409 order.invalid_transition and a record the user may not touch gets 403. Picking, packing and shipping are not
+ * offered here; close-remaining (picking / packed after a partial shipment) and complete (shipped) are.
  */
 export function availableActions(order: OrderRecord, permissions: OrderPermissions, userId: string | null = null): OrderAction[] {
   const result: OrderTransition[] = [];
@@ -55,10 +65,16 @@ export function availableActions(order: OrderRecord, permissions: OrderPermissio
       if (cancel) result.push("cancel");
       break;
     case "approved":
+      if (cancel && order.fulfillmentStatus === "none") result.push("cancel");
+      break;
     case "picking":
     case "packed":
-      // After a partial shipment only short-close is possible (I9) — a fulfilment action, not offered here.
+      // After a partial shipment cancel is gone (I9); the rest can only be closed (short-close → shipped).
+      if (order.fulfillmentStatus === "partial" && permissions.approve) result.push("close-remaining");
       if (cancel && order.fulfillmentStatus === "none") result.push("cancel");
+      break;
+    case "shipped":
+      if (permissions.complete) result.push("complete");
       break;
     default:
       break;

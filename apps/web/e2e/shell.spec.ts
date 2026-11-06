@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
 test.describe("shell — desktop", () => {
   test.use({ viewport: DESKTOP });
 
-  test("renders sidebar, header and an honest placeholder", async ({ page }) => {
+  test("renders sidebar, header and the dashboard; unbuilt modules show an honest placeholder", async ({ page }) => {
     await page.goto("/pano");
     await expect(page.getByRole("heading", { level: 1, name: "Pano" })).toBeVisible();
     const nav = page.getByRole("navigation", { name: "Ana menü" });
@@ -21,10 +21,11 @@ test.describe("shell — desktop", () => {
     await expect(page.getByTestId("session-user")).toHaveText(USER.fullName);
     await expect(page.getByTitle("Aktif işletme")).toHaveText(TENANT_A.tenantName);
     await expect(page.getByText("İşletme sahibi")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Bu modül henüz geliştiriliyor" })).toBeVisible();
-    // The API status widget reads the (mocked) meta endpoint.
-    await expect(page.getByRole("status")).toContainText("API bağlı");
+    // #129: /pano is the real overview now (dashboard.spec.ts covers its tiles per role).
+    await expect(page.getByRole("heading", { level: 2, name: "Onay bekleyen siparişler" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Menüyü aç" })).toBeHidden();
+    await page.goto("/ice-aktarma");
+    await expect(page.getByRole("heading", { name: "Bu modül henüz geliştiriliyor" })).toBeVisible();
   });
 
   test("navigates between modules and marks the active link", async ({ page }) => {

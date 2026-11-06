@@ -13,7 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api/client";
 import { IdempotencyKeys } from "@/lib/catalog/idempotency";
 import { withBusyRetry } from "@/lib/inventory/busy-retry";
-import { availableActions, isDraftEditable, isInFulfilment, type OrderAction } from "@/lib/orders/actions";
+import { availableActions, isDraftEditable, isInFulfilment, isReasonAction, type OrderAction, type ReasonAction } from "@/lib/orders/actions";
 import { ORDERS_HREF, getOrder, transitionOrder, type LoadedOrder, type OrderTransition, type TransitionBody } from "@/lib/orders/api";
 import {
   ORDER_BUSY_FINAL_MESSAGE,
@@ -34,7 +34,7 @@ import { orderSourceLabels } from "@/lib/orders/labels";
 import { orderPermissions, type OrderPermissions } from "@/lib/orders/permissions";
 import { useSession } from "@/lib/session/session-context";
 import { FulfillmentBadge, OrderStatus } from "./order-badges";
-import { ReasonDialog } from "./order-actions";
+import { ReasonDialog, remainingLines } from "./order-actions";
 import { OrderAddresses } from "./order-addresses";
 import { OrderDraftEditor } from "./order-draft-editor";
 import { FulfilmentSection, OrderLinesTable, OrderTotalsPanel, ShortagesPanel, pricesHidden } from "./order-lines";
@@ -54,6 +54,8 @@ const SUCCESS: Record<OrderTransition, string> = {
   reject: "Sipariş reddedildi ve taslağa döndü",
   approve: "Sipariş onaylandı; stok ayrıldı",
   cancel: "Sipariş iptal edildi",
+  "close-remaining": "Kalan miktar kapatıldı; kalan rezervasyon serbest bırakıldı",
+  complete: "Sipariş tamamlandı",
 };
 
 const dateTime = new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Istanbul" });
@@ -179,7 +181,7 @@ function OrderView({
   const [conflict, setConflict] = useState(false);
   const [shortages, setShortages] = useState<{ action: StockAction; items: Shortage[] } | null>(null);
   const [confirmShortages, setConfirmShortages] = useState<{ action: StockAction; items: Shortage[] } | null>(null);
-  const [reasonFor, setReasonFor] = useState<"reject" | "cancel" | null>(null);
+  const [reasonFor, setReasonFor] = useState<ReasonAction | null>(null);
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [unpriced, setUnpriced] = useState<number[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -278,9 +280,9 @@ function OrderView({
   };
 
   const onAction = (a: OrderAction) => {
-    if (a.needsReason) {
+    if (isReasonAction(a.action)) {
       setReasonError(null);
-      setReasonFor(a.action as "reject" | "cancel");
+      setReasonFor(a.action);
       return;
     }
     void run(a.action, a.action === "approve" ? { confirmNegativeStock: false } : undefined);
@@ -356,6 +358,8 @@ function OrderView({
               value={`${dateTime.format(new Date(order.approvedAt))}${order.approvedBy ? ` — ${personName(order.approvedBy, order.approvedByName ?? null)}` : ""}`}
             />
           ) : null}
+          {order.shippedAt ? <Info label="Sevk" value={dateTime.format(new Date(order.shippedAt))} /> : null}
+          {order.completedAt ? <Info label="Tamamlanma" value={dateTime.format(new Date(order.completedAt))} /> : null}
           {order.cancelledAt ? <Info label="İptal" value={`${dateTime.format(new Date(order.cancelledAt))}${order.cancelReason ? ` — ${order.cancelReason}` : ""}`} /> : null}
           {order.notes && !editable ? <Info label="Not" value={order.notes} /> : null}
         </dl>
@@ -384,6 +388,14 @@ function OrderView({
             ))}
           </div>
           {submitBlock && actions.some((a) => a.action === "submit") ? <p className="text-caption text-fg-muted">{submitBlock}</p> : null}
+          {actions.some((a) => a.action === "close-remaining") ? (
+            <p className="text-caption text-fg-muted">
+              Sipariş kısmen sevk edildi. Kalan miktar gönderilmeyecekse “Kalanı kapat” ile kapatın; kalan rezervasyon serbest bırakılır.
+            </p>
+          ) : null}
+          {actions.some((a) => a.action === "complete") ? (
+            <p className="text-caption text-fg-muted">Sevkiyat tamamlandı. Teslimat sonrası siparişi “Tamamla” ile kapatın.</p>
+          ) : null}
           {retrying ? (
             <p role="status" className="text-caption text-fg-muted">
               Sipariş meşgul; bir kez daha deneniyor…
@@ -435,6 +447,7 @@ function OrderView({
         action={reasonFor}
         orderNumber={order.number}
         holdsReservation={order.status === "approved" || order.status === "picking" || order.status === "packed"}
+        remaining={reasonFor === "close-remaining" ? remainingLines(loaded.detail.lines) : []}
         busy={pending === reasonFor && reasonFor !== null}
         error={reasonError}
         onCancel={() => setReasonFor(null)}

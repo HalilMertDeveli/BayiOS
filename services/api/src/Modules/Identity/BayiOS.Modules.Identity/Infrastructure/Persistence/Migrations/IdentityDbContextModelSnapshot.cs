@@ -23,6 +23,116 @@ namespace BayiOS.Modules.Identity.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("BayiOS.Modules.Identity.Domain.Invitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<Guid?>("AcceptedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("accepted_by");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("email");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<Guid?>("RevokedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revoked_by");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("role");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("row_version");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<int>("TokenCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("token_count");
+
+                    b.Property<byte[]>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("token_hash");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_invitations");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ux_invitations_token_hash");
+
+                    b.HasIndex("TenantId", "Email")
+                        .IsUnique()
+                        .HasDatabaseName("ux_invitations_pending_email")
+                        .HasFilter("status = 'pending'");
+
+                    b.HasIndex("TenantId", "Status", "ExpiresAt")
+                        .HasDatabaseName("ix_invitations_tenant_status_expires");
+
+                    b.ToTable("invitations", "identity", t =>
+                        {
+                            t.HasCheckConstraint("ck_invitations_accepted", "(status = 'accepted') = (accepted_at IS NOT NULL AND accepted_by IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_invitations_email", "email = lower(btrim(email)) AND length(email) BETWEEN 3 AND 254 AND position('@' in email) > 1");
+
+                            t.HasCheckConstraint("ck_invitations_expiry", "expires_at > created_at");
+
+                            t.HasCheckConstraint("ck_invitations_revoked", "(status = 'revoked') = (revoked_at IS NOT NULL AND revoked_by IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_invitations_role", "role IN ('admin', 'manager', 'sales', 'warehouse_staff', 'viewer')");
+
+                            t.HasCheckConstraint("ck_invitations_status", "status IN ('pending', 'accepted', 'revoked', 'expired')");
+
+                            t.HasCheckConstraint("ck_invitations_token_count", "token_count >= 1");
+
+                            t.HasCheckConstraint("ck_invitations_token_hash", "octet_length(token_hash) = 32");
+                        });
+                });
+
             modelBuilder.Entity("BayiOS.Modules.Identity.Domain.Membership", b =>
                 {
                     b.Property<Guid>("Id")
@@ -293,6 +403,16 @@ namespace BayiOS.Modules.Identity.Infrastructure.Persistence.Migrations
                         .HasName("pk_user_profiles");
 
                     b.ToTable("user_profiles", "identity");
+                });
+
+            modelBuilder.Entity("BayiOS.Modules.Identity.Domain.Invitation", b =>
+                {
+                    b.HasOne("BayiOS.Modules.Identity.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_invitations_tenants_tenant_id");
                 });
 
             modelBuilder.Entity("BayiOS.Modules.Identity.Domain.Membership", b =>

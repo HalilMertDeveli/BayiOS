@@ -54,7 +54,7 @@ public static class ConditionalGrants
 {
     public static IReadOnlyList<GrantCondition> All { get; } =
     [
-        // ¹ admin manages manager and lower roles only (no member-management endpoint yet).
+        // ¹ admin manages manager and lower roles only (MemberService evaluates it per target member, #129).
         new(Roles.Admin, Permissions.MembersManage, 1, "members.below_admin", null, RecordLevel: true),
 
         // ² tenant rule "warehouse staff may assign barcodes".

@@ -1,0 +1,104 @@
+name: demo-seed
+
+# Pilot demos (#56/#57): seeds BOTH full synthetic demos ("Demo Motor Yedek Parça", "Demo LED Elektronik") through
+# the public API against the real local stack (infra/ci/e2e-stack.sh, API-only), then runs the seeder a second time
+# and requires it to change nothing (idempotent re-run). The demo UI stories themselves run in the `e2e real stack`
+# job (apps/web/e2e-local/demo-*.spec.ts). No secrets: passwords are generated inside the runner and never uploaded.
+# Runs on PRs that touch the seeder, and on demand. ci-gate picks it up automatically for those PRs.
+
+on:
+  pull_request:
+    branches: [preview, main]
+    paths:
+      - "apps/web/e2e-local/demo/**"
+      - "infra/ci/e2e-stack.sh"
+      - ".github/workflows/demo-seed.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  seed:
+    name: demo seed (twice)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+      SUPABASE_TELEMETRY_DISABLED: "1"
+      E2E_SKIP_WEB: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: services/api/global.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Start the real stack (Supabase Auth, Postgres 17 + migrations, API)
+        run: bash infra/ci/e2e-stack.sh up
+
+      - name: Seed both demos (first run)
+        run: node apps/web/e2e-local/demo/seed.mjs --summary "$RUNNER_TEMP/demo-seed-1.json"
+
+      - name: Seed again (must be a no-op)
+        run: node apps/web/e2e-local/demo/seed.mjs --summary "$RUNNER_TEMP/demo-seed-2.json"
+
+      - name: Verify the re-run changed nothing and report counts
+        run: |
+          node - "$RUNNER_TEMP/demo-seed-1.json" "$RUNNER_TEMP/demo-seed-2.json" <<'EOF' >>"$GITHUB_STEP_SUMMARY"
+          const fs = require("fs");
+          const [first, second] = process.argv.slice(2).map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
+          const problems = [];
+          for (const [demo, r] of Object.entries(first)) {
+            if (r.error || r.skipped) problems.push(`${demo}: first run ${r.error ?? "skipped"}`);
+            if (!second[demo]?.skipped) problems.push(`${demo}: second run was not a no-op`);
+            if (JSON.stringify(second[demo]?.counts) !== JSON.stringify(r.counts)) problems.push(`${demo}: counts changed on re-run`);
+          }
+          console.log("## Demo seed\n\n| Demo | Slug | s | Products | Variants | Customers | Orders | By status |\n|---|---|---|---|---|---|---|---|");
+          for (const [demo, r] of Object.entries(first)) {
+            const c = r.counts ?? {};
+            console.log(`| ${demo} | ${r.slug} | ${r.seconds} | ${c.products} | ${c.variants} | ${c.customers} | ${c.orders} | ${JSON.stringify(c.ordersByStatus)} |`);
+          }
+          console.log(problems.length ? `\n**Problems:** ${problems.join("; ")}` : "\nRe-run: no-op for every demo.");
+          if (problems.length) { console.error(problems.join("\n")); process.exit(1); }
+          EOF
+
+      - name: Upload seed summaries (counts only, no credentials)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: demo-seed-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/demo-seed-*.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Collect stack logs
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/bayios-e2e/logs"
+          cp "$RUNNER_TEMP/bayios-e2e"/*.log "$RUNNER_TEMP/bayios-e2e/logs/" 2>/dev/null || true
+          docker logs supabase_auth_bayios >"$RUNNER_TEMP/bayios-e2e/logs/supabase-auth.log" 2>&1 || true
+
+      - name: Upload stack logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: demo-seed-logs-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bayios-e2e/logs
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Stop the stack
+        if: always()
+        run: bash infra/ci/e2e-stack.sh down

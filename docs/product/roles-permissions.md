@@ -134,7 +134,27 @@ Gösterim: **✓** izinli · **–** izin yok · **K** koşullu (dipnot) · **O*
 - Sipariş yanıtlarındaki müşteri adı müşteri verisidir: yalnızca `customers.read` sahiplerine dolu; warehouse_staff (dipnot 8) için boş. Kayıtlardaki kişi görünen adları (oluşturan, onaylayan, zaman çizelgesi, görev atanan) kaydı okuyabilen herkese gösterilir; e-posta yalnızca üye listesinde (`members.read`).
 - Onaylanmamış sevkiyat iptali `tasks.assign` ister (yönetici kararı); `orders.ship` sahibi warehouse_staff iptal edemez.
 
+**Uygulama yorumu (#129, matris değişikliği değildir) — ekip yönetimi:**
+- Davet (`members.invite`): owner `admin`, `manager`, `sales`, `warehouse_staff`, `viewer` davet eder; admin yalnızca manager
+  ve altını (dipnot 1'in davete uygulanışı; "kimse kendi rolünden yükseğini veremez, admin'i yalnızca owner verir").
+  `owner` davet edilmez ve rol değişikliğiyle verilmez; yalnızca **sahiplik devri** (`ownership.transfer`, yalnızca owner):
+  hedef aktif üye owner olur, devreden admin olur (tek transaction). Davet yenileme/iptali de aynı hiyerarşiye tabidir
+  (admin, admin davetine dokunamaz → `members.role_not_grantable`).
+- Rol değişikliği ve askıya alma / yeniden etkinleştirme (`members.manage`): owner herkesi; admin (dipnot 1) yalnızca
+  manager ve altındaki üyeleri yönetir (`members.not_manageable`) ve admin atayamaz. Son **aktif** owner düşürülemez /
+  askıya alınamaz (`members.last_owner`); kimse kendini askıya alamaz. Askıya alma bir sonraki istekte etkilidir.
+- Davet kabulü izin değildir: davetli henüz üye olmadığından tenant'sız uçtur; davet adresiyle aynı, doğrulanmış e-posta
+  ile oturum gerekir (threat-model §4.1).
+
 ## 4. Ayarlanabilir kurallar (tenant düzeyi)
+
+Okuma/güncelleme: `GET/PATCH /api/v1/tenant/settings` (`tenant.settings.manage`: owner, admin; ETag/If-Match; değerler
+doğrulanır). Bu tablodaki kurallardan biri değişince `tenant.rules_changed`, diğer iş ayarları değişince
+`tenant.settings_changed` audit olayı yazılır (#129). Kurallar her istekte okunur: değişiklik bir sonraki istekte
+etkilidir (`GET /me` izinleri, uç kapısı `auth.disabled_by_tenant_rule`, `GET /members?permission=`). "2FA zorunlu" bayrağı
+saklanır ve audit'lenir ancak **henüz zorlanmaz**: bu belge API tarafında zorlanabilir bir kural tanımlamıyor (öneri:
+owner/admin için Supabase token'ında `aal = aal2` şartı; MFA kayıt ekranı ve kilitlenme kurtarma yolu olmadan açılırsa
+owner'ı kilitler — ürün sahibi kararı).
 | Kural | Varsayılan | Etkilediği izin |
 |---|---|---|
 | Satış personeli sipariş onaylayabilir | Açık | orders.approve |
@@ -167,7 +187,7 @@ Abonelik düşürüldüğünde/bittiğinde: veri silinmez; entitlement'ı kalkan
 - **Salt okunur olanlar (yeni kullanım kapalı):** yeni aktif depo (aktif depo sayısı ≤ `max_warehouses`; pasif depoyu yeniden aktifleştirme de sayılır), lokasyon oluşturma/düzenleme ve depoda lokasyonu açma (`warehouse_locations`), yeni WhatsApp ayrıştırması (`ai_order_parsing`). Depo adı değiştirme, depoyu pasifleştirme, lokasyonu kapatma (`usesLocations = false`, stok yokken) her pakette açıktır (geri dönüş yolu).
 - AI ek modülü kapalıyken mevcut ayrıştırmalar listelenir, okunur, **onaylanır/reddedilir** (sipariş akışında takılı kalmaz); yalnızca yeni ayrıştırma reddedilir.
 - Ek modül "etkinleştirme" ödeme olmadan ücretsiz ve süreli (`Billing:ModuleTrialDays`, varsayılan 30) bir denemedir; modül başına bir kez; yalnızca owner (`billing.manage`), denetim kaydıyla. Paket değişikliği API'de yoktur.
-- Limit sayıları geçicidir (AQ-01/AQ-06): Temel `max_warehouses` 1, `max_users` 5; Profesyonel depo sınırsız, `max_users` 25; AI ek modülü `ai_parses_per_month` 1000. `max_users` tanımlı ve kullanımda gösterilir, ancak üye davet ucu henüz olmadığından zorlanmaz. `barcode_operations` (Profesyonel) tanımlıdır, henüz bir uç kapılamaz.
+- Limit sayıları geçicidir (AQ-01/AQ-06): Temel `max_warehouses` 1, `max_users` 5; Profesyonel depo sınırsız, `max_users` 25; AI ek modülü `ai_parses_per_month` 1000. `max_users` = **aktif üye + açık (bekleyen, süresi dolmamış) davet**; davet oluşturma, davet yenileme, davet kabulü ve askıdaki üyeyi yeniden etkinleştirme bu sınırla zorlanır (#129); askıdaki üye ve iptal edilmiş/süresi dolmuş davet koltuk tutmaz. `barcode_operations` (Profesyonel) tanımlıdır, henüz bir uç kapılamaz.
 
 ## 6. Test gereksinimleri
 - Her API ucu için rol × izin tablo-temelli yetki testi (bu dokümandaki matris kaynak alınır).

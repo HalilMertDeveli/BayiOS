@@ -12,7 +12,9 @@ using Npgsql;
 
 namespace BayiOS.Modules.Identity.Application;
 
-internal sealed record AppError(int Status, string Code, string Title, IDictionary<string, string[]>? Errors = null);
+/// <param name="Extensions">Extra Problem Details members (e.g. the id of a conflicting invitation).</param>
+internal sealed record AppError(
+    int Status, string Code, string Title, IDictionary<string, string[]>? Errors = null, IReadOnlyDictionary<string, object?>? Extensions = null);
 
 /// <summary>A merge-patch member: <see cref="IsSet"/> is false when absent from the document.</summary>
 internal readonly record struct PatchValue(bool IsSet, string? Value);
@@ -229,7 +231,9 @@ internal sealed partial class IdentityService(
         }
 
         var after = ToResponse(settings);
-        var changes = new AuditChanges()
+
+        // The adjustable rules of roles-permissions §4 (they change who may do what) get their own event.
+        var rules = new AuditChanges()
             .Field("negativeStockPolicy", before.NegativeStockPolicy, after.NegativeStockPolicy)
             .Field("salesCanApproveOrders", before.SalesCanApproveOrders, after.SalesCanApproveOrders)
             .Field("salesMaxDiscountPercent", before.SalesMaxDiscountPercent, after.SalesMaxDiscountPercent)
@@ -237,7 +241,15 @@ internal sealed partial class IdentityService(
             .Field("showCostToViewer", before.ShowCostToViewer, after.ShowCostToViewer)
             .Field("staffCanAssignBarcode", before.StaffCanAssignBarcode, after.StaffCanAssignBarcode)
             .Field("staffCanApproveReceipt", before.StaffCanApproveReceipt, after.StaffCanApproveReceipt)
-            .Field("require2fa", before.Require2fa, after.Require2fa)
+            .Field("require2fa", before.Require2fa, after.Require2fa);
+        if (rules.HasChanges)
+        {
+            await audit.RecordAsync(
+                new AuditEvent(AuditActions.TenantRulesChanged, "tenant_settings", settings.TenantId, rules.ToDictionary()),
+                cancellationToken);
+        }
+
+        var changes = new AuditChanges()
             .Field("defaultTaxRate", before.DefaultTaxRate, after.DefaultTaxRate)
             .Field("pricesIncludeTaxDisplay", before.PricesIncludeTaxDisplay, after.PricesIncludeTaxDisplay)
             .Field("requireOrderApproval", before.RequireOrderApproval, after.RequireOrderApproval)

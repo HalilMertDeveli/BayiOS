@@ -18,8 +18,10 @@ describe("safeNextPath", () => {
 });
 
 describe("route groups", () => {
-  it("only the landing, auth screens and callback are public", () => {
-    for (const path of ["/", "/giris", "/kayit", "/sifre-sifirla", "/auth/callback"]) expect(isPublicPath(path)).toBe(true);
+  it("only the landing, auth screens, callback and the invitation page are public", () => {
+    for (const path of ["/", "/giris", "/kayit", "/sifre-sifirla", "/auth/callback", "/davet"]) expect(isPublicPath(path)).toBe(true);
+    // The invitation page is reachable signed in too (accepting needs a session).
+    expect(isGuestOnlyPath("/davet")).toBe(false);
     for (const path of ["/pano", "/isletme-olustur", "/isletme-sec", "/sifre-yenile", "/tasarim-sistemi"]) {
       expect(isPublicPath(path)).toBe(false);
     }

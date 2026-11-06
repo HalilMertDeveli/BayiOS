@@ -75,6 +75,9 @@ up_supabase() {
   wait_http "${SUPABASE_URL}/auth/v1/.well-known/jwks.json" 60 jwks || fail "Supabase JWKS not reachable"
   curl --silent --fail "${SUPABASE_URL}/auth/v1/.well-known/jwks.json" | grep -q '"ES256"' \
     || fail "Supabase JWKS does not publish an ES256 key (the API rejects HS256 by design)"
+  # The demo seeder / demo E2E (apps/web/e2e-local/demo) sign users in against GoTrue with this public local-dev key.
+  # Later CI steps get it through GITHUB_ENV; locally the seeder asks `supabase status` itself.
+  if [ -n "${GITHUB_ENV:-}" ]; then echo "SUPABASE_PUBLISHABLE_KEY=${PUBLISHABLE_KEY}" >>"$GITHUB_ENV"; fi
 }
 
 # ---------------------------------------------------------------- 2. Postgres 17 + EF migrations
@@ -160,7 +163,8 @@ up() {
   up_supabase
   up_database
   up_api
-  up_web
+  # E2E_SKIP_WEB=1: API-only stack (e.g. the demo seeder workflow needs no web app).
+  if [ "${E2E_SKIP_WEB:-0}" = 1 ]; then log "Skipping the web app (E2E_SKIP_WEB=1)"; else up_web; fi
   log "Stack ready: web http://localhost:${WEB_PORT} · API http://localhost:${API_PORT} · Auth ${SUPABASE_URL} · Mailpit http://127.0.0.1:54324"
   log "Logs: ${STATE_DIR}/api.log, ${STATE_DIR}/web.log"
 }

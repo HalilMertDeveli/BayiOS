@@ -208,6 +208,23 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 | T10 | Realtime / SignalR | Grup adı tahmin edilerek başka tenant olayları dinlenir | Gruplara yalnızca sunucu ekler (`tenant:{id}`), membership doğrulandıktan sonra | Integration: SignalR test client |
 | T11 | Outbox / bildirim | Bildirim yanlış tenant kullanıcılarına gider | Alıcılar tenant membership'ten sorgulanır | Integration |
 
+### 4.1 Üye daveti ve üyelik yönetimi (uygulanan, #129)
+
+E-posta gönderim altyapısı ve Supabase service-role anahtarı **yoktur**. Davet eden, `POST /members/invitations`
+yanıtındaki token'ı (32 rastgele bayt, base64url, bir kez gösterilir) davetliye kendisi iletir. Kabul açık bir uçtur
+(`POST /invitations/accept`, `X-Tenant-Id` yok); `GET /me` otomatik katılım yapmaz (salt okunur transaction; davet
+spam'iyle rıza dışı tenant'a eklemeyi önler).
+
+| # | Tehdit | Önlem | Test |
+|---|---|---|---|
+| I1 | Token sızıntısı (log, ekran görüntüsü, sohbet) ile hesap ele geçirme / yetkisiz katılım | Token tek başına yetmez: kabul, erişim token'ının `email` claim'i davet adresiyle (küçük harf, kırpılmış) **aynı** ve **doğrulanmış** olmalı. Token düz saklanmaz (yalnızca SHA-256, `identity.invitations.token_hash`); yanıt idempotency deposuna da yazılmaz (oluşturma/yenileme `Idempotency-Key` almaz). Web bağlantıyı URL fragment'i (`#token`) ile kurmalıdır (sunucu/Referer'a gitmez) | `InvitationsApiTests` (farklı/eksik e-posta, DB'de token yok, idempotency deposunda token yok) |
+| I2 | Doğrulanmamış e-posta ile davet adresini sahiplenme | Supabase token'ında üst düzey `email_verified` yok (yerel GoTrue ile doğrulandı); `user_metadata.email_verified` onayda `true` olur **ama kullanıcı tarafından yazılabilir**. Asıl güvence Supabase "Confirm email" ayarıdır (`enable_confirmations = true`: onaysız adres oturum alamaz — canlı yerel yığında doğrulandı). Üst düzey `email_verified` (OIDC / custom access-token hook) her zaman kabul edilir; `Invitations:TrustUserMetadataEmailVerified=false` ile yalnızca o kabul edilir. Anonim oturum (`is_anonymous`) hiçbir zaman sayılmaz | `InvitationsApiTests.An_unverified_or_anonymous_session_cannot_accept`, `MemberRulesTests` |
+| I3 | Replay / eski token | Tek kullanımlık (kabulde `accepted`); yenileme token'ı döndürür, eskisi geçersiz; iptal edilen/kabul edilen token → 404 `invitation.not_found` (bilinmeyen token ile aynı yanıt); süre 7 gün (`Invitations:LifetimeDays`) → 410 | `A_used_token_cannot_be_replayed_by_anyone`, `Expired_revoked_and_rotated_tokens_are_rejected` |
+| I4 | RLS dışı arama (davetli henüz üye değil) | `identity.find_invitation_tenant(bytea)` SECURITY DEFINER, sabit `search_path`, PUBLIC'e kapalı; sahibin politikası yalnızca `pending` satırları okur; fonksiyon yalnızca tenant id döner. Sonrası o tenant'ın bağlamında normal RLS ile | `The_runtime_role_finds_an_invitation_only_through_the_token_lookup_function`, `DatabaseSecurityGuardTests` |
+| I5 | Rol yükseltme (admin → admin/owner atama, owner'ı askıya alma) | Hiyerarşi: owner admin ve altını, admin yalnızca manager ve altını davet eder/yönetir (dipnot 1, K kaydı serviste değerlendirilir); `owner` yalnızca sahiplik devriyle (`ownership.transfer`, yalnızca owner) verilir; son aktif owner düşürülemez/askıya alınamaz; kişi kendini askıya alamaz. Üye değişiklikleri tenant başına transaction kilidiyle sıralanır (eşzamanlı iki owner birbirini düşüremez) | `MemberManagementApiTests` (rol × hedef × yeni rol tablosu, eşzamanlılık) |
+| I6 | Davet spam'i / koltuk aşımı | `members.invite` yalnızca owner/admin; e-posta başına tek bekleyen davet; `max_users` = aktif üye + açık davet, kilit altında sayılır (403 `entitlement.limit_exceeded`); genel yazma rate limit'i | `Max_users_counts_active_members_and_open_invitations`, `Concurrent_invitations_cannot_overshoot_max_users` |
+| I7 | Askıya alınan kullanıcının süren oturumu | Tenant çözümleme her istekte yalnızca `active` üyeliği kabul eder: askıya alma bir sonraki istekte etkilidir. Supabase oturumu iptal edilmez (service-role yok); kullanıcı başka tenant'larına erişmeye devam eder | `A_disabled_member_loses_access_on_the_next_request_and_regains_it_when_enabled` |
+
 ## 5. JWT tuzakları ve kontroller
 
 | Tuzak | Kontrol |
@@ -266,7 +283,7 @@ Her olay: `id, tenant_id, actor_user_id, actor_role, action, entity_type, entity
 
 | Kategori | Olaylar |
 |---|---|
-| Kimlik/üyelik | `member.invited`, `member.joined`, `member.role_changed`, `member.removed`, `tenant.created`, `tenant.settings_changed` |
+| Kimlik/üyelik | `member.invited`, `member.invite_resent`, `member.invite_revoked`, `member.joined`, `member.role_changed`, `member.disabled`, `member.enabled`, `member.ownership_transferred`, `member.removed`, `tenant.created`, `tenant.settings_changed`, `tenant.rules_changed` |
 | Erişim | `auth.forbidden_tenant_access` (başka tenant denemesi), `auth.rbac_denied`, `rate_limit.exceeded` |
 | Katalog/fiyat | `product.created/updated/archived`, `price_list.updated`, `price_list.imported` |
 | Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.negative_stock_confirmed` (`warn` politikasında açık onayla eksiye düşüş), `inventory.transfer_posted`, `inventory.count_posted` |
@@ -290,9 +307,17 @@ token sayıları), `ai.draft_created` (sipariş id/no, seçim sayıları: propos
 (`ai.line_flagged_ambiguous` ayrı olay yerine `ai.parse_requested.ambiguous` sayısı; `ai.draft_approved` = Orders'ın
 `order.approved` olayı), `billing.trial_started`, `billing.trial_expired`, `billing.module_activated`,
 `billing.module_deactivated`, `billing.module_trial_expired` (#124; ödeme bilgisi yok), `export.downloaded` (#125; yalnızca
-rapor, biçim ve satır sayısı — dışa aktarılan veri yoktur). Kaynak: `SharedKernel/Platform/Audit/AuditLog.cs`
-(`AuditActions`) ve modül sabitleri (`ImportAuditActions`, `CustomerAuditActions`, `AssistantAuditActions`). Tablodaki diğer kodlar henüz uygulanmadı; özellikle
-`member.*` ve `auth.*` (erişim reddi) olayları #89'da açık kalır (Identity uçlarına bağlı).
+rapor, biçim ve satır sayısı — dışa aktarılan veri yoktur), **üyelik (#129):** `member.invited` (rol, bitiş),
+`member.invite_resent` (rol, token sayısı, bitiş), `member.invite_revoked` (rol), `member.joined` (kullanıcı id, rol, davet
+id), `member.role_changed` (kullanıcı id, rol from/to), `member.disabled` / `member.enabled` (kullanıcı id, rol, durum
+from/to), `member.ownership_transferred` (eski/yeni owner kullanıcı id'leri) — **e-posta adresi ve token hiçbir olayda
+yoktur** (data-policy §8); `tenant.rules_changed` (roles-permissions §4 kuralları: satış onayı, iskonto sınırı, maliyet
+görünürlüğü, depo barkod/mal kabul, negatif stok, 2FA bayrağı; diğer iş ayarları `tenant.settings_changed`'de kalır),
+`billing.trial_shortened` (operatör aracı `infra/ops/shorten-trial.sql`, `actor_role = 'operator'`). Kaynak:
+`SharedKernel/Platform/Audit/AuditLog.cs` (`AuditActions`) ve modül sabitleri (`ImportAuditActions`,
+`CustomerAuditActions`, `AssistantAuditActions`). Tablodaki diğer kodlar henüz uygulanmadı: `member.removed` (üyelik
+silinmez, askıya alınır) ve `auth.*` / `rate_limit.exceeded` (erişim reddi olayları: reddedilen istek geri alındığından ayrı
+bir transaction gerektirir) #89'da açık kalır.
 
 Audit tablosu append-only; okuma yalnızca owner/admin; saklama süresi `data-policy.md` §4 (2 yıl).
 

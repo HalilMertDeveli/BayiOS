@@ -41,7 +41,7 @@ const taskPath = (id: string, suffix = "") => `/api/v1/picking-tasks/${encodeURI
 const shipmentPath = (id: string, suffix = "") => `/api/v1/shipments/${encodeURIComponent(id)}${suffix}`;
 
 /** "My work list": active tasks assigned to me (`assigned`) or still in the pool (`pool`). Needs tasks.read.own. */
-export async function listMyTasks(api: ApiClient, scope: "assigned" | "pool", signal?: AbortSignal): Promise<TaskSummary[]> {
+export async function listMyTasks(api: ApiClient, scope: "assigned" | "pool" | "all", signal?: AbortSignal): Promise<TaskSummary[]> {
   const query = new URLSearchParams({ scope, limit: String(FULFILMENT_PAGE_SIZE) });
   return (await api.request<MyTasks>(`/api/v1/picking-tasks/mine?${query}`, { tenant: true, signal })).data.items;
 }

@@ -66,4 +66,10 @@ describe("reason dialogs", () => {
     expect(validateReason("reject", "", "x".repeat(501))).toMatch(/500/);
     expect(validateReason("reject", "", "Fiyat hatalı")).toBeNull();
   });
+
+  it("close-remaining needs a preset; 'Diğer' needs a note (#129)", () => {
+    expect(validateReason("close-remaining", "", "")).toMatch(/Kalanı kapatma sebebini/);
+    expect(validateReason("close-remaining", "Diğer", "")).toMatch(/açıklama/);
+    expect(validateReason("close-remaining", "Stok tedarik edilemiyor", "")).toBeNull();
+  });
 });

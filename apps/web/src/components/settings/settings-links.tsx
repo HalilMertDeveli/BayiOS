@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ListPlus, Puzzle, type LucideIcon } from "lucide-react";
+import { ListPlus, Puzzle, SlidersHorizontal, Tags, Users, type LucideIcon } from "lucide-react";
 import { PLAN_PAGE_HREF } from "@/lib/billing/labels";
 import { useSession } from "@/lib/session/session-context";
 
@@ -19,11 +19,31 @@ function SettingsLink({ href, title, description, Icon }: { href: string; title:
   );
 }
 
-/** The settings pages that are ready; "Paket ve modüller" for billing.read (owner, admin). Visibility only. */
+/**
+ * The settings pages that are ready: "Ekip" for members.read (owner, admin, manager), "İş kuralları" for
+ * tenant.settings.manage and "Paket ve modüller" for billing.read (owner, admin). Visibility only.
+ */
 export function SettingsLinks() {
   const { access } = useSession();
   return (
     <ul aria-label="Diğer ayarlar" className="grid max-w-3xl gap-3 md:grid-cols-2">
+      {access.canSome("members.read") ? (
+        <SettingsLink href="/ayarlar/ekip" title="Ekip" description="Kişileri davet edin, rollerini değiştirin, üyeliği askıya alın." Icon={Users} />
+      ) : null}
+      {access.can("tenant.settings.manage") ? (
+        <SettingsLink
+          href="/ayarlar/is-kurallari"
+          title="İş kuralları"
+          description="Satış onayı, iskonto sınırı, alış fiyatı görünürlüğü ve depo yetkileri."
+          Icon={SlidersHorizontal}
+        />
+      ) : null}
+      <SettingsLink
+        href="/urunler/markalar"
+        title="Marka, kategori ve birimler"
+        description="Ürünlerde seçilen markalar, kategori ağacı ve ölçü birimleri."
+        Icon={Tags}
+      />
       <SettingsLink href="/ayarlar/ozel-alanlar" title="Özel alanlar" description="Ürün ve varyantlara işletmenize özel bilgi alanları ekleyin." Icon={ListPlus} />
       {access.can("billing.read") ? (
         <SettingsLink

@@ -13,6 +13,7 @@ describe("orderPermissions — derived from GET /me effective permissions", () =
       editDraftOwnOnly: false,
       submit: true,
       approve: true,
+      complete: true,
       cancel: true,
       cancelOwnOpenOnly: false,
       overridePrice: true,
@@ -32,6 +33,8 @@ describe("orderPermissions — derived from GET /me effective permissions", () =
       cancelOwnOpenOnly: true,
       overridePrice: false,
       discount: false,
+      // orders.edit.approved is not granted to sales: no "Tamamla".
+      complete: false,
     });
   });
 
@@ -41,7 +44,7 @@ describe("orderPermissions — derived from GET /me effective permissions", () =
 
   it("warehouse_staff reads task-linked orders only (K⁸) and has no order-desk action", () => {
     const p = orderPermissions(accessFor("warehouse_staff"));
-    expect(p).toMatchObject({ read: true, readTaskLinkedOnly: true, create: false, editDraft: false, submit: false, approve: false, cancel: false, discount: false });
+    expect(p).toMatchObject({ read: true, readTaskLinkedOnly: true, create: false, editDraft: false, submit: false, approve: false, complete: false, cancel: false, discount: false });
   });
 
   it("viewer is read-only; no tenant means nothing", () => {

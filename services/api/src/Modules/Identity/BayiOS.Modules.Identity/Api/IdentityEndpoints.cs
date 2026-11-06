@@ -295,10 +295,21 @@ internal static class IdentityEndpoints
         return TypedResults.Ok(result.Value.Settings);
     }
 
-    private static ProblemHttpResult Problem(AppError error) => TypedResults.Problem(
-        error.Errors is null
-            ? ApiProblems.Create(error.Status, error.Code, error.Title)
-            : ApiProblems.Validation(error.Errors));
+    internal static ProblemHttpResult Problem(AppError error)
+    {
+        if (error.Errors is not null)
+        {
+            return TypedResults.Problem(ApiProblems.Validation(error.Errors));
+        }
+
+        var problem = ApiProblems.Create(error.Status, error.Code, error.Title);
+        foreach (var (name, value) in error.Extensions ?? new Dictionary<string, object?>())
+        {
+            problem.Extensions[name] = value;
+        }
+
+        return TypedResults.Problem(problem);
+    }
 
     private static string ETag(long version) => $"W/\"{version.ToString(CultureInfo.InvariantCulture)}\"";
 

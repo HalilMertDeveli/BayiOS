@@ -78,3 +78,6 @@ export const linePriceSourceLabels: Record<string, string> = {
 
 /** Preset cancel reasons (user-flows AF-04); the text sent is "<preset>: <note>". */
 export const CANCEL_REASONS = ["Müşteri vazgeçti", "Stok yok", "Fiyat anlaşmazlığı", "Mükerrer sipariş", "Diğer"] as const;
+
+/** Preset reasons for closing the rest of a partially shipped order (short-close); sent the same way. */
+export const CLOSE_REMAINING_REASONS = ["Stok tedarik edilemiyor", "Müşteri kalanı istemiyor", "Ürün artık satılmıyor", "Diğer"] as const;
