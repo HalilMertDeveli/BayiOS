@@ -24,7 +24,7 @@ import { logApiErrors } from "./support/real-stack";
  * the Imports API (the web has no import screen yet — /ice-aktarma is a placeholder) and shows up in the catalog →
  * a quantity tier (20+) is added on the default price list in the UI → goods receipt by barcode onto shelves → an
  * order of 25 gets the tier price → picking with a damaged-goods shortage → partial shipment → short-close of the rest
- * (API: no web action yet) → stock and reservations from the ledger → top-products report exported as CSV and XLSX.
+ * on the order detail ("Kalanı kapat") → stock and reservations from the ledger → top-products report exported as CSV and XLSX.
  */
 const PSU = "PSU-5V40A";
 const CABLE = "KBL-FLAT-16P";
@@ -145,9 +145,18 @@ test("LED demo: toplu katalog içe aktarma → fiyat kademesi → kademeli fiyat
   // The 3 damaged units stay reserved until the manager decides.
   await expectStock(page, ist.id, PSU, RECEIVED[PSU] - (ORDERED[PSU] - DAMAGED), DAMAGED, RECEIVED[PSU] - ORDERED[PSU]);
 
-  // ---- 7. Short-close the rest. No web action exists for it yet (gap, docs/operations/demo.md): the owner's own token.
-  const order = await demo.api.get<{ order: { version: number } }>(`/api/v1/orders/${orderId}`);
-  const closed = await demo.api.post<Order>(`/api/v1/orders/${orderId}/close-remaining`, { reason: "Hasarlı 3 adet kapatıldı (sentetik)" }, { ifMatch: `W/"${order.order.version}"` });
+  // ---- 7. Short-close the rest on the order detail ("Kalanı kapat", #129): preset reason + note, then the API state.
+  await page.goto(`/siparisler/${orderId}`);
+  await page.getByRole("region", { name: "İşlemler" }).getByRole("button", { name: "Kalanı kapat" }).click();
+  const closeDialog = page.getByRole("alertdialog");
+  await expect(closeDialog.getByRole("list", { name: "Kapatılacak kalan miktar" })).toContainText(PSU);
+  await closeDialog.getByLabel("Kapatma sebebi").selectOption("Diğer");
+  await closeDialog.getByLabel("Açıklama").fill("Hasarlı 3 adet kapatıldı (sentetik)");
+  const closeResponse = page.waitForResponse((r) => r.url().endsWith(`/api/v1/orders/${orderId}/close-remaining`) && r.request().method() === "POST");
+  await closeDialog.getByRole("button", { name: "Kalanı kapat" }).click();
+  expect((await closeResponse).status()).toBe(200);
+  await expect(closeDialog).toHaveCount(0);
+  const closed = await demo.api.get<Order>(`/api/v1/orders/${orderId}`);
   expect(closed.order.status).toBe("shipped");
   const psuLine = closed.lines.find((l) => l.sku === PSU)!;
   expect([Number(psuLine.shippedQuantity), Number(psuLine.cancelledQuantity)]).toEqual([ORDERED[PSU] - DAMAGED, DAMAGED]);

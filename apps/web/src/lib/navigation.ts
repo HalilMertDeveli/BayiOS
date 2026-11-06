@@ -58,7 +58,7 @@ export const navSections: readonly NavSection[] = [
       {
         href: "/pano",
         label: "Pano",
-        description: "Bekleyen onaylar, kritik stok ve görev özeti burada olacak.",
+        description: "Onay bekleyen siparişler, bugünkü siparişler, kritik stok ve görev özeti.",
         Icon: LayoutDashboard,
         visible: (a) => a.can("orders.read") || a.canSome("reports.read"),
       },

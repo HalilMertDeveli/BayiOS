@@ -175,9 +175,9 @@ export function createMockCatalog(options: { products?: number | MockProduct[]; 
       { id: BRAND_IDS.parlak, name: "Parlak (mock)", isArchived: false, version: 1, createdAt: NOW, updatedAt: null },
     ],
     categories: [
-      { id: CATEGORY_IDS.aydinlatma, parentId: null, name: "Aydınlatma", path: "1", depth: 0, sortOrder: 0, isArchived: false, version: 1, createdAt: NOW, updatedAt: null },
-      { id: CATEGORY_IDS.panel, parentId: CATEGORY_IDS.aydinlatma, name: "Panel", path: "1.2", depth: 1, sortOrder: 0, isArchived: false, version: 1, createdAt: NOW, updatedAt: null },
-      { id: CATEGORY_IDS.motor, parentId: null, name: "Motor", path: "3", depth: 0, sortOrder: 1, isArchived: false, version: 1, createdAt: NOW, updatedAt: null },
+      { id: CATEGORY_IDS.aydinlatma, parentId: null, name: "Aydınlatma", path: `/${CATEGORY_IDS.aydinlatma}/`, depth: 1, sortOrder: 0, isArchived: false, version: 1, createdAt: NOW, updatedAt: null },
+      { id: CATEGORY_IDS.panel, parentId: CATEGORY_IDS.aydinlatma, name: "Panel", path: `/${CATEGORY_IDS.aydinlatma}/${CATEGORY_IDS.panel}/`, depth: 2, sortOrder: 0, isArchived: false, version: 1, createdAt: NOW, updatedAt: null },
+      { id: CATEGORY_IDS.motor, parentId: null, name: "Motor", path: `/${CATEGORY_IDS.motor}/`, depth: 1, sortOrder: 1, isArchived: false, version: 1, createdAt: NOW, updatedAt: null },
     ],
     fields: options.fields ?? defaultFields(),
     products,
@@ -285,6 +285,137 @@ function mergeAttributes(current: Json, patch: Json | undefined): Json {
   return next;
 }
 
+type ReferenceKind = "units" | "brands" | "categories";
+const lower = (v: unknown) => String(v ?? "").trim().toLocaleLowerCase("tr");
+const cleanText = (v: unknown) => (typeof v === "string" ? v.trim().replace(/\s+/g, " ") : "");
+let referenceCounter = 0;
+
+/**
+ * Units / brands / categories (#129): GET (includeArchived, brand `q`), POST (Idempotency-Key required + replayed,
+ * 409 brand_name_taken / unit_code_taken / category_name_taken, 422 field errors in the API's English shapes),
+ * PATCH (If-Match → 412, merge patch) and DELETE = archive (If-Match; 409 category_has_children). Roles are not checked
+ * here: the screens gate on the MOCK /me permissions and the API's own tests cover the 403s.
+ */
+async function handleReference(
+  route: Route,
+  catalog: MockCatalog,
+  r: { path: string; method: string; body: Json | null; ifMatch: string | undefined; params: URLSearchParams },
+): Promise<boolean> {
+  const match = r.path.match(/^\/api\/v1\/(units|brands|categories)(?:\/([^/]+))?$/);
+  if (!match) return false;
+  const kind = match[1] as ReferenceKind;
+  const list = catalog[kind];
+  const id = match[2];
+  const reply = (status: number, payload: unknown, headers: Record<string, string> = {}) => fulfillJson(route, status, payload, headers).then(() => true);
+  const invalid = (errors: Record<string, string[]>) => reply(422, problemBody(422, "validation.failed", { errors }));
+  const active = (x: Json) => x.isArchived !== true;
+
+  const nameProblem = (field: string, value: unknown, max: number) => {
+    const name = cleanText(value);
+    return !name || name.length > max ? { [field]: [`Must be 1–${max} characters.`] } : null;
+  };
+  const conflict = (candidate: Json, self: string | null): string | null => {
+    if (kind === "brands" && list.some((x) => x.id !== self && active(x) && lower(x.name) === lower(candidate.name))) return "catalog.brand_name_taken";
+    if (kind === "units" && list.some((x) => x.id !== self && lower(x.code) === lower(candidate.code))) return "catalog.unit_code_taken";
+    if (
+      kind === "categories" &&
+      list.some((x) => x.id !== self && active(x) && (x.parentId ?? null) === (candidate.parentId ?? null) && lower(x.name) === lower(candidate.name))
+    ) {
+      return "catalog.category_name_taken";
+    }
+    return null;
+  };
+
+  if (!id && r.method === "GET") {
+    const all = r.params.get("includeArchived") === "true";
+    const q = lower(r.params.get("q"));
+    const items = list.filter((x) => (all || active(x)) && (!q || lower(x.name).includes(q)));
+    return reply(200, { items });
+  }
+
+  if (!id && r.method === "POST") {
+    const key = route.request().headers()["idempotency-key"];
+    if (!key) return reply(428, problemBody(428, "precondition.required"));
+    const replayKey = `${kind}:${key}`;
+    const replayed = referenceReplays.get(replayKey);
+    if (replayed) return reply(201, replayed, { ...etag(Number(replayed.version)), "Idempotent-Replayed": "true" });
+    const b = r.body ?? {};
+    const now = new Date().toISOString();
+    let created: Json;
+    if (kind === "brands") {
+      const problem = nameProblem("name", b.name, 100);
+      if (problem) return invalid(problem);
+      created = { id: uuid("b", 500 + ++referenceCounter), name: cleanText(b.name), isArchived: false, version: 1, createdAt: now, updatedAt: null };
+    } else if (kind === "units") {
+      const code = String(b.code ?? "").trim().toLowerCase();
+      const errors: Record<string, string[]> = {};
+      if (!code || /\s/.test(code) || code.length > 20) errors.code = ["Code must be 1–20 characters without whitespace."];
+      Object.assign(errors, nameProblem("name", b.name, 50) ?? {});
+      if (Object.keys(errors).length) return invalid(errors);
+      created = { id: uuid("a", 500 + ++referenceCounter), code, name: cleanText(b.name), allowsFraction: b.allowsFraction === true, isArchived: false, version: 1, createdAt: now, updatedAt: null };
+    } else {
+      const problem = nameProblem("name", b.name, 100);
+      if (problem) return invalid(problem);
+      const parentId = (b.parentId as string | null) ?? null;
+      const parent = parentId ? list.find((x) => x.id === parentId && active(x)) : null;
+      if (parentId && !parent) return invalid({ parentId: ["Parent category not found."] });
+      const depth = parent ? Number(parent.depth) + 1 : 1;
+      if (depth > 4) return invalid({ parentId: ["Category tree depth is limited to 4."] });
+      const newId = uuid("c", 500 + ++referenceCounter);
+      created = {
+        id: newId,
+        parentId,
+        name: cleanText(b.name),
+        path: `${parent ? String(parent.path) : "/"}${newId}/`,
+        depth,
+        sortOrder: Number(b.sortOrder ?? 0),
+        isArchived: false,
+        version: 1,
+        createdAt: now,
+        updatedAt: null,
+      };
+    }
+    const taken = conflict(created, null);
+    if (taken) return reply(409, problemBody(409, taken));
+    list.push(created);
+    referenceReplays.set(replayKey, created);
+    return reply(201, created, etag(1));
+  }
+
+  if (!id) return false;
+  const item = list.find((x) => x.id === id);
+  if (!item) return reply(404, problemBody(404, "resource.not_found"));
+  if (!r.ifMatch) return reply(428, problemBody(428, "precondition.required"));
+  if (versionOf(r.ifMatch) !== Number(item.version)) return reply(412, problemBody(412, "concurrency.version_mismatch"));
+
+  if (r.method === "PATCH") {
+    const b = r.body ?? {};
+    const max = kind === "units" ? 50 : 100;
+    if (b.name !== undefined && b.name !== null) {
+      const problem = nameProblem("name", b.name, max);
+      if (problem) return invalid(problem);
+    }
+    const next: Json = { ...item, ...(b.name ? { name: cleanText(b.name) } : {}) };
+    if (kind === "units" && typeof b.allowsFraction === "boolean") next.allowsFraction = b.allowsFraction;
+    if (kind === "categories" && b.sortOrder !== undefined && b.sortOrder !== null) next.sortOrder = Number(b.sortOrder);
+    const taken = conflict(next, id);
+    if (taken) return reply(409, problemBody(409, taken));
+    Object.assign(item, next, { version: Number(item.version) + 1, updatedAt: new Date().toISOString() });
+    return reply(200, item, etag(Number(item.version)));
+  }
+  if (r.method === "DELETE") {
+    if (kind === "categories" && list.some((x) => x.parentId === id && active(x))) {
+      return reply(409, problemBody(409, "catalog.category_has_children"));
+    }
+    Object.assign(item, { isArchived: true, version: Number(item.version) + 1, updatedAt: new Date().toISOString() });
+    await route.fulfill({ status: 204, headers: HEADERS });
+    return true;
+  }
+  return false;
+}
+
+const referenceReplays = new Map<string, Json>();
+
 /** Handles a Catalog request; returns false when the path is not a Catalog endpoint. */
 export async function handleCatalog(route: Route, catalog: MockCatalog): Promise<boolean> {
   const request = route.request();
@@ -302,9 +433,7 @@ export async function handleCatalog(route: Route, catalog: MockCatalog): Promise
   }
 
   const ifMatch = request.headers()["if-match"];
-  if (method === "GET" && path === "/api/v1/units") return fulfillJson(route, 200, { items: catalog.units }).then(() => true);
-  if (method === "GET" && path === "/api/v1/brands") return fulfillJson(route, 200, { items: catalog.brands }).then(() => true);
-  if (method === "GET" && path === "/api/v1/categories") return fulfillJson(route, 200, { items: catalog.categories }).then(() => true);
+  if (await handleReference(route, catalog, { path, method, body, ifMatch, params: url.searchParams })) return true;
 
   if (path === "/api/v1/custom-fields") {
     if (method === "GET") {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { accessFor } from "@/test/session";
 import type { FixtureRole } from "@/test/me-fixtures";
-import { availableActions, isDraftEditable, isInFulfilment, isOwnOrder } from "./actions";
+import { availableActions, isDraftEditable, isInFulfilment, isOwnOrder, isReasonAction } from "./actions";
 import { ORDER_STATUSES } from "./labels";
 import { orderPermissions } from "./permissions";
 
@@ -19,14 +19,24 @@ describe("availableActions — state machine × /me permissions (inventory-and-o
     expect(actionsOf(role, "approved")).toEqual(["cancel"]);
     expect(actionsOf(role, "picking")).toEqual(["cancel"]);
     expect(actionsOf(role, "packed")).toEqual(["cancel"]);
-    expect(actionsOf(role, "shipped")).toEqual([]);
+    expect(actionsOf(role, "shipped")).toEqual(["complete"]);
     expect(actionsOf(role, "completed")).toEqual([]);
     expect(actionsOf(role, "cancelled")).toEqual([]);
   });
 
-  it("no cancel after a partial shipment (I9: only short-close, which is a fulfilment action)", () => {
-    expect(actionsOf("owner", "picking", "partial")).toEqual([]);
-    expect(actionsOf("manager", "packed", "partial")).toEqual([]);
+  it("no cancel after a partial shipment (I9): only close-remaining, for orders.approve holders", () => {
+    expect(actionsOf("owner", "picking", "partial")).toEqual(["close-remaining"]);
+    expect(actionsOf("manager", "packed", "partial")).toEqual(["close-remaining"]);
+    // Nothing shipped yet, or approved without a shipment: nothing to close.
+    expect(actionsOf("owner", "picking", "none")).toEqual(["cancel"]);
+    expect(actionsOf("owner", "approved", "partial")).toEqual([]);
+  });
+
+  it("close-remaining follows the approve grant (sales: tenant rule K⁹); complete needs orders.edit.approved", () => {
+    expect(actionsOf("sales", "packed", "partial", ME)).toEqual(["close-remaining"]);
+    expect(actionsOf("sales", "packed", "partial", ME, { salesCanApproveOrders: false })).toEqual([]);
+    expect(actionsOf("sales", "shipped", "full", ME)).toEqual([]);
+    expect(actionsOf("manager", "shipped", "partial")).toEqual(["complete"]);
   });
 
   it("sales cancels only its own draft / pending order (K¹¹); approve follows the tenant rule (K⁹)", () => {
@@ -41,14 +51,19 @@ describe("availableActions — state machine × /me permissions (inventory-and-o
     for (const status of ORDER_STATUSES) expect(actionsOf(role, status, "none", ME)).toEqual([]);
   });
 
-  it("never offers fulfilment transitions (picking, packing, shipping, short-close move to Warehouse)", () => {
+  it("never offers picking, packing or shipping (Warehouse APIs)", () => {
     const all = ROLES.flatMap((role) => ORDER_STATUSES.flatMap((s) => [...actionsOf(role, s), ...actionsOf(role, s, "partial")]));
-    expect(new Set(all)).toEqual(new Set(["submit", "approve", "reject", "withdraw", "cancel"]));
+    expect(new Set(all)).toEqual(new Set(["submit", "approve", "reject", "withdraw", "cancel", "close-remaining", "complete"]));
   });
 
-  it("reject and cancel ask for a reason first", () => {
-    const actions = availableActions({ status: "pending_approval", fulfillmentStatus: "none" }, orderPermissions(accessFor("owner")));
+  it("reject, cancel and close-remaining ask for a reason first; complete does not", () => {
+    const owner = orderPermissions(accessFor("owner"));
+    const actions = availableActions({ status: "pending_approval", fulfillmentStatus: "none" }, owner);
     expect(actions.filter((a) => a.needsReason).map((a) => a.action)).toEqual(["reject", "cancel"]);
+    expect(availableActions({ status: "packed", fulfillmentStatus: "partial" }, owner).map((a) => [a.action, a.needsReason])).toEqual([["close-remaining", true]]);
+    expect(availableActions({ status: "shipped", fulfillmentStatus: "full" }, owner).map((a) => [a.action, a.needsReason])).toEqual([["complete", false]]);
+    expect(isReasonAction("close-remaining")).toBe(true);
+    expect(isReasonAction("complete")).toBe(false);
   });
 });
 

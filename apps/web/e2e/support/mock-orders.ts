@@ -75,6 +75,9 @@ export type MockOrder = {
   approvedAt: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
+  /** Set by close-remaining (short-close → shipped) and complete (#129); undefined = null. */
+  shippedAt?: string | null;
+  completedAt?: string | null;
   /** A picker reported a shortage (Warehouse, JOB 10). */
   hasShortage: boolean;
   /** Creator (own-records grants): orders created through the mock API belong to the signed-in mock user. */
@@ -249,8 +252,8 @@ function orderResponse(order: MockOrder, withAddresses = true) {
     approvedAt: order.approvedAt,
     approvedBy: order.approvedAt ? MOCK_USER_ID : null,
     approvedByName: order.approvedAt ? userName(MOCK_USER_ID) : null,
-    shippedAt: null,
-    completedAt: null,
+    shippedAt: order.shippedAt ?? null,
+    completedAt: order.completedAt ?? null,
     cancelledAt: order.cancelledAt,
     cancelReason: order.cancelReason,
     hasShortage: order.hasShortage,
@@ -622,7 +625,16 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
   if (method !== "POST" || !action) return false;
 
   // ---- Transitions ----
-  const gate: Record<string, string> = { submit: "submit", withdraw: "submit", reject: "approve", approve: "approve", cancel: "cancel" };
+  const gate: Record<string, string> = {
+    submit: "submit",
+    withdraw: "submit",
+    reject: "approve",
+    approve: "approve",
+    cancel: "cancel",
+    // #129: short-close after a partial shipment (orders.approve) and shipped → completed (orders.edit.approved).
+    "close-remaining": "approve",
+    complete: "edit.approved",
+  };
   if (!gate[action]) return done(json(route, 404, problemBody(404, "resource.not_found")));
   const transition = grant(`orders.${gate[action]}`);
   if (!transition) return forbidden(`orders.${gate[action]}`);
@@ -645,12 +657,14 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
     reject: { pending_approval: "draft" },
     approve: { pending_approval: "approved" },
     cancel: { draft: "cancelled", pending_approval: "cancelled", ...(order.fulfillmentStatus === "none" ? { approved: "cancelled", picking: "cancelled", packed: "cancelled" } : {}) },
+    "close-remaining": order.fulfillmentStatus === "partial" ? { picking: "shipped", packed: "shipped" } : {},
+    complete: { shipped: "completed" },
   };
   const target = next[action][from];
   if (!target) return done(json(route, 409, problemBody(409, "order.invalid_transition")));
 
   const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
-  if ((action === "reject" || action === "cancel") && !reason) {
+  if ((action === "reject" || action === "cancel" || action === "close-remaining") && !reason) {
     return done(json(route, 422, problemBody(422, "validation.failed", { errors: { reason: ["Required."] } })));
   }
   if (action === "submit" || action === "approve") {
@@ -693,13 +707,25 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
     order.cancelReason = reason;
     for (const l of order.lines) l.reservedQuantity = 0;
   }
+  if (action === "close-remaining") {
+    // The open rest is cancelled and its reservation released (released quantity goes back to "available").
+    for (const l of order.lines) {
+      const open = l.quantity - l.shippedQuantity - l.cancelledQuantity;
+      if (open > 0 && mock.available.has(l.variantId)) mock.available.set(l.variantId, mock.available.get(l.variantId)! + open);
+      l.cancelledQuantity += Math.max(0, open);
+      l.openQuantity = 0;
+      l.reservedQuantity = 0;
+    }
+    order.shippedAt = "2026-11-05T13:00:00Z";
+  }
+  if (action === "complete") order.completedAt = "2026-11-05T14:00:00Z";
   if (action === "submit") {
     order.shippingSnapshot = pickAddress(order, "shipping");
     order.billingSnapshot = pickAddress(order, "billing");
   }
   order.status = autoApprove ? "approved" : target;
   order.version += 1;
-  addHistory(order, action, from, reason || null);
+  addHistory(order, action === "close-remaining" ? "close_remaining" : action, from, reason || null);
   if (autoApprove) addHistory(order, "approve", "pending_approval");
   return succeed(200, order);
 }

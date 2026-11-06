@@ -262,7 +262,7 @@ test.describe("onay, red, iptal (mock)", () => {
     await expect(page.getByRole("list", { name: "Durum geçmişi" })).toContainText("Onaylandı, stok rezerve edildi");
   });
 
-  test("depoda: kısmi sevk + eksik bildirimi salt okunur gösterilir; iptal yok (yalnızca short-close, depo ekranında)", async ({ page }) => {
+  test("depoda: kısmi sevk + eksik bildirimi gösterilir; iptal yok, yalnızca “Kalanı kapat” (short-close, #129)", async ({ page }) => {
     const ctx = setup((c) =>
       add(c, 1, { status: "picking", fulfillmentStatus: "partial", hasShortage: true, lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 2 }] }),
     );
@@ -271,7 +271,9 @@ test.describe("onay, red, iptal (mock)", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Sipariş SIP-2026-000001" })).toBeVisible();
     await expect(page.getByText("Kısmi sevk").first()).toBeVisible();
     await expect(page.getByText("Depoda eksik bildirildi").first()).toBeVisible();
-    await expect(page.getByRole("heading", { name: "İşlemler" })).toHaveCount(0);
+    const actions = page.getByRole("region", { name: "İşlemler" });
+    await expect(actions.getByRole("button")).toHaveText(["Kalanı kapat"]);
+    await expect(page.getByRole("button", { name: "Siparişi iptal et" })).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Satır bazında sevkiyat durumu" })).toContainText("MOCK-001-1");
   });
 

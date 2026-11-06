@@ -40,6 +40,7 @@ export type Permission =
   | "orders.edit.draft"
   | "orders.submit"
   | "orders.approve"
+  | "orders.edit.approved"
   | "orders.price.override"
   | "orders.cancel"
   | "orders.ship"

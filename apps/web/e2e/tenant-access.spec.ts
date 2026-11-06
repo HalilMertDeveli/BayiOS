@@ -55,6 +55,8 @@ test("suspended while working (403 tenant.inactive): the page is replaced; switc
   const api = await signedIn(page, { memberships: [TENANT_A, TENANT_B] });
   await page.goto("/urunler");
   await expect(page.getByRole("heading", { level: 1, name: "Ürünler" })).toBeVisible();
+  // The list's own requests must be done first: a 403 for them would replace the page before the click (race).
+  await page.waitForLoadState("networkidle");
 
   api.inactiveTenants.push(TENANT_A.tenantId);
   await page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Stok" }).click();

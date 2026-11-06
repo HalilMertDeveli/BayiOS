@@ -13,8 +13,10 @@ export type OrderPermissions = {
   editDraftOwnOnly: boolean;
   /** orders.submit — send for approval, withdraw. */
   submit: boolean;
-  /** orders.approve — approve (reserve stock) and reject. */
+  /** orders.approve — approve (reserve stock), reject, and close the rest after a partial shipment (close-remaining). */
   approve: boolean;
+  /** orders.edit.approved — complete a shipped order (shipped → completed). */
+  complete: boolean;
   /** orders.cancel — cancel with a reason (any scope). */
   cancel: boolean;
   /** orders.cancel only for the caller's own draft / pending-approval orders (sales, K¹¹). */
@@ -46,6 +48,7 @@ export function orderPermissions(access: Access): OrderPermissions {
     editDraftOwnOnly: editDraft && (access.scope("orders.edit.draft") === "own" || access.hasCondition("orders.edit.draft", CONDITIONS.ordersOwn)),
     submit: access.can("orders.submit"),
     approve: access.canSome("orders.approve"),
+    complete: access.canSome("orders.edit.approved"),
     cancel,
     cancelOwnOpenOnly: access.hasCondition("orders.cancel", CONDITIONS.ordersOwnDraftOrPending),
     overridePrice,

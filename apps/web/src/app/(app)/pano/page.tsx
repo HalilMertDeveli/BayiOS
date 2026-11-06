@@ -1,21 +1,14 @@
-import { ApiStatus } from "@/components/api-status";
-import { ModulePlaceholder, placeholderMetadata } from "@/components/shell/module-placeholder";
+import { Dashboard } from "@/components/dashboard/dashboard";
 import { RoleHomeRedirect } from "@/components/shell/role-home-redirect";
 
-export const metadata = placeholderMetadata("/pano");
+export const metadata = { title: "Pano" };
 
+/** W03 Pano (#129): role-aware overview. Warehouse staff (no order desk) are sent on to Görevlerim (W12). */
 export default function PanoPage() {
   return (
-    <ModulePlaceholder href="/pano">
+    <>
       <RoleHomeRedirect from="/pano" />
-      <section aria-labelledby="system-status" className="rounded-lg border border-line bg-card p-4 shadow-e1">
-        <h2 id="system-status" className="text-h3 text-fg">
-          Sistem durumu
-        </h2>
-        <div className="mt-2">
-          <ApiStatus />
-        </div>
-      </section>
-    </ModulePlaceholder>
+      <Dashboard />
+    </>
   );
 }

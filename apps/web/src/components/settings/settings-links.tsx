@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ListPlus, Puzzle, SlidersHorizontal, Users, type LucideIcon } from "lucide-react";
+import { ListPlus, Puzzle, SlidersHorizontal, Tags, Users, type LucideIcon } from "lucide-react";
 import { PLAN_PAGE_HREF } from "@/lib/billing/labels";
 import { useSession } from "@/lib/session/session-context";
 
@@ -38,6 +38,12 @@ export function SettingsLinks() {
           Icon={SlidersHorizontal}
         />
       ) : null}
+      <SettingsLink
+        href="/urunler/markalar"
+        title="Marka, kategori ve birimler"
+        description="Ürünlerde seçilen markalar, kategori ağacı ve ölçü birimleri."
+        Icon={Tags}
+      />
       <SettingsLink href="/ayarlar/ozel-alanlar" title="Özel alanlar" description="Ürün ve varyantlara işletmenize özel bilgi alanları ekleyin." Icon={ListPlus} />
       {access.can("billing.read") ? (
         <SettingsLink
