@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CircleAlert, Package, Plus, Rows3, Rows4, Search, SearchX, SlidersHorizontal } from "lucide-react";
+import { CircleAlert, Package, Plus, Rows3, Rows4, Search, SearchX, SlidersHorizontal, Tags } from "lucide-react";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -211,12 +211,18 @@ export function ProductList() {
         title="Ürünler"
         description="Ürün kataloğu: ad, SKU veya barkodla arayın; kategori, marka ve özel alanlarla filtreleyin."
         actions={
-          permissions.write ? (
-            <Link href="/urunler/yeni" className={buttonClasses("primary")}>
-              <Plus className="size-4" aria-hidden="true" />
-              Yeni ürün
+          <>
+            <Link href="/urunler/markalar" className={buttonClasses("secondary")}>
+              <Tags className="size-4" aria-hidden="true" />
+              Marka, kategori ve birimler
             </Link>
-          ) : null
+            {permissions.write ? (
+              <Link href="/urunler/yeni" className={buttonClasses("primary")}>
+                <Plus className="size-4" aria-hidden="true" />
+                Yeni ürün
+              </Link>
+            ) : null}
+          </>
         }
       />
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ListPlus, Puzzle, type LucideIcon } from "lucide-react";
+import { ListPlus, Puzzle, Tags, type LucideIcon } from "lucide-react";
 import { PLAN_PAGE_HREF } from "@/lib/billing/labels";
 import { useSession } from "@/lib/session/session-context";
 
@@ -24,6 +24,12 @@ export function SettingsLinks() {
   const { access } = useSession();
   return (
     <ul aria-label="Diğer ayarlar" className="grid max-w-3xl gap-3 md:grid-cols-2">
+      <SettingsLink
+        href="/urunler/markalar"
+        title="Marka, kategori ve birimler"
+        description="Ürünlerde seçilen markalar, kategori ağacı ve ölçü birimleri."
+        Icon={Tags}
+      />
       <SettingsLink href="/ayarlar/ozel-alanlar" title="Özel alanlar" description="Ürün ve varyantlara işletmenize özel bilgi alanları ekleyin." Icon={ListPlus} />
       {access.can("billing.read") ? (
         <SettingsLink

@@ -10,7 +10,9 @@ const KNOWN: [RegExp, string | ((m: RegExpMatchArray) => string)][] = [
   [/^Cannot be null\.$/, "Bu alan boş bırakılamaz."],
   [/^Must be 1–(\d+) characters\.$/, (m) => `1–${m[1]} karakter girin.`],
   [/^Must be at most (\d+) characters\.$/, (m) => `En fazla ${m[1]} karakter girin.`],
-  [/^Must be 1–(\d+) characters without whitespace\.$/, (m) => `Boşluk içermeyen 1–${m[1]} karakter girin.`],
+  [/^(?:Code m|M)ust be 1–(\d+) characters without whitespace\.$/, (m) => `Boşluk içermeyen 1–${m[1]} karakter girin.`],
+  [/^Parent category not found\.$/, "Üst kategori bulunamadı veya arşivlenmiş. Sayfayı yenileyin."],
+  [/^Category tree depth is limited to (\d+)\.$/, (m) => `Kategori ağacı en fazla ${m[1]} seviye olabilir; bu kategorinin altına kategori eklenemez.`],
   [/^Must be a percentage between 0 and 100/, "0 ile 100 arasında, en fazla 2 ondalıklı bir oran girin."],
   [/^Must be active or inactive/, "Durum aktif veya pasif olmalı."],
   [/^Must be a string of 1–(\d+) characters\.$/, (m) => `1–${m[1]} karakter girin.`],
@@ -78,6 +80,9 @@ export const CATALOG_CONFLICTS: Record<string, string> = {
   "catalog.field_key_taken": "Bu anahtar başka bir özel alanda kullanılıyor. Farklı bir anahtar girin.",
   "catalog.field_limit_reached": "Aktif özel alan sınırına ulaşıldı. Kullanmadığınız bir alanı arşivleyin.",
   "catalog.brand_name_taken": "Bu marka adı zaten kayıtlı.",
+  "catalog.unit_code_taken": "Bu birim kodu zaten kayıtlı (arşivlenmiş birimler dahil). Farklı bir kod girin.",
+  "catalog.category_name_taken": "Aynı üst kategoride bu adla bir kategori var. Farklı bir ad girin.",
+  "catalog.category_has_children": "Bu kategorinin aktif alt kategorileri var. Önce alt kategorileri arşivleyin.",
 };
 
 export type CodeConflict = components["schemas"]["CodeConflict"];

@@ -13,7 +13,7 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api/client";
-import { archiveProduct, createProduct, getProduct, productHref, updateProduct, type Product } from "@/lib/catalog/api";
+import { archiveProduct, createProduct, getProduct, productHref, updateProduct, type Brand, type Product } from "@/lib/catalog/api";
 import { fieldsFor } from "@/lib/catalog/attributes";
 import {
   CATALOG_CONFLICTS,
@@ -44,7 +44,9 @@ import {
 import { useSession } from "@/lib/session/session-context";
 import { useResetAfterCreate } from "@/lib/use-reset-after-create";
 import { AttributeInput } from "./attribute-input";
+import { BrandDialog } from "./brand-settings";
 import { FormAlert } from "./form-alert";
+import { UNITS_HREF } from "./reference-shared";
 import { ProductStatusBadge } from "./product-status-badge";
 import { useCatalogReference, type CatalogReference } from "./use-catalog-reference";
 import { VariantFields, variantErrorKeys } from "./variant-fields";
@@ -227,6 +229,9 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, 
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [focusToken, setFocusToken] = useState(0);
   const [keys] = useState(() => new IdempotencyKeys());
+  /** Brands created inline from this form ("+ Yeni marka", #129) until the reference lists are reloaded. */
+  const [addedBrands, setAddedBrands] = useState<Brand[]>([]);
+  const [brandDialog, setBrandDialog] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
 
@@ -360,7 +365,9 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, 
     values.defaultUnitId,
   );
   const brandOptions = withCurrent(
-    [...reference.brands].sort((a, b) => a.name.localeCompare(b.name, "tr")).map((b) => ({ value: b.id, label: b.name })),
+    [...reference.brands, ...addedBrands.filter((a) => !reference.brands.some((b) => b.id === a.id))]
+      .sort((a, b) => a.name.localeCompare(b.name, "tr"))
+      .map((b) => ({ value: b.id, label: b.name })),
     values.brandId,
   );
   const catOptions = withCurrent(categoryOptions(reference.categories), values.categoryId);
@@ -469,15 +476,27 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, 
                 onChange={(e) => set("categoryId", e.target.value)}
                 error={errors.categoryId}
               />
-              <Select
-                id={fieldId("brandId")}
-                label="Marka"
-                placeholder="Markasız"
-                options={brandOptions}
-                value={values.brandId}
-                onChange={(e) => set("brandId", e.target.value)}
-                error={errors.brandId}
-              />
+              <div className="flex flex-col gap-1">
+                <Select
+                  id={fieldId("brandId")}
+                  label="Marka"
+                  placeholder="Markasız"
+                  options={brandOptions}
+                  value={values.brandId}
+                  onChange={(e) => set("brandId", e.target.value)}
+                  error={errors.brandId}
+                />
+                {!readOnly ? (
+                  <button
+                    type="button"
+                    className="inline-flex min-h-8 w-fit items-center gap-1 text-caption font-medium text-brand-fg underline-offset-2 hover:underline"
+                    onClick={() => setBrandDialog(true)}
+                  >
+                    <Plus className="size-3.5" aria-hidden="true" />
+                    Yeni marka
+                  </button>
+                ) : null}
+              </div>
               <Select
                 id={fieldId("defaultUnitId")}
                 label="Birim"
@@ -487,7 +506,17 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, 
                 value={values.defaultUnitId}
                 onChange={(e) => set("defaultUnitId", e.target.value)}
                 error={errors.defaultUnitId}
-                hint={reference.units.length === 0 ? "Tanımlı birim yok. Önce Ayarlar'dan birim ekleyin." : undefined}
+                hint={
+                  reference.units.length === 0 ? (
+                    <>
+                      Tanımlı birim yok.{" "}
+                      <Link href={UNITS_HREF} className="font-medium text-brand-fg underline underline-offset-2">
+                        Birimler
+                      </Link>{" "}
+                      ekranından birim ekleyin.
+                    </>
+                  ) : undefined
+                }
               />
               <Input
                 id={fieldId("taxRate")}
@@ -605,6 +634,18 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, 
 
       {product ? (
         <VariantsSection product={product} variantFields={variantFields} readOnly={readOnly} onChanged={onVariantsChanged} onConflict={onReload} />
+      ) : null}
+
+      {brandDialog ? (
+        <BrandDialog
+          brand={null}
+          onClose={() => setBrandDialog(false)}
+          onSaved={(brand) => {
+            setAddedBrands((list) => [...list, brand]);
+            set("brandId", brand.id);
+            setBrandDialog(false);
+          }}
+        />
       ) : null}
 
       <Dialog

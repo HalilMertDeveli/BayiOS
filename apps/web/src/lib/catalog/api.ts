@@ -116,17 +116,76 @@ export async function archiveVariant(api: ApiClient, id: string, etag: string): 
   await api.request<void>(`/api/v1/variants/${encodeURIComponent(id)}`, { method: "DELETE", tenant: true, ifMatch: etag });
 }
 
-export async function listBrands(api: ApiClient, signal?: AbortSignal): Promise<Brand[]> {
-  return (await api.request<ListResponse<Brand>>("/api/v1/brands", { tenant: true, signal })).data.items;
+export type CreateBrandRequest = S["CreateBrandRequest"];
+export type UpdateBrandRequest = S["UpdateBrandRequest"];
+export type CreateUnitRequest = S["CreateUnitRequest"];
+export type UpdateUnitRequest = S["UpdateUnitRequest"];
+export type CreateCategoryRequest = S["CreateCategoryRequest"];
+export type UpdateCategoryRequest = S["UpdateCategoryRequest"];
+
+/** Small per-tenant reference lists (unpaged, ≤ 1000 rows each): archived rows only when asked. */
+type ReferenceListOptions = { includeArchived?: boolean };
+
+function referencePath(resource: string, options: ReferenceListOptions & { q?: string }): string {
+  const params = new URLSearchParams();
+  if (options.includeArchived) params.set("includeArchived", "true");
+  if (options.q) params.set("q", options.q);
+  const query = params.toString();
+  return `/api/v1/${resource}${query ? `?${query}` : ""}`;
 }
 
-export async function listUnits(api: ApiClient, signal?: AbortSignal): Promise<Unit[]> {
-  return (await api.request<ListResponse<Unit>>("/api/v1/units", { tenant: true, signal })).data.items;
+/** Brands A→Z; `q` = name contains (server-side, case-insensitive). */
+export async function listBrands(api: ApiClient, signal?: AbortSignal, options: ReferenceListOptions & { q?: string } = {}): Promise<Brand[]> {
+  return (await api.request<ListResponse<Brand>>(referencePath("brands", options), { tenant: true, signal })).data.items;
 }
 
-export async function listCategories(api: ApiClient, signal?: AbortSignal): Promise<Category[]> {
-  return (await api.request<ListResponse<Category>>("/api/v1/categories", { tenant: true, signal })).data.items;
+export async function listUnits(api: ApiClient, signal?: AbortSignal, options: ReferenceListOptions = {}): Promise<Unit[]> {
+  return (await api.request<ListResponse<Unit>>(referencePath("units", options), { tenant: true, signal })).data.items;
 }
+
+export async function listCategories(api: ApiClient, signal?: AbortSignal, options: ReferenceListOptions = {}): Promise<Category[]> {
+  return (await api.request<ListResponse<Category>>(referencePath("categories", options), { tenant: true, signal })).data.items;
+}
+
+/** POST (Idempotency-Key), PATCH (merge patch + If-Match) and DELETE = archive (If-Match) of one reference record. */
+async function createReference<T>(api: ApiClient, resource: string, body: unknown, idempotencyKey: string): Promise<T> {
+  return (await api.request<T>(`/api/v1/${resource}`, { method: "POST", tenant: true, body, idempotencyKey })).data;
+}
+
+async function updateReference<T>(api: ApiClient, resource: string, id: string, patch: unknown, etag: string): Promise<T> {
+  const response = await api.request<T>(`/api/v1/${resource}/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    tenant: true,
+    body: patch,
+    ifMatch: etag,
+    contentType: MERGE_PATCH,
+  });
+  return response.data;
+}
+
+async function archiveReference(api: ApiClient, resource: string, id: string, etag: string): Promise<void> {
+  await api.request<void>(`/api/v1/${resource}/${encodeURIComponent(id)}`, { method: "DELETE", tenant: true, ifMatch: etag });
+}
+
+/** catalog.write. A 409 catalog.brand_name_taken when an active brand has the same name (case-insensitive). */
+export const createBrand = (api: ApiClient, body: CreateBrandRequest, idempotencyKey: string) => createReference<Brand>(api, "brands", body, idempotencyKey);
+export const updateBrand = (api: ApiClient, id: string, patch: Partial<UpdateBrandRequest>, etag: string) => updateReference<Brand>(api, "brands", id, patch, etag);
+export const archiveBrand = (api: ApiClient, id: string, etag: string) => archiveReference(api, "brands", id, etag);
+
+/** catalog.fields.manage. The code is fixed after creation (409 catalog.unit_code_taken on a duplicate). */
+export const createUnit = (api: ApiClient, body: CreateUnitRequest, idempotencyKey: string) => createReference<Unit>(api, "units", body, idempotencyKey);
+export const updateUnit = (api: ApiClient, id: string, patch: Partial<UpdateUnitRequest>, etag: string) => updateReference<Unit>(api, "units", id, patch, etag);
+export const archiveUnit = (api: ApiClient, id: string, etag: string) => archiveReference(api, "units", id, etag);
+
+/**
+ * catalog.fields.manage. The parent is fixed at creation (no moving); names are unique among siblings
+ * (409 catalog.category_name_taken); archiving needs no active children (409 catalog.category_has_children).
+ */
+export const createCategory = (api: ApiClient, body: CreateCategoryRequest, idempotencyKey: string) =>
+  createReference<Category>(api, "categories", body, idempotencyKey);
+export const updateCategory = (api: ApiClient, id: string, patch: Partial<UpdateCategoryRequest>, etag: string) =>
+  updateReference<Category>(api, "categories", id, patch, etag);
+export const archiveCategory = (api: ApiClient, id: string, etag: string) => archiveReference(api, "categories", id, etag);
 
 /** All custom field definitions (product and variant); archived ones only when asked. */
 export async function listCustomFields(

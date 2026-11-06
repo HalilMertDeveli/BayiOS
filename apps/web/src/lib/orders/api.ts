@@ -63,10 +63,12 @@ export async function updateOrder(api: ApiClient, id: string, patch: Partial<Upd
 }
 
 /**
- * Order-desk transitions built in this screen. Fulfilment (picking tasks, packing, shipments, close-remaining) goes
- * through the Warehouse picking-task and shipment APIs and is deliberately absent here (read-only on the detail page).
+ * Order-desk transitions built in this screen, as the path segment of POST /api/v1/orders/{id}/{action}. Picking,
+ * packing and shipping go through the Warehouse picking-task and shipment APIs (read-only on the detail page); after a
+ * partial shipment the order desk closes the rest (`close-remaining`, orders.approve) and completes a shipped order
+ * (`complete`, orders.edit.approved).
  */
-export type OrderTransition = "submit" | "withdraw" | "reject" | "approve" | "cancel";
+export type OrderTransition = "submit" | "withdraw" | "reject" | "approve" | "cancel" | "close-remaining" | "complete";
 
 export type TransitionBody = { reason: string } | { confirmNegativeStock: boolean } | undefined;
 
