@@ -139,6 +139,18 @@ void main() {
           .onPressed,
       isNull,
     );
+
+    // The field kept its focus through the lookup: a keyboard-wedge
+    // scanner's next read goes straight in (regression from the emulator).
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('receiving-code-field')),
+    );
+    expect(field.focusNode?.hasFocus, isTrue);
+    expect(field.enabled, isTrue);
+    tester.testTextInput.enterText('8690000000011');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('receiving-line-editor')), findsOneWidget);
   });
 
   testWidgets('quantity and bin are validated before adding', (tester) async {

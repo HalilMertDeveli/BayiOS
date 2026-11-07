@@ -23,7 +23,7 @@ class CameraBarcodeScanner implements BarcodeScanner {
 
   @override
   Future<String?> scan(BuildContext context, {required String title}) =>
-      Navigator.of(context).push<String>(
+      Navigator.of(context, rootNavigator: true).push<String>(
         MaterialPageRoute(
           fullscreenDialog: true,
           builder: (_) => ScannerScreen(title: title),

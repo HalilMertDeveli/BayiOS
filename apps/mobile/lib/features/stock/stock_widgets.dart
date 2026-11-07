@@ -60,7 +60,9 @@ class _CodeEntryFieldState extends ConsumerState<CodeEntryField> {
 
   void _submit(String value) {
     final code = value.trim();
-    if (code.isEmpty) return;
+    // While a lookup runs the field stays enabled (and focused, so a
+    // keyboard-wedge scanner's next read is not lost); submits wait.
+    if (code.isEmpty || widget.busy || !widget.enabled) return;
     if (widget.clearOnSubmit) {
       _controller.clear();
     } else {
@@ -85,7 +87,7 @@ class _CodeEntryFieldState extends ConsumerState<CodeEntryField> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final enabled = widget.enabled && !widget.busy;
+    final enabled = widget.enabled;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -119,13 +121,16 @@ class _CodeEntryFieldState extends ConsumerState<CodeEntryField> {
                     ),
             ),
             onSubmitted: _submit,
+            // Keep focus after Enter (default unfocuses): the next scan of a
+            // keyboard-wedge scanner types straight into the field.
+            onEditingComplete: () {},
           ),
         ),
         const SizedBox(width: BosSpace.s8),
         IconButton.filled(
           key: widget.scanKey,
           tooltip: widget.scanTitle,
-          onPressed: enabled ? _scan : null,
+          onPressed: enabled && !widget.busy ? _scan : null,
           iconSize: 28,
           style: IconButton.styleFrom(
             minimumSize: const Size.square(BosSize.primaryAction),
