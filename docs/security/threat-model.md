@@ -286,7 +286,7 @@ Her olay: `id, tenant_id, actor_user_id, actor_role, action, entity_type, entity
 | Kimlik/üyelik | `member.invited`, `member.invite_resent`, `member.invite_revoked`, `member.joined`, `member.role_changed`, `member.disabled`, `member.enabled`, `member.ownership_transferred`, `member.removed`, `tenant.created`, `tenant.settings_changed`, `tenant.rules_changed` |
 | Erişim | `auth.forbidden_tenant_access` (başka tenant denemesi), `auth.rbac_denied`, `rate_limit.exceeded` |
 | Katalog/fiyat | `product.created/updated/archived`, `price_list.updated`, `price_list.imported` |
-| Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.negative_stock_confirmed` (`warn` politikasında açık onayla eksiye düşüş), `inventory.transfer_posted`, `inventory.count_posted` |
+| Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.negative_stock_confirmed` (`warn` politikasında açık onayla eksiye düşüş), `inventory.threshold_set`, `inventory.threshold_removed` (minimum stok eşiği), `inventory.transfer_posted`, `inventory.count_posted` |
 | Sipariş | `order.created`, `order.approved` (rezervasyon), `order.cancelled` (release), `order.pick_progress`, `order.shipped`, `order.remaining_closed` (short-close, kalan rezervasyonlar bırakılır), `order.price_overridden` (liste fiyatı dışı fiyat/iskonto) |
 | Depo hazırlama/sevkiyat | `picking.task_created`, `picking.task_assigned`, `picking.task_cancelled`, `picking.shortage_reported`, `shipment.packed`, `shipment.confirmed` (stok çıkışı), `shipment.cancelled` (onaylanmamış sevkiyat iptali; stok hareketi yok, toplananlar putaway'e) |
 | Import/Export | `import.started/completed/failed/cancelled`, `export.requested/downloaded` |
@@ -294,9 +294,11 @@ Her olay: `id, tenant_id, actor_user_id, actor_role, action, entity_type, entity
 | Veri hakları | `data_export.tenant_requested`, `data_deletion.tenant_requested/completed` |
 | Güvenlik | `api_key.created/revoked` (ileride), `integration.webhook_changed` |
 
-**Uygulanan eylem kodları (2026-11-05, #89 denetimi):** `tenant.created`, `tenant.settings_changed` (iş ayarları ve firma
+**Uygulanan eylem kodları (2026-11-05, #89 denetimi; 2026-11-07 #60 RC kontrolünde koddan yeniden sayıldı):**
+`tenant.created`, `tenant.settings_changed` (iş ayarları ve firma
 profili; vergi no/telefon yalnızca `changed`), `inventory.receipt_posted`, `inventory.adjustment_posted`,
-`inventory.negative_stock_confirmed`, `order.created`, `order.approved`, `order.cancelled`, `order.shipped`,
+`inventory.negative_stock_confirmed`, `inventory.threshold_set` / `inventory.threshold_removed` (#137/#151; entity
+`stock_threshold`; yalnızca `variantId`, `warehouseId` ve `minQuantity` from/to — stok hareketi oluşmaz), `order.created`, `order.approved`, `order.cancelled`, `order.shipped`,
 `order.remaining_closed`, `order.price_overridden`, `order.pick_progress`, `picking.task_created`, `picking.task_assigned`,
 `picking.task_cancelled`, `picking.shortage_reported`, `shipment.packed`, `shipment.confirmed`, `shipment.cancelled`,
 `import.started`, `import.completed`, `import.failed`, `import.cancelled`, `import.rollback_requested`, `import.rolled_back`,
@@ -314,10 +316,16 @@ from/to), `member.ownership_transferred` (eski/yeni owner kullanıcı id'leri) �
 yoktur** (data-policy §8); `tenant.rules_changed` (roles-permissions §4 kuralları: satış onayı, iskonto sınırı, maliyet
 görünürlüğü, depo barkod/mal kabul, negatif stok, 2FA bayrağı; diğer iş ayarları `tenant.settings_changed`'de kalır),
 `billing.trial_shortened` (operatör aracı `infra/ops/shorten-trial.sql`, `actor_role = 'operator'`). Kaynak:
-`SharedKernel/Platform/Audit/AuditLog.cs` (`AuditActions`) ve modül sabitleri (`ImportAuditActions`,
-`CustomerAuditActions`, `AssistantAuditActions`). Tablodaki diğer kodlar henüz uygulanmadı: `member.removed` (üyelik
-silinmez, askıya alınır) ve `auth.*` / `rate_limit.exceeded` (erişim reddi olayları: reddedilen istek geri alındığından ayrı
-bir transaction gerektirir) #89'da açık kalır.
+`SharedKernel/Platform/Audit/AuditLog.cs` (`AuditActions`) ve modül sabitleri (`BillingAuditActions`,
+`ImportAuditActions`, `CustomerAuditActions`, `AssistantAuditActions`, `OrderAuditActions`, `ReportAuditActions`).
+
+Tablodaki şu kodlar **henüz uygulanmadı** (2026-11-07 itibarıyla kodda yok): `member.removed` (üyelik silinmez, askıya
+alınır); `auth.forbidden_tenant_access`, `auth.rbac_denied`, `rate_limit.exceeded` (erişim reddi olayları: reddedilen istek
+geri alındığından ayrı bir transaction gerektirir — #89'da açık); `product.created/updated/archived`, `price_list.updated`,
+`price_list.imported` (katalog/fiyat değişiklikleri şu an audit'e yazılmaz; içe aktarma yalnızca `import.*` ile izlenir);
+`inventory.transfer_posted`, `inventory.count_posted` (transfer/sayım özelliği yok, #29); `export.requested` (dışa aktarma
+eşzamanlı; yalnızca `export.downloaded`); `data_export.tenant_requested`, `data_deletion.tenant_requested/completed`
+(tenant veri hakları akışı yok); `api_key.*`, `integration.webhook_changed` (özellik yok).
 
 Audit tablosu append-only; okuma yalnızca owner/admin; saklama süresi `data-policy.md` §4 (2 yıl).
 

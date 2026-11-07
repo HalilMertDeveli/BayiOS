@@ -4,9 +4,11 @@
 Her çalışanın yalnızca işine gereken ekranları görmesini ve işlemleri yapmasını sağlamak.
 Bir kullanıcının bir işletmede **tek bir rolü** vardır. Roller sabittir; yeni rol tanımlanamaz.
 
-> **Önemli:** Çalışan davet etme ve rol değiştirme ekranı **henüz yoktur**
-> (Ayarlar'da "Ekip, roller ve işletme profili ayarları henüz geliştiriliyor." yazar).
-> Pilotta ek kullanıcılar BayiOS ekibi tarafından tanımlanır.
+> **Ekip yönetimi:** Çalışanları **Ayarlar → Ekip** ekranından davet eder, rollerini değiştirir, üyeliği askıya alır
+> veya yeniden açarsınız. İşletme sahibi yönetici ve altındaki rolleri, yönetici operasyon müdürü ve altındaki rolleri
+> yönetir; sahiplik yalnızca **sahiplik devri** ile verilir ve son işletme sahibi askıya alınamaz. Davet e-posta ile
+> gönderilmez: oluşan bağlantıyı (7 gün geçerli) kişiye siz iletirsiniz; kabul için kişinin aynı e-posta adresiyle
+> kaydolup adresini doğrulamış olması gerekir.
 
 ## Roller
 
@@ -77,4 +79,6 @@ Bir kullanıcının bir işletmede **tek bir rolü** vardır. Roller sabittir; y
 
 ## İpuçları
 - Menüde bir bölümü göremiyorsanız rolünüz o bölüme izin vermiyordur.
-- Satış personelinin onay yetkisi ve iskonto sınırı gibi kurallar şu an ekrandan değiştirilemez; pilotta BayiOS ekibine bildirin.
+- Satış personelinin onay yetkisi, iskonto sınırı, alış fiyatı görünürlüğü ve depo personelinin barkod atama / mal kabul
+  onayı gibi kurallar **Ayarlar → İş kuralları** ekranından (sahip ve yönetici) değiştirilir. İki adımlı doğrulama
+  seçeneği henüz uygulanmıyor.

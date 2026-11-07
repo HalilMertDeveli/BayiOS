@@ -67,6 +67,8 @@ tek çeşittir; kendi **SKU**'su ve **barkodu** vardır (ör. ön/arka, renk). T
 ## İpuçları
 - Ondalık ayırıcı olarak virgül kullanabilirsiniz (12,5).
 - Barkod okuyucu klavye gibi çalışır: arama kutusuna tıklayıp barkodu okutmanız yeterlidir.
-- **Marka**, **kategori** ve **birim** listelerini düzenleme ekranı henüz yoktur. Kategoriler ve birimler sektör şablonundan gelir;
-  marka listesi pilotta BayiOS ekibi tarafından doldurulur.
+- **Marka**, **kategori** ve **birim** listeleri **Ürünler → Markalar / Kategoriler / Birimler** ekranlarından (Ayarlar'daki
+  "Marka, kategori ve birimler" bağlantısından da) düzenlenir. Kategoriler ve birimler başlangıçta sektör şablonundan
+  gelir; ürün formunda yeni marka satır içinde de eklenebilir.
+- Her ürün için **Minimum stok** bölümü vardır; ayrıntı: [Stok düzeltme ve minimum stok](06-stok-duzeltme-negatif-stok.md#minimum-stok-kritik-stok-eşiği).
 - Salt okunur rollerde ekranda "Salt okunur görünüm" uyarısı çıkar.

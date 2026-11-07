@@ -64,4 +64,5 @@ Resmî WhatsApp otomasyonu ve Gelişmiş analitik "Yakında" olarak görünür v
 
 ## İpuçları
 - Paket değişikliği (Temel ↔ Profesyonel) şu an uygulama içinden yapılamaz; ödeme altyapısı yoktur.
-- Kullanıcı sınırı ekranda gösterilir ama üye davet ekranı olmadığı için henüz uygulanmaz.
+- Kullanıcı sınırı uygulanır: aktif üyeler ve açık davetler birlikte sayılır; sınır doluysa yeni davet oluşturulamaz.
+  **Ayarlar → Ekip** ekranında kullanım gösterilir.
