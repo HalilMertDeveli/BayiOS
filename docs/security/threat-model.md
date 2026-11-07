@@ -301,7 +301,7 @@ Her olay: `id, tenant_id, actor_user_id, actor_role, action, entity_type, entity
 | Kategori | Olaylar |
 |---|---|
 | Kimlik/üyelik | `member.invited`, `member.invite_resent`, `member.invite_revoked`, `member.joined`, `member.role_changed`, `member.disabled`, `member.enabled`, `member.ownership_transferred`, `member.removed`, `tenant.created`, `tenant.settings_changed`, `tenant.rules_changed` |
-| Erişim | `auth.forbidden_tenant_access` (başka tenant denemesi), `auth.rbac_denied`, `rate_limit.exceeded` |
+| Erişim | `auth.membership_denied` (başka/askıdaki tenant denemesi; eski taslak adı `auth.forbidden_tenant_access`), `auth.access_denied` (izin/K-O reddi; eski taslak adı `auth.rbac_denied`), `auth.entitlement_denied` (plan/limit reddi), `rate_limit.exceeded` |
 | Katalog/fiyat | `product.created/updated/archived`, `price_list.updated`, `price_list.imported` |
 | Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.negative_stock_confirmed` (`warn` politikasında açık onayla eksiye düşüş), `inventory.threshold_set`, `inventory.threshold_removed` (minimum stok eşiği), `inventory.transfer_posted`, `inventory.count_posted` |
 | Sipariş | `order.created`, `order.approved` (rezervasyon), `order.cancelled` (release), `order.pick_progress`, `order.shipped`, `order.remaining_closed` (short-close, kalan rezervasyonlar bırakılır), `order.price_overridden` (liste fiyatı dışı fiyat/iskonto) |
@@ -336,9 +336,56 @@ görünürlüğü, depo barkod/mal kabul, negatif stok, 2FA bayrağı; diğer i�
 `SharedKernel/Platform/Audit/AuditLog.cs` (`AuditActions`) ve modül sabitleri (`BillingAuditActions`,
 `ImportAuditActions`, `CustomerAuditActions`, `AssistantAuditActions`, `OrderAuditActions`, `ReportAuditActions`).
 
+**Erişim reddi olayları (#89):** her 403 bir audit satırı yazar; entity tipi `access`, `entity_id` boş.
+- `auth.membership_denied` — `TenantContextMiddleware`: `X-Tenant-Id` aktif üyelik olmayan bir tenant'ı gösteriyor
+  (`code` = `tenant.access_denied`; `membershipStatus` = `none` | `invited` | `disabled`) ya da tenant aktif değil
+  (`code` = `tenant.inactive`, `membershipStatus` = `active`, `actor_role` = üyenin rolü). Satır **adı verilen** tenant'ın
+  log'una yazılır (owner/admin başka bir kullanıcının denemesini görür); o tenant yoksa hiçbir şey yazılmaz.
+- `auth.access_denied` — izin kapısı (`auth.forbidden`, `auth.disabled_by_tenant_rule` + `condition`), servis
+  düzeyindeki K/O kayıt reddi (`orders.not_owner`, `orders.discount_limit_exceeded` … — modülün 403 kodu) ve
+  fail-closed güvenlik ağı (`UnitOfWorkFilter`).
+- `auth.entitlement_denied` — `RequireEntitlement` kapısı (`entitlement.required`) ve servis limiti
+  (`entitlement.limit_exceeded`); `feature` = özellik/limit kodu.
+
+Yük yalnızca sunucu değerleridir: `code`, `method`, `route` (**şablon**, ör. `/api/v1/orders/{id:guid}` — ham yol veya
+sorgu yok), `permissions` (reddedilen izin ya da uç noktanın `anyOf` listesi), `condition`, `feature`,
+`suppressedRepeats`. Aktör = doğrulanmış JWT `sub`, `correlation_id`, `ip_hash` yalnızca `Audit:IpHashKey` varsa;
+**user agent, gövde, başlık metni veya e-posta yazılmaz**. Tekrarlanan idempotent yanıt (replay) yeniden yazılmaz.
+
+*Transaction:* istek UnitOfWork'ü 403'te geri alınır; satır bu yüzden `AccessDenialAuditLog` içinde havuzdan alınan
+**ayrı bir `bayios_app` bağlantısında, kendi kısa transaction'ında** yazılır: `set_config('app.user_id'|'app.tenant_id',
+…, true)` + `INSERT … SELECT … FROM identity.tenants WHERE id = @tenant` (RLS politikası `tenant_isolation` aynen
+uygulanır; sahte tenant id satır üretmez). İstemcinin bağlantıyı kesmesi yazmayı iptal etmez (`RequestAborted`
+kullanılmaz); yazma zaman aşımı 5 sn. Yazma hatası 403'ü değiştirmez: hata log'a (yalnızca id'ler) ve metriğe gider.
+
+*DoS sınırı (tekilleştirme seçimi):* örnekleme yerine **tekilleştirme** — örnekleme ilk denemeyi kaçırabilir,
+tekilleştirme her (kullanıcı, tenant, kod) için ilk reddi her zaman yazar. Pencere başına anahtar başına en fazla bir
+satır (`Audit:DenialDedupeWindow`, varsayılan 60 sn, 1 sn…1 sa); pencere içindeki tekrarlar sayılır ve anahtarın
+sonraki satırında `suppressedRepeats` olarak raporlanır. Bellek tablosu en fazla `Audit:DenialDedupeCapacity` (10 000)
+canlı anahtar tutar; doluysa ve süresi dolan yoksa yeni anahtarlar **yalnızca log'lanır** (süpürme en sık pencerenin
+onda birinde bir) — veritabanı yazımı pencere başına ≤ kapasite. Aynı anda en fazla `Audit:DenialMaxConcurrentWrites`
+(4) yazma bağlantı tutar; 2 sn'de yuva bulamayan red yazılmaz, log'lanır (istek başına ikinci bağlantı havuzu
+tüketemez). Kodlar sunucu sabitleri olduğundan anahtar uzayı kullanıcı × tenant ile sınırlıdır; hız sınırlayıcı (§6.5)
+bu yola ulaşmadan önce kullanıcı başına istek sayısını zaten sınırlar. Metrik: `bayios.audit.access_denials`
+(`outcome` = `written` | `suppressed` | `dropped` | `unknown_tenant` | `failed`). Instance başına: N instance anahtar ve
+pencere başına en fazla N satır yazar.
+
+*401 bilinçli olarak audit'e yazılmaz, yalnızca log'a* (`RequestLoggingMiddleware`, durum kodu + rota): geçersiz,
+süresi dolmuş veya anonim (L-2, #161) token'da doğrulanmış bir kimlik yoktur, `X-Tenant-Id` ise doğrulanmamış bir
+istemci değeridir. 401'i bir tenant'ın log'una yazmak kimliksiz herkese herhangi bir tenant'ın audit tablosuna satır
+yazdırmak olurdu; kimliksiz istekler hız sınırlayıcıdan da muaftır (veritabanına gitmeden 401) — bu, sınırsız bir yazma
+yükselticisi olurdu. Kimlik doğrulama saldırıları Supabase Auth tarafında ve istek log'unda izlenir.
+
+Kalan riskler: (1) çok sayıda gerçek hesap kontrol eden saldırgan, var olmayan tenant id'leri döndürerek tekilleştirme
+tablosunu doldurabilir; bu sürede yeni reddler veritabanına değil yalnızca log'a/metriğe düşer (`dropped`) — sessiz
+değildir. (2) Pencere içindeki son tekrarlar, anahtar bir daha görülmezse `suppressedRepeats` olarak hiç yazılmaz.
+(3) Bir instance çökerse bellek tablosu sıfırlanır (en fazla bir satır fazlası). Doğrulama: `AccessDenialAuditTests`
+(her yol tam bir satır, geri alma satırı silmez, tenant izolasyonu API + RLS, pencere/tekrar), `AccessDenialDeduplicatorTests`,
+`TenantIsolationSweepTests` (X-Tenant-Id taraması: A'daki tek değişiklik çağıran başına tek `auth.membership_denied`).
+
 Tablodaki şu kodlar **henüz uygulanmadı** (2026-11-07 itibarıyla kodda yok): `member.removed` (üyelik silinmez, askıya
-alınır); `auth.forbidden_tenant_access`, `auth.rbac_denied`, `rate_limit.exceeded` (erişim reddi olayları: reddedilen istek
-geri alındığından ayrı bir transaction gerektirir — #89'da açık); `product.created/updated/archived`, `price_list.updated`,
+alınır); `rate_limit.exceeded` (429, sınırlayıcı veritabanına dokunmadan önce verir — audit'e yazmak taşkını
+veritabanına taşırdı; yalnızca Problem Details kodu ve log); `product.created/updated/archived`, `price_list.updated`,
 `price_list.imported` (katalog/fiyat değişiklikleri şu an audit'e yazılmaz; içe aktarma yalnızca `import.*` ile izlenir);
 `inventory.transfer_posted`, `inventory.count_posted` (transfer/sayım özelliği yok, #29); `export.requested` (dışa aktarma
 eşzamanlı; yalnızca `export.downloaded`); `data_export.tenant_requested`, `data_deletion.tenant_requested/completed`

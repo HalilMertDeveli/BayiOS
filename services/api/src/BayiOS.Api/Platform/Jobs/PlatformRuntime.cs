@@ -18,8 +18,11 @@ internal static class PlatformRuntime
         services.AddOptions<AuditOptions>().BindConfiguration(AuditOptions.Section)
             .Validate(o => AuditOptions.IsValidIpHashKey(o.IpHashKey), $"Audit:IpHashKey must be empty (no IP hash) or at least {AuditOptions.MinIpHashKeyBytes} bytes.")
             .Validate(o => o.Retention >= AuditOptions.MinRetention, "Audit:Retention cannot be shorter than 730 days (data-policy §4).")
+            .Validate(o => o.HasValidDenialSettings, "Audit:DenialDedupeWindow must be 1 s…1 h, DenialDedupeCapacity 1…1 000 000, DenialMaxConcurrentWrites 1…32.")
             .ValidateOnStart();
         services.AddScoped<IAuditLog, AuditLog>();
+        // Singleton: the dedupe table and the write slots are per instance (threat-model §7, #89).
+        services.AddSingleton<IAccessDenialAudit, AccessDenialAuditLog>();
 
         services.AddOptions<JobsOptions>().BindConfiguration(JobsOptions.Section)
             .Validate(o => o.BatchSize is >= 1 and <= 100, "Jobs:BatchSize must be between 1 and 100.")

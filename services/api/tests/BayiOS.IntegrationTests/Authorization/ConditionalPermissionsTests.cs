@@ -306,7 +306,10 @@ public sealed class ConditionalPermissionsTests(ApiFixture fixture)
             HttpStatusCode.Forbidden,
             "auth.forbidden");
         Assert.Equal("Test siparişi", (await kit.GetAsync(draft.Order.Id)).Order.Notes);
+        // #89: the edit was rolled back, the access-denial audit row (own transaction) was not.
+        Assert.Equal(1L, await DenialCountAsync(kit.Owner.TenantId, sales.UserId, "auth.forbidden", "/api/v1/orders/{id:guid}"));
         await HttpAssert.ProblemAsync(await staff.GetAsync("/api/v1/orders"), HttpStatusCode.Forbidden, "auth.forbidden");
+        Assert.Equal(1L, await DenialCountAsync(kit.Owner.TenantId, staff.UserId, "auth.forbidden", "/api/v1/orders/"));
 
         // Unconditional grants are untouched by the safety net.
         Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync("/api/v1/orders")).StatusCode);
@@ -466,6 +469,24 @@ public sealed class ConditionalPermissionsTests(ApiFixture fixture)
         command.Parameters.Add(new NpgsqlParameter { Value = status });
         command.Parameters.Add(new NpgsqlParameter { Value = tenantId });
         Assert.Equal(1, await command.ExecuteNonQueryAsync(Ct));
+    }
+
+    private async Task<long> DenialCountAsync(Guid tenantId, Guid userId, string code, string route)
+    {
+        await using var connection = new NpgsqlConnection(fixture.SuperuserConnectionString);
+        await connection.OpenAsync(Ct);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT count(*) FROM audit.audit_events
+            WHERE tenant_id = $1 AND actor_user_id = $2 AND action = 'auth.access_denied' AND changes->>'code' = $3 AND changes->>'route' = $4
+            """,
+            connection);
+        foreach (var value in new object[] { tenantId, userId, code, route })
+        {
+            command.Parameters.Add(new NpgsqlParameter { Value = value });
+        }
+
+        return (long)(await command.ExecuteScalarAsync(Ct))!;
     }
 
     private static CatalogClient Rebind(Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> host, CatalogClient client)
