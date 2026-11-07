@@ -35,6 +35,38 @@ public interface IJobHandler
     Task HandleAsync(JobExecution job, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// A job handler that calls a slow external service (e.g. the Claude API, ADR 0010). The worker runs it
+/// <b>without</b> a unit of work: no pooled connection and no transaction are held while it waits on the network.
+/// The handler opens short transactions itself through <see cref="IJobTransactions"/> (read → commit → external call
+/// with no connection → write the result in a new transaction that also marks the job succeeded). If it never calls
+/// <see cref="IJobTransactions.CompleteAsync"/>, the worker marks the job succeeded after it returns. Throwing fails
+/// the attempt as usual (retry with backoff, then <c>dead</c>); short transactions that already committed stay
+/// committed, so every step must be idempotent.
+/// </summary>
+public interface IExternalCallJobHandler : IJobHandler
+{
+}
+
+/// <summary>
+/// Short transactions for an <see cref="IExternalCallJobHandler"/>. Each call runs in a fresh DI scope whose
+/// RequestContext carries the job's tenant (no user) and whose UnitOfWork sets <c>app.tenant_id</c>, so module
+/// DbContexts, RLS and the audit log behave exactly as in a request. The connection goes back to the pool as soon as
+/// the call returns.
+/// </summary>
+public interface IJobTransactions
+{
+    /// <summary>Runs <paramref name="work"/> in its own transaction and commits it (rolled back if it throws).</summary>
+    Task<T> RunAsync<T>(Func<IServiceProvider, CancellationToken, Task<T>> work, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Runs the final <paramref name="work"/> and marks the job succeeded in the same transaction. Returns false (and
+    /// rolls the work back) when this worker no longer holds the job's lease — it was handed to another worker after
+    /// the lease expired — so a result is never committed twice.
+    /// </summary>
+    Task<bool> CompleteAsync(Func<IServiceProvider, CancellationToken, Task> work, CancellationToken cancellationToken);
+}
+
 /// <summary>A claimed job as seen by its handler.</summary>
 public sealed record JobExecution(
     Guid Id,

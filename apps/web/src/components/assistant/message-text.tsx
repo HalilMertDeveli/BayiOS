@@ -1,11 +1,11 @@
-import { messageSegments } from "@/lib/assistant/review";
+import { messageSegments, type SegmentLine } from "@/lib/assistant/review";
 
 /**
  * The pasted WhatsApp message, shown as UNTRUSTED PLAIN TEXT: every segment is a React text node (escaped by React), so
  * HTML, script tags, markdown and URLs stay inert characters — nothing is parsed, rendered or turned into a link. The
  * parts the order lines were read from are marked with their line number.
  */
-export function MessageText({ message, lines }: { message: string; lines: readonly { lineNo: number | string; rawText: string }[] }) {
+export function MessageText({ message, lines }: { message: string; lines: readonly SegmentLine[] }) {
   const segments = messageSegments(message, lines);
   return (
     <p data-testid="whatsapp-message" className="text-body leading-7 break-words whitespace-pre-wrap text-fg">

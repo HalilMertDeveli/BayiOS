@@ -40,7 +40,7 @@ const WARNINGS: Record<string, { text: string; tone: WarningTone }> = {
     text: "Katalog çok büyük; benzerlik araması kataloğun bir kısmında yapıldı. Eşleşmeyen satırlarda ürünü arayarak seçin.",
     tone: "warning",
   },
-  personal_data_masked: { text: "Telefon numarası ve e-posta adresleri ayrıştırmadan önce gizlendi.", tone: "info" },
+  personal_data_masked: { text: "Telefon numarası, e-posta adresi ve tanınan kişi adları ayrıştırmadan önce gizlendi.", tone: "info" },
 };
 
 /** Turkish text for a warning code; an unknown code still shows (neutral text, code kept for support). */
@@ -85,7 +85,7 @@ export type ParserNotice = {
 };
 
 /** Which parser ran and why (fallbackReason; the server warnings as a fallback when the reason is missing). */
-export function parserNotice(parser: string, fallbackReason: string | null, warnings: readonly string[] = []): ParserNotice {
+export function parserNotice(parser: string | null, fallbackReason: string | null, warnings: readonly string[] = []): ParserNotice {
   if (parser === "ai") {
     return { label: "AI", text: "Mesaj AI ile okundu ve yalnızca kataloğunuzla eşleştirildi. Her satırı kontrol edip onaylayın.", tone: "info" };
   }
@@ -117,9 +117,12 @@ export const matchMethodLabels: Record<string, string> = {
   barcode: "Barkod",
   name: "Ürün adı",
   similarity: "Benzerlik",
+  alias: "Önceki onay",
 };
 
 export const parseStatusLabels: Record<string, string> = {
+  pending: "Ayrıştırılıyor",
+  failed: "Ayrıştırılamadı",
   needs_review: "İnceleme bekliyor",
   approved: "Taslak oluşturuldu",
   rejected: "Reddedildi",

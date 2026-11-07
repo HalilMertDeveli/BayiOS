@@ -2,12 +2,16 @@
  * MOCK WHATSAPP ORDER ASSISTANT FOR PLAYWRIGHT — IN-MEMORY, SYNTHETIC DATA, NOT THE REAL API, NO AI.
  *
  * Stand-in for /api/v1/ai/order-parses following packages/contracts/openapi.json (Integrations, ADR 0010):
- * - POST submit (Idempotency-Key required, replayed on reuse; 422 `text` limits; 429 `ai.rate_limited` + Retry-After
- *   when `rateLimited` is set). A tiny scripted "parser" reads one order line per message line: a line naming a
+ * - GET/PUT settings: the tenant's AI opt-in (`optedIn`; on by default HERE so the flows below run — the real API's
+ *   default is off). PUT needs tenant.settings.manage (owner/admin), else 403 auth.forbidden.
+ * - POST submit (Idempotency-Key required, replayed on reuse; 409 `ai.opt_in_required` while opted out; 422 `text`
+ *   limits; 429 `ai.rate_limited` + Retry-After when `rateLimited` is set) → 202 + status URL. The parse stays `pending`
+ *   for `pendingPolls` status polls (the "background job"), then becomes needs_review — or failed with `failWith`.
+ *   A tiny scripted "parser" reads one order line per message line: a line naming a
  *   catalog SKU is `matched` (one proposal), a line containing "ampul" is `ambiguous` (two candidates, no proposal),
  *   a line that looks like an instruction ("talimat", "onayla", "yok say") is dropped with `instruction_ignored`,
  *   anything else with a number is `unmatched`. Parser = rules with fallbackReason `disabled` (AI off), or `parser`.
- * - GET list / GET one (ETag); POST approve (If-Match → 412, every line listed once, explicit variant + quantity,
+ * - GET status; GET list / GET one (ETag; lines carry textStart/textLength); POST approve (If-Match → 412, every line listed once, explicit variant + quantity,
  *   orders.create needed → 403 auth.forbidden + `permission`) creates a `whatsapp_ai` draft in the Orders mock
  *   (prices from the mock default list, never auto-approved); POST reject.
  * Permissions come from the same MOCK /me fixtures the web receives. No price or stock is ever part of a parse.
@@ -28,10 +32,24 @@ export type MockAssistant = {
   parser: { parser: "ai" | "rules"; fallbackReason: string | null; model: string | null };
   idempotency: Map<string, { status: number; body: unknown }>;
   counter: number;
+  /** The tenant's AI opt-in (PUT /ai/settings switches it). */
+  optedIn: boolean;
+  /** Status polls answered "pending" before a submitted parse is done. */
+  pendingPolls: number;
+  /** Failure code a submitted parse ends with instead of a review (null = it succeeds). */
+  failWith: string | null;
+  /** Submitted parses still "processing": remaining pending polls and the finished state. */
+  processing: Map<string, { polls: number; ready: Json }>;
 };
 
-export function createMockAssistant(options: { parses?: Json[]; parser?: MockAssistant["parser"]; rateLimitedFor?: number } = {}): MockAssistant {
+export function createMockAssistant(
+  options: { parses?: Json[]; parser?: MockAssistant["parser"]; rateLimitedFor?: number; optedIn?: boolean; pendingPolls?: number; failWith?: string } = {},
+): MockAssistant {
   return {
+    optedIn: options.optedIn ?? true,
+    pendingPolls: options.pendingPolls ?? 1,
+    failWith: options.failWith ?? null,
+    processing: new Map(),
     parses: options.parses ?? [],
     rateLimitedFor: options.rateLimitedFor ?? null,
     parser: options.parser ?? { parser: "rules", fallbackReason: "disabled", model: null },
@@ -42,7 +60,7 @@ export function createMockAssistant(options: { parses?: Json[]; parser?: MockAss
 
 export const parseId = (n: number) => `00000000-0000-4000-8000-5a${String(n).padStart(10, "0")}`;
 
-const HEADERS = { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "ETag, Retry-After, Idempotent-Replayed" };
+const HEADERS = { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "ETag, Location, Retry-After, Idempotent-Replayed" };
 const json = (route: Route, status: number, body: unknown, headers: Record<string, string> = {}) => fulfillJson(route, status, body, { ...HEADERS, ...headers });
 const done = (p: Promise<unknown>) => p.then(() => true);
 
@@ -60,7 +78,10 @@ function parseText(text: string, catalog: MockCatalog | null) {
   const warnings: string[] = [];
   const lines: Json[] = [];
   const unparsedFragments: string[] = [];
+  let cursor = 0;
   for (const raw of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
+    const textStart = text.indexOf(raw, cursor);
+    cursor = textStart + raw.length;
     if (INSTRUCTION.test(raw)) {
       if (!warnings.includes("instruction_ignored")) warnings.push("instruction_ignored");
       continue;
@@ -76,6 +97,8 @@ function parseText(text: string, catalog: MockCatalog | null) {
     const base = {
       lineNo,
       rawText: raw,
+      textStart,
+      textLength: raw.length,
       productCode: sku ? sku.sku : null,
       productText,
       quantity: qty ? Number(qty[1].replace(",", ".")) : null,
@@ -130,10 +153,34 @@ export async function handleAssistant(route: Route, mock: MockAssistant, ctx: Ct
   const body = (request.postDataJSON?.() ?? null) as Json | null;
   const idemKey = request.headers()["idempotency-key"];
 
+  if (path === "/api/v1/ai/settings") {
+    if (method === "PUT") {
+      if (grants.find((g) => g.permission === "tenant.settings.manage")?.scope !== "all") {
+        return done(json(route, 403, problemBody(403, "auth.forbidden", { title: "Missing permission: tenant.settings.manage", permission: "tenant.settings.manage" })));
+      }
+      if (typeof body?.aiParsingEnabled !== "boolean") {
+        return done(json(route, 422, problemBody(422, "validation.failed", { errors: { aiParsingEnabled: ["Required (true or false)."] } })));
+      }
+      mock.optedIn = body.aiParsingEnabled;
+    } else if (method !== "GET") {
+      return done(json(route, 404, problemBody(404, "resource.not_found")));
+    }
+    const settings = {
+      aiParsingEnabled: mock.optedIn,
+      providerConfigured: mock.parser.parser === "ai",
+      limits: { maxInputChars: 4000, maxInputLines: 150, hourlyParseLimit: 30 },
+      updatedAt: null,
+      updatedBy: null,
+      version: 1,
+    };
+    return done(json(route, 200, settings, { ETag: 'W/"1"' }));
+  }
+
   if (method === "POST" && path === "/api/v1/ai/order-parses") {
     if (!idemKey) return done(json(route, 400, problemBody(400, "idempotency.key_required")));
     const replay = mock.idempotency.get(`submit:${idemKey}`);
     if (replay) return done(json(route, replay.status, replay.body, { "Idempotent-Replayed": "true" }));
+    if (!mock.optedIn) return done(json(route, 409, problemBody(409, "ai.opt_in_required")));
     const text = typeof body?.text === "string" ? body.text.trim() : "";
     if (!text) return done(json(route, 422, problemBody(422, "validation.failed", { errors: { text: ["Required."] } })));
     if (text.length > 4000) return done(json(route, 422, problemBody(422, "validation.failed", { errors: { text: ["At most 4000 characters."] } })));
@@ -147,6 +194,7 @@ export async function handleAssistant(route: Route, mock: MockAssistant, ctx: Ct
       status: "needs_review",
       channel: "whatsapp_paste",
       customerId: body?.customerId ?? null,
+      warehouseId: body?.warehouseId ?? null,
       parser: mock.parser.parser,
       model: mock.parser.model,
       promptVersion: "mock-v1",
@@ -160,13 +208,52 @@ export async function handleAssistant(route: Route, mock: MockAssistant, ctx: Ct
       orderId: null,
       createdAt: new Date(Date.UTC(2026, 10, 5, 9, mock.counter)).toISOString(),
       createdBy: MOCK_USER_ID,
+      completedAt: new Date(Date.UTC(2026, 10, 5, 9, mock.counter, 2)).toISOString(),
       reviewedAt: null,
       reviewedBy: null,
       version: 1,
     };
-    mock.parses.unshift(parse);
-    mock.idempotency.set(`submit:${idemKey}`, { status: 201, body: parse });
-    return done(json(route, 201, parse, { ETag: etag(parse) }));
+    // 202: the "background job" finishes after `pendingPolls` status polls; until then the parse is pending, no lines.
+    const ready = mock.failWith
+      ? { ...parse, status: "failed", failureCode: mock.failWith, parser: null, promptVersion: null, lines: [], unparsedFragments: [], summary: summary([]) }
+      : { ...parse, failureCode: null };
+    const pending = { ...ready, status: "pending", parser: null, model: null, promptVersion: null, fallbackReason: null, failureCode: null, lines: [], unparsedFragments: [], warnings: [], summary: summary([]) };
+    mock.parses.unshift(pending);
+    mock.processing.set(String(parse.id), { polls: mock.pendingPolls, ready });
+    const accepted = {
+      id: parse.id,
+      status: "pending",
+      statusUrl: `/api/v1/ai/order-parses/${String(parse.id)}/status`,
+      resultUrl: `/api/v1/ai/order-parses/${String(parse.id)}`,
+      pollAfterMs: 100,
+    };
+    mock.idempotency.set(`submit:${idemKey}`, { status: 202, body: accepted });
+    return done(json(route, 202, accepted, { Location: accepted.statusUrl }));
+  }
+
+  const statusMatch = /^\/api\/v1\/ai\/order-parses\/([^/]+)\/status$/.exec(path);
+  if (statusMatch && method === "GET") {
+    const index = mock.parses.findIndex((p) => p.id === statusMatch[1]);
+    if (index < 0) return done(json(route, 404, problemBody(404, "resource.not_found")));
+    const job = mock.processing.get(statusMatch[1]);
+    if (job && job.polls-- <= 0) {
+      mock.parses[index] = job.ready;
+      mock.processing.delete(statusMatch[1]);
+    }
+    const current = mock.parses[index];
+    const state = current.status === "pending" ? "pending" : current.status === "failed" ? "failed" : "succeeded";
+    return done(
+      json(route, 200, {
+        id: current.id,
+        state,
+        parseStatus: current.status,
+        failureCode: current.failureCode ?? null,
+        resultUrl: `/api/v1/ai/order-parses/${String(current.id)}`,
+        pollAfterMs: state === "pending" ? 100 : null,
+        createdAt: current.createdAt,
+        completedAt: state === "pending" ? null : current.createdAt,
+      }),
+    );
   }
 
   if (method === "GET" && path === "/api/v1/ai/order-parses") {

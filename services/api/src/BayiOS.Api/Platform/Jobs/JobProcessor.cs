@@ -63,12 +63,22 @@ internal sealed partial class JobProcessor(
 
         try
         {
-            await unitOfWork.BeginAsync(readOnly: false, cancellationToken);
             using var payload = JsonDocument.Parse(job.Payload);
             var execution = new JobExecution(
                 job.Id, job.Type, job.TenantId, payload.RootElement.Clone(), job.Attempts, job.MaxAttempts, context.CorrelationId);
 
-            await RunHandlerAsync(services, execution, cancellationToken);
+            // Resolving a handler opens no connection (the UnitOfWork connects on BeginAsync).
+            var handler = execution.Type == JobHandlerRegistry.OutboxDeliveryType ? null
+                : registry.Jobs.TryGetValue(execution.Type, out var create) ? create(services)
+                : throw new InvalidOperationException($"No handler is registered for job type '{execution.Type}'.");
+            if (handler is IExternalCallJobHandler external)
+            {
+                await ExecuteExternalAsync(services, external, job, execution, cancellationToken);
+                return;
+            }
+
+            await unitOfWork.BeginAsync(readOnly: false, cancellationToken);
+            await RunHandlerAsync(services, handler, execution, cancellationToken);
 
             if (!await JobStore.CompleteAsync(unitOfWork, job.Id, WorkerId, cancellationToken))
             {
@@ -109,13 +119,32 @@ internal sealed partial class JobProcessor(
         }
     }
 
-    private async Task RunHandlerAsync(IServiceProvider services, JobExecution execution, CancellationToken cancellationToken)
+    /// <summary>
+    /// An <see cref="IExternalCallJobHandler"/>: no unit of work is started, so no connection is held while the handler
+    /// waits on the external service; it opens short transactions through <see cref="IJobTransactions"/>. When it did
+    /// not complete the job itself, the job is marked succeeded on a short transaction of its own afterwards.
+    /// </summary>
+    private async Task ExecuteExternalAsync(
+        IServiceProvider services, IExternalCallJobHandler handler, ClaimedJob job, JobExecution execution, CancellationToken cancellationToken)
     {
-        if (execution.Type != JobHandlerRegistry.OutboxDeliveryType)
+        var transactions = services.GetRequiredService<JobTransactions>();
+        transactions.Bind(job, WorkerId, execution.CorrelationId);
+        await handler.HandleAsync(execution, cancellationToken);
+        if (transactions.Outcome is null)
         {
-            var handler = registry.Jobs.TryGetValue(execution.Type, out var create)
-                ? create(services)
-                : throw new InvalidOperationException($"No handler is registered for job type '{execution.Type}'.");
+            await transactions.CompleteAsync((_, _) => Task.CompletedTask, cancellationToken);
+        }
+
+        if (transactions.Outcome == false)
+        {
+            LogLeaseLost(logger, job.Id, job.Type);
+        }
+    }
+
+    private async Task RunHandlerAsync(IServiceProvider services, IJobHandler? handler, JobExecution execution, CancellationToken cancellationToken)
+    {
+        if (handler is not null)
+        {
             await handler.HandleAsync(execution, cancellationToken);
             return;
         }

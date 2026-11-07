@@ -22,6 +22,9 @@ public static class IntegrationsModule
     /// <summary>Tenant-less maintenance job clearing AI parse texts past retention (scheduled by the platform worker).</summary>
     public const string TextRetentionJobType = "integrations.ai_text_retention";
 
+    /// <summary>Tenant job parsing one accepted message in the background (ADR 0010 §2.1).</summary>
+    public const string OrderParseJobType = "integrations.ai_order_parse";
+
     /// <summary>
     /// Registers the WhatsApp order assistant (ADR 0010). The host must provide <see cref="IAssistantCatalog"/>
     /// (Catalog adapter) and <see cref="IAssistantOrderDrafts"/> (Orders adapter), and schedule
@@ -56,6 +59,7 @@ public static class IntegrationsModule
         services.AddSingleton<AiUsageMeter>();
         services.AddScoped<OrderParseService>();
         services.AddJobHandler<ParseTextRetentionJob>(ParseTextRetentionJob.Type);
+        services.AddJobHandler<AiOrderParseJob>(AiOrderParseJob.Type);
         services.TryAddSingleton(TimeProvider.System);
         return services;
     }

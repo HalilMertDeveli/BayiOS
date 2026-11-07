@@ -3,30 +3,43 @@
 import { useEffect, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CircleAlert, Clock, Lock, MessageSquareText, ScanText } from "lucide-react";
+import { ArrowLeft, CircleAlert, Clock, Lock, MessageSquareText, ScanText, ShieldCheck } from "lucide-react";
 import { LockedFeature } from "@/components/billing/locked-feature";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/client";
 import { IdempotencyKeys } from "@/lib/catalog/idempotency";
 import {
-  MAX_MESSAGE_CHARS,
-  MAX_MESSAGE_LINES,
+  DEFAULT_MESSAGE_LIMITS,
+  ParseStillPendingError,
+  getAiSettings,
   listOrderParses,
+  messageLimits,
   orderParseHref,
   submitOrderParse,
+  updateAiSettings,
+  waitForOrderParse,
+  type AiSettings,
+  type MessageLimits,
   type OrderParseListItem,
 } from "@/lib/assistant/api";
-import { assistantErrorMessage, isRateLimited, rateLimitMessage, translateTextError } from "@/lib/assistant/errors";
+import {
+  assistantErrorMessage,
+  isOptInRequired,
+  isRateLimited,
+  parseFailureMessage,
+  rateLimitMessage,
+  translateTextError,
+} from "@/lib/assistant/errors";
 import { parserNotice } from "@/lib/assistant/labels";
 import { FEATURES, featureGate } from "@/lib/billing/entitlements";
 import { assistantPermissions } from "@/lib/assistant/permissions";
-import { ORDERS_HREF } from "@/lib/orders/api";
+import { NEW_ORDER_HREF, ORDERS_HREF } from "@/lib/orders/api";
 import { useSession } from "@/lib/session/session-context";
 
 const dateTime = new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Istanbul" });
@@ -41,11 +54,11 @@ function BackLink() {
 }
 
 /** Client-side check before sending (the API checks the same limits and stays authoritative). */
-export function messageError(text: string): string | null {
+export function messageError(text: string, limits: MessageLimits = DEFAULT_MESSAGE_LIMITS): string | null {
   const trimmed = text.trim();
   if (!trimmed) return "WhatsApp mesajını yapıştırın.";
-  if (trimmed.length > MAX_MESSAGE_CHARS) return `Mesaj en fazla ${MAX_MESSAGE_CHARS.toLocaleString("tr-TR")} karakter olabilir; mesajı bölerek gönderin.`;
-  if (trimmed.split("\n").length > MAX_MESSAGE_LINES) return `Mesaj en fazla ${MAX_MESSAGE_LINES} satır olabilir; mesajı bölerek gönderin.`;
+  if (trimmed.length > limits.maxChars) return `Mesaj en fazla ${limits.maxChars.toLocaleString("tr-TR")} karakter olabilir; mesajı bölerek gönderin.`;
+  if (trimmed.split("\n").length > limits.maxLines) return `Mesaj en fazla ${limits.maxLines} satır olabilir; mesajı bölerek gönderin.`;
   return null;
 }
 
@@ -72,7 +85,7 @@ export function WhatsappOrderPage() {
               <LockedFeature gate={aiGate} title="WhatsApp siparişi ayrıştırma kapalı" />
             </section>
           ) : (
-            <SubmitForm />
+            <AssistantEntry canManage={permissions.manageAi} />
           )}
           <PendingReviews />
         </>
@@ -89,54 +102,209 @@ export function WhatsappOrderPage() {
   );
 }
 
-function SubmitForm() {
+type SettingsState = { status: "loading" } | { status: "ready"; settings: AiSettings | null };
+
+/**
+ * The tenant's AI opt-in (data-policy §7, default off) decides what is shown: the message form, or — while off — an
+ * explanation with the switch for owner/admin. If the settings cannot be read the form is shown; the API refuses
+ * (409 `ai.opt_in_required`) when needed and the panel follows.
+ */
+function AssistantEntry({ canManage }: { canManage: boolean }) {
+  const { api } = useSession();
+  const [state, setState] = useState<SettingsState>({ status: "loading" });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getAiSettings(api, controller.signal)
+      .then((settings) => {
+        if (!controller.signal.aborted) setState({ status: "ready", settings });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setState({ status: "ready", settings: null });
+      });
+    return () => controller.abort();
+  }, [api]);
+
+  if (state.status === "loading") {
+    return (
+      <section aria-label="WhatsApp mesajı" className="rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+        <p role="status" className="text-body text-fg-muted">
+          Yükleniyor…
+        </p>
+      </section>
+    );
+  }
+  const { settings } = state;
+  if (settings && !settings.aiParsingEnabled) {
+    return <OptInPanel canManage={canManage} onChanged={(next) => setState({ status: "ready", settings: next })} />;
+  }
+  return (
+    <SubmitForm
+      limits={messageLimits(settings)}
+      onOptInRequired={() =>
+        setState((current) => ({
+          status: "ready",
+          settings:
+            current.status === "ready" && current.settings
+              ? { ...current.settings, aiParsingEnabled: false }
+              : { aiParsingEnabled: false, providerConfigured: false, limits: { maxInputChars: DEFAULT_MESSAGE_LIMITS.maxChars, maxInputLines: DEFAULT_MESSAGE_LIMITS.maxLines, hourlyParseLimit: 0 }, updatedAt: null, updatedBy: null, version: 0 },
+        }))
+      }
+    />
+  );
+}
+
+/** AI parsing is off for the tenant: what switching it on means, and the switch (owner/admin only). */
+function OptInPanel({ canManage, onChanged }: { canManage: boolean; onChanged: (settings: AiSettings) => void }) {
+  const uid = useId();
+  const { api } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+
+  const enable = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      onChanged(await updateAiSettings(api, true));
+    } catch (e) {
+      setError(assistantErrorMessage(e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section aria-labelledby={`${uid}-opt-in`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+      <h2 id={`${uid}-opt-in`} className="inline-flex items-center gap-2 text-h3 text-fg">
+        <ShieldCheck className="size-5 text-fg-muted" aria-hidden="true" />
+        AI ile sipariş ayrıştırma kapalı
+      </h2>
+      {error ? (
+        <FormAlert ref={errorRef} tone="error" title="Ayar değiştirilemedi">
+          {error}
+        </FormAlert>
+      ) : null}
+      <p className="text-body text-fg">
+        Açıldığında yapıştırdığınız mesaj metni — telefon, e-posta ve tanınan kişi adları gizlenerek — ayrıştırma için yurt dışındaki AI
+        hizmetine gönderilir. Kataloğunuz, fiyatlarınız ve müşteri bilgileriniz gönderilmez; satırlar yalnızca kataloğunuzla, sunucuda
+        eşleştirilir ve sipariş sizin onayınız olmadan oluşmaz.
+      </p>
+      {canManage ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-caption text-fg-muted">Bu tercih işletmenin tamamı için geçerlidir, kayıt altına alınır ve her zaman kapatılabilir.</p>
+          <Button icon={<ShieldCheck className="size-4" />} loading={busy} onClick={() => void enable()}>
+            AI ayrıştırmayı aç
+          </Button>
+        </div>
+      ) : (
+        <p role="note" className="text-body text-fg-muted">
+          Bu ayarı işletme sahibi veya yöneticisi açabilir. O zamana kadar siparişi elle oluşturabilirsiniz.{" "}
+          <Link href={NEW_ORDER_HREF} className="text-brand-fg underline underline-offset-2">
+            Yeni sipariş
+          </Link>
+        </p>
+      )}
+    </section>
+  );
+}
+
+type SubmitAlert = { tone: "error" | "warning"; title: string; message: string; parseId?: string; manual?: boolean };
+
+function SubmitForm({ limits, onOptInRequired }: { limits: MessageLimits; onOptInRequired: () => void }) {
   const uid = useId();
   const { api } = useSession();
   const router = useRouter();
   const [customer, setCustomer] = useState<{ id: string; name: string; code: string } | null>(null);
   const [text, setText] = useState("");
   const [textError, setTextError] = useState<string | undefined>();
-  const [alert, setAlert] = useState<{ tone: "error" | "warning"; title: string; message: string } | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [alert, setAlert] = useState<SubmitAlert | null>(null);
+  const [phase, setPhase] = useState<"idle" | "sending" | "parsing">("idle");
   const [keys] = useState(() => new IdempotencyKeys());
   const alertRef = useRef<HTMLDivElement>(null);
+  const polling = useRef<AbortController | null>(null);
+  const submitting = phase !== "idle";
 
   useEffect(() => {
     if (alert) alertRef.current?.focus();
   }, [alert]);
 
+  // Leaving the page stops polling (the parse continues on the server and stays listed).
+  useEffect(() => () => polling.current?.abort(), []);
+
   const length = text.trim().length;
-  const over = length > MAX_MESSAGE_CHARS;
+  const over = length > limits.maxChars;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting) return;
-    const invalid = messageError(text);
+    const invalid = messageError(text, limits);
     setTextError(invalid ?? undefined);
     if (invalid) return;
     const body = { text: text.trim(), customerId: customer?.id ?? null };
-    setSubmitting(true);
+    setPhase("sending");
     setAlert(null);
+    let parseId: string | null = null;
     try {
-      const { parse } = await submitOrderParse(api, body, keys.keyFor(body));
+      const accepted = await submitOrderParse(api, body, keys.keyFor(body));
       keys.reset();
-      router.push(orderParseHref(parse.id));
+      parseId = accepted.id;
+      setPhase("parsing");
+      const controller = new AbortController();
+      polling.current = controller;
+      const status = await waitForOrderParse(api, accepted.id, { signal: controller.signal, initialDelayMs: Number(accepted.pollAfterMs) });
+      if (status.state === "succeeded") {
+        router.push(orderParseHref(accepted.id));
+        return;
+      }
+      setAlert({ tone: "error", title: "Mesaj ayrıştırılamadı", message: parseFailureMessage(status.failureCode), manual: true });
     } catch (error) {
-      if (isRateLimited(error)) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      if (error instanceof ParseStillPendingError) {
+        setAlert({
+          tone: "warning",
+          title: "Ayrıştırma sürüyor",
+          message: "Mesaj hâlâ işleniyor. Birazdan aşağıdaki listeden veya bu bağlantıdan incelemeye devam edebilirsiniz.",
+          parseId: error.parseId,
+        });
+      } else if (parseId) {
+        // Accepted, but polling failed (network): the parse continues on the server.
+        setAlert({ tone: "warning", title: "Durum alınamadı", message: assistantErrorMessage(error), parseId });
+      } else if (isOptInRequired(error)) {
+        onOptInRequired();
+      } else if (isRateLimited(error)) {
         setAlert({ tone: "warning", title: "Saatlik ayrıştırma sınırı doldu", message: rateLimitMessage(error) });
       } else if (error instanceof ApiError && error.status === 422 && error.fieldErrors.text?.length) {
         setTextError(translateTextError(error.fieldErrors.text[0]));
       } else {
         setAlert({ tone: "error", title: "Mesaj ayrıştırılamadı", message: assistantErrorMessage(error) });
       }
-      setSubmitting(false);
     }
+    setPhase("idle");
   };
 
   return (
     <form noValidate onSubmit={submit} aria-label="WhatsApp mesajı" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
       {alert ? (
-        <FormAlert ref={alertRef} tone={alert.tone} title={alert.title}>
+        <FormAlert
+          ref={alertRef}
+          tone={alert.tone}
+          title={alert.title}
+          actions={
+            alert.parseId ? (
+              <Link href={orderParseHref(alert.parseId)} className={buttonClasses("secondary", "sm")}>
+                İncelemeyi aç
+              </Link>
+            ) : alert.manual ? (
+              <Link href={NEW_ORDER_HREF} className={buttonClasses("secondary", "sm")}>
+                Siparişi elle oluştur
+              </Link>
+            ) : undefined
+          }
+        >
           {alert.message}
         </FormAlert>
       ) : null}
@@ -153,7 +321,7 @@ function SubmitForm() {
       <div className="flex flex-col gap-1">
         <Textarea
           label="WhatsApp mesajı"
-          hint="Mesajı olduğu gibi yapıştırın. Telefon ve e-posta adresleri ayrıştırmadan önce gizlenir; mesajdaki fiyatlar kullanılmaz."
+          hint="Mesajı olduğu gibi yapıştırın. Telefon, e-posta ve tanınan kişi adları ayrıştırmadan önce gizlenir; mesajdaki fiyatlar kullanılmaz."
           rows={10}
           value={text}
           error={textError}
@@ -166,7 +334,7 @@ function SubmitForm() {
           }}
         />
         <p className={over ? "text-caption text-danger-fg" : "text-caption text-fg-muted"}>
-          {length.toLocaleString("tr-TR")} / {MAX_MESSAGE_CHARS.toLocaleString("tr-TR")} karakter
+          {length.toLocaleString("tr-TR")} / {limits.maxChars.toLocaleString("tr-TR")} karakter
         </p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -175,6 +343,9 @@ function SubmitForm() {
           Mesajı ayrıştır
         </Button>
       </div>
+      <p role="status" className={phase === "parsing" ? "text-body text-fg-muted" : "sr-only"}>
+        {phase === "parsing" ? "Mesaj ayrıştırılıyor ve kataloğunuzla eşleştiriliyor…" : ""}
+      </p>
     </form>
   );
 }

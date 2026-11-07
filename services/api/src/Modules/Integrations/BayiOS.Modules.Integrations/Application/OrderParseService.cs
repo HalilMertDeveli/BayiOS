@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -9,14 +8,15 @@ using BayiOS.Modules.Integrations.Matching;
 using BayiOS.Modules.Integrations.Parsing;
 using BayiOS.SharedKernel.Authorization;
 using BayiOS.SharedKernel.Entitlements;
-using BayiOS.SharedKernel.Observability;
 using BayiOS.SharedKernel.Platform.Audit;
+using BayiOS.SharedKernel.Platform.Jobs;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace BayiOS.Modules.Integrations.Application;
 
@@ -31,15 +31,30 @@ internal sealed class AiParserAccessor(IServiceProvider services, IOptions<AiOpt
 /// <summary>Stored review document (jsonb <c>review</c>): the response lines plus the unparsed fragments.</summary>
 internal sealed record StoredReview(IReadOnlyList<OrderParseLineResponse> Lines, IReadOnlyList<string> UnparsedFragments);
 
+/// <summary>What the background parse needs from the pending row (read in phase 1, ADR 0010 §2.1).</summary>
+internal sealed record PendingParse(Guid Id, Guid TenantId, string MaskedText, Guid? CustomerId, Guid? CreatedBy, IReadOnlyList<string> Warnings);
+
+/// <summary>Result of the parser step (AI or rules) of a background parse.</summary>
+internal sealed record ParseOutcome(
+    ParsedOrder Parse, string Parser, string? Model, string PromptVersion, string? FallbackReason, AiTokenUsage Usage);
+
 /// <summary>
-/// WhatsApp order assistant (#47, #48, #50; ADR 0010). Submit: validate size → hourly limit (429) → mask personal data
-/// → AI parser when enabled, configured and under the daily quota, else (or on any provider failure) the rules
-/// parser → ground + match against the tenant's catalog → store for review. Approve: the reviewer confirms a variant
-/// for every included line; the draft is created through the Orders create command with source <c>whatsapp_ai</c>
-/// (prices from Pricing; the order is never auto-approved). Nothing the parser outputs can set a price, a stock level,
-/// a catalog id or an approval.
+/// WhatsApp order assistant (#47, #48, #50, #121; ADR 0010).
+/// <para>
+/// Submit (request): validate size → tenant opt-in (409) → hourly/monthly limit (429/403) → mask personal data → store
+/// a <c>pending</c> parse and enqueue <see cref="AiOrderParseJob"/> in the same transaction → 202. The provider is never
+/// called inside a request.
+/// </para>
+/// <para>
+/// Background (<see cref="AiOrderParseJob"/>): <see cref="BeginJobAsync"/> (short transaction) → parser call with no
+/// connection held → <see cref="CompleteJobAsync"/> (short transaction: ground + match against the tenant's catalog
+/// and learned aliases, store the review). Approve: the reviewer confirms a variant for every included line; the draft
+/// is created through the Orders create command with source <c>whatsapp_ai</c> (prices from Pricing; the order is never
+/// auto-approved) and confirmed phrases are learned as aliases. Nothing the parser outputs can set a price, a stock
+/// level, a catalog id or an approval.
+/// </para>
 /// </summary>
-internal sealed partial class OrderParseService(
+internal sealed class OrderParseService(
     IntegrationsDbContext db,
     IRequestContext requestContext,
     IAuthorizationContext authorization,
@@ -50,10 +65,11 @@ internal sealed partial class OrderParseService(
     AiParserAccessor ai,
     IOptions<AiOptions> options,
     IAuditLog audit,
-    TimeProvider clock,
-    ILogger<OrderParseService> logger)
+    IBackgroundJobs jobs,
+    TimeProvider clock)
 {
     public const int MaxListLimit = 100;
+    public const int MaxAliasPhrase = 200;
     private const int MaxNotes = 2000;
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -62,9 +78,13 @@ internal sealed partial class OrderParseService(
 
     private Guid UserId => requestContext.UserId ?? throw new InvalidOperationException("No user resolved.");
 
-    // ---------------------------------------------------------------- submit
+    public static string StatusUrl(Guid id) => $"/api/v1/ai/order-parses/{id}/status";
 
-    public async Task<AppResult<OrderParseResponse>> SubmitAsync(SubmitOrderParseRequest request, CancellationToken cancellationToken)
+    public static string ResultUrl(Guid id) => $"/api/v1/ai/order-parses/{id}";
+
+    // ---------------------------------------------------------------- submit (request)
+
+    public async Task<AppResult<OrderParseAcceptedResponse>> SubmitAsync(SubmitOrderParseRequest request, CancellationToken cancellationToken)
     {
         var settings = options.Value;
         var text = Normalise(request.Text);
@@ -83,6 +103,13 @@ internal sealed partial class OrderParseService(
             return AppError.Validation("text", $"At most {settings.MaxInputLines} lines.");
         }
 
+        // data-policy §7: the message may leave Türkiye only when the tenant opted in. Checked before anything is counted.
+        if (!await IsOptedInAsync(cancellationToken))
+        {
+            return new AppError(
+                409, AssistantProblems.OptInRequired, "AI order parsing is switched off for this business; an owner or admin can switch it on");
+        }
+
         // The endpoint gate already required ai_order_parsing; the add-on's monthly quota is checked with the hourly limit.
         var monthlyLimit = (await entitlements.CurrentAsync(cancellationToken)).LimitOf(EntitlementCodes.AiParsesPerMonth);
         var start = await meter.TryStartParseAsync(TenantId, UserId, settings.HourlyParseLimit, monthlyLimit, cancellationToken);
@@ -98,27 +125,103 @@ internal sealed partial class OrderParseService(
                 RetryAfterSeconds: meter.SecondsUntilNextHour());
         }
 
-        var started = Stopwatch.GetTimestamp();
+        // Masked before it is stored: the raw text never reaches the database, the queue or the provider.
         var masked = TurkishText.MaskPersonalData(text, out var maskedAny);
-        var serverWarnings = new List<string>();
-        if (maskedAny)
+        string[] warnings = maskedAny ? [ParseWarnings.PersonalDataMasked] : [];
+        var entity = OrderParseRequest.CreatePending(
+            TenantId, request.CustomerId, request.WarehouseId, masked, Sha256(masked), JsonSerializer.Serialize(warnings, Json), UserId, clock.GetUtcNow());
+        db.ParseRequests.Add(entity);
+        await db.SaveChangesAsync(cancellationToken);
+
+        // Same transaction: the job exists only if the parse does (and vice versa). Payload = ids only.
+        await jobs.EnqueueAsync(
+            new JobRequest(AiOrderParseJob.Type, new AiOrderParsePayload(entity.Id), MaxAttempts: AiOrderParseJob.MaxAttempts, DedupeKey: entity.Id.ToString("N")),
+            cancellationToken);
+
+        await audit.RecordAsync(
+            new AuditEvent(AssistantAuditActions.ParseRequested, AssistantAuditActions.EntityType, entity.Id, new AuditChanges()
+                .Value("textLength", entity.TextLength)
+                .Value("customerGiven", entity.CustomerId is not null)
+                .Value("warehouseGiven", entity.WarehouseId is not null)
+                .Value("personalDataMasked", maskedAny)
+                .ToDictionary()),
+            cancellationToken);
+        return new OrderParseAcceptedResponse(entity.Id, entity.Status, StatusUrl(entity.Id), ResultUrl(entity.Id), settings.PollAfterMs);
+    }
+
+    // ---------------------------------------------------------------- background job (phases 1 and 3)
+
+    /// <summary>
+    /// Phase 1 of <see cref="AiOrderParseJob"/>: the pending row and what the parser needs. Null when there is nothing
+    /// to do — the parse is gone, already processed (a retried or duplicate job), past the processing deadline or the
+    /// tenant opted out in the meantime (the last two are recorded as failed; the text is then sent nowhere).
+    /// </summary>
+    public async Task<PendingParse?> BeginJobAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var entity = await LockAsync(id, cancellationToken);
+        if (entity is null || entity.Status != OrderParseStatuses.Pending)
         {
-            serverWarnings.Add(ParseWarnings.PersonalDataMasked);
+            return null;
         }
 
-        var outcome = await ParseAsync(masked, serverWarnings, cancellationToken);
-        var parsedText = outcome.Parser == ParserKinds.Ai ? AnthropicOrderParser.Neutralise(masked) : masked;
-        var matcher = await MatcherAsync(outcome.Parse, serverWarnings, cancellationToken);
-        var review = OrderParseReview.Build(outcome.Parse, parsedText, matcher, outcome.Parser == ParserKinds.Ai, serverWarnings);
+        string? failure = null;
+        if (clock.GetUtcNow() - entity.CreatedAt > TimeSpan.FromSeconds(options.Value.ProcessingDeadlineSeconds))
+        {
+            failure = ParseFailureCodes.TimedOut;
+        }
+        else if (!await IsOptedInAsync(cancellationToken))
+        {
+            failure = ParseFailureCodes.OptInRevoked;
+        }
+        else if (entity.RawText is null)
+        {
+            failure = ParseFailureCodes.ProcessingFailed; // purged before it was ever processed
+        }
 
-        var stored = new StoredReview([.. review.Lines.Select(ToResponse)], review.UnparsedFragments);
-        var counts = (review.Lines.Count, review.Count(MatchStatuses.Matched), review.Count(MatchStatuses.Ambiguous), review.Count(MatchStatuses.Unmatched));
+        if (failure is not null)
+        {
+            await FailAsync(entity, failure, cancellationToken);
+            return null;
+        }
+
+        var warnings = JsonSerializer.Deserialize<List<string>>(entity.Warnings, Json) ?? [];
+        return new PendingParse(entity.Id, entity.TenantId, entity.RawText!, entity.CustomerId, entity.CreatedBy, warnings);
+    }
+
+    /// <summary>
+    /// Phase 3 of <see cref="AiOrderParseJob"/>: ground and match the parse against the tenant's catalog and learned
+    /// aliases and store the review (pending → needs_review). A no-op when the parse is no longer pending.
+    /// </summary>
+    public async Task<bool> CompleteJobAsync(PendingParse pending, ParseOutcome outcome, IReadOnlyCollection<string> serverWarnings, int durationMs, CancellationToken cancellationToken)
+    {
+        var entity = await LockAsync(pending.Id, cancellationToken);
+        if (entity is null || entity.Status != OrderParseStatuses.Pending)
+        {
+            return false;
+        }
+
+        var warnings = new List<string>(serverWarnings);
+        var parsedText = outcome.Parser == ParserKinds.Ai ? AnthropicOrderParser.Neutralise(pending.MaskedText) : pending.MaskedText;
+        var matcher = await MatcherAsync(outcome.Parse, pending.CustomerId, warnings, cancellationToken);
+        var review = OrderParseReview.Build(outcome.Parse, parsedText, matcher, outcome.Parser == ParserKinds.Ai, warnings);
+
+        // Character offsets into messageText (the neutralised text has the same length as the masked one).
+        var cursor = 0;
+        var lines = new List<OrderParseLineResponse>(review.Lines.Count);
+        foreach (var line in review.Lines)
+        {
+            var span = OrderParseReview.Locate(parsedText, line.Parsed.RawText, cursor);
+            if (span is { } found)
+            {
+                cursor = found.Start + found.Length;
+            }
+
+            lines.Add(ToResponse(line, span));
+        }
+
+        var stored = new StoredReview(lines, review.UnparsedFragments);
         var usage = outcome.Usage;
-        var entity = OrderParseRequest.Create(
-            TenantId,
-            request.CustomerId,
-            masked,
-            Sha256(masked),
+        entity.Complete(
             outcome.Parser,
             outcome.Model,
             outcome.PromptVersion,
@@ -126,17 +229,15 @@ internal sealed partial class OrderParseService(
             JsonSerializer.Serialize(outcome.Parse, Json),
             JsonSerializer.Serialize(stored, Json),
             JsonSerializer.Serialize(review.Warnings, Json),
-            counts,
+            (review.Lines.Count, review.Count(MatchStatuses.Matched), review.Count(MatchStatuses.Ambiguous), review.Count(MatchStatuses.Unmatched)),
             review.OverallConfidence,
             (usage.InputTokens, usage.OutputTokens, usage.CacheReadInputTokens, usage.CacheCreationInputTokens),
-            (int)Math.Min(int.MaxValue, Stopwatch.GetElapsedTime(started).TotalMilliseconds),
-            UserId,
+            durationMs,
             clock.GetUtcNow());
-        db.ParseRequests.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
 
         await audit.RecordAsync(
-            new AuditEvent(AssistantAuditActions.ParseRequested, AssistantAuditActions.EntityType, entity.Id, new AuditChanges()
+            new AuditEvent(AssistantAuditActions.ParseCompleted, AssistantAuditActions.EntityType, entity.Id, new AuditChanges()
                 .Value("parser", entity.Parser)
                 .Value("model", entity.Model)
                 .Value("promptVersion", entity.PromptVersion)
@@ -145,86 +246,121 @@ internal sealed partial class OrderParseService(
                 .Value("matched", entity.MatchedCount)
                 .Value("ambiguous", entity.AmbiguousCount)
                 .Value("unmatched", entity.UnmatchedCount)
+                .Value("aliasMatches", review.Lines.Count(l => l.Match.Candidates is [{ Method: MatchMethods.Alias }]))
                 .Value("warnings", review.Warnings)
                 .Value("inputTokens", entity.InputTokens)
                 .Value("outputTokens", entity.OutputTokens)
                 .ToDictionary()),
             cancellationToken);
-        return ToResponse(entity);
+        return true;
     }
 
-    private sealed record ParseOutcome(
-        ParsedOrder Parse, string Parser, string? Model, string PromptVersion, string? FallbackReason, AiTokenUsage Usage);
-
-    private async Task<ParseOutcome> ParseAsync(string masked, List<string> serverWarnings, CancellationToken cancellationToken)
+    /// <summary>The job gave up (last attempt failed): pending → failed, so pollers stop waiting.</summary>
+    public async Task FailJobAsync(Guid id, string failureCode, CancellationToken cancellationToken)
     {
-        var settings = options.Value;
-        var parser = ai.Parser;
-        var usage = AiTokenUsage.None;
-        string reason;
-        if (parser is null)
+        var entity = await LockAsync(id, cancellationToken);
+        if (entity is not null && entity.Status == OrderParseStatuses.Pending)
         {
-            reason = FallbackReasons.Disabled;
-            serverWarnings.Add(ParseWarnings.AiDisabled);
+            await FailAsync(entity, failureCode, cancellationToken);
         }
-        else if (await meter.TryReserveAiCallAsync(TenantId, UserId, settings.DailyCallLimit, settings.DailyTokenLimit, cancellationToken)
-                 is not AiQuotaDecision.Allowed)
-        {
-            reason = FallbackReasons.QuotaExceeded;
-            serverWarnings.Add(ParseWarnings.AiQuotaExceeded);
-        }
-        else
-        {
-            var result = await parser.ParseAsync(masked, cancellationToken);
-            usage = result.Usage;
-
-            // Not tied to the request token: a call that was made is always counted.
-            await meter.RecordAiCallAsync(TenantId, UserId, usage, failed: result.Parse is null, CancellationToken.None);
-            if (result.Parse is not null)
-            {
-                return new ParseOutcome(result.Parse, ParserKinds.Ai, result.Model, result.PromptVersion, null, usage);
-            }
-
-            reason = result.FailureReason ?? FallbackReasons.ProviderError;
-            serverWarnings.Add(ParseWarnings.AiUnavailable);
-        }
-
-        if (parser is not null)
-        {
-            await meter.RecordFallbackAsync(TenantId, UserId, CancellationToken.None);
-            BayiOsMetrics.AiFallbacks.Add(1, new KeyValuePair<string, object?>("reason", reason));
-            LogFallback(logger, TenantId, reason);
-        }
-
-        return new ParseOutcome(RuleBasedOrderParser.Parse(masked), ParserKinds.Rules, null, RuleBasedOrderParser.Version, reason, usage);
     }
 
-    private async Task<CatalogMatcher> MatcherAsync(ParsedOrder parse, List<string> serverWarnings, CancellationToken cancellationToken)
+    private async Task FailAsync(OrderParseRequest entity, string failureCode, CancellationToken cancellationToken)
+    {
+        entity.Fail(failureCode, clock.GetUtcNow());
+        await db.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(
+            new AuditEvent(AssistantAuditActions.ParseFailed, AssistantAuditActions.EntityType, entity.Id, new AuditChanges()
+                .Value("failureCode", failureCode)
+                .ToDictionary()),
+            cancellationToken);
+    }
+
+    private async Task<OrderParseRequest?> LockAsync(Guid id, CancellationToken cancellationToken)
+    {
+        await db.JoinTransactionAsync(cancellationToken);
+        var tenantId = TenantId;
+        return (await db.ParseRequests
+                .FromSql($"SELECT * FROM integrations.ai_parse_requests WHERE id = {id} AND tenant_id = {tenantId} FOR UPDATE")
+                .IgnoreQueryFilters()
+                .ToListAsync(cancellationToken))
+            .SingleOrDefault();
+    }
+
+    private async Task<CatalogMatcher> MatcherAsync(ParsedOrder parse, Guid? customerId, List<string> serverWarnings, CancellationToken cancellationToken)
     {
         var snapshot = await catalog.LoadActiveVariantsAsync(options.Value.MatchCatalogLimit, cancellationToken);
-        if (!snapshot.Truncated)
+        var entries = snapshot.Entries.ToList();
+        if (snapshot.Truncated)
         {
-            return new CatalogMatcher(snapshot.Entries);
+            // Large catalog: fuzzy matching sees the first N variants, exact codes are looked up in the whole catalog.
+            serverWarnings.Add(ParseWarnings.CatalogTruncated);
+            var codes = parse.Lines
+                .SelectMany(l => new[] { l.ProductCode }.Concat(l.RawText.Split(' ', StringSplitOptions.RemoveEmptyEntries)))
+                .OfType<string>()
+                .Select(CatalogMatcher.NormaliseCode)
+                .Where(c => c.Length >= 3 && c.Any(char.IsAsciiDigit))
+                .Distinct(StringComparer.Ordinal)
+                .Take(500)
+                .ToList();
+            if (codes.Count > 0)
+            {
+                entries.AddRange(await catalog.FindByCodesAsync(codes, cancellationToken));
+            }
         }
 
-        // Large catalog: fuzzy matching sees the first N variants, exact codes are looked up in the whole catalog.
-        serverWarnings.Add(ParseWarnings.CatalogTruncated);
-        var codes = parse.Lines
-            .SelectMany(l => new[] { l.ProductCode }.Concat(l.RawText.Split(' ', StringSplitOptions.RemoveEmptyEntries)))
-            .OfType<string>()
-            .Select(CatalogMatcher.NormaliseCode)
-            .Where(c => c.Length >= 3 && c.Any(char.IsAsciiDigit))
-            .Distinct(StringComparer.Ordinal)
-            .Take(500)
-            .ToList();
-        var extra = codes.Count == 0 ? [] : await catalog.FindByCodesAsync(codes, cancellationToken);
-        return new CatalogMatcher(snapshot.Entries.Concat(extra).DistinctBy(e => e.VariantId));
+        // Learned aliases of exactly these phrases (tenant-wide and the parse's customer); RLS + query filter = this tenant.
+        var phrases = parse.Lines.Select(CatalogMatcher.AliasKey).Where(p => p.Length is > 0 and <= MaxAliasPhrase).Distinct(StringComparer.Ordinal).ToList();
+        var aliases = phrases.Count == 0
+            ? []
+            : await db.Aliases.AsNoTracking()
+                .Where(a => phrases.Contains(a.Phrase) && (a.CustomerId == null || a.CustomerId == customerId))
+                .Select(a => new AliasEntry(a.Phrase, a.VariantId, a.CustomerId != null))
+                .ToListAsync(cancellationToken);
+
+        // An alias only counts while its variant is an active variant of this tenant's catalog.
+        var known = entries.Select(e => e.VariantId).ToHashSet();
+        var missing = aliases.Select(a => a.VariantId).Where(v => !known.Contains(v)).Distinct().ToList();
+        if (missing.Count > 0)
+        {
+            entries.AddRange(await catalog.FindByIdsAsync(missing, cancellationToken));
+        }
+
+        return new CatalogMatcher(entries.DistinctBy(e => e.VariantId), aliases);
     }
 
     // ---------------------------------------------------------------- reads
 
     public async Task<OrderParseResponse?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         await db.ParseRequests.AsNoTracking().SingleOrDefaultAsync(r => r.Id == id, cancellationToken) is { } entity ? ToResponse(entity) : null;
+
+    public async Task<OrderParseStatusResponse?> StatusAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var row = await db.ParseRequests.AsNoTracking()
+            .Where(r => r.Id == id)
+            .Select(r => new { r.Id, r.Status, r.FailureCode, r.CreatedAt, r.CompletedAt })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (row is null)
+        {
+            return null;
+        }
+
+        var settings = options.Value;
+        if (OrderParseStatuses.IsParsed(row.Status))
+        {
+            return new OrderParseStatusResponse(row.Id, ParseStates.Succeeded, row.Status, null, ResultUrl(row.Id), null, row.CreatedAt, row.CompletedAt);
+        }
+
+        if (row.Status == OrderParseStatuses.Failed)
+        {
+            return new OrderParseStatusResponse(row.Id, ParseStates.Failed, row.Status, row.FailureCode, ResultUrl(row.Id), null, row.CreatedAt, row.CompletedAt);
+        }
+
+        // Pending past the deadline: the worker is down or the queue is stuck — report it instead of letting clients wait.
+        return clock.GetUtcNow() - row.CreatedAt > TimeSpan.FromSeconds(settings.ProcessingDeadlineSeconds)
+            ? new OrderParseStatusResponse(row.Id, ParseStates.Failed, row.Status, ParseFailureCodes.TimedOut, ResultUrl(row.Id), null, row.CreatedAt, null)
+            : new OrderParseStatusResponse(row.Id, ParseStates.Pending, row.Status, null, ResultUrl(row.Id), settings.PollAfterMs, row.CreatedAt, null);
+    }
 
     public async Task<OrderParseListResponse> ListAsync(string? status, int limit, CancellationToken cancellationToken)
     {
@@ -253,6 +389,151 @@ internal sealed partial class OrderParseService(
             today.Day, ai.IsConfigured, settings.Model, today.ParseRequests, settings.HourlyParseLimit, today.AiCalls, settings.DailyCallLimit,
             today.QuotaTokens, settings.DailyTokenLimit, today.AiFailures, today.Fallbacks, today.InputTokens, today.OutputTokens,
             today.CacheReadTokens, today.CacheWriteTokens);
+    }
+
+    // ---------------------------------------------------------------- tenant settings (opt-in, data-policy §7)
+
+    private async Task<bool> IsOptedInAsync(CancellationToken cancellationToken) =>
+        await db.Settings.AsNoTracking().Where(s => s.TenantId == TenantId).Select(s => s.AiParsingEnabled).SingleOrDefaultAsync(cancellationToken);
+
+    public async Task<AiSettingsResponse> GetSettingsAsync(CancellationToken cancellationToken)
+    {
+        var row = await db.Settings.AsNoTracking().SingleOrDefaultAsync(s => s.TenantId == TenantId, cancellationToken);
+
+        // No row = the default (off) at version 1: the row an update creates starts there, so If-Match stays valid.
+        return row is null ? Settings(false, null, null, 1) : Settings(row.AiParsingEnabled, row.UpdatedAt, row.UpdatedBy, row.RowVersion);
+    }
+
+    public async Task<AppResult<AiSettingsResponse>> UpdateSettingsAsync(UpdateAiSettingsRequest request, long? expectedVersion, CancellationToken cancellationToken)
+    {
+        if (request.AiParsingEnabled is not { } enabled)
+        {
+            return AppError.Validation("aiParsingEnabled", "Required (true or false).");
+        }
+
+        await db.JoinTransactionAsync(cancellationToken);
+        var tenantId = TenantId;
+        var now = clock.GetUtcNow();
+
+        // Concurrent first updates must not race on the insert: make sure the (default, off) row exists, then lock it.
+        await db.Database.ExecuteSqlAsync(
+            $"""
+            INSERT INTO integrations.ai_settings (tenant_id, ai_parsing_enabled, row_version, updated_at, updated_by)
+            VALUES ({tenantId}, false, 1, {now}, {UserId}) ON CONFLICT (tenant_id) DO NOTHING
+            """,
+            cancellationToken);
+        var row = (await db.Settings
+                .FromSql($"SELECT * FROM integrations.ai_settings WHERE tenant_id = {tenantId} FOR UPDATE")
+                .ToListAsync(cancellationToken))
+            .Single();
+        if (expectedVersion is { } version && version != row.RowVersion)
+        {
+            return AppError.VersionMismatch();
+        }
+
+        var before = row.AiParsingEnabled;
+        if (before != enabled)
+        {
+            row.Set(enabled, UserId, now);
+            await db.SaveChangesAsync(cancellationToken);
+            await audit.RecordAsync(
+                new AuditEvent(AssistantAuditActions.SettingsChanged, AssistantAuditActions.SettingsEntityType, tenantId, new AuditChanges()
+                    .Field("aiParsingEnabled", before, enabled)
+                    .ToDictionary()),
+                cancellationToken);
+        }
+
+        return Settings(row.AiParsingEnabled, row.UpdatedAt, row.UpdatedBy, row.RowVersion);
+    }
+
+    private AiSettingsResponse Settings(bool enabled, DateTimeOffset? updatedAt, Guid? updatedBy, long version)
+    {
+        var settings = options.Value;
+        return new AiSettingsResponse(
+            enabled, ai.IsConfigured, new AiInputLimits(settings.MaxInputChars, settings.MaxInputLines, settings.HourlyParseLimit), updatedAt, updatedBy, version);
+    }
+
+    // ---------------------------------------------------------------- learned aliases (WAI-07)
+
+    public async Task<LearnedAliasListResponse> ListAliasesAsync(Guid? variantId, Guid? customerId, int limit, CancellationToken cancellationToken)
+    {
+        var query = db.Aliases.AsNoTracking();
+        if (variantId is { } variant)
+        {
+            query = query.Where(a => a.VariantId == variant);
+        }
+
+        if (customerId is { } customer)
+        {
+            query = query.Where(a => a.CustomerId == customer);
+        }
+
+        var items = await query
+            .OrderByDescending(a => a.UpdatedAt).ThenBy(a => a.Id)
+            .Take(Math.Clamp(limit, 1, MaxListLimit))
+            .Select(a => new LearnedAliasResponse(a.Id, a.Phrase, a.VariantId, a.CustomerId, a.Confirmations, a.UpdatedAt))
+            .ToListAsync(cancellationToken);
+        return new LearnedAliasListResponse(items);
+    }
+
+    public async Task<bool> DeleteAliasAsync(Guid id, CancellationToken cancellationToken)
+    {
+        await db.JoinTransactionAsync(cancellationToken);
+        var alias = await db.Aliases.SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
+        if (alias is null)
+        {
+            return false;
+        }
+
+        db.Aliases.Remove(alias);
+        await db.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(
+            new AuditEvent(AssistantAuditActions.AliasDeleted, AssistantAuditActions.AliasEntityType, alias.Id, new AuditChanges()
+                .Value("variantId", alias.VariantId)
+                .Value("customerSpecific", alias.CustomerId is not null)
+                .Value("confirmations", alias.Confirmations)
+                .ToDictionary()),
+            cancellationToken);
+        return true;
+    }
+
+    /// <summary>
+    /// Upserts phrase → variant in the tenant scope and, when the order has a customer, in that customer's scope
+    /// (latest confirmation wins; confirmations count up while the variant stays the same). Atomic under concurrency.
+    /// </summary>
+    private async Task LearnAsync(Guid parseId, Guid? customerId, IReadOnlyList<(string Phrase, Guid VariantId)> learned, CancellationToken cancellationToken)
+    {
+        await db.JoinTransactionAsync(cancellationToken);
+        var now = clock.GetUtcNow();
+        foreach (var (phrase, variantId) in learned)
+        {
+            foreach (var scope in customerId is null ? new Guid?[] { null } : [null, customerId])
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    INSERT INTO integrations.learned_aliases AS a
+                        (id, tenant_id, customer_id, phrase, variant_id, confirmations, last_parse_id, created_at, created_by, updated_at, updated_by)
+                    VALUES (@id, @tenant, @customer, @phrase, @variant, 1, @parse, @now, @user, @now, @user)
+                    ON CONFLICT (tenant_id, customer_id, phrase) DO UPDATE SET
+                        confirmations = CASE WHEN a.variant_id = EXCLUDED.variant_id THEN a.confirmations + 1 ELSE 1 END,
+                        variant_id = EXCLUDED.variant_id,
+                        last_parse_id = EXCLUDED.last_parse_id,
+                        updated_at = EXCLUDED.updated_at,
+                        updated_by = EXCLUDED.updated_by
+                    """,
+                    [
+                        new NpgsqlParameter<Guid>("id", Guid.CreateVersion7()),
+                        new NpgsqlParameter<Guid>("tenant", TenantId),
+                        new NpgsqlParameter("customer", NpgsqlDbType.Uuid) { Value = (object?)scope ?? DBNull.Value },
+                        new NpgsqlParameter<string>("phrase", phrase),
+                        new NpgsqlParameter<Guid>("variant", variantId),
+                        new NpgsqlParameter<Guid>("parse", parseId),
+                        new NpgsqlParameter<DateTimeOffset>("now", now),
+                        new NpgsqlParameter<Guid>("user", UserId),
+                    ],
+                    cancellationToken);
+            }
+        }
     }
 
     // ---------------------------------------------------------------- approve / reject
@@ -292,11 +573,28 @@ internal sealed partial class OrderParseService(
             return AppError.Validation(errors);
         }
 
+        // Units: the order is in the variant's unit. A unit the reviewer confirms must be exactly that unit.
         var included = choices.Where(c => c.Include).ToList();
+        var variants = (await catalog.FindByIdsAsync([.. included.Select(c => c.VariantId!.Value).Distinct()], cancellationToken))
+            .ToDictionary(v => v.VariantId);
+        foreach (var choice in included.Where(c => c.Unit is not null))
+        {
+            if (variants.TryGetValue(choice.VariantId!.Value, out var variant)
+                && !string.Equals(choice.Unit!.Trim(), variant.Unit, StringComparison.OrdinalIgnoreCase))
+            {
+                errors[$"lines[{choice.Index}].unit"] = [$"The order line is in the variant's unit ({variant.Unit}); convert the quantity to {variant.Unit}."];
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            return AppError.Validation(errors);
+        }
+
         var result = await drafts.CreateDraftAsync(
             new AssistantDraftOrder(
                 customerId!.Value,
-                request.WarehouseId,
+                request.WarehouseId ?? entity.WarehouseId,
                 entity.Id,
                 string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
                 [.. included.Select(c => new AssistantDraftLine(c.VariantId!.Value, c.Quantity!.Value))]),
@@ -315,8 +613,21 @@ internal sealed partial class OrderParseService(
                 SelectedVariantId = choice.Include ? choice.VariantId : null,
                 SelectedQuantity = choice.Include ? choice.Quantity : null,
                 Selection = choice.Selection,
+                SelectedUnit = choice.Include && variants.TryGetValue(choice.VariantId!.Value, out var variant) ? variant.Unit : null,
             };
         }).ToList();
+
+        // WAI-07: the reviewer's decisions become aliases (the Orders module has just accepted these variants). Lines the
+        // message already pinned down by an exact code or name teach nothing new.
+        var learned = included
+            .Where(c => c.Learn)
+            .Select(c => (Line: stored.Lines.Single(l => l.LineNo == c.LineNo), c.VariantId!.Value))
+            .Where(x => !x.Line.Candidates.Any(k => k.VariantId == x.Value && k.Method is MatchMethods.Sku or MatchMethods.Barcode or MatchMethods.Name))
+            .Select(x => (Phrase: CatalogMatcher.AliasKey(ToParsed(x.Line)), VariantId: x.Value))
+            .Where(x => x.Phrase.Length is > 0 and <= MaxAliasPhrase)
+            .DistinctBy(x => x.Phrase)
+            .ToList();
+        await LearnAsync(entity.Id, customerId, learned, cancellationToken);
 
         var now = clock.GetUtcNow();
         entity.Review = JsonSerializer.Serialize(stored with { Lines = lines }, Json);
@@ -336,6 +647,7 @@ internal sealed partial class OrderParseService(
                 .Value("candidate", choices.Count(c => c.Selection == Selections.Candidate))
                 .Value("manual", choices.Count(c => c.Selection == Selections.Manual))
                 .Value("skipped", choices.Count(c => c.Selection == Selections.Skipped))
+                .Value("aliasesLearned", learned.Count)
                 .Value("parser", entity.Parser)
                 .ToDictionary()),
             cancellationToken);
@@ -368,13 +680,7 @@ internal sealed partial class OrderParseService(
     private async Task<(OrderParseRequest? Entity, AppError? Error)> LockReviewableAsync(
         Guid id, long? expectedVersion, CancellationToken cancellationToken, bool allowPurged = false)
     {
-        await db.JoinTransactionAsync(cancellationToken);
-        var tenantId = TenantId;
-        var entity = (await db.ParseRequests
-                .FromSql($"SELECT * FROM integrations.ai_parse_requests WHERE id = {id} AND tenant_id = {tenantId} FOR UPDATE")
-                .IgnoreQueryFilters()
-                .ToListAsync(cancellationToken))
-            .SingleOrDefault();
+        var entity = await LockAsync(id, cancellationToken);
         if (entity is null)
         {
             return (null, AppError.NotFound());
@@ -387,7 +693,7 @@ internal sealed partial class OrderParseService(
 
         if (entity.Status != OrderParseStatuses.NeedsReview)
         {
-            return (null, new AppError(409, AssistantProblems.NotReviewable, $"The parse is already {entity.Status}"));
+            return (null, new AppError(409, AssistantProblems.NotReviewable, $"The parse is {entity.Status}"));
         }
 
         if (!allowPurged && entity.Review is null)
@@ -408,7 +714,7 @@ internal sealed partial class OrderParseService(
         public const string Skipped = "skipped";
     }
 
-    private sealed record Choice(int LineNo, bool Include, Guid? VariantId, decimal? Quantity, string Selection);
+    private sealed record Choice(int Index, int LineNo, bool Include, Guid? VariantId, decimal? Quantity, string Selection, string? Unit, bool Learn);
 
     /// <summary>
     /// Every review line exactly once; an included line names its variant explicitly (no implicit acceptance of a
@@ -449,7 +755,7 @@ internal sealed partial class OrderParseService(
 
             if (!include)
             {
-                choices.Add(new Choice(lineNo, false, null, null, Selections.Skipped));
+                choices.Add(new Choice(i, lineNo, false, null, null, Selections.Skipped, null, false));
                 continue;
             }
 
@@ -466,10 +772,16 @@ internal sealed partial class OrderParseService(
                 continue;
             }
 
+            if (item.Unit is { } unit && (string.IsNullOrWhiteSpace(unit) || unit.Length > 32))
+            {
+                errors[$"{key}.unit"] = ["A unit code of at most 32 characters, or omit it."];
+                continue;
+            }
+
             var selection = variantId == line.ProposedVariantId ? Selections.Proposed
                 : line.Candidates.Any(c => c.VariantId == variantId) ? Selections.Candidate
                 : Selections.Manual;
-            choices.Add(new Choice(lineNo, true, variantId, q, selection));
+            choices.Add(new Choice(i, lineNo, true, variantId, q, selection, item.Unit, item.LearnAlias ?? true));
         }
 
         var missing = stored.Lines.Select(l => l.LineNo).Where(n => !seen.Contains(n)).ToList();
@@ -487,10 +799,15 @@ internal sealed partial class OrderParseService(
 
     // ---------------------------------------------------------------- mapping
 
-    private static OrderParseLineResponse ToResponse(ReviewLine line) =>
+    private static ParsedLine ToParsed(OrderParseLineResponse line) =>
+        new(line.RawText, line.ProductCode, line.ProductText, line.Quantity, line.Unit, line.BrandModel, line.ParseConfidence, line.Notes);
+
+    private static OrderParseLineResponse ToResponse(ReviewLine line, (int Start, int Length)? span) =>
         new(
             line.LineNo,
             line.Parsed.RawText,
+            span?.Start,
+            span?.Length,
             line.Parsed.ProductCode,
             line.Parsed.ProductText,
             line.Parsed.Quantity,
@@ -516,10 +833,12 @@ internal sealed partial class OrderParseService(
             entity.Status,
             entity.Channel,
             entity.CustomerId,
+            entity.WarehouseId,
             entity.Parser,
             entity.Model,
             entity.PromptVersion,
             entity.FallbackReason,
+            entity.FailureCode,
             entity.RawText,
             entity.TextPurgedAt is not null,
             stored?.Lines ?? [],
@@ -529,6 +848,7 @@ internal sealed partial class OrderParseService(
             entity.OrderId,
             entity.CreatedAt,
             entity.CreatedBy,
+            entity.CompletedAt,
             entity.ReviewedAt,
             entity.ReviewedBy,
             entity.RowVersion);
@@ -551,7 +871,12 @@ internal sealed partial class OrderParseService(
         var normalised = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(normalised)));
     }
+}
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "AI order parse for tenant {TenantId} used the rules parser ({Reason})")]
-    private static partial void LogFallback(ILogger logger, Guid tenantId, string reason);
+/// <summary>Processing states of the status endpoint.</summary>
+internal static class ParseStates
+{
+    public const string Pending = "pending";
+    public const string Succeeded = "succeeded";
+    public const string Failed = "failed";
 }

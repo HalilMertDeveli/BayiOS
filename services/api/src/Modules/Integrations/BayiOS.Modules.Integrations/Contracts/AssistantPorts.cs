@@ -18,6 +18,9 @@ public interface IAssistantCatalog
 
     /// <summary>Active variants whose SKU or barcode equals one of the (normalised, upper-case) codes.</summary>
     Task<IReadOnlyList<CatalogEntry>> FindByCodesAsync(IReadOnlyCollection<string> codes, CancellationToken cancellationToken);
+
+    /// <summary>Active variants (of active products) among the given ids; ids of other tenants or inactive variants are absent.</summary>
+    Task<IReadOnlyList<CatalogEntry>> FindByIdsAsync(IReadOnlyCollection<Guid> variantIds, CancellationToken cancellationToken);
 }
 
 public sealed record AssistantDraftLine(Guid VariantId, decimal Quantity);

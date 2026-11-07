@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Bot, CircleAlert, FileCheck2, Lock, MessageSquareText, RotateCcw, ShieldAlert, XCircle } from "lucide-react";
+import { ArrowLeft, Bot, CircleAlert, FileCheck2, Hourglass, Lock, MessageSquareText, RotateCcw, ShieldAlert, XCircle } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import { useCustomerNames, useWarehouses } from "@/components/orders/use-order-reference";
@@ -17,12 +17,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api/client";
 import { IdempotencyKeys } from "@/lib/catalog/idempotency";
-import { WHATSAPP_ORDER_HREF, approveOrderParse, getOrderParse, rejectOrderParse, type LoadedParse, type OrderParse } from "@/lib/assistant/api";
-import { approveFieldErrors, assistantErrorMessage, isNotReviewable, isParseVersionConflict } from "@/lib/assistant/errors";
+import {
+  ParseStillPendingError,
+  WHATSAPP_ORDER_HREF,
+  approveOrderParse,
+  getOrderParse,
+  rejectOrderParse,
+  waitForOrderParse,
+  type LoadedParse,
+  type OrderParse,
+} from "@/lib/assistant/api";
+import { approveFieldErrors, assistantErrorMessage, isNotReviewable, isParseVersionConflict, parseFailureMessage } from "@/lib/assistant/errors";
 import { parseStatusLabels, parserNotice, warningTexts } from "@/lib/assistant/labels";
 import { assistantPermissions } from "@/lib/assistant/permissions";
 import { buildApproveRequest, initialReview, lineErrorsFromFields, reviewReducer, reviewSummary } from "@/lib/assistant/review";
-import { orderHref } from "@/lib/orders/api";
+import { NEW_ORDER_HREF, orderHref } from "@/lib/orders/api";
 import { useSession } from "@/lib/session/session-context";
 import { MessageText } from "./message-text";
 import { ReviewLineCard } from "./review-line-card";
@@ -127,7 +136,11 @@ export function OrderParseReviewPage({ parseId }: { parseId: string }) {
         title={TITLE}
         description={`${dateTime.format(new Date(parse.createdAt))} · ${parseStatusLabels[parse.status] ?? parse.status}`}
       />
-      {parse.status === "needs_review" ? (
+      {parse.status === "pending" ? (
+        <PendingParse parseId={parse.id} onDone={reload} />
+      ) : parse.status === "failed" ? (
+        <FailedParse parse={parse} />
+      ) : parse.status === "needs_review" ? (
         // Keyed by version: a reload after a conflict starts the review from the server's state.
         <ReviewForm
           key={String(parse.version)}
@@ -143,6 +156,84 @@ export function OrderParseReviewPage({ parseId }: { parseId: string }) {
         <ClosedParse parse={parse} />
       )}
     </>
+  );
+}
+
+/**
+ * The background parse has not finished (the page was opened from the list or reloaded right after submit): poll the
+ * status with backoff, then load the review. Stops when the page is left.
+ */
+function PendingParse({ parseId, onDone }: { parseId: string; onDone: () => void }) {
+  const { api } = useSession();
+  const [stalled, setStalled] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    waitForOrderParse(api, parseId, { signal: controller.signal })
+      .then(() => {
+        if (!controller.signal.aborted) onDone();
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setStalled(error instanceof ParseStillPendingError ? "Mesaj hâlâ işleniyor. Biraz sonra yeniden deneyin." : assistantErrorMessage(error));
+      });
+    return () => controller.abort();
+  }, [api, parseId, onDone, attempt]);
+
+  return (
+    <section aria-label="İnceleme durumu" className="rounded-lg border border-line bg-card shadow-e1">
+      {stalled ? (
+        <div role="alert">
+          <EmptyState
+            icon={<Hourglass className="size-6" />}
+            title="Ayrıştırma henüz bitmedi"
+            description={stalled}
+            action={
+              <Button
+                onClick={() => {
+                  setStalled(null);
+                  setAttempt((n) => n + 1);
+                }}
+              >
+                Tekrar dene
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <div role="status">
+          <EmptyState
+            icon={<Hourglass className="size-6" />}
+            title="Mesaj ayrıştırılıyor"
+            description="Satırlar okunuyor ve yalnızca kataloğunuzla eşleştiriliyor. Hazır olunca inceleme burada açılır."
+          />
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** The background parse gave up: nothing to review; parse again or enter the order manually. */
+function FailedParse({ parse }: { parse: OrderParse }) {
+  return (
+    <section aria-label="İnceleme durumu" className="rounded-lg border border-line bg-card shadow-e1">
+      <EmptyState
+        icon={<CircleAlert className="size-6" />}
+        title="Mesaj ayrıştırılamadı"
+        description={parseFailureMessage(parse.failureCode)}
+        action={
+          <div className="flex flex-wrap justify-center gap-2">
+            <Link href={WHATSAPP_ORDER_HREF} className={buttonClasses("secondary")}>
+              Yeniden ayrıştır
+            </Link>
+            <Link href={NEW_ORDER_HREF} className={buttonClasses("primary")}>
+              Siparişi elle oluştur
+            </Link>
+          </div>
+        }
+      />
+    </section>
   );
 }
 
@@ -242,7 +333,8 @@ function ReviewForm({
   const [customer, setCustomer] = useState<{ id: string; name: string | null; code: string | null } | null>(
     parse.customerId ? { id: parse.customerId, name: null, code: null } : null,
   );
-  const [warehouseId, setWarehouseId] = useState("");
+  // The warehouse given on submit (if any) is the default; else the tenant's default warehouse.
+  const [warehouseId, setWarehouseId] = useState(parse.warehouseId ?? "");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const [formError, setFormError] = useState<{ title: string; message: string; summary: string[]; reload: boolean } | null>(null);
@@ -364,7 +456,10 @@ function ReviewForm({
       <ParseNotices parse={parse} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start">
-        <section aria-labelledby={`${uid}-original-message`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 lg:sticky lg:top-4">
+        <section
+          aria-labelledby={`${uid}-original-message`}
+          className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 lg:sticky lg:top-4 lg:row-span-2"
+        >
           <h2 id={`${uid}-original-message`} className="inline-flex items-center gap-2 text-h3 text-fg">
             <MessageSquareText className="size-5 text-fg-muted" aria-hidden="true" />
             Orijinal mesaj
@@ -460,30 +555,35 @@ function ReviewForm({
               </ol>
             )}
           </section>
-
-          <section aria-label="Taslak oluştur" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
-            <p className="text-body text-fg">
-              {summary.kept} satır taslağa eklenecek{summary.skipped > 0 ? `, ${summary.skipped} satır çıkarıldı` : ""}.
-            </p>
-            <p id={blockerId} aria-live="polite" className={blocker ? "text-body text-warning-fg" : "text-body text-success-fg"}>
-              {blocker ?? "Tüm satırlar hazır. Taslak oluşturulunca siparişi kontrol edip onaya gönderebilirsiniz; sipariş kendiliğinden onaylanmaz."}
-            </p>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button variant="secondary" disabled={disabled} onClick={() => setRejectOpen(true)}>
-                Ayrıştırmayı reddet
-              </Button>
-              <Button
-                icon={<FileCheck2 className="size-4" />}
-                loading={busy === "approve"}
-                disabled={disabled || blocker !== null}
-                aria-describedby={blockerId}
-                onClick={() => void approve()}
-              >
-                Taslak siparişi oluştur
-              </Button>
-            </div>
-          </section>
         </div>
+
+        {/* Sticky on small screens, so a long review keeps the confirm button in reach — a grid item, so it can stick from
+            the top of the review on; under the lines (right column, static) in the desktop layout. */}
+        <section
+          aria-label="Taslak oluştur"
+          className="sticky bottom-0 z-10 flex flex-col gap-3 rounded-lg border border-line bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-e3 lg:static lg:col-start-2 lg:pb-4 lg:shadow-e1"
+        >
+          <p className="text-body text-fg">
+            {summary.kept} satır taslağa eklenecek{summary.skipped > 0 ? `, ${summary.skipped} satır çıkarıldı` : ""}.
+          </p>
+          <p id={blockerId} aria-live="polite" className={blocker ? "text-body text-warning-fg" : "text-body text-success-fg"}>
+            {blocker ?? "Tüm satırlar hazır. Taslak oluşturulunca siparişi kontrol edip onaya gönderebilirsiniz; sipariş kendiliğinden onaylanmaz."}
+          </p>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" disabled={disabled} onClick={() => setRejectOpen(true)}>
+              Ayrıştırmayı reddet
+            </Button>
+            <Button
+              icon={<FileCheck2 className="size-4" />}
+              loading={busy === "approve"}
+              disabled={disabled || blocker !== null}
+              aria-describedby={blockerId}
+              onClick={() => void approve()}
+            >
+              Taslak siparişi oluştur
+            </Button>
+          </div>
+        </section>
       </div>
 
       <Dialog

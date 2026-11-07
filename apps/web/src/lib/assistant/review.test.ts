@@ -126,8 +126,9 @@ describe("buildApproveRequest", () => {
       warehouseId: "wh-1",
       notes: "Kapıya bırakın",
       lines: [
-        { lineNo: 1, include: true, variantId: "var-1", quantity: 4 },
-        { lineNo: 2, include: true, variantId: "var-3", quantity: 4 },
+        // unit: the catalog unit shown next to the quantity (the API refuses it if it is no longer the variant's unit).
+        { lineNo: 1, include: true, variantId: "var-1", quantity: 4, unit: "ADET" },
+        { lineNo: 2, include: true, variantId: "var-3", quantity: 4, unit: "ADET" },
         { lineNo: 3, include: false, variantId: null, quantity: null },
       ],
     });

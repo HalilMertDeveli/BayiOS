@@ -94,8 +94,8 @@ describe("OrderParseReviewPage", () => {
       warehouseId: null,
       notes: null,
       lines: [
-        { lineNo: 1, include: true, variantId: "var-1", quantity: 2 },
-        { lineNo: 2, include: true, variantId: "var-3", quantity: 4 },
+        { lineNo: 1, include: true, variantId: "var-1", quantity: 2, unit: "ADET" },
+        { lineNo: 2, include: true, variantId: "var-3", quantity: 4, unit: "ADET" },
         { lineNo: 3, include: false, variantId: null, quantity: null },
       ],
     });
@@ -133,5 +133,49 @@ describe("OrderParseReviewPage", () => {
     const { calls } = renderReview(orderParse(), "viewer");
     expect(screen.getByText("WhatsApp siparişi yetkiniz yok")).toBeTruthy();
     expect(calls).toHaveLength(0);
+  });
+
+  it("a parse still being processed shows progress, polls the status and opens the review when ready", async () => {
+    const ready = orderParse({ customerId: "cust-1" });
+    let current: OrderParse = { ...ready, status: "pending", parser: null, promptVersion: null, lines: [], completedAt: null };
+    const api: ApiClient = {
+      async request<T>(path: string) {
+        if (path === "/api/v1/ai/order-parses/parse-1") return { data: current as T, status: 200, etag: 'W/"1"' };
+        if (path === "/api/v1/ai/order-parses/parse-1/status") {
+          current = ready; // MOCK: the background job finished between two polls
+          return { data: { id: "parse-1", state: "succeeded", parseStatus: "needs_review", failureCode: null, resultUrl: "/x", pollAfterMs: null } as T, status: 200, etag: null };
+        }
+        throw new ApiError("not mocked", 404, { code: "resource.not_found" });
+      },
+    };
+    render(
+      <SessionContext value={mockSession("owner", { api })}>
+        <ToastProvider>
+          <OrderParseReviewPage parseId="parse-1" />
+        </ToastProvider>
+      </SessionContext>,
+    );
+    expect(await screen.findByText("Mesaj ayrıştırılıyor")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Taslak siparişi oluştur" }, { timeout: 3000 })).toBeTruthy();
+  });
+
+  it("a parse that failed in the background offers parsing again or the manual order", async () => {
+    renderReview(orderParse({ status: "failed", failureCode: "ai.opt_in_revoked", parser: null, promptVersion: null, lines: [] }));
+    expect(await screen.findByRole("heading", { name: "Mesaj ayrıştırılamadı" })).toBeTruthy();
+    expect(screen.getByText(/mesaj hiçbir yere gönderilmedi/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Siparişi elle oluştur" }).getAttribute("href")).toBe("/siparisler/yeni");
+  });
+
+  it("uses the warehouse given on submit as the default of the draft", async () => {
+    const user = userEvent.setup();
+    const parse = orderParse({
+      customerId: "cust-1",
+      warehouseId: "wh-7",
+      lines: [parseLine(1, { matchStatus: "matched", proposedVariantId: "var-1", candidates: [candidate(1)] })],
+    });
+    const { calls } = renderReview(parse);
+    await user.click(await screen.findByLabelText("Satır 1: önerilen ürünü onaylıyorum"));
+    await user.click(confirmButton());
+    expect(calls.find((c) => c.path.endsWith("/approve"))?.options.body).toMatchObject({ warehouseId: "wh-7" });
   });
 });

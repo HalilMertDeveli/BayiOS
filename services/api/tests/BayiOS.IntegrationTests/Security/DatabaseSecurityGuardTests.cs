@@ -66,6 +66,10 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         ["integrations.ai_parse_requests"] = ArchiveOnly,
         ["integrations.ai_usage"] = ArchiveOnly,
 
+        // The tenant's AI opt-in is switched, never deleted; a wrongly learned alias is deleted by a reviewer (#121).
+        ["integrations.ai_settings"] = ArchiveOnly,
+        ["integrations.learned_aliases"] = Full,
+
         ["inventory.inventory_balances"] = ArchiveOnly, // derived; never deleted
         ["inventory.inventory_movements"] = AppendOnly, // the ledger
         ["inventory.stock_reservations"] = ArchiveOnly,

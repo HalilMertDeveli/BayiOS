@@ -40,11 +40,18 @@ Karar geçerlidir; aşağıdakiler uygulamadaki somutlaştırmalar ve bilinçli 
 - **Modül:** `BayiOS.Modules.Integrations` (şema `integrations`): `ai_parse_requests` (inceleme kaydı), `ai_usage`
   (tenant × saat sayaçları). Catalog ve Orders'a yalnızca host port'ları üzerinden erişir (`IAssistantCatalog`,
   `IAssistantOrderDrafts` — `BayiOS.Api/Platform/IntegrationsPorts.cs`).
-- **Senkron işlem (sapma, §2.1 "202 + job" yerine):** `POST /ai/order-parses` ayrıştırma + eşleştirmeyi istek içinde
-  yapar ve `201` + inceleme yükü döner. Gerekçe: kural ayrıştırıcı anlıktır, PRD WAI-10 p95 ≤ 8 sn ister ve job
-  kuyruğu sonuç için polling gerektirir. Bedeli: AI çağrısı süresince (≤ `Ai:TimeoutSeconds` × (1 + `Ai:MaxRetries`))
-  istek transaction'ı ve bir havuz bağlantısı açık kalır; saatlik tenant limiti (30) bunu sınırlar. Bağlantı havuzu
-  baskısı ölçülürse çağrı job'a taşınır (yanıttaki `status` alanı buna hazırdır).
+- ~~Senkron işlem (sapma)~~ → **#121 ile §2.1'e dönüldü (202 + job):** `POST /ai/order-parses` metni doğrular, tenant
+  opt-in'ini (data-policy §7) ve limitleri kontrol eder, maskelenmiş metinle `pending` bir kayıt ve
+  `integrations.ai_order_parse` job'ını **aynı** transaction'da yazar, `202` + `Location: …/{id}/status` döner. Durum
+  ucu `GET /ai/order-parses/{id}/status` → `pending | succeeded | failed` (+ `pollAfterMs`, `failureCode`); istemci
+  geri çekilmeli yoklar. Job bir `IExternalCallJobHandler`'dır (ADR 0006): (1) kısa transaction'da kaydı okur
+  (işlenmişse/son tarihi geçmişse/opt-in kapandıysa iş yok) → commit; (2) **hiçbir bağlantı tutmadan** kotayı ayırır
+  (kendi kısa transaction'ı), AI'ı çağırır (≤ `Ai:TimeoutSeconds` × (1 + `Ai:MaxRetries`)), token'ları yazar; (3) yeni
+  kısa transaction'da eşleştirir, incelemeyi yazar ve job'ı `succeeded` işaretler. Lease kaybedilmişse (3) geri alınır;
+  iki worker aynı işi işleyemez (SKIP LOCKED + `pending` koşulu; testli). Son deneme de başarısızsa kayıt `failed`
+  (`ai.parse_failed`); `Ai:ProcessingDeadlineSeconds` (900) içinde işlenmeyen kayıt `ai.parse_timed_out` olarak
+  raporlanır. İdempotency: submit `Idempotency-Key` ile (aynı anahtar → aynı 202 gövdesi, tek kayıt, tek job; job
+  `dedupe_key` = parse id).
 - **Şema (§2.2):** `lines[] { rawText, productCode?, productText, quantity?, unit?, brandModel?, confidence, notes? }`,
   `unparsedFragments[]`, `warnings[]` (sabit kod listesi). Fiyat/stok/katalog kimliği/onay alanı yok; sunucu doğrulayıcısı
   (`ParsedOrderValidator`) tam özellik kümesini, tipleri, enum'ları ve API'nin ifade edemediği sınırları (uzunluk,
@@ -64,7 +71,18 @@ Karar geçerlidir; aşağıdakiler uygulamadaki somutlaştırmalar ve bilinçli 
   katlama, hafif kök bulma, yazım hatası için trigram, rakam içeren token'larda **kesin** karşılaştırma (H4 ≠ H7).
   `pg_trgm` sorgusu yerine bellek içi skorlama seçildi (aynı kod eval kümesinde birim test edilir); tenant'ın en çok
   `Ai:MatchCatalogLimit` (25.000) aktif varyantı yüklenir, tam kodlar her zaman tüm katalogda aranır.
-  (b) müşteriye özgü / öğrenilmiş alias **henüz yok** (Catalog'da `variant_aliases` tablosu yok; WAI-07, P1).
+  (b)/(c) **öğrenilmiş alias (WAI-07, #121):** Catalog'daki `variant_aliases` yerine Integrations'a ait
+  `integrations.learned_aliases` (tenant, isteğe bağlı müşteri, normalize ifade → varyant; RLS FORCE). Onayda, Orders
+  taslağı kabul ettikten sonra dahil edilen ve kod/barkod/tam adla zaten belirlenmemiş her satırın ifadesi tenant
+  geneline ve siparişin müşterisine yazılır (son onay kazanır; satır başına `learnAlias: false` ile kapatılır). Eşleştirmede
+  kod eşleşmesinden sonra, ad/benzerlikten önce müşteri alias'ı, sonra tenant alias'ı denenir (`method = alias`; yine
+  yalnızca öneri, insan onaylar). Alias yalnızca tenant'ın **aktif** varyantına işaret ediyorsa kullanılır; ürün, fiyat
+  veya stok getiremez. `GET /ai/aliases`, `DELETE /ai/aliases/{id}` (denetimli) ile yönetilir.
+- **Kişi adı maskeleme (#121):** telefon/e-postaya ek olarak bağlamla tanınan adlar `[ad]` olur (en iyi çaba; sınırlar
+  data-policy §3).
+- **API ekleri (#121):** satırlarda `textStart`/`textLength` (`messageText` içinde UTF-16 ofset; bulunamazsa null),
+  `GET /ai/settings` giriş limitlerini yayınlar, submit `warehouseId` kabul eder (onayda varsayılan), onay satırında
+  `unit` (verilirse varyantın birimi olmalı, aksi 422 — dönüşüm yok) ve yanıt satırında `selectedUnit`.
 - **Onay (§2.4–2.5):** `POST /ai/order-parses/{id}/approve` her inceleme satırının açıkça listelenmesini ister
   (dahil edilen satırda `variantId` zorunlu — eşleşen satırın önerisi de örtük kabul edilmez); ayrı `PUT …/lines` ucu
   yok, seçimler onay isteğinde gelir. Taslak Orders `CreateAsync` ile `source = whatsapp_ai`,
@@ -73,4 +91,6 @@ Karar geçerlidir; aşağıdakiler uygulamadaki somutlaştırmalar ve bilinçli 
 - **Gizlilik (§3):** gönderilen yalnızca maskelenmiş mesaj metni + sabit talimat; saklanan metin de maskelenmiş
   hâlidir. Metin, ayrıştırma ve inceleme satırları 30 gün sonra `integrations.purge_expired_parse_texts` ile silinir
   (sayılar, token'lar ve sipariş bağı kalır). Kota, `ai_parses_per_month` entitlement'ı değil, yapılandırılabilir
-  günlük çağrı/token limitidir (entitlement altyapısı henüz yok).
+  günlük çağrı/token limitidir (entitlement altyapısı henüz yok). *Güncelleme (#51/#121):* submit artık
+  `ai_order_parsing` entitlement'ını (`RequireEntitlement`) ve aylık `ai_parses_per_month` limitini de uygular;
+  günlük çağrı/token kotası ayrıca geçerlidir.

@@ -82,6 +82,7 @@ internal static class SecurityProbes
             "POST /api/v1/invitations/accept" => new { token = hack },
             "POST /api/v1/import-jobs" => "multipart",
             "POST /api/v1/ai/order-parses" => new { text = "2 adet fren balatası " + hack, customerId = own.Id("customer") },
+            "PUT /api/v1/ai/settings" => new { aiParsingEnabled = true },
             "POST /api/v1/ai/order-parses/{id}/approve" => new
             {
                 customerId = own.Id("customer"),

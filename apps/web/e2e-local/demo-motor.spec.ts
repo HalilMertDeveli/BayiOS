@@ -55,13 +55,19 @@ test("motor demo: bayi WhatsApp'tan fren seti → inceleme → onay → barkodla
   // ---- 1. WhatsApp message from the dealer, pasted on Siparişler → WhatsApp siparişi.
   await page.goto("/siparisler");
   await page.getByRole("link", { name: "WhatsApp siparişi" }).click();
-  await page.getByRole("searchbox", { name: "Müşteri (isteğe bağlı)" }).fill(dealer.code);
+  // AI parsing is opt-in per tenant (data-policy §7, off by default): switch it on when the demo tenant has it off.
+  const optIn = page.getByRole("button", { name: "AI ayrıştırmayı aç" });
+  const customerSearch = page.getByRole("searchbox", { name: "Müşteri (isteğe bağlı)" });
+  await expect(optIn.or(customerSearch)).toBeVisible();
+  if (await optIn.isVisible()) await optIn.click();
+  await customerSearch.fill(dealer.code);
   await page.getByRole("button", { name: "Müşteri ara" }).click();
   await page.getByRole("button", { name: new RegExp(escapeRegExp(dealer.name)) }).click();
   await page.getByRole("textbox", { name: /^WhatsApp mesajı/ }).fill(demo.def.whatsapp.text);
   const submitted = page.waitForResponse((r) => r.url().endsWith("/api/v1/ai/order-parses") && r.request().method() === "POST");
   await page.getByRole("button", { name: "Mesajı ayrıştır" }).click();
-  expect((await submitted).status()).toBe(201);
+  // 202: accepted; the page polls the status until the background parse is done, then opens the review.
+  expect((await submitted).status()).toBe(202);
 
   // ---- 2. Review: SKU lines are proposed (confirm each), the name-only line is chosen by hand; nothing is priced here.
   await expect(page).toHaveURL(/\/siparisler\/whatsapp\/[0-9a-f-]{36}$/);

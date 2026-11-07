@@ -43,6 +43,7 @@ internal sealed class TenantWorld
         ["shipments"] = "shipment",
         ["shipments/lines"] = "shipmentLine",
         ["order-parses"] = "orderParse",
+        ["aliases"] = "learnedAlias",
         ["members"] = "member",
         ["invitations"] = "invitation",
     };
@@ -172,8 +173,27 @@ internal sealed class TenantWorld
         _ids["orderLine"] = OrderLineId;
         await FulfilAsync();
 
-        // A WhatsApp parse awaiting review (AI off: rules parser), naming the tenant's own product.
-        await CreateAsync("orderParse", "/api/v1/ai/order-parses", new { text = $"2 adet fren balatası {Token}", customerId = Id("customer") });
+        // A WhatsApp parse awaiting review (AI off: rules parser), naming the tenant's own product: opt in, submit (202),
+        // run its background job.
+        await SendOkAsync(HttpMethod.Put, "/api/v1/ai/settings", new { aiParsingEnabled = true });
+        var parse = await ReadAsync(
+            await Owner.PostAsync("/api/v1/ai/order-parses", new { text = $"2 adet fren balatası {Token}", customerId = Id("customer") }),
+            HttpStatusCode.Accepted,
+            "/api/v1/ai/order-parses");
+        Remember("orderParse", parse);
+        await Integrations.AssistantKit.ProcessAsync(_fixture.Services, Owner, Id("orderParse"), "tenant-world");
+
+        // A learned alias (WAI-07) of the tenant's variant — normally written by an approval; here directly, so the
+        // parse above stays reviewable for the approve/reject probes.
+        _ids["learnedAlias"] = await Integrations.AssistantKit.ScalarAsync<Guid>(
+            _fixture,
+            """
+            INSERT INTO integrations.learned_aliases (id, tenant_id, phrase, variant_id, confirmations, created_at, updated_at)
+            VALUES (gen_random_uuid(), $1, $2, $3, 1, now(), now()) RETURNING id
+            """,
+            TenantId,
+            "fren balatasi " + Token.ToLowerInvariant(),
+            Id("variant"));
 
         // A second member (sales) and a pending invitation (#129): targets of the member-management routes.
         var member = Guid.NewGuid();

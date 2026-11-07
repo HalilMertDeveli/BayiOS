@@ -465,7 +465,16 @@ export async function startPickTask(refs, orderId) {
 export async function whatsappDraft(refs) {
   const { api, def, variants, customers } = refs;
   const customer = customers[def.whatsapp.customer];
-  const parse = await api.post("/api/v1/ai/order-parses", { text: def.whatsapp.text, customerId: customer.id });
+  // AI parsing is opt-in per tenant (data-policy §7, off by default); the parse runs in a background job (202).
+  await api.put("/api/v1/ai/settings", { aiParsingEnabled: true });
+  const accepted = await api.post("/api/v1/ai/order-parses", { text: def.whatsapp.text, customerId: customer.id });
+  let status = { state: "pending" };
+  for (let i = 0; i < 120 && status.state === "pending"; i++) {
+    await sleep(500);
+    status = await api.get(accepted.statusUrl);
+  }
+  if (status.state !== "succeeded") throw new Error(`The WhatsApp parse did not finish: ${status.state} ${status.failureCode ?? ""}`);
+  const parse = await api.get(accepted.resultUrl);
   const lines = parse.lines.map((line) => {
     const intent = def.whatsapp.lines.find((i) => line.rawText.toLowerCase().includes(i.match));
     return intent && variants[intent.sku]

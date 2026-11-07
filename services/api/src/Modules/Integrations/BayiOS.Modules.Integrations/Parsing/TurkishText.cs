@@ -169,9 +169,48 @@ public static partial class TurkishText
     [GeneratedRegex(@"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", RegexOptions.CultureInvariant)]
     private static partial Regex EmailPattern();
 
+    /// <summary>Replacement of a person name.</summary>
+    public const string NameMask = "[ad]";
+
+    // A capitalised word (Turkish letters included) that is not a greeting or a form of address itself ("Selam abi" is
+    // not a name), and up to three of them: "Ahmet", "Ayşe Nur Çelik".
+    private const string NameWord =
+        @"(?!(?:Selam(?:lar)?|Merhaba|Günaydın|İyi|Kolay|Tamam|Teşekkür\p{Ll}*|Sağol\p{Ll}*|Abi|Abla|Bey|Hanım|Usta)\b)\p{Lu}\p{Ll}{1,20}";
+
+    private const string Names = NameWord + @"(?:[ \t]+" + NameWord + "){0,2}";
+
+    // "Ben Ahmet", "adım Ayşe Yılmaz", "İsim: Mehmet Kaya", "alıcı: Fatma Demir", "teslim alacak kişi Ali Can".
+    [GeneratedRegex(
+        @"(?<lead>\b(?:[Bb]en|[Bb]enim[ \t]+ad[ıi]m|[Aa]d[ıi]m|[İIi]smim|[İIi]sim|[Aa]d[ \t]*[Ss]oyad[ıi]?|[Aa]l[ıi]c[ıi]|[Tt]eslim[ \t]+alacak(?:[ \t]+ki[şs]i)?)\b[ \t]*[:,-]?[ \t]*)(?<name>" + Names + ")",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex IntroducedNamePattern();
+
+    // "Ahmet Bey", "Ayşe Hanım", "Mehmet abi", "Fatma abla" — a capitalised name before a form of address.
+    [GeneratedRegex(
+        @"(?<name>" + Names + @")(?<tail>[ \t]+(?:[Bb]ey|[Hh]an[ıi]m|[Aa]bi|[Aa]bla|[Aa]mca|[Tt]eyze|[Kk]arde[şs]im)\b)",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex AddressedNamePattern();
+
+    // "Sayın Ahmet Yılmaz", "Sn. Ayşe Kaya".
+    [GeneratedRegex(@"(?<lead>\b(?:[Ss]ay[ıi]n|[Ss]n\.)[ \t]+)(?<name>" + Names + ")", RegexOptions.CultureInvariant)]
+    private static partial Regex TitledNamePattern();
+
+    // "Merhaba Ahmet," / "Selam Ayşe!" — a greeting followed by a capitalised name that ends the clause.
+    [GeneratedRegex(
+        @"(?<lead>\b(?:[Mm]erhaba|[Ss]elam(?:lar)?|[Gg]ünaydın|[İIi]yi[ \t]+g[üu]nler)[ \t]*,?[ \t]+)(?<name>" + Names + @")(?=[ \t]*(?:[,!.;\r\n]|$))",
+        RegexOptions.CultureInvariant | RegexOptions.Multiline)]
+    private static partial Regex GreetedNamePattern();
+
     /// <summary>
-    /// Masks Turkish mobile numbers (keeping the last two digits) and e-mail addresses before text leaves the server.
-    /// Barcodes (8–14 digits not shaped like a 5xx mobile number) are left alone.
+    /// Masks Turkish mobile numbers (keeping the last two digits), e-mail addresses and — best effort — person names
+    /// before text leaves the server. Barcodes (8–14 digits not shaped like a 5xx mobile number) are left alone.
+    /// <para>
+    /// Names are recognised only in context (data-policy §3, limits documented there): after a self-introduction
+    /// ("ben", "adım", "isim:", "alıcı:"), before a form of address ("Bey", "Hanım", "abi", "abla"), after a title
+    /// ("Sayın", "Sn.") or right after a greeting ("Merhaba Ahmet,"). A name written without such context, in lower
+    /// case, or a company name is not recognised; a capitalised product word in such a position may be masked too
+    /// (over-masking only costs a reviewer a look at the original message).
+    /// </para>
     /// </summary>
     public static string MaskPersonalData(string text, out bool masked)
     {
@@ -188,6 +227,17 @@ public static partial class TurkishText
             found = true;
             return "[e-posta]";
         });
+
+        string Lead(Match m)
+        {
+            found = true;
+            return m.Groups["lead"].Value + NameMask + m.Groups["tail"].Value;
+        }
+
+        result = IntroducedNamePattern().Replace(result, Lead);
+        result = TitledNamePattern().Replace(result, Lead);
+        result = GreetedNamePattern().Replace(result, Lead);
+        result = AddressedNamePattern().Replace(result, Lead);
         masked = found;
         return result;
     }
