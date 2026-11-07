@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/ui/toast";
 import { ApiError, type ApiClient, type RequestOptions } from "@/lib/api/client";
 import type { TenantSettings } from "@/lib/api/identity";
 import { SessionContext } from "@/lib/session/session-context";
 import type { FixtureRole } from "@/test/me-fixtures";
+import { frameBeforeCommit } from "@/test/frame-before-commit";
 import { mockSession } from "@/test/session";
 import { BusinessRules } from "./business-rules";
 
@@ -109,6 +110,29 @@ describe("BusinessRules", () => {
     await userEvent.click(screen.getByRole("button", { name: "Kuralları kaydet" }));
     expect(await screen.findByText("Kurallar başkası tarafından değiştirildi")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Güncel kuralları yükle" })).toBeTruthy();
+  });
+
+  it("a failed save focuses the error even when a frame runs before the update commits (#152)", async () => {
+    frameBeforeCommit();
+    try {
+      const { api } = fakeApi(new ApiError("x", 500, { code: "server.error" }));
+      renderRules("owner", api);
+      await userEvent.click(await screen.findByRole("checkbox", { name: "Depo personeli barkod atayabilir" }));
+      await userEvent.click(screen.getByRole("button", { name: "Kuralları kaydet" }));
+      const alert = (await screen.findByText("Kurallar kaydedilemedi")).closest('[tabindex="-1"]');
+      await waitFor(() => expect(document.activeElement).toBe(alert));
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("412: the reload notice takes focus (the save button it came from is disabled now)", async () => {
+    const { api } = fakeApi(new ApiError("x", 412, { code: "concurrency.version_mismatch" }));
+    renderRules("owner", api);
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Depo personeli barkod atayabilir" }));
+    await userEvent.click(screen.getByRole("button", { name: "Kuralları kaydet" }));
+    const notice = (await screen.findByText("Kurallar başkası tarafından değiştirildi")).closest('[tabindex="-1"]');
+    await waitFor(() => expect(document.activeElement).toBe(notice));
   });
 
   it.each(["manager", "sales", "viewer"] as const)("%s: locked, no request", async (role) => {

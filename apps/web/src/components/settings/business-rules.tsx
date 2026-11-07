@@ -17,6 +17,7 @@ import { etagOf } from "@/lib/catalog/api";
 import { isVersionConflict } from "@/lib/catalog/errors";
 import { negativeStockOptions } from "@/lib/onboarding/tenant-form";
 import { useSession } from "@/lib/session/session-context";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 import {
   RULE_FIELDS,
   buildRulesPatch,
@@ -106,6 +107,8 @@ export function BusinessRulesForm({ loaded, onSaved, onReload }: { loaded: Loade
   const [conflict, setConflict] = useState(false);
   const [saving, setSaving] = useState(false);
   const alertRef = useRef<HTMLDivElement>(null);
+  const conflictRef = useRef<HTMLDivElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
   const set = (patch: Partial<RulesValues>) => setValues((v) => ({ ...v, ...patch }));
 
   const patch = buildRulesPatch(loaded.settings, values);
@@ -114,7 +117,7 @@ export function BusinessRulesForm({ loaded, onSaved, onReload }: { loaded: Loade
 
   const fail = (message: string) => {
     setFormError(message);
-    requestAnimationFrame(() => alertRef.current?.focus());
+    focusAfterCommit(() => alertRef.current);
   };
 
   const submit = async (event: FormEvent) => {
@@ -139,6 +142,7 @@ export function BusinessRulesForm({ loaded, onSaved, onReload }: { loaded: Loade
       setSaving(false);
       if (isVersionConflict(error)) {
         setConflict(true);
+        focusAfterCommit(() => conflictRef.current);
         return;
       }
       if (error instanceof ApiError && error.status === 422) {
@@ -160,6 +164,7 @@ export function BusinessRulesForm({ loaded, onSaved, onReload }: { loaded: Loade
     <form noValidate onSubmit={submit} aria-label="İş kuralları" className="flex max-w-3xl flex-col gap-5">
       {conflict ? (
         <FormAlert
+          ref={conflictRef}
           tone="warning"
           title="Kurallar başkası tarafından değiştirildi"
           actions={

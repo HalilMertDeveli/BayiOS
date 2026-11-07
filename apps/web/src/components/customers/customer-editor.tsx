@@ -43,6 +43,7 @@ import { customerPermissions } from "@/lib/customers/permissions";
 import { currencyOptions } from "@/lib/pricing/money";
 import { useSession } from "@/lib/session/session-context";
 import { useResetAfterCreate } from "@/lib/use-reset-after-create";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 import { AddressSection } from "./address-section";
 import { AnonymizeDialog } from "./anonymize-dialog";
 import { CustomerStatusBadge } from "./customer-status-badge";
@@ -183,13 +184,14 @@ function CustomerForm({
   const [statusError, setStatusError] = useState<string | null>(null);
   const [anonymizeOpen, setAnonymizeOpen] = useState(false);
   const summaryRef = useRef<HTMLDivElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
   const set = (patch: Partial<CustomerFormValues>) => setValues((v) => ({ ...v, ...patch }));
 
   const showErrors = (fieldErrors: Record<string, string>, extra: string[] = []) => {
     const { onFields, unmatched } = partitionErrors(fieldErrors, FIELD_KEYS);
     setErrors(onFields);
     setSummary([...unmatched, ...extra]);
-    requestAnimationFrame(() => summaryRef.current?.focus());
+    focusAfterCommit(() => summaryRef.current);
   };
 
   const handleFailure = (error: unknown) => {

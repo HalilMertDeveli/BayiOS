@@ -16,6 +16,7 @@ import { buildInviteLink } from "@/lib/members/invite-link";
 import { formatDateTime, roleDescriptions, roleLabel } from "@/lib/members/labels";
 import type { Role } from "@/lib/navigation";
 import { useSession } from "@/lib/session/session-context";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 
 /** A freshly issued link: lives only in the parent's state while the link dialog is open, never stored or logged. */
 export type IssuedLink = { link: string; email: string; role: string; expiresAt: string; renewed: boolean };
@@ -40,10 +41,11 @@ export function InviteDialog({ roles, onClose, onIssued }: { roles: readonly Rol
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const alertRef = useRef<HTMLDivElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
 
   const fail = (message: string) => {
     setFormError(message);
-    requestAnimationFrame(() => alertRef.current?.focus());
+    focusAfterCommit(() => alertRef.current);
   };
 
   const submit = async (event?: FormEvent) => {
