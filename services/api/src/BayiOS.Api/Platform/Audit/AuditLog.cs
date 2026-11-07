@@ -31,6 +31,26 @@ internal sealed class AuditOptions
     /// <summary><c>Audit:Retention</c> — events older than this are purged (default and minimum 730 days).</summary>
     public TimeSpan Retention { get; set; } = MinRetention;
 
+    /// <summary>
+    /// <c>Audit:DenialDedupeWindow</c> — at most one access-denial row per (user, tenant, problem code) in this window
+    /// (default 60 s, 1 s … 1 h). Repeats inside it are only counted (<c>suppressedRepeats</c> on the next row).
+    /// </summary>
+    public TimeSpan DenialDedupeWindow { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// <c>Audit:DenialDedupeCapacity</c> — tracked (user, tenant, code) keys per instance (default 10 000). When full
+    /// and nothing has expired, further denials are only logged: writes stay ≤ capacity per window.
+    /// </summary>
+    public int DenialDedupeCapacity { get; set; } = 10_000;
+
+    /// <summary><c>Audit:DenialMaxConcurrentWrites</c> — extra pooled connections denial writes may hold at once (default 4).</summary>
+    public int DenialMaxConcurrentWrites { get; set; } = 4;
+
+    public bool HasValidDenialSettings =>
+        DenialDedupeWindow >= TimeSpan.FromSeconds(1) && DenialDedupeWindow <= TimeSpan.FromHours(1)
+        && DenialDedupeCapacity is >= 1 and <= 1_000_000
+        && DenialMaxConcurrentWrites is >= 1 and <= 32;
+
     public static bool IsValidIpHashKey(string? key) =>
         string.IsNullOrEmpty(key) || Encoding.UTF8.GetByteCount(key) >= MinIpHashKeyBytes;
 }
@@ -95,9 +115,11 @@ internal sealed class AuditLog(
         unitOfWork.OnCommitted(() => BayiOsMetrics.RecordCommittedAudit(action));
     }
 
-    private byte[]? IpHash(HttpContext? http)
+    private byte[]? IpHash(HttpContext? http) => IpHash(options.Value.IpHashKey, http);
+
+    /// <summary>HMAC-SHA-256 of the client IP under <c>Audit:IpHashKey</c>; null without a key or an address.</summary>
+    internal static byte[]? IpHash(string? key, HttpContext? http)
     {
-        var key = options.Value.IpHashKey;
         var ip = http?.Connection.RemoteIpAddress;
         if (string.IsNullOrEmpty(key) || ip is null)
         {

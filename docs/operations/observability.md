@@ -80,6 +80,7 @@ Yerel deneme (ücretsiz, dış gönderim yok): `infra/ops/observability/otel-col
 | `bayios.ai.fallbacks` | `bayios_ai_fallbacks_total` | counter | `reason` (`quota_exceeded`, `provider_error`, `timeout`, `refused`, `truncated`, `invalid_output`) | AI ayrıştırma kural tabanlı ayrıştırıcıya düştü |
 | `bayios.http.server_errors` | `bayios_http_server_errors_total` | counter | `http.route` (şablon), `http.response.status_code` | 5xx yanıt |
 | `bayios.errors.unhandled` | `bayios_errors_unhandled_total` | counter | `source` = `http` \| `job` | İşlenmemiş istisna (HTTP 500 / dead job) |
+| `bayios.audit.access_denials` | `bayios_audit_access_denials_total` | counter | `action` (`auth.*`), `outcome` = `written` \| `suppressed` \| `dropped` \| `unknown_tenant` \| `failed` | 403 erişim reddi audit yazıcısının sonucu (#89; threat-model §7) |
 | `bayios.jobs.queue_lag` | `bayios_jobs_queue_lag_seconds` | gauge | — | Vadesi gelmiş en eski `queued` job'ın yaşı (son readiness ölçümü) |
 | `bayios.jobs.queue_depth` | `bayios_jobs_queue_depth` | gauge | — | Vadesi gelmiş `queued` job sayısı (son readiness ölçümü) |
 

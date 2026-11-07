@@ -1,6 +1,7 @@
 using BayiOS.SharedKernel.Authorization;
 using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Persistence;
+using BayiOS.SharedKernel.Platform.Audit;
 using BayiOS.SharedKernel.Platform.Idempotency;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -151,7 +152,15 @@ internal static partial class UnitOfWorkFilter
             result = TypedResults.Problem(ApiProblems.Create(StatusCodes.Status403Forbidden, "auth.forbidden", "Not allowed"));
         }
 
-        if (EndpointResults.StatusCodeOf(result) >= 400)
+        var status = EndpointResults.StatusCodeOf(result);
+        if (status == StatusCodes.Status403Forbidden && result is not StoredHttpResult { Replayed: true })
+        {
+            // Service-level K / O refusals, entitlement limits and the safety net above. Written on a separate
+            // connection, so the denial row survives the rollback below (#89).
+            await AccessDenials.RecordAsync(context.HttpContext, AccessDenials.ProblemOf(result));
+        }
+
+        if (status >= 400)
         {
             await unitOfWork.RollbackAsync(cancellationToken);
         }

@@ -306,7 +306,17 @@ public sealed class TenantIsolationSweepTests(ApiFixture fixture)
         }
 
         SecurityProbes.AssertNone(failures);
-        SecurityProbes.AssertNone(before.Diff(await a.SnapshotAsync()));
+
+        // #89: the one expected change in A is its access-denial audit — exactly one auth.membership_denied row per caller
+        // that named A (deduplicated over every route), written on its own transaction. Nothing else of A changed; the
+        // unknown tenant id wrote nothing anywhere.
+        var diff = before.Diff(await a.SnapshotAsync());
+        SecurityProbes.AssertNone([.. diff.Where(d => !(d.StartsWith("audit.audit_events [", StringComparison.Ordinal)
+            && d.Contains("] inserted: ", StringComparison.Ordinal)
+            && d.Contains("\"action\": \"auth.membership_denied\"", StringComparison.Ordinal)))]);
+        Guid[] namedA = [b.UserId, noTenant, invited, disabled];
+        Assert.Equal(namedA.Length, diff.Count);
+        Assert.All(namedA, user => Assert.Single(diff, d => d.Contains($"\"actor_user_id\": \"{user}\"", StringComparison.Ordinal)));
         Assert.True(tenantScoped.Count >= 90, $"Only {tenantScoped.Count} tenant-scoped routes found");
     }
 

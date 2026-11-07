@@ -3,6 +3,7 @@ using BayiOS.Modules.Identity.Contracts;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
 using BayiOS.SharedKernel.Authorization;
 using BayiOS.SharedKernel.Persistence;
+using BayiOS.SharedKernel.Platform.Audit;
 using BayiOS.SharedKernel.Tenancy;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.Authorization;
@@ -53,6 +54,7 @@ internal sealed partial class TenantContextMiddleware(RequestDelegate next, ILog
             if (access is null)
             {
                 LogTenantAccessDenied(logger, userId, tenantId);
+                await RecordMembershipDenialAsync(context, "tenant.access_denied", tenantId, role: null);
                 await ApiProblems.WriteAsync(context, ApiProblems.Create(
                     StatusCodes.Status403Forbidden, "tenant.access_denied", "No access to this tenant"));
                 return;
@@ -62,6 +64,7 @@ internal sealed partial class TenantContextMiddleware(RequestDelegate next, ILog
             if (!access.TenantIsActive)
             {
                 LogTenantInactive(logger, userId, tenantId, access.TenantStatus);
+                await RecordMembershipDenialAsync(context, "tenant.inactive", tenantId, access.Role);
                 await ApiProblems.WriteAsync(context, ApiProblems.Create(
                     StatusCodes.Status403Forbidden, "tenant.inactive", "This tenant is not active"));
                 return;
@@ -88,6 +91,14 @@ internal sealed partial class TenantContextMiddleware(RequestDelegate next, ILog
             await next(context);
         }
     }
+
+    /// <summary>
+    /// <c>auth.membership_denied</c> in the <b>named</b> tenant's audit log (#89), on its own connection — the request
+    /// transaction is never committed. Written only if that tenant exists; the request's tenant stays unresolved.
+    /// </summary>
+    private static Task RecordMembershipDenialAsync(HttpContext context, string code, Guid tenantId, string? role) =>
+        context.RequestServices.GetRequiredService<IAccessDenialAudit>().RecordAsync(
+            context, new AccessDenial(AccessDenialActions.MembershipDenied, code, tenantId, role));
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Tenant access denied for user {UserId} to tenant {TenantId}")]
     private static partial void LogTenantAccessDenied(ILogger logger, Guid userId, Guid tenantId);

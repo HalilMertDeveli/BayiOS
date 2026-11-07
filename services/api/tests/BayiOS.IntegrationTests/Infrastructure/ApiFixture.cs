@@ -280,6 +280,9 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         // test reaches; Security/RateLimitingTests derive hosts with the real, small limits.
         builder.UseSetting("RateLimiting:ReadsPerMinute", "1000000");
         builder.UseSetting("RateLimiting:WritesPerMinute", "1000000");
+        // Access-denial audit (#89): one row per (user, tenant, code) for the whole of a slow sweep, so the security
+        // sweeps can assert the exact rows; AccessDenialAuditTests derives a host with a short window for the expiry.
+        builder.UseSetting("Audit:DenialDedupeWindow", "00:10:00");
         builder.ConfigureTestServices(services =>
             services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
                 options.BackchannelHttpHandler = new TestJwksHandler()));

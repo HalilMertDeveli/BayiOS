@@ -59,6 +59,13 @@ public static class BayiOsMetrics
     public static readonly Counter<long> UnhandledErrors = Meter.CreateCounter<long>(
         "bayios.errors.unhandled", "{error}", "Unhandled exceptions (HTTP 500 or dead-lettered job).");
 
+    /// <summary>
+    /// Access-denial audit outcomes (#89). Tags <c>action</c> (<c>auth.*</c>) and <c>outcome</c>: written | suppressed
+    /// (dedupe window) | dropped (dedupe table full / no write slot) | unknown_tenant | failed.
+    /// </summary>
+    public static readonly Counter<long> AccessDenialAudits = Meter.CreateCounter<long>(
+        "bayios.audit.access_denials", "{denial}", "403 access denials seen by the audit writer, by outcome.");
+
     private static double _queueLagSeconds;
     private static long _queueDepth;
 
@@ -76,7 +83,8 @@ public static class BayiOsMetrics
     public static IReadOnlyList<string> InstrumentNames { get; } =
     [
         OrdersApproved.Name, ReservationShortages.Name, NegativeStockConfirmed.Name, JobsDeadLettered.Name, JobsRetried.Name,
-        ImportsFailed.Name, AiFallbacks.Name, HttpServerErrors.Name, UnhandledErrors.Name, QueueLag.Name, QueueDepth.Name,
+        ImportsFailed.Name, AiFallbacks.Name, HttpServerErrors.Name, UnhandledErrors.Name, AccessDenialAudits.Name, QueueLag.Name,
+        QueueDepth.Name,
     ];
 
     public static void ObserveQueue(TimeSpan lag, long depth)

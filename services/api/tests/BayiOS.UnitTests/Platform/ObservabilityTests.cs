@@ -39,7 +39,8 @@ public class ObservabilityTests
         [
             "bayios.orders.approved", "bayios.inventory.reservation_shortages", "bayios.inventory.negative_stock_confirmed",
             "bayios.jobs.dead_lettered", "bayios.jobs.retried", "bayios.imports.failed", "bayios.ai.fallbacks",
-            "bayios.http.server_errors", "bayios.errors.unhandled", "bayios.jobs.queue_lag", "bayios.jobs.queue_depth",
+            "bayios.http.server_errors", "bayios.errors.unhandled", "bayios.audit.access_denials", "bayios.jobs.queue_lag",
+            "bayios.jobs.queue_depth",
         ];
         Assert.Equal(expected.Order(), BayiOsMetrics.InstrumentNames.Order());
         Assert.All(expected, name => Assert.Contains(name, published));

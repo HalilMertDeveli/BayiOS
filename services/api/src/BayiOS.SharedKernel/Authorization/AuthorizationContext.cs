@@ -1,4 +1,5 @@
 using BayiOS.SharedKernel.Entitlements;
+using BayiOS.SharedKernel.Platform.Audit;
 using BayiOS.SharedKernel.Tenancy;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.Authorization;
@@ -257,6 +258,7 @@ public sealed class PermissionAuthorizationHandler(IAuthorizationContext authori
 /// <summary>
 /// Writes the 403 of a failed endpoint gate: <see cref="AuthorizationProblems.DisabledByTenantRule"/> when a tenant rule
 /// switched the grant off, otherwise the default behaviour (<c>auth.forbidden</c> from the JWT scheme's OnForbidden).
+/// Every 403 is also recorded as an access-denial audit event (<see cref="AccessDenials"/>, #89); a 401 is not.
 /// </summary>
 public sealed class PermissionAuthorizationResultHandler : IAuthorizationMiddlewareResultHandler
 {
@@ -270,6 +272,7 @@ public sealed class PermissionAuthorizationResultHandler : IAuthorizationMiddlew
             var problem = ApiProblems.Create(StatusCodes.Status403Forbidden, AuthorizationProblems.DisabledByTenantRule, "Not allowed");
             problem.Extensions["permission"] = reason.Permission;
             problem.Extensions["condition"] = reason.Condition;
+            await AccessDenials.RecordAsync(context, problem);
             await ApiProblems.WriteAsync(context, problem);
             return;
         }
@@ -282,8 +285,16 @@ public sealed class PermissionAuthorizationResultHandler : IAuthorizationMiddlew
             && !failure.FailedRequirements.Any(r => r is not EntitlementRequirement)
             && EntitlementAuthorizationHandler.DenialOf(context) is { } denial)
         {
-            await ApiProblems.WriteAsync(context, denial.ToProblem());
+            var entitlementProblem = denial.ToProblem();
+            await AccessDenials.RecordAsync(context, entitlementProblem);
+            await ApiProblems.WriteAsync(context, entitlementProblem);
             return;
+        }
+
+        if (authorizeResult.Forbidden)
+        {
+            // The JWT scheme's OnForbidden answers auth.forbidden. A 401 (challenge) is never recorded: no verified caller.
+            await AccessDenials.RecordAsync(context, null);
         }
 
         await _default.HandleAsync(next, context, policy, authorizeResult);
