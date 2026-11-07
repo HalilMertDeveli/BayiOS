@@ -1,28 +1,23 @@
-# infra/deploy — preview hosting şablonları
+# infra/deploy — deploy hattı ve hosting şablonları
 
-> **Durum: DEPLOY EDİLMEDİ.** Bu dizindeki dosyalar yalnızca hazırlıktır. BayiOS için hiçbir Fly.io / Vercel / Supabase
-> hesabı, uygulaması veya projesi oluşturulmadı. Hosting sağlayıcısı henüz **ürün sahibi tarafından onaylanmadı**
-> (öneri: Fly.io `fra` — `docs/operations/hosting-options.md`).
+> **Durum: DEPLOY EDİLMEDİ.** BayiOS için hiçbir Fly.io / Vercel / Supabase hesabı, uygulaması veya projesi yok (#138).
+> Hat hazır ve sırlar yokken güvenli: `deploy-preview.yml` "skipped: secrets missing" ile yeşil no-op,
+> `deploy-production.yml` `PRODUCTION_DEPLOY_ENABLED` ayarlanana kadar kapalı.
 
 | Dosya | Amaç |
 |---|---|
-| `fly.preview.toml` | API preview uygulaması için Fly.io yapılandırma şablonu (`fra`, auto-stop, `/health` kontrolü, sırlar yalnızca adla) |
+| `fly.preview.toml` | API preview uygulaması (`fra`, auto-stop, `/health` kontrolü, sırlar yalnızca adla) |
+| `fly.production.toml` | API production şablonu (always-on, min 1 makine — **maliyet onayı gerekir**) |
+| `preflight.sh` | Hangi sırların **var olduğuna** bakar (değer basmaz): hiçbiri yok → atla; eksik → kırmızı; hepsi → devam |
+| `apply-migrations.sh` | Deploy migration adımı: `manifest.txt` sırasıyla idempotent EF script'lerini **yalnızca `bayios_migrator`** ile uygular (başka rolü ve `sslmode=require`'sız URL'yi reddeder), ardından `infra/supabase/bootstrap/verify.sql` |
+| `smoke.sh` | `/health` 200, `/health/ready` 200, `/api/v1/meta` ortamı |
 
-Akışın tamamı (preview/production ayrımı, deploy, rollback, migration sırası, Vercel web preview kurulumu):
+Sıra (değişmez): **migration → API → web.** Akışın tamamı, rollback ve ürün sahibi kurulum listesi:
 [`docs/operations/deploy-and-rollback.md`](../../docs/operations/deploy-and-rollback.md).
 
 ## İmaj
-- Kaynak: `services/api/Dockerfile` (build context `services/api`), chiseled ASP.NET 10 runtime, non-root (UID 1654), port 8080.
-- CI: `.github/workflows/ci-container.yml` imajı derler, çalıştırıp `GET /health` = 200 doğrular, Trivy ile tarar. Registry'ye **push etmez**.
-- İmajda kabuk yok → Dockerfile'da `HEALTHCHECK` yok; sağlık kontrolü dışarıdan (`fly.preview.toml` `[[http_service.checks]]`).
-
-## Ürün sahibinin onaylaması gerekenler (sırayla)
-1. **Hosting sağlayıcısı + maliyet** — Fly.io free tier yok, hesap açılışında kart gerekir. Preview: `shared-cpu-1x` / 512 MB,
-   auto-stop ile boşta ~0; sürekli açık kalsa 1 GB için resmi fiyat $7,73/ay (512 MB yaklaşık yarısı — **tahmini, panelde teyit edilmeli**).
-   Harcama limiti/alarm kurulmalı.
-2. **`bayios-preview` Supabase projesi** — free plan, `eu-central-1`; org'un 2 aktif free proje kotasının 2.'sini kullanır
-   (`docs/operations/environments.md` §4).
-3. **Vercel projesi** (Git entegrasyonu, root `apps/web`) — Hobby planı ticari olmayan kullanım içindir; ticari pilot öncesi Pro onayı.
-4. Onaydan sonra: GitHub Environment `preview` + deploy token'ı (`FLY_API_TOKEN`, uygulamaya kısıtlı deploy token) — sır olarak, repoya değil.
+- Kaynak: `services/api/Dockerfile`, chiseled ASP.NET 10 runtime, non-root (UID 1654), port 8080.
+- CI'da derlenir; registry'ye yalnızca deploy job'ı ve yalnızca sırlar varsa **değişmez etiketle** push eder
+  (`registry.fly.io/<app>:<git-sha>`; production `:<vX.Y.Z>-<sha12>`). Fly builder'ı ve `release_command` kullanılmaz.
 
 Onay gelmeden `fly launch`, `fly deploy`, `vercel link` veya Supabase proje oluşturma **yapılmaz**.

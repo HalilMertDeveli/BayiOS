@@ -1,0 +1,90 @@
+name: ci-db-bootstrap
+
+# Rehearses the Supabase bootstrap (infra/supabase/bootstrap) and the deploy-time migration step
+# (infra/deploy/apply-migrations.sh) against throwaway containers (issues #70, #76; ci-cd.md "db.yml"):
+#   postgres : plain postgres:17 (bootstrap as superuser; hook step skips)
+#   supabase : Supabase Postgres image (postgres is NOT a superuser) + Supabase Auth with the access-token hook
+# Each: bootstrap twice (idempotent) -> EF scripts twice as bayios_migrator -> verify.sql (roles, grants, forced RLS)
+# -> bayios_app RLS/trigram smoke -> (supabase) hook checks. Logic in infra/supabase/bootstrap/test.sh. No secrets.
+
+on:
+  pull_request:
+    paths:
+      - "services/api/**/Migrations/**"
+      - "infra/supabase/bootstrap/**"
+      - "infra/deploy/apply-migrations.sh"
+      - "infra/ci/ef-migrations.sh"
+      - "infra/docker/initdb/**"
+      - ".github/workflows/ci-db-bootstrap.yml"
+  push:
+    branches: [main, preview]
+    paths:
+      - "services/api/**/Migrations/**"
+      - "infra/supabase/bootstrap/**"
+      - "infra/deploy/apply-migrations.sh"
+      - "infra/ci/ef-migrations.sh"
+      - "infra/docker/initdb/**"
+      - ".github/workflows/ci-db-bootstrap.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scripts:
+    name: db bootstrap - migration scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: services/api/global.json
+
+      - name: Generate idempotent scripts (+ manifest)
+        run: bash infra/ci/ef-migrations.sh
+        env:
+          OUT_DIR: ${{ runner.temp }}/migrations
+          POSTGRES_PASSWORD: ci-local-only
+          BAYIOS_APP_PASSWORD: ci-local-only
+          BAYIOS_MIGRATOR_PASSWORD: ci-local-only
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bootstrap-migrations-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/migrations/*.sql
+            ${{ runner.temp }}/migrations/manifest.txt
+          if-no-files-found: error
+          retention-days: 3
+
+  rehearsal:
+    name: db bootstrap & deploy-migration rehearsal (${{ matrix.flavor }})
+    needs: scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [postgres, supabase]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bootstrap-migrations-${{ github.run_id }}
+          path: ${{ runner.temp }}/migrations
+
+      - name: Rehearse (${{ matrix.flavor }})
+        env:
+          SCRIPTS_DIR: ${{ runner.temp }}/migrations
+          FLAVOR: ${{ matrix.flavor }}
+        run: bash infra/supabase/bootstrap/test.sh "$FLAVOR"

@@ -4,7 +4,7 @@
 |---|---|
 | Sahip | DevOps Engineer |
 | Durum | Taslak v0.1 — hiçbir bulut kaynağı henüz oluşturulmadı |
-| Son güncelleme | 2026-11-04 |
+| Son güncelleme | 2026-11-07 |
 
 ## 1. Ortam tanımları
 
@@ -24,9 +24,9 @@
 ## 2. Yapılandırma ve sırlar
 Ayrıntılı sır tablosu: `docs/security/data-policy.md` §9. Özet:
 - **Local:** `.env` (git-ignored) — `.env.example` yalnızca değişken adları.
-- **Preview:** GitHub Environment `preview` (deploy token'ları), API host env, Vercel "Preview" env.
-- **Production:** GitHub Environment `production` (required reviewer: ürün sahibi), API host env, Vercel "Production" env.
-- `ConnectionStrings__Default` = `bayios_app` rolü (`NOBYPASSRLS`, tablo sahibi değil); `ConnectionStrings__Migrator` = `bayios_migrator` (yalnızca CI/deploy migration adımı, API'ye verilmez). `postgres`/service-role ile uygulama bağlantısı yasaktır; local compose'da da aynı bootstrap SQL'i (`infra/docker/initdb/`) çalıştırılır.
+- **Preview:** GitHub Environment `preview` — secrets `PREVIEW_MIGRATOR_CONNECTION`, `FLY_API_TOKEN`, opsiyonel `VERCEL_DEPLOY_HOOK_URL`; variables opsiyonel `FLY_APP`, `API_BASE_URL` — API host (Fly) secrets, Vercel "Preview" env.
+- **Production:** GitHub Environment `production` (required reviewer: ürün sahibi) — secrets `PRODUCTION_MIGRATOR_CONNECTION`, `FLY_API_TOKEN` (ayrı token), opsiyonel `VERCEL_DEPLOY_HOOK_URL`; variables `FLY_APP`, `API_BASE_URL`; repo değişkeni `PRODUCTION_DEPLOY_ENABLED` — API host env, Vercel "Production" env. Tam liste ve sıra: `deploy-and-rollback.md` §8.
+- `ConnectionStrings__Default` = `bayios_app` rolü (`NOBYPASSRLS`, tablo sahibi değil); `ConnectionStrings__Migrator` = `bayios_migrator` (yalnızca yerel/CI migration; preview/production'da aynı rolün URI'si `*_MIGRATOR_CONNECTION` GitHub Environment secret'ı, API'ye verilmez). `postgres`/service-role ile uygulama bağlantısı yasaktır; local compose'da `infra/docker/initdb/`, Supabase'de `infra/supabase/bootstrap/` aynı rolleri kurar.
 - API yapılandırması ASP.NET Core adlandırmasını kullanır (`:` → `__`). Diziler indeksle verilir: CORS için `Cors__AllowedOrigins__0`, `Cors__AllowedOrigins__1`, … (tek değerli `Cors__AllowedOrigins=` diziye bağlanmaz).
 - Eksik `ConnectionStrings__Default` / `Auth__*` ile API yine açılır (`/health` 200) ama kapalı-güvenli kalır: `/health/ready` 503, tüm token'lar 401.
 - `Audit__IpHashKey`: audit kayıtlarındaki istemci IP'sinin HMAC-SHA-256 anahtarı (data-policy §8.5). **Fail-safe:** boşsa API çalışır ama IP hash'i hiç yazılmaz (`ip_hash = NULL`). Doluysa en az 32 bayt olmalı; daha kısası başlangıçta `OptionsValidationException` ile reddedilir (API açılmaz — yanlış sır bir deploy hatasıdır). Ortam başına ayrı rastgele değer (ör. `openssl rand -base64 48`); preview/production'da API host secret'ı, repo'ya asla. Değiştirmek eski hash'lerle karşılaştırmayı keser.
@@ -88,10 +88,10 @@ Not: Free preview projesi 1 hafta etkisizlikte duraklar; CI'da haftalık "keep-a
 FCM ücretsizdir (https://firebase.google.com/pricing, 2026-11-04). Spark planında kalınır; Blaze'e geçiş (kart gerektirir) yalnızca onayla. Proje adları Firebase'de küresel benzersiz ID gerektirir; `bayios-dev` alınmışsa sonek eklenir. **Firebase CLI kurulu değil; projeleri ürün sahibi oluşturur veya CLI kurulduktan sonra onayla oluşturulur.**
 
 ## 7. Migration terfi akışı
-1. İş şeması migration'ı ilgili modülde EF Core migration'ı olarak yazılır (`services/api/src/Modules/<M>/…/Migrations`, ADR 0005); `infra/supabase/migrations` yalnızca bootstrap içindir (DB rolleri `bayios_app`/`bayios_migrator`, uzantılar, Storage politikaları). PR'da idempotent SQL script artefaktı + geri dönüş notu.
-2. CI: boş Postgres 17 container'a tüm migration'lar uygulanır + RLS/GRANT kontrol SQL'i + integration testler.
-3. `preview` dalına merge → migration `bayios-preview`'a otomatik uygulanır (GitHub Environment `preview`).
-4. Release adayı: `main`'e PR → ürün sahibi onayı → `production` environment reviewer onayı → prod migration → API deploy.
+1. İş şeması migration'ı ilgili modülde EF Core migration'ı olarak yazılır (`services/api/src/Modules/<M>/…/Migrations`, ADR 0005); `infra/supabase/bootstrap/` yalnızca bootstrap içindir (DB rolleri `bayios_app`/`bayios_migrator`, `pg_trgm`, access-token hook; ileride Storage politikaları) ve proje başına bir kez ürün sahibince çalıştırılır. PR'da idempotent SQL script artefaktı + geri dönüş notu.
+2. CI: boş Postgres 17 container'a tüm migration'lar uygulanır (`ci-migrations`) + bootstrap ve deploy migration adımının düz Postgres 17 ve Supabase Postgres imajında provası, RLS/GRANT kontrolü `verify.sql` (`ci-db-bootstrap`) + integration testler.
+3. `preview` dalına merge → `deploy-preview.yml` migration'ı `bayios-preview`'a `bayios_migrator` ile uygular (GitHub Environment `preview`), sonra API, sonra web. Sırlar yoksa adım "skipped: secrets missing" ile atlanır.
+4. Release adayı: `main`'e PR → ürün sahibi onayı → `vX.Y.Z` etiketi → `deploy-production.yml` (`PRODUCTION_DEPLOY_ENABLED` + `production` environment reviewer onayı) → prod migration → API deploy.
 5. Kural: **expand → migrate → contract.** Yıkıcı değişiklik (sütun silme/yeniden adlandırma) iki ayrı sürümde yapılır; API önce eski+yeni şemayla uyumlu çalışır.
 6. Production migration'ları asla ajan tarafından elle/MCP ile uygulanmaz.
 

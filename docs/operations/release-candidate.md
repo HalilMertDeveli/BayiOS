@@ -229,10 +229,19 @@ Açık issue'lar (`gh issue list --state open`, 2026-11-07): 37. Kritik etiketli
 - [ ] **#138 canlı ortam:** Supabase projesi (bölge kararı OD-07; plan, PITR ve yedek saklama OD-06), API hosting (öneri
       Fly.io fra, ~10–20 $/ay, harcama limiti ile), Vercel (ticari kullanım: Pro), alan adı, GitHub Environments
       `preview`/`production`. Maliyet onayı önce.
+- [ ] Supabase bootstrap (proje başına bir kez, kendi makinenizde): `SUPABASE_DB_URL=… bash
+      infra/supabase/bootstrap/bootstrap.sh --set-passwords` → `verify: OK` (`infra/supabase/bootstrap/README.md` §1).
 - [ ] Supabase Auth ayarları: **Confirm email açık**, **Secure email change açık** (davet kabulü buna dayanır), minimum
-      şifre uzunluğu ≥ 8, asimetrik (ES256) JWT imzalama; site/redirect URL'leri.
-- [ ] Custom access-token hook onayı (`email_confirmed_at`'ten üst düzey `email_verified`) → sonra
-      `Invitations:TrustUserMetadataEmailVerified=false`.
+      şifre uzunluğu ≥ 8, asimetrik (ES256) JWT imzalama; site/redirect URL'leri (README §3).
+- [ ] Custom access-token hook'unu etkinleştir (`bayios_auth_hooks.custom_access_token`, bootstrap kurar), token'da üst
+      düzey `email_verified` doğrula → sonra API'de `Invitations__TrustUserMetadataEmailVerified=false`.
+- [ ] Fly uygulaması + uygulama secret'ları (adlar): `ConnectionStrings__Default` (`bayios_app`), `Auth__Authority`,
+      `Auth__Audience`, `Cors__AllowedOrigins__0`, `Audit__IpHashKey`; deploy token'ı `fly tokens create deploy`.
+- [ ] GitHub Environment **`preview`**: secrets `PREVIEW_MIGRATOR_CONNECTION`, `FLY_API_TOKEN`, (ops.)
+      `VERCEL_DEPLOY_HOOK_URL`; variables (ops.) `FLY_APP`, `API_BASE_URL`; deployment branch yalnızca `preview`.
+- [ ] GitHub Environment **`production`**: required reviewer = ürün sahibi; secrets `PRODUCTION_MIGRATOR_CONNECTION`,
+      `FLY_API_TOKEN`, (ops.) `VERCEL_DEPLOY_HOOK_URL`; variables `FLY_APP`, `API_BASE_URL`; en son repo değişkeni
+      `PRODUCTION_DEPLOY_ENABLED=true` (production deploy onayıyla). Ayrıntı: `deploy-and-rollback.md` §8.
 - [ ] **#139 hukuki:** KVKK aydınlatma metni ve açık rıza, kullanım koşulları, gizlilik politikası, abonelik sözleşmesi,
       şirket/fatura; müşteri anonimleştirme yetkisinin kimde olacağı.
 - [ ] **#61 kararlar:** OD-01…OD-12 (özellikle OD-02 paket limitleri, OD-04 import limiti, OD-06 yedek, OD-07 bölge,
@@ -242,8 +251,10 @@ Açık issue'lar (`gh issue list --state open`, 2026-11-07): 37. Kritik etiketli
 - [ ] Pilot işletme(ler)in seçimi ve pilot takvimi (#140).
 
 ### (b) Mühendislik aksiyonları — production öncesi (Faz B)
-- [ ] #70 deploy hattında idempotent migration adımı (`bayios_migrator`, ortam onayı ile) · #76 Supabase bootstrap
-      (pg_trgm, `bayios_app`/`bayios_migrator` rolleri) · #10 preview uçtan uca smoke (web → API → Supabase).
+- [x] #70 deploy hattında idempotent migration adımı (`deploy-preview.yml` / `deploy-production.yml` iskeleti,
+      `infra/deploy/apply-migrations.sh`; sırsız güvenli no-op) · #76 Supabase bootstrap (`infra/supabase/bootstrap/`:
+      `pg_trgm`, roller, access-token hook, `verify.sql`; CI'da düz Postgres 17 + Supabase imajında prova).
+- [ ] İlk gerçek preview deploy'u (hesaplar açıldıktan sonra) · #10 preview uçtan uca smoke (web → API → Supabase).
 - [ ] #55 yapılandırılmış log + correlation id, hata izleme, yedekten geri yükleme provası, rollback ve olay runbook'u.
 - [ ] `Audit__IpHashKey` (≥ 32 bayt) ortam sırrı olarak; 32 bayttan kısa anahtar başlatmayı durdurur (test edildi), boş
       bırakılırsa audit'e IP özeti yazılmaz.
@@ -251,7 +262,8 @@ Açık issue'lar (`gh issue list --state open`, 2026-11-07): 37. Kritik etiketli
       eşzamanlılık gece koşusu · #152 odak/URL yarışları ve kararsız limit testi · #153 fixture yarışı.
 - [ ] #89 erişim reddi audit'i · #83 onboarding devamı (KVKK onayı, adres/vergi, ilk depo).
 - [ ] #121 AI'yı canlıya hazırlama (yalnızca AI açılacaksa).
-- [ ] Gitleaks kararı (R-7) ve tehdit modeli R6'nın güncellenmesi.
+- [x] Gitleaks (R-7): `secret-scan.yml` (PR commit'leri + haftalık/push tam geçmiş, checksum doğrulamalı binary,
+      `.gitleaks.toml` yalnızca belgeli sentetik değerler). Kalan: tehdit modeli R6 metninin güncellenmesi (Security).
 - [ ] Production deploy ve production migration: **ürün sahibi onayı zorunlu** (AUTOPILOT §4).
 
 ### (c) Pilot giriş / çıkış ölçütleri

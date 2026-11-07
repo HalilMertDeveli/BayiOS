@@ -5,7 +5,8 @@
 #   bash infra/ci/ef-migrations.sh
 #
 # For every module DbContext (discovered, not listed by hand) it:
-#   1. generates `dotnet ef migrations script --idempotent` into $OUT_DIR (the reviewable deploy artefact),
+#   1. generates `dotnet ef migrations script --idempotent` into $OUT_DIR (the reviewable deploy artefact) plus
+#      $OUT_DIR/manifest.txt (apply order, consumed by infra/deploy/apply-migrations.sh),
 #   2. fails if `dotnet ef migrations has-pending-model-changes` reports model changes without a migration,
 #   3. applies every script to an empty postgres:17 bootstrapped with infra/docker/initdb, as bayios_migrator,
 #   4. applies every script a second time to prove it is idempotent, and checks the migration history.
@@ -85,6 +86,9 @@ for project in "${projects[@]}"; do
   done
 done
 [ "${#scripts[@]}" -gt 0 ] || fail "No DbContext found in any module"
+
+# Apply order for the deploy step (infra/deploy/apply-migrations.sh): exactly the order verified below.
+for script in "${scripts[@]}"; do basename "$script"; done > "${OUT_DIR}/manifest.txt"
 
 # ---------------------------------------------------------------- empty postgres:17 bootstrapped like local/CI databases
 log "Starting ${PG_IMAGE} with infra/docker/initdb"
