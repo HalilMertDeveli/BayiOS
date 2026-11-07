@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useId } from "react";
 import Link from "next/link";
 import { ArrowLeft, CircleAlert, Lock, PackagePlus, Truck, TriangleAlert, Undo2 } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
@@ -182,6 +182,7 @@ function ShipmentView({
   onLoaded: (loaded: LoadedShipment) => void;
   onReload: () => void;
 }) {
+  const uid = useId();
   const { api, access } = useSession();
   const { toast } = useToast();
   const { shipment } = loaded;
@@ -225,8 +226,8 @@ function ShipmentView({
         </FormAlert>
       ) : null}
 
-      <section aria-labelledby="shipment-info" className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
-        <h2 id="shipment-info" className="sr-only">
+      <section aria-labelledby={`${uid}-shipment-info`} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+        <h2 id={`${uid}-shipment-info`} className="sr-only">
           Sevkiyat bilgileri
         </h2>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-body sm:grid-cols-2">
@@ -283,8 +284,8 @@ function ShipmentView({
       ) : null}
 
       {isOpen && permissions.assign ? (
-        <section aria-labelledby="shipment-cancel" className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
-          <h2 id="shipment-cancel" className="text-h3 text-fg">
+        <section aria-labelledby={`${uid}-shipment-cancel`} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+          <h2 id={`${uid}-shipment-cancel`} className="text-h3 text-fg">
             Sevkiyatı iptal et
           </h2>
           <p className="text-body text-fg-secondary">
@@ -372,9 +373,10 @@ function Info({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function ShipmentLines({ lines, canShort, onShort }: { lines: ShipmentLine[]; canShort: boolean; onShort: (line: ShipmentLine) => void }) {
+  const uid = useId();
   return (
-    <section aria-labelledby="shipment-lines" className="flex flex-col gap-2">
-      <h2 id="shipment-lines" className="text-h3 text-fg">
+    <section aria-labelledby={`${uid}-shipment-lines`} className="flex flex-col gap-2">
+      <h2 id={`${uid}-shipment-lines`} className="text-h3 text-fg">
         Satırlar
       </h2>
       <ul className="flex flex-col gap-2">
@@ -424,6 +426,7 @@ function PackCheck({
   onPacked: (next: LoadedShipment) => void;
   onError: (error: unknown) => void;
 }) {
+  const uid = useId();
   const { api } = useSession();
   const { shipment } = loaded;
   const [pack, setPack] = useState<PackState>(emptyPack);
@@ -478,12 +481,12 @@ function PackCheck({
   const current = pack.packages[pack.current] ?? {};
 
   return (
-    <section aria-labelledby="pack-check" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
-      <h2 id="pack-check" className="text-h3 text-fg">
+    <section aria-labelledby={`${uid}-pack-check`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+      <h2 id={`${uid}-pack-check`} className="text-h3 text-fg">
         Paket kontrolü (isteğe bağlı)
       </h2>
       <p className="text-body text-fg-secondary">Her ürünü koliye koyarken okutun. Tüm satırlar tamamlanınca kaydedin; isterseniz paket kontrolü olmadan da sevk onaylanabilir.</p>
-      <ScanField id="pack-scan" label="Ürün barkodu veya SKU" hint="Her okutma 1 adet ekler." inputRef={inputRef} onScan={onScan} />
+      <ScanField id={`${uid}-pack-scan`} label="Ürün barkodu veya SKU" hint="Her okutma 1 adet ekler." inputRef={inputRef} onScan={onScan} />
       <ScanFeedback feedback={feedback} idleText={`Koli ${pack.current + 1} açık — okutmaya hazır.`} />
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="info">Koli {pack.current + 1} / {pack.packages.length}</Badge>
@@ -536,6 +539,7 @@ function PackCheck({
 
 /** Confirmation: stock leaves once. One key per attempt on this version, so a retry after a lost answer is replayed. */
 function ConfirmSection({ loaded, onConfirmed, onError }: { loaded: LoadedShipment; onConfirmed: (next: LoadedShipment) => void; onError: (error: unknown) => void }) {
+  const uid = useId();
   const { api } = useSession();
   const { shipment } = loaded;
   const [carrier, setCarrier] = useState(shipment.carrier ?? "");
@@ -581,8 +585,8 @@ function ConfirmSection({ loaded, onConfirmed, onError }: { loaded: LoadedShipme
   };
 
   return (
-    <section aria-labelledby="confirm-shipment" className="flex flex-col gap-3 rounded-lg border-2 border-brand bg-card p-4 shadow-e1">
-      <h2 id="confirm-shipment" className="text-h3 text-fg">
+    <section aria-labelledby={`${uid}-confirm-shipment`} className="flex flex-col gap-3 rounded-lg border-2 border-brand bg-card p-4 shadow-e1">
+      <h2 id={`${uid}-confirm-shipment`} className="text-h3 text-fg">
         Sevkiyatı onayla
       </h2>
       <p className="text-body text-fg-secondary">Onayla ayrılan stok depodan düşer ve sipariş sevk edildi olarak işaretlenir. Bu işlem geri alınamaz.</p>
@@ -624,6 +628,7 @@ function ConfirmSection({ loaded, onConfirmed, onError }: { loaded: LoadedShipme
 
 /** Stock movements of this shipment (`source_id` = shipment id). Needs inventory.movements.read. */
 function ShipmentMovements({ shipmentId, lines }: { shipmentId: string; lines: ShipmentLine[] }) {
+  const uid = useId();
   const { api } = useSession();
   const [data, setData] = useState<{ status: "loading" } | { status: "error"; message: string } | { status: "ready"; items: Movement[] }>({ status: "loading" });
   useEffect(() => {
@@ -635,8 +640,8 @@ function ShipmentMovements({ shipmentId, lines }: { shipmentId: string; lines: S
   }, [api, shipmentId]);
   const skuOf = (variantId: string) => lines.find((l) => l.variantId === variantId)?.sku ?? variantId;
   return (
-    <section aria-labelledby="shipment-movements" className="flex flex-col gap-2">
-      <h2 id="shipment-movements" className="text-h3 text-fg">
+    <section aria-labelledby={`${uid}-shipment-movements`} className="flex flex-col gap-2">
+      <h2 id={`${uid}-shipment-movements`} className="text-h3 text-fg">
         Stok hareketleri
       </h2>
       {data.status === "loading" ? (

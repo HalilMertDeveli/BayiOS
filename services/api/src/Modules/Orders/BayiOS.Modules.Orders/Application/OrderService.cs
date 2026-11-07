@@ -105,9 +105,8 @@ internal sealed class OrderService(
         var today = Today(now);
         await db.JoinTransactionAsync(cancellationToken);
         var prefix = (await orderSettings.GetAsync(cancellationToken)).NumberPrefix;
-        var number = await NextNumberAsync(prefix, today.Year, cancellationToken);
         var order = Order.Create(
-            TenantId, number, customer.CustomerId, warehouse!.Id, source, request.SourceReferenceId, currency, today, UserId, now);
+            TenantId, customer.CustomerId, warehouse!.Id, source, request.SourceReferenceId, currency, today, UserId, now);
         order.Notes = OrderText.Clean(request.Notes);
         order.RequestedDeliveryDate = request.RequestedDeliveryDate;
         order.ShippingAddressId = request.ShippingAddressId;
@@ -120,6 +119,10 @@ internal sealed class OrderService(
         }
 
         db.History.Add(OrderStatusChange.Create(order, OrderActions.Create, null, null, UserId, now, correlationId));
+
+        // Gapless numbering serialises a tenant's creates on one counter row until commit; everything that can fail
+        // or take time (validation, pricing every line) is done above, so the row is held only for the inserts.
+        order.AssignNumber(await NextNumberAsync(prefix, today.Year, cancellationToken));
         await audit.RecordAsync(
             new AuditEvent(OrderAuditActions.Created, OrderAuditActions.EntityType, order.Id, new AuditChanges()
                 .Value("number", order.Number)
@@ -1032,6 +1035,7 @@ internal sealed class OrderService(
     /// <summary>
     /// Gapless per tenant, prefix and year (PRD ORD-14): the counter row is locked until the creating transaction
     /// ends, so a rolled-back create consumes no number. The prefix is the tenant setting at creation time.
+    /// Call it as the last step before saving: the lock serialises the tenant's creates until commit.
     /// </summary>
     private async Task<string> NextNumberAsync(string prefix, int year, CancellationToken cancellationToken)
     {

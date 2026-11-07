@@ -4,11 +4,12 @@
 |---|---|
 | Sahip | Security Engineer (`.claude/agents/security-engineer.md`) |
 | Durum | Taslak v0.1 — kod yazılmadan önce hazırlandı; her modül tamamlandığında güncellenir |
-| Son güncelleme | 2026-11-04 |
+| Son güncelleme | 2026-11-07 (#160 güvenlik denetimi düzeltmeleri) |
 | İlgili | `docs/security/data-policy.md`, `docs/testing/test-strategy.md`, `docs/operations/ci-cd.md`, `SECURITY.md` |
 
-> Bu belge tasarım varsayımlarına dayanır. "Doğrulama testi" sütunundaki testler henüz yazılmamıştır; her biri bir issue'ya
-> dönüştürülür ve test yazılana kadar ilgili risk **açık** sayılır.
+> Bu belge tasarım varsayımlarına dayanır. Satırların koda karşı kanıt eşlemesi (test adı / komut / kod satırı):
+> `docs/security/audit-2026-11.md` §2; o denetimin bulguları ve düzeltme PR'ları aynı belgenin §1'indedir. Kanıtı olmayan
+> satır **açık** sayılır.
 
 ## 1. Kapsam ve varlıklar
 
@@ -97,8 +98,9 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 ### 3.1 Web (Next.js 16, Vercel)
 | STRIDE | Tehdit | Ciddiyet | Önlem | Doğrulama testi |
 |---|---|---|---|---|
-| S | Oturum token'ının XSS ile çalınması | H | CSP (nonce tabanlı), `dangerouslySetInnerHTML` yasak (lint kuralı), Supabase oturumu için httpOnly cookie tercih | Playwright: CSP başlığı var; ESLint kuralı CI'da |
-| T | `NEXT_PUBLIC_` ile sırların istemciye sızması | H | Yalnızca Supabase URL + publishable/anon key public; diğerleri sunucu env | CI: build çıktısında sır deseni taraması (gitleaks `--no-git` dist üzerinde) |
+| S | Oturum token'ının XSS ile çalınması | H | CSP (#160: `script-src 'self' 'unsafe-inline'` — Cache Components/PPR ile nonce mümkün değil, gerekçe `apps/web/src/lib/security/headers.ts`; `connect-src`/`img-src` yalnız uygulama + API + Supabase, `object-src`/`base-uri`/`frame-ancestors 'none'`), `dangerouslySetInnerHTML`/`innerHTML`/`eval` yasak (ESLint `react/no-danger`, `no-restricted-properties`, `no-eval`). Supabase oturum çerezi JS'den okunur (`@supabase/ssr` tarayıcı istemcisi gereği; httpOnly bu mimaride mümkün değil — kalan risk: audit-2026-11 M-2) | `e2e/security-headers.spec.ts` (başlıklar, ana rotalarda CSP ihlali 0, yabancı fetch/beacon/script engelli, çerçeveleme engelli); `src/lib/security/headers.test.ts`; ESLint CI'da |
+| T | `NEXT_PUBLIC_` ile sırların istemciye sızması | H | Yalnızca Supabase URL + publishable/anon key public; diğerleri sunucu env | CI: `ci-web` → `gitleaks dir .next/static` (#160) |
+| T | Clickjacking (tek tıklık onay/sevk/yetki eylemleri) | M | `frame-ancestors 'none'` + `X-Frame-Options: DENY` (#160) | `security-headers.spec.ts` (yabancı origin çerçeveleyemez, kontrol çerçevesi çalışır) |
 | R | Kullanıcı işlemlerinin izlenememesi | M | Tüm yazmalar API'de audit'lenir (web'de yazma yok) | API audit testleri |
 | I | Preview deploy'larının public erişimi | M | Vercel Deployment Protection (Vercel Authentication) preview'da açık; preview yalnızca sentetik veri | Manuel kontrol listesi (release readiness) |
 | D | — (Vercel CDN) | L | Vercel DDoS koruması | — |
@@ -123,7 +125,8 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 | R | Kritik işlemlerin inkârı | M | Audit olayları (bölüm 7), değiştirilemez tablo | Audit integration testleri |
 | I | Hata mesajında stack trace / SQL | M | ProblemDetails, production'da detay yok | Integration: 500 yanıtında stack yok |
 | I | IDOR (`/orders/{id}`) | C | Her sorgu tenant filtresi + RLS; başka tenant'ın ID'si → 404 | `TenantIsolationMatrixTests` |
-| D | Kaba kuvvet / yoğun istek | H | ASP.NET Core rate limiter (bölüm 6) | Integration: limit aşımında 429 |
+| D | Kaba kuvvet / yoğun istek | H | ASP.NET Core rate limiter (bölüm 6.5; #160) | `Security/AuditFixesTests` (429 + `Retry-After`, kova ayrımı, sahte tenant başlığı yeni kova değil), `UnitTests/Platform/RateLimitingTests` |
+| S | Anonim Supabase oturumu (`is_anonymous`) | L | Kimlik doğrulamada her uçta 401 (#160, audit L-2); ayar da kapalı | `AuditFixesTests.Anonymous_sessions_are_rejected_everywhere` |
 | E | Rol yükseltme (sales → admin işlemi) | H | Policy tabanlı yetki, endpoint başına izin matrisi | `RbacMatrixTests` (rol × endpoint) |
 
 ### 3.4 Veritabanı (Supabase PostgreSQL 17)
@@ -277,6 +280,20 @@ Webhook hedefleri, URL'den katalog/görsel çekme gibi özellikler eklenirse:
 | AI ayrıştırma | 30/saat ve günlük tenant kotası | tenant |
 | Export | 10/saat | tenant |
 Aşımda `429` + `Retry-After`. Değerler pilot ölçümüyle güncellenir.
+
+**Uygulama (#160):** `services/api/src/BayiOS.Api/Platform/RateLimiting/ApiRateLimiting.cs`. Sınırlayıcı kimlik
+doğrulamadan hemen sonra, `TenantContextMiddleware` havuzdan bağlantı almadan **önce** çalışır (taşkın veritabanına
+dokunmadan reddedilir). İki zincirli kova: `(kullanıcı, X-Tenant-Id, okuma|yazma)` = yukarıdaki limit ve
+`(kullanıcı, okuma|yazma)` tüm tenant başlıkları üzerinden = `RateLimiting:UserAcrossTenantsFactor` (5) × limit —
+`X-Tenant-Id` döndürmek bütçe kazandırmaz (üye olunmayan başlık yine 403). Token bucket: kova bir dakikalık bütçeyi tutar,
+dakikada tam limit kadar dolar (300 → 1 sn'de 5; 60 → 1 sn'de 1); kuyruk yok. GET/HEAD = okuma, diğerleri yazma. Yanıt:
+`429` Problem Details `rate_limit.exceeded` + `Retry-After` (sn). Muaf: `/health*`, kimliksiz istekler (veritabanına
+gitmeden 401), meta. Yapılandırma: `RateLimiting:Enabled|ReadsPerMinute|WritesPerMinute` (varsayılanlar yukarıdaki
+değerler; `appsettings.Development.json` yerel demo tohumlama için yükseltir; test/yük/E2E koşum altyapıları kendi
+bütçesini verir). **Çoklu instance:** sayaçlar instance belleğindedir; üretim tek, sürekli açık makinedir
+(`infra/deploy/fly.production.toml`). N instance'ta bir istemci en fazla N × limit alır (hâlâ sınırlı). Ölçeklenirken
+limitler instance sayısına bölünmeli ya da sayaçlar paylaşılan depoya (Redis vb.) taşınmalıdır. Postgres sayacı bilinçli
+olarak seçilmedi: korunan veritabanına her isteğe bir yazma ekler.
 
 ## 7. Audit olayları listesi
 Her olay: `id, tenant_id, actor_user_id, actor_role, action, entity_type, entity_id, occurred_at, ip(hash), user_agent(kısaltılmış), correlation_id, before/after özeti (PII hariç)`.

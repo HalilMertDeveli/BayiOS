@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { ShoppingCart } from "lucide-react";
 import { OrderStatus } from "@/components/orders/order-badges";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -65,6 +66,7 @@ function OrdersReportBody() {
 }
 
 function OrdersContent({ report }: { report: OrdersReport | null }) {
+  const uid = useId();
   const loading = report === null;
   const amounts = report?.amountsVisible ?? false;
   const rows = report?.byStatus ?? [];
@@ -102,10 +104,10 @@ function OrdersContent({ report }: { report: OrdersReport | null }) {
       <StatList label="Özet" loading={loading} stats={[{ label: "Sipariş", value: count(totalOrders) }]} />
       {!amounts && report ? <p className="text-caption text-fg-muted">Tutarlar rolünüz için gizli; yalnızca adetler gösteriliyor.</p> : null}
       {report ? <DailyChart title="Günlük sipariş sayısı" label="Günlük sipariş sayısı" points={points} /> : null}
-      <ReportSection id="orders-by-status" title="Duruma göre" description="Durum, siparişin bugünkü durumudur; tutarlar para birimine göre ayrı toplanır.">
+      <ReportSection id={`${uid}-orders-by-status`} title="Duruma göre" description="Durum, siparişin bugünkü durumudur; tutarlar para birimine göre ayrı toplanır.">
         <Table caption="Duruma göre siparişler" columns={statusColumns} rows={rows} getRowId={(r) => `${r.status}|${r.currency}`} loading={loading} loadingRows={3} />
       </ReportSection>
-      <ReportSection id="orders-by-day" title="Günlük döküm">
+      <ReportSection id={`${uid}-orders-by-day`} title="Günlük döküm">
         <Table
           caption="Günlük sipariş dökümü"
           columns={dayColumns}

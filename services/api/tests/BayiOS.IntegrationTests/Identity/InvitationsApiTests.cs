@@ -118,11 +118,15 @@ public sealed class InvitationsApiTests(ApiFixture fixture)
                      MembersKit.Invitee(fixture, userId, email, metadataEmailVerified: false),
                      MembersKit.Invitee(fixture, userId, email, metadataEmailVerified: null),
                      MembersKit.Invitee(fixture, userId, email, metadataEmailVerified: false, topLevelEmailVerified: false),
-                     MembersKit.Invitee(fixture, userId, email, metadataEmailVerified: true, isAnonymous: true),
                  })
         {
             await HttpAssert.ProblemAsync(await MembersKit.AcceptAsync(invitee, issued.Token), HttpStatusCode.Forbidden, "invitation.email_not_verified");
         }
+
+        // An anonymous session is not an identity at all (audit 2026-11 L-2): refused at authentication, before the
+        // invitation rules (which still reject it too — EmailVerification.IsVerified, MemberRulesTests).
+        var anonymous = MembersKit.Invitee(fixture, userId, email, metadataEmailVerified: true, isAnonymous: true);
+        await HttpAssert.ProblemAsync(await MembersKit.AcceptAsync(anonymous, issued.Token), HttpStatusCode.Unauthorized, "auth.invalid_token");
 
         // The invitation is untouched; a server-asserted top-level email_verified is enough on its own.
         var verified = MembersKit.Invitee(fixture, userId, email, metadataEmailVerified: null, topLevelEmailVerified: true);

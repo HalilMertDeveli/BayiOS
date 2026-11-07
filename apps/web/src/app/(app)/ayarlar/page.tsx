@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { OrderSettings } from "@/components/settings/order-settings";
 import { SettingsLinks } from "@/components/settings/settings-links";
 import { PageHeader } from "@/components/ui/page-header";
@@ -9,12 +10,13 @@ export const metadata = { title: "Ayarlar" };
  * business profile come later.
  */
 export default function AyarlarPage() {
+  const uid = useId();
   return (
     <>
       <PageHeader title="Ayarlar" description="İşletmenizin sipariş kuralları ve kullanıma hazır ayarlar." />
       <OrderSettings />
-      <section aria-labelledby="ready-settings" className="flex flex-col gap-3">
-        <h2 id="ready-settings" className="text-h3 text-fg">
+      <section aria-labelledby={`${uid}-ready-settings`} className="flex flex-col gap-3">
+        <h2 id={`${uid}-ready-settings`} className="text-h3 text-fg">
           Diğer ayarlar
         </h2>
         <SettingsLinks />

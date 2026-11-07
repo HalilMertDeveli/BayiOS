@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CircleAlert, Clock, Lock, MessageSquareText, ScanText } from "lucide-react";
@@ -90,6 +90,7 @@ export function WhatsappOrderPage() {
 }
 
 function SubmitForm() {
+  const uid = useId();
   const { api } = useSession();
   const router = useRouter();
   const [customer, setCustomer] = useState<{ id: string; name: string; code: string } | null>(null);
@@ -140,7 +141,7 @@ function SubmitForm() {
         </FormAlert>
       ) : null}
       <CustomerPicker
-        id="f-customerId"
+        id={`${uid}-f-customerId`}
         label="Müşteri (isteğe bağlı)"
         pickedLabel="Müşteri"
         hint="Şimdi veya inceleme ekranında seçebilirsiniz. Müşteri bilgisi AI'ya gönderilmez."
@@ -182,6 +183,7 @@ type PendingState = { status: "loading" } | { status: "error"; message: string }
 
 /** Parses still waiting for review (newest first), so a started review can be continued. */
 function PendingReviews() {
+  const uid = useId();
   const { api } = useSession();
   const [state, setState] = useState<PendingState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -199,8 +201,8 @@ function PendingReviews() {
   }, [api, attempt]);
 
   return (
-    <section aria-labelledby="pending-reviews" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
-      <h2 id="pending-reviews" className="text-h3 text-fg">
+    <section aria-labelledby={`${uid}-pending-reviews`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+      <h2 id={`${uid}-pending-reviews`} className="text-h3 text-fg">
         İnceleme bekleyen mesajlar
       </h2>
       {state.status === "loading" ? (

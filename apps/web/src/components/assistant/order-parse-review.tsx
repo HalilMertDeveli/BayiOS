@@ -230,6 +230,7 @@ function ReviewForm({
   onLoaded: (next: LoadedParse) => void;
   onReload: () => void;
 }) {
+  const uid = useId();
   const { api } = useSession();
   const router = useRouter();
   const { toast } = useToast();
@@ -363,8 +364,8 @@ function ReviewForm({
       <ParseNotices parse={parse} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start">
-        <section aria-labelledby="original-message" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 lg:sticky lg:top-4">
-          <h2 id="original-message" className="inline-flex items-center gap-2 text-h3 text-fg">
+        <section aria-labelledby={`${uid}-original-message`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 lg:sticky lg:top-4">
+          <h2 id={`${uid}-original-message`} className="inline-flex items-center gap-2 text-h3 text-fg">
             <MessageSquareText className="size-5 text-fg-muted" aria-hidden="true" />
             Orijinal mesaj
           </h2>
@@ -387,12 +388,12 @@ function ReviewForm({
         </section>
 
         <div className="flex flex-col gap-4">
-          <section aria-labelledby="draft-header" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1">
-            <h2 id="draft-header" className="text-h3 text-fg">
+          <section aria-labelledby={`${uid}-draft-header`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1">
+            <h2 id={`${uid}-draft-header`} className="text-h3 text-fg">
               Müşteri ve depo
             </h2>
             <CustomerPicker
-              id="f-customerId"
+              id={`${uid}-f-customerId`}
               label="Müşteri"
               pickedLabel="Müşteri"
               hint="Ad veya kodun bir kısmı; tam vergi no / telefon / WhatsApp. Yalnızca aktif müşteriler."
@@ -424,9 +425,9 @@ function ReviewForm({
             </div>
           </section>
 
-          <section aria-labelledby="review-lines" className="flex flex-col gap-3">
+          <section aria-labelledby={`${uid}-review-lines`} className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
-              <h2 id="review-lines" className="text-h3 text-fg">
+              <h2 id={`${uid}-review-lines`} className="text-h3 text-fg">
                 Satırlar ({state.lines.length})
               </h2>
               <p className="text-body text-fg-muted">

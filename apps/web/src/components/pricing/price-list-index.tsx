@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CircleAlert, Calculator, Plus, Star, Tags } from "lucide-react";
@@ -58,6 +58,7 @@ export function usePriceLists(includeArchived: boolean) {
 
 /** /fiyat-listeleri (W18): sales and (for cost-permitted roles) purchase lists; default first. */
 export function PriceListIndex() {
+  const uid = useId();
   const { access } = useSession();
   const permissions = pricingPermissions(access);
   const [showArchived, setShowArchived] = useState(false);
@@ -128,9 +129,9 @@ export function PriceListIndex() {
         </FormAlert>
       ) : null}
 
-      <section aria-labelledby="price-list-list" className="flex flex-col gap-3">
+      <section aria-labelledby={`${uid}-price-list-list`} className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="price-list-list" className="text-h3 text-fg">
+          <h2 id={`${uid}-price-list-list`} className="text-h3 text-fg">
             Listeler
           </h2>
           <label className="inline-flex min-h-11 items-center gap-2 text-body text-fg">
@@ -205,6 +206,7 @@ function CreatePriceListDialog({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const uid = useId();
   const { api } = useSession();
   const { toast } = useToast();
   const router = useRouter();
@@ -254,13 +256,13 @@ function CreatePriceListDialog({
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Vazgeç
           </Button>
-          <Button type="submit" form="price-list-form" loading={saving}>
+          <Button type="submit" form={`${uid}-price-list-form`} loading={saving}>
             Listeyi oluştur
           </Button>
         </>
       }
     >
-      <form id="price-list-form" noValidate onSubmit={submit} className="flex flex-col gap-4">
+      <form id={`${uid}-price-list-form`} noValidate onSubmit={submit} className="flex flex-col gap-4">
         {formError ? (
           <FormAlert tone="error" title="Kaydedilemedi">
             {formError}

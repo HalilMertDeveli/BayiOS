@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { Boxes, CircleAlert, PackagePlus, Rows3, Rows4, ScanBarcode, SearchX, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,7 @@ type MoreState = { status: "idle" } | { status: "loading" } | { status: "error";
  * friendly, Enter submits); keyset paging. A term matching too many products gets 422 → "Aramayı daraltın".
  */
 export function StockBalances() {
+  const uid = useId();
   const { api, access } = useSession();
   const permissions = inventoryPermissions(access);
   // Filters change through navigate / setFilter only: they build on the URL just requested, not the stale one (#152).
@@ -292,9 +293,9 @@ export function StockBalances() {
         ) : null}
       </section>
 
-      <section aria-labelledby="balance-results" className="flex flex-col gap-3">
+      <section aria-labelledby={`${uid}-balance-results`} className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="balance-results" className="text-h3 text-fg">
+          <h2 id={`${uid}-balance-results`} className="text-h3 text-fg">
             Stok bakiyeleri
           </h2>
           <div className="flex items-center gap-3">

@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -30,6 +31,7 @@ export function StockMovementsReportView() {
 }
 
 function StockMovementsReportBody() {
+  const uid = useId();
   const { api } = useSession();
   const { today, range, rangeError, params, update, setRange } = useReportUrl();
   const warehouseId = params.get("depo") ?? "";
@@ -74,10 +76,10 @@ function StockMovementsReportBody() {
       ) : (
         <>
           <p className="text-caption text-fg-muted">Miktarlar ürünlerin kendi birimlerindedir; farklı birimler toplamda birlikte sayılır. Maliyet gösterilmez.</p>
-          <ReportSection id="movements-by-type" title="Hareket tipine göre">
+          <ReportSection id={`${uid}-movements-by-type`} title="Hareket tipine göre">
             <Table caption="Hareket tipine göre toplamlar" columns={typeColumns} rows={report?.totals ?? []} getRowId={(r) => r.type} loading={!report} loadingRows={3} />
           </ReportSection>
-          <ReportSection id="movements-by-day" title="Günlük döküm">
+          <ReportSection id={`${uid}-movements-by-day`} title="Günlük döküm">
             <Table
               caption="Günlük stok hareketleri"
               columns={dayColumns}

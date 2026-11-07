@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useState, type FormEvent, useId } from "react";
 import { MapPin, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +50,7 @@ export function AddressSection({
   /** Keeps the page's copy in sync (the customer form remounts after a save). */
   onChange?: (addresses: Address[]) => void;
 }) {
+  const uid = useId();
   const { api } = useSession();
   const { toast } = useToast();
   const [addresses, setAddresses] = useState<Address[]>(initial);
@@ -105,9 +106,9 @@ export function AddressSection({
   };
 
   return (
-    <section aria-labelledby="sec-addresses" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <section aria-labelledby={`${uid}-sec-addresses`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="sec-addresses" className="flex items-center gap-2 text-h3 text-fg">
+        <h2 id={`${uid}-sec-addresses`} className="flex items-center gap-2 text-h3 text-fg">
           <MapPin className="size-5" aria-hidden="true" />
           Adresler
         </h2>
@@ -252,6 +253,7 @@ function AddressDialog({
   onSaved: () => void;
   onConflict: () => void;
 }) {
+  const uid = useId();
   const { api } = useSession();
   const { toast } = useToast();
   const [values, setValues] = useState<AddressFormValues>(() => (address ? addressToValues(address) : newAddressValues(defaultType)));
@@ -311,13 +313,13 @@ function AddressDialog({
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Vazgeç
           </Button>
-          <Button type="submit" form="address-form" loading={saving}>
+          <Button type="submit" form={`${uid}-address-form`} loading={saving}>
             {address ? "Kaydet" : "Adresi ekle"}
           </Button>
         </>
       }
     >
-      <form id="address-form" noValidate onSubmit={submit} className="flex flex-col gap-4">
+      <form id={`${uid}-address-form`} noValidate onSubmit={submit} className="flex flex-col gap-4">
         {formError ? (
           <FormAlert tone="error" title="Kaydedilemedi">
             {formError}

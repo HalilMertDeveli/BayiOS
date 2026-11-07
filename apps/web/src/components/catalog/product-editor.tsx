@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Archive, ArrowLeft, CircleAlert, LoaderCircle, Lock, Plus, RotateCcw, SearchX, Trash2 } from "lucide-react";
@@ -205,6 +205,7 @@ type ProductFormProps = {
 };
 
 function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, onCreated }: ProductFormProps) {
+  const uid = useId();
   const { api, access } = useSession();
   const permissions = catalogPermissions(access);
   const readOnly = !permissions.write;
@@ -445,8 +446,8 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, 
 
       <form ref={formRef} noValidate onSubmit={submit} aria-label={product ? "Ürünü düzenle" : "Yeni ürün"} className="flex flex-col gap-4">
         <fieldset disabled={readOnly} className="flex flex-col gap-4">
-          <section aria-labelledby="sec-core" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
-            <h2 id="sec-core" className="text-h3 text-fg">
+          <section aria-labelledby={`${uid}-sec-core`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+            <h2 id={`${uid}-sec-core`} className="text-h3 text-fg">
               Temel bilgiler
             </h2>
             <Input
@@ -548,9 +549,9 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, 
           </section>
 
           {productFields.length > 0 ? (
-            <section aria-labelledby="sec-attributes" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+            <section aria-labelledby={`${uid}-sec-attributes`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
               <div className="flex flex-col gap-1">
-                <h2 id="sec-attributes" className="text-h3 text-fg">
+                <h2 id={`${uid}-sec-attributes`} className="text-h3 text-fg">
                   Özel alanlar
                 </h2>
                 <p className="text-caption text-fg-muted">İşletmenize özel ürün bilgileri.</p>
@@ -574,9 +575,9 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, 
           ) : null}
 
           {!product ? (
-            <section aria-labelledby="sec-variants" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+            <section aria-labelledby={`${uid}-sec-variants`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
               <div className="flex flex-col gap-1">
-                <h2 id="sec-variants" className="text-h3 text-fg">
+                <h2 id={`${uid}-sec-variants`} className="text-h3 text-fg">
                   Varyantlar
                 </h2>
                 <p className="text-caption text-fg-muted">

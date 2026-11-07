@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useId } from "react";
 import Link from "next/link";
 import { ArrowLeft, CircleAlert, History, Lock, SearchX, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,7 @@ type Head = { status: "loading" } | { status: "error"; message: string; notFound
 
 /** /stok/varyant/[id]: one variant's balances per warehouse/location and its movement history (W08 stock card). */
 export function VariantStock({ variantId }: { variantId: string }) {
+  const uid = useId();
   const { api, access } = useSession();
   const permissions = inventoryPermissions(access);
   const { state: warehouses } = useWarehouses();
@@ -106,8 +107,8 @@ export function VariantStock({ variantId }: { variantId: string }) {
         }
       />
 
-      <section aria-labelledby="variant-balances" className="flex flex-col gap-3">
-        <h2 id="variant-balances" className="text-h3 text-fg">
+      <section aria-labelledby={`${uid}-variant-balances`} className="flex flex-col gap-3">
+        <h2 id={`${uid}-variant-balances`} className="text-h3 text-fg">
           Depo ve raf bakiyeleri
         </h2>
         {head.status === "ready" ? (
@@ -193,6 +194,7 @@ function MovementHistory({
   warehouseOptions: { id: string; name: string; code: string }[];
   warehouseLabel: (id: string) => string;
 }) {
+  const uid = useId();
   const { api } = useSession();
   const [warehouseId, setWarehouseId] = useState("");
   const [type, setType] = useState("");
@@ -248,9 +250,9 @@ function MovementHistory({
   ];
 
   return (
-    <section aria-labelledby="movement-history" className="flex flex-col gap-3">
+    <section aria-labelledby={`${uid}-movement-history`} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 id="movement-history" className="flex items-center gap-2 text-h3 text-fg">
+        <h2 id={`${uid}-movement-history`} className="flex items-center gap-2 text-h3 text-fg">
           <History className="size-5" aria-hidden="true" />
           Hareket geçmişi
         </h2>

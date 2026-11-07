@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, useId } from "react";
 import { Archive, FolderPlus, FolderTree, Pencil, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -188,6 +188,7 @@ export function CategorySettings() {
 const KNOWN = new Set(["name", "sortOrder"]);
 
 function CategoryDialog({ editing, onClose, onSaved }: { editing: Editing; onClose: () => void; onSaved: () => void }) {
+  const uid = useId();
   const { api } = useSession();
   const { toast } = useToast();
   const original = editing.mode === "edit" ? editing.node.category : null;
@@ -230,7 +231,7 @@ function CategoryDialog({ editing, onClose, onSaved }: { editing: Editing; onClo
   };
 
   const title = original ? `Kategoriyi düzenle: ${original.name}` : parent ? `${parent.category.name} altına kategori` : "Yeni ana kategori";
-  const formId = "category-form";
+  const formId = `${useId()}-category-form`;
   return (
     <Dialog
       open
@@ -259,7 +260,7 @@ function CategoryDialog({ editing, onClose, onSaved }: { editing: Editing; onClo
         ) : null}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8rem]">
           <Input
-            id="category-name"
+            id={`${uid}-category-name`}
             label="Kategori adı"
             required
             maxLength={CATEGORY_NAME_MAX}
@@ -270,7 +271,7 @@ function CategoryDialog({ editing, onClose, onSaved }: { editing: Editing; onClo
             autoComplete="off"
           />
           <Input
-            id="category-sort"
+            id={`${uid}-category-sort`}
             label="Sıra"
             inputMode="numeric"
             value={values.sortOrder}

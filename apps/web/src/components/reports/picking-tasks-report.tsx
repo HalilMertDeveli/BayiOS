@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { ClipboardList } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, type TableColumn } from "@/components/ui/table";
@@ -34,6 +35,7 @@ export function PickingTasksReportView() {
 }
 
 function PickingTasksReportBody() {
+  const uid = useId();
   const { api } = useSession();
   const { today, range, rangeError, params, update, setRange } = useReportUrl();
   const warehouseId = params.get("depo") ?? "";
@@ -90,7 +92,7 @@ function PickingTasksReportBody() {
               points={fillDays(listDays(report), report.days.map((d) => ({ day: d.day, value: Number(d.completed) })))}
             />
           ) : null}
-          <ReportSection id="picking-by-day" title="Günlük döküm" description="Her sayı kendi olayının gününe yazılır (oluşturma, tamamlama, iptal).">
+          <ReportSection id={`${uid}-picking-by-day`} title="Günlük döküm" description="Her sayı kendi olayının gününe yazılır (oluşturma, tamamlama, iptal).">
             <Table caption="Günlük toplama görevleri" columns={columns} rows={report?.days ?? []} getRowId={(r) => r.day} loading={!report} loadingRows={3} maxHeight="28rem" density="compact" />
           </ReportSection>
         </>

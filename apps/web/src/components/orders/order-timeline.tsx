@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { History } from "lucide-react";
 import type { OrderHistoryEntry } from "@/lib/orders/api";
 import { historyActionLabels, orderStatusLabel } from "@/lib/orders/labels";
@@ -17,10 +18,11 @@ export function changedByText(h: Pick<OrderHistoryEntry, "changedBy" | "changedB
 }
 
 export function OrderTimeline({ history, currentUserId }: { history: readonly OrderHistoryEntry[]; currentUserId: string | null }) {
+  const uid = useId();
   const entries = [...history].sort((a, b) => a.changedAt.localeCompare(b.changedAt));
   return (
-    <section aria-labelledby="order-history" className="flex flex-col gap-3">
-      <h2 id="order-history" className="flex items-center gap-2 text-h3 text-fg">
+    <section aria-labelledby={`${uid}-order-history`} className="flex flex-col gap-3">
+      <h2 id={`${uid}-order-history`} className="flex items-center gap-2 text-h3 text-fg">
         <History className="size-5 text-fg-muted" aria-hidden="true" />
         Durum geçmişi
       </h2>

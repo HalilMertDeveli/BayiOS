@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode, useId } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CircleAlert, Lock, MapPin, PackagePlus, Pencil, Plus, Star, Warehouse as WarehouseIcon } from "lucide-react";
@@ -53,6 +53,7 @@ function mutationError(error: unknown): { fields: Record<string, string>; messag
 
 /** /depo: warehouses and their shelf/bin locations (create, edit, deactivate) + entry to goods receipt. */
 export function WarehouseAdmin() {
+  const uid = useId();
   const { access, entitlements } = useSession();
   const permissions = inventoryPermissions(access);
   const { state, reload, upsert } = useWarehouses();
@@ -120,7 +121,7 @@ export function WarehouseAdmin() {
                 variant="secondary"
                 icon={newWarehouseGate.locked ? <Lock className="size-4" /> : <Plus className="size-4" />}
                 disabled={newWarehouseGate.locked}
-                aria-describedby={newWarehouseGate.locked ? "warehouse-limit" : undefined}
+                aria-describedby={newWarehouseGate.locked ? `${uid}-warehouse-limit` : undefined}
                 onClick={() => setEditing("new")}
               >
                 Yeni depo
@@ -137,7 +138,7 @@ export function WarehouseAdmin() {
       />
 
       {permissions.manageWarehouses && newWarehouseGate.locked ? (
-        <div id="warehouse-limit">
+        <div id={`${uid}-warehouse-limit`}>
           <LockedFeature gate={newWarehouseGate} title="Yeni aktif depo eklenemiyor" />
         </div>
       ) : null}
@@ -148,8 +149,8 @@ export function WarehouseAdmin() {
         </FormAlert>
       ) : null}
 
-      <section aria-labelledby="warehouse-list" className="flex flex-col gap-3">
-        <h2 id="warehouse-list" className="text-h3 text-fg">
+      <section aria-labelledby={`${uid}-warehouse-list`} className="flex flex-col gap-3">
+        <h2 id={`${uid}-warehouse-list`} className="text-h3 text-fg">
           Depolar
         </h2>
         {state.status === "error" ? (
@@ -259,6 +260,7 @@ function WarehouseDialog({
   onClose: () => void;
   onSaved: (w: Warehouse) => void;
 }) {
+  const uid = useId();
   const { api } = useSession();
   const { toast } = useToast();
   const mode = warehouse ? "edit" : "create";
@@ -313,13 +315,13 @@ function WarehouseDialog({
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Vazgeç
           </Button>
-          <Button type="submit" form="warehouse-form" loading={saving}>
+          <Button type="submit" form={`${uid}-warehouse-form`} loading={saving}>
             {warehouse ? "Kaydet" : "Depoyu ekle"}
           </Button>
         </>
       }
     >
-      <form id="warehouse-form" noValidate onSubmit={submit} className="flex flex-col gap-4">
+      <form id={`${uid}-warehouse-form`} noValidate onSubmit={submit} className="flex flex-col gap-4">
         {formError ? (
           <FormAlert tone="error" title="Kaydedilemedi">
             {formError}
@@ -379,6 +381,7 @@ function WarehouseDialog({
 }
 
 function LocationsPanel({ warehouse, canManage: canManageRole, locationsGate }: { warehouse: Warehouse; canManage: boolean; locationsGate: Gate }) {
+  const uid = useId();
   // Without warehouse_locations, existing locations stay listed (read-only); adding or editing them is locked.
   const canManage = canManageRole && !locationsGate.locked;
   const [includeInactive, setIncludeInactive] = useState(true);
@@ -408,9 +411,9 @@ function LocationsPanel({ warehouse, canManage: canManageRole, locationsGate }: 
   ];
 
   return (
-    <section aria-labelledby="location-list" className="flex flex-col gap-3">
+    <section aria-labelledby={`${uid}-location-list`} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <h2 id="location-list" className="flex items-center gap-2 text-h3 text-fg">
+        <h2 id={`${uid}-location-list`} className="flex items-center gap-2 text-h3 text-fg">
           <MapPin className="size-5" aria-hidden="true" />
           {warehouse.name} — lokasyonlar
         </h2>
@@ -477,6 +480,7 @@ function LocationsPanel({ warehouse, canManage: canManageRole, locationsGate }: 
 }
 
 function LocationDialog({ warehouse, location, onClose, onSaved }: { warehouse: Warehouse; location: Location | null; onClose: () => void; onSaved: () => void }) {
+  const uid = useId();
   const { api } = useSession();
   const { toast } = useToast();
   const [values, setValues] = useState<LocationFormValues>(() => (location ? locationToValues(location) : newLocationValues()));
@@ -528,13 +532,13 @@ function LocationDialog({ warehouse, location, onClose, onSaved }: { warehouse: 
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Vazgeç
           </Button>
-          <Button type="submit" form="location-form" loading={saving}>
+          <Button type="submit" form={`${uid}-location-form`} loading={saving}>
             {location ? "Kaydet" : "Lokasyonu ekle"}
           </Button>
         </>
       }
     >
-      <form id="location-form" noValidate onSubmit={submit} className="flex flex-col gap-4">
+      <form id={`${uid}-location-form`} noValidate onSubmit={submit} className="flex flex-col gap-4">
         {formError ? (
           <FormAlert tone="error" title="Kaydedilemedi">
             {formError}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, useId } from "react";
 import { Archive, Pencil, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -39,6 +39,7 @@ export function VariantsSection({
   /** 412 inside a dialog: reload everything. */
   onConflict: () => void;
 }) {
+  const uid = useId();
   const [editing, setEditing] = useState<Editing | null>(null);
   const [archiving, setArchiving] = useState<Variant | null>(null);
   const productArchived = product.status === "archived";
@@ -94,9 +95,9 @@ export function VariantsSection({
   ];
 
   return (
-    <section aria-labelledby="sec-variants" className="flex flex-col gap-3">
+    <section aria-labelledby={`${uid}-sec-variants`} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="sec-variants" className="text-h3 text-fg">
+        <h2 id={`${uid}-sec-variants`} className="text-h3 text-fg">
           Varyantlar ({product.variants.length})
         </h2>
         {!readOnly && !productArchived ? (
@@ -212,7 +213,7 @@ function VariantDialog({
   };
 
   const title = original ? (readOnly ? `Varyant: ${original.sku}` : `Varyantı düzenle: ${original.sku}`) : "Varyant ekle";
-  const formId = "variant-dialog-form";
+  const formId = `${useId()}-variant-dialog-form`;
 
   return (
     <Dialog

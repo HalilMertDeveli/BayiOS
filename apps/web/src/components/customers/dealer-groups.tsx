@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { Archive, ArchiveRestore, ArrowLeft, CircleAlert, Pencil, Plus, UsersRound } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
@@ -44,6 +44,7 @@ function mutationError(error: unknown): { fields: Record<string, string>; messag
 
 /** /musteriler/gruplar (W18): dealer groups with their price list and default discount. */
 export function DealerGroups() {
+  const uid = useId();
   const { access } = useSession();
   const permissions = customerPermissions(access);
   const { state, reload, upsertGroup } = useCustomerReference();
@@ -120,9 +121,9 @@ export function DealerGroups() {
         </FormAlert>
       ) : null}
 
-      <section aria-labelledby="group-list" className="flex flex-col gap-3">
+      <section aria-labelledby={`${uid}-group-list`} className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="group-list" className="text-h3 text-fg">
+          <h2 id={`${uid}-group-list`} className="text-h3 text-fg">
             Gruplar
           </h2>
           <label className="inline-flex min-h-11 items-center gap-2 text-body text-fg">
@@ -224,6 +225,7 @@ function DealerGroupDialog({
   onClose: () => void;
   onSaved: (g: DealerGroup) => void;
 }) {
+  const uid = useId();
   const { api, access } = useSession();
   const canAssign = customerPermissions(access).assignPriceLists;
   const { toast } = useToast();
@@ -277,13 +279,13 @@ function DealerGroupDialog({
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Vazgeç
           </Button>
-          <Button type="submit" form="dealer-group-form" loading={saving}>
+          <Button type="submit" form={`${uid}-dealer-group-form`} loading={saving}>
             {group ? "Kaydet" : "Grubu ekle"}
           </Button>
         </>
       }
     >
-      <form id="dealer-group-form" noValidate onSubmit={submit} className="flex flex-col gap-4">
+      <form id={`${uid}-dealer-group-form`} noValidate onSubmit={submit} className="flex flex-col gap-4">
         {formError ? (
           <FormAlert tone="error" title="Kaydedilemedi">
             {formError}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { Gauge, PackageCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -184,6 +184,7 @@ function CriticalStockReportBody() {
 }
 
 function ThresholdForm({ value, onApply }: { value: string | null; onApply: (value: string | null) => void }) {
+  const uid = useId();
   const [text, setText] = useState(() => toDecimalInput(value));
   const [shown, setShown] = useState(value);
   const [error, setError] = useState<string | undefined>();
@@ -211,21 +212,21 @@ function ThresholdForm({ value, onApply }: { value: string | null; onApply: (val
     <form noValidate onSubmit={submit} aria-label="Kritik eşik filtresi" className="flex flex-col gap-1">
       <div className="flex items-end gap-2">
         <Input
-          id="critical-threshold"
+          id={`${uid}-critical-threshold`}
           label="Kritik eşik"
           inputMode="decimal"
           className="w-40"
           placeholder="Ürün eşiği"
           value={text}
           aria-invalid={error ? true : undefined}
-          aria-describedby="critical-threshold-help"
+          aria-describedby={`${uid}-critical-threshold-help`}
           onChange={(e) => setText(e.target.value)}
         />
         <Button type="submit" variant="secondary">
           Uygula
         </Button>
       </div>
-      <p id="critical-threshold-help" className={error ? "text-caption text-danger-fg" : "text-caption text-fg-muted"}>
+      <p id={`${uid}-critical-threshold-help`} className={error ? "text-caption text-danger-fg" : "text-caption text-fg-muted"}>
         {error ?? "Boş: her ürünün kendi minimum stoğu. Değer girerseniz tüm ürünler bu sabit eşiğe göre listelenir."}
       </p>
     </form>

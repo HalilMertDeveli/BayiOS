@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { CircleAlert, Package, Plus, Rows3, Rows4, Search, SearchX, SlidersHorizontal, Tags } from "lucide-react";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -52,6 +52,7 @@ function primaryVariant(product: Product) {
  * status, filterable custom fields), keyset paging with "Daha fazla yükle". Only one page at a time is fetched.
  */
 export function ProductList() {
+  const uid = useId();
   const { api, access } = useSession();
   const permissions = catalogPermissions(access);
   // Filters change through navigate / setFilter only: they build on the URL just requested, not the stale one (#152).
@@ -284,9 +285,9 @@ export function ProductList() {
         ) : null}
       </section>
 
-      <section aria-labelledby="product-results" className="flex flex-col gap-3">
+      <section aria-labelledby={`${uid}-product-results`} className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="product-results" className="text-h3 text-fg">
+          <h2 id={`${uid}-product-results`} className="text-h3 text-fg">
             Ürün listesi
           </h2>
           <div className="flex items-center gap-3">
@@ -427,6 +428,7 @@ function AttributeFilters({
   applied: Record<string, string>;
   onApply: (attributes: Record<string, string>) => void;
 }) {
+  const uid = useId();
   const appliedCount = Object.keys(applied).length;
   const [open, setOpen] = useState(appliedCount > 0);
   const [draft, setDraft] = useState<Record<string, string>>(applied);
@@ -452,7 +454,7 @@ function AttributeFilters({
           variant="secondary"
           size="sm"
           aria-expanded={open}
-          aria-controls="attribute-filters"
+          aria-controls={open ? `${uid}-attribute-filters` : undefined}
           icon={<SlidersHorizontal className="size-4" />}
           onClick={() => setOpen(!open)}
         >
@@ -460,7 +462,7 @@ function AttributeFilters({
         </Button>
       </div>
       {open ? (
-        <form id="attribute-filters" onSubmit={submit} className="flex flex-col gap-3 rounded-md border border-line p-3">
+        <form id={`${uid}-attribute-filters`} onSubmit={submit} className="flex flex-col gap-3 rounded-md border border-line p-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {fields.map((field) => {
               const key = `attr.${field.key}`;

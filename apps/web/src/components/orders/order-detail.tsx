@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useId } from "react";
 import Link from "next/link";
 import { ArrowLeft, CircleAlert, Lock, RotateCcw } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
@@ -166,6 +166,7 @@ function OrderView({
   onLoaded: (loaded: LoadedOrder) => void;
   onReload: () => void;
 }) {
+  const uid = useId();
   const { api, state, access } = useSession();
   const { toast } = useToast();
   const { order } = loaded.detail;
@@ -341,8 +342,8 @@ function OrderView({
         </div>
       ) : null}
 
-      <section aria-labelledby="order-summary" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
-        <h2 id="order-summary" className="sr-only">
+      <section aria-labelledby={`${uid}-order-summary`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+        <h2 id={`${uid}-order-summary`} className="sr-only">
           Sipariş bilgileri
         </h2>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-body sm:grid-cols-2 lg:grid-cols-3">
@@ -372,8 +373,8 @@ function OrderView({
       ) : null}
 
       {actions.length > 0 ? (
-        <section aria-labelledby="order-actions" className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
-          <h2 id="order-actions" className="text-h3 text-fg">
+        <section aria-labelledby={`${uid}-order-actions`} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+          <h2 id={`${uid}-order-actions`} className="text-h3 text-fg">
             İşlemler
           </h2>
           <div className="flex flex-wrap gap-2">
@@ -420,8 +421,8 @@ function OrderView({
           onReload={onReload}
         />
       ) : (
-        <section aria-labelledby="order-lines" className="flex flex-col gap-3">
-          <h2 id="order-lines" className="text-h3 text-fg">
+        <section aria-labelledby={`${uid}-order-lines`} className="flex flex-col gap-3">
+          <h2 id={`${uid}-order-lines`} className="text-h3 text-fg">
             Satırlar
           </h2>
           {order.status === "draft" && permissions.submit && !editable ? (

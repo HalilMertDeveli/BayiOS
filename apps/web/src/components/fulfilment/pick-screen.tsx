@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useId } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCheck, CircleAlert, Lock, MapPin, Minus, PackageCheck, Plus, RotateCcw, TriangleAlert } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
@@ -151,6 +151,7 @@ function PickView({
   onLoaded: (loaded: LoadedTask) => void;
   onReload: () => void;
 }) {
+  const uid = useId();
   const { api, state } = useSession();
   const { toast } = useToast();
   const myId = state.status === "ready" ? state.user.id : null;
@@ -401,8 +402,8 @@ function PickView({
       ) : null}
 
       {canWork && current ? (
-        <section aria-labelledby="current-line" className="flex flex-col gap-4 rounded-lg border-2 border-brand bg-card p-4 shadow-e2">
-          <h2 id="current-line" className="sr-only">
+        <section aria-labelledby={`${uid}-current-line`} className="flex flex-col gap-4 rounded-lg border-2 border-brand bg-card p-4 shadow-e2">
+          <h2 id={`${uid}-current-line`} className="sr-only">
             Şu anki satır
           </h2>
           {current.locationCode ? (
@@ -437,7 +438,7 @@ function PickView({
       {canWork ? (
         <section aria-label="Okutma" className="flex flex-col gap-3">
           <ScanField
-            id="pick-scan"
+            id={`${uid}-pick-scan`}
             label={nextStep === "location" ? "Raf barkodu" : "Ürün barkodu veya SKU"}
             hint="Okuyucu ile okutun veya yazıp Enter'a basın. Aynı ürünü tekrar okutmak 1 adet ekler."
             inputRef={inputRef}
@@ -445,10 +446,10 @@ function PickView({
           />
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col gap-1">
-              <span id="step-label" className="text-body font-medium text-fg">
+              <span id={`${uid}-step-label`} className="text-body font-medium text-fg">
                 Okutma başına adet
               </span>
-              <div role="group" aria-labelledby="step-label" className="flex items-center gap-2">
+              <div role="group" aria-labelledby={`${uid}-step-label`} className="flex items-center gap-2">
                 <Button size="lg" variant="secondary" className="min-h-12 min-w-12 px-0" aria-label="Adet azalt" disabled={step <= 1} onClick={() => (updateStep(step - 1, current), focusInput())}>
                   <Minus className="size-5" aria-hidden="true" />
                 </Button>
@@ -493,8 +494,8 @@ function PickView({
         </section>
       ) : null}
 
-      <section aria-labelledby="pick-lines" className="flex flex-col gap-2">
-        <h2 id="pick-lines" className="text-h3 text-fg">
+      <section aria-labelledby={`${uid}-pick-lines`} className="flex flex-col gap-2">
+        <h2 id={`${uid}-pick-lines`} className="text-h3 text-fg">
           Toplama listesi (raf sırası)
         </h2>
         <ol className="flex flex-col gap-2">

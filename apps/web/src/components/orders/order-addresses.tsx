@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { addressLines, isMaskedAddress, type OrderAddress } from "@/lib/orders/addresses";
 
 /**
@@ -14,10 +15,11 @@ export function OrderAddresses({
   billing: OrderAddress | null;
   snapshot: boolean;
 }) {
+  const uid = useId();
   return (
-    <section aria-labelledby="order-addresses" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <section aria-labelledby={`${uid}-order-addresses`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
       <div className="flex flex-col gap-0.5">
-        <h2 id="order-addresses" className="text-h3 text-fg">
+        <h2 id={`${uid}-order-addresses`} className="text-h3 text-fg">
           Adresler
         </h2>
         <p className="text-caption text-fg-muted">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useId } from "react";
 import Link from "next/link";
 import { CircleAlert, FileUp, Lock, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -76,6 +76,7 @@ function useMemberNames(enabled: boolean) {
 
 /** /ice-aktarma (W06): import history (newest first, keyset "Daha fazla") and the entry to the wizard. */
 export function ImportHistory() {
+  const uid = useId();
   const { api, access, state: session } = useSession();
   const permissions = importPermissions(access);
   const canStartAny = runnableTypes(permissions).length > 0;
@@ -165,8 +166,8 @@ export function ImportHistory() {
       {!permissions.run ? (
         <ImportsLocked permissions={permissions} />
       ) : (
-        <section aria-labelledby="import-history" className="flex flex-col gap-3">
-          <h2 id="import-history" className="text-h3 text-fg">
+        <section aria-labelledby={`${uid}-import-history`} className="flex flex-col gap-3">
+          <h2 id={`${uid}-import-history`} className="text-h3 text-fg">
             İçe aktarma geçmişi
           </h2>
           {state.status === "error" ? (

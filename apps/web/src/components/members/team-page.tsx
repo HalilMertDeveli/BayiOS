@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useId } from "react";
 import Link from "next/link";
 import { Ban, CircleAlert, Crown, Lock, MailPlus, RefreshCw, RotateCcw, Trash2, UserCog, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +53,7 @@ const STATUS_FILTERS = [
  * GET /me permissions and the role hierarchy (lib/members/permissions.ts); the API checks every call again.
  */
 export function TeamPage() {
+  const uid = useId();
   const { api, access, state, reload } = useSession();
   const { toast } = useToast();
   const userId = state.status === "ready" ? state.user.id : null;
@@ -275,8 +276,8 @@ export function TeamPage() {
       />
 
       {seats ? (
-        <section aria-labelledby="seats" className="flex flex-col gap-1 rounded-lg border border-line bg-card p-4 shadow-e1">
-          <h2 id="seats" className="text-body font-semibold text-fg">
+        <section aria-labelledby={`${uid}-seats`} className="flex flex-col gap-1 rounded-lg border border-line bg-card p-4 shadow-e1">
+          <h2 id={`${uid}-seats`} className="text-body font-semibold text-fg">
             Kullanıcı sayısı
           </h2>
           <p className="text-body text-fg">
@@ -303,9 +304,9 @@ export function TeamPage() {
         </section>
       ) : null}
 
-      <section aria-labelledby="members" className="flex flex-col gap-3">
+      <section aria-labelledby={`${uid}-members`} className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <h2 id="members" className="text-h3 text-fg">
+          <h2 id={`${uid}-members`} className="text-h3 text-fg">
             Üyeler
           </h2>
           <div className="grid grid-cols-2 gap-2 sm:flex">
@@ -355,9 +356,9 @@ export function TeamPage() {
         ) : null}
       </section>
 
-      <section aria-labelledby="invitations" className="flex flex-col gap-3">
+      <section aria-labelledby={`${uid}-invitations`} className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">
-          <h2 id="invitations" className="text-h3 text-fg">
+          <h2 id={`${uid}-invitations`} className="text-h3 text-fg">
             Bekleyen davetler
           </h2>
           <p className="text-caption text-fg-muted">Bağlantılar güvenlik için yeniden gösterilmez. Kaybolan bağlantı için “Yeni bağlantı” oluşturun; eskisi geçersiz olur.</p>

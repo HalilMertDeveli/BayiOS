@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, useId } from "react";
 import { Archive, Pencil, Plus, Ruler } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -144,6 +144,7 @@ export function UnitSettings() {
 const KNOWN = new Set(["code", "name", "allowsFraction"]);
 
 function UnitDialog({ unit, onClose, onSaved }: { unit: Unit | null; onClose: () => void; onSaved: () => void }) {
+  const uid = useId();
   const { api } = useSession();
   const { toast } = useToast();
   const [values, setValues] = useState<UnitFormValues>(() => ({ code: unit?.code ?? "", name: unit?.name ?? "", allowsFraction: unit?.allowsFraction ?? false }));
@@ -183,7 +184,7 @@ function UnitDialog({ unit, onClose, onSaved }: { unit: Unit | null; onClose: ()
     }
   };
 
-  const formId = "unit-form";
+  const formId = `${useId()}-unit-form`;
   return (
     <Dialog
       open
@@ -211,7 +212,7 @@ function UnitDialog({ unit, onClose, onSaved }: { unit: Unit | null; onClose: ()
         ) : null}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
-            id="unit-code"
+            id={`${uid}-unit-code`}
             label="Kod"
             required
             readOnly={!!unit}
@@ -224,7 +225,7 @@ function UnitDialog({ unit, onClose, onSaved }: { unit: Unit | null; onClose: ()
             spellCheck={false}
           />
           <Input
-            id="unit-name"
+            id={`${uid}-unit-name`}
             label="Birim adı"
             required
             maxLength={UNIT_NAME_MAX}

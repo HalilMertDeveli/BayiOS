@@ -21,6 +21,11 @@ API_PORT="${LOAD_API_PORT:-5390}"
 AUTH_PORT="${LOAD_AUTH_PORT:-5391}"
 # Npgsql pool of the API (default 100). Kept explicit so the report states what was measured.
 DB_POOL="${LOAD_DB_POOL:-100}"
+# General API rate limit (threat-model §6.5: 300 reads / 60 writes per user+tenant and minute). The mix drives a whole
+# tenant's traffic through a handful of users, so the limiter stays on but with a budget the scenarios never reach.
+# LOAD_RATE_READS=300 LOAD_RATE_WRITES=60 runs the stack with the production limits (docs/testing/load-2026-11.md §3.2).
+RATE_READS="${LOAD_RATE_READS:-1000000}"
+RATE_WRITES="${LOAD_RATE_WRITES:-1000000}"
 
 log() { printf '\n==> [%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 fail() { printf '::error::%s\n' "$*" >&2; exit 1; }
@@ -105,6 +110,8 @@ up() {
   Auth__Authority="http://127.0.0.1:${AUTH_PORT}/auth/v1" \
   Auth__Audience=authenticated \
   Auth__RequireHttpsMetadata=false \
+  RateLimiting__ReadsPerMinute="${RATE_READS}" \
+  RateLimiting__WritesPerMinute="${RATE_WRITES}" \
     start_bg api "${STATE_DIR}/api.log" dotnet "${out}/BayiOS.Api.dll"
   wait_http "http://127.0.0.1:${API_PORT}/health/ready" 60 || { cat "${STATE_DIR}/api.log"; fail "API did not become ready"; }
   log "Load stack ready: API http://127.0.0.1:${API_PORT} · tokens ${STATE_DIR}/tokens.json · logs ${STATE_DIR}/api.log"

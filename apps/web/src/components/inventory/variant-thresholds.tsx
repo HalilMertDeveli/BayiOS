@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, useId } from "react";
 import { CircleAlert, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,7 @@ export function VariantThresholds({
   /** Called after a successful save (the balances' "Kritik" flags may change). */
   onSaved: () => void;
 }) {
+  const uid = useId();
   const { api } = useSession();
   const { toast } = useToast();
   const [load, setLoad] = useState<Load>({ status: "loading" });
@@ -109,9 +110,9 @@ export function VariantThresholds({
   };
 
   return (
-    <section aria-labelledby="variant-thresholds" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <section aria-labelledby={`${uid}-variant-thresholds`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
       <div className="flex flex-col gap-1">
-        <h2 id="variant-thresholds" className="flex items-center gap-2 text-h3 text-fg">
+        <h2 id={`${uid}-variant-thresholds`} className="flex items-center gap-2 text-h3 text-fg">
           <Gauge className="size-5" aria-hidden="true" />
           Minimum stok
         </h2>
@@ -145,7 +146,7 @@ export function VariantThresholds({
               return (
                 <Input
                   key={key}
-                  id={`threshold-${key}`}
+                  id={`${uid}-threshold-${key}`}
                   label={r.label}
                   hint={r.hint}
                   inputMode={allowsFraction ? "decimal" : "numeric"}
