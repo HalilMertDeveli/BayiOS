@@ -21,7 +21,8 @@ import { logApiErrors } from "./support/real-stack";
 /**
  * PILOT DEMO #57 — "Demo LED Elektronik" on the REAL stack (nothing mocked). A small version of the synthetic demo is
  * seeded through the public API as its owner, then: the supplier catalog (generated XLSX) is bulk-imported through
- * the Imports API (the web has no import screen yet — /ice-aktarma is a placeholder) and shows up in the catalog →
+ * the Imports API (the same helper the demo seeder uses; the web wizard /ice-aktarma (#94) is covered on the real
+ * stack by real-stack-imports.spec.ts) and shows up in the catalog →
  * a quantity tier (20+) is added on the default price list in the UI → goods receipt by barcode onto shelves → an
  * order of 25 gets the tier price → picking with a damaged-goods shortage → partial shipment → short-close of the rest
  * on the order detail ("Kalanı kapat") → stock and reservations from the ledger → top-products report exported as CSV and XLSX.

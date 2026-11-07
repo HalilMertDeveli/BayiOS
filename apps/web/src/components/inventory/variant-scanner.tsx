@@ -44,36 +44,61 @@ export function VariantScanner({ label, hint, onPick, pickedText, error, inputRe
   const localRef = useRef<HTMLInputElement | null>(null);
   const ref = inputRef ?? localRef;
 
-  const pick = (variant: VariantRef) => {
+  /** `code` = what was looked up: the field is cleared only if it still holds it (not a code typed meanwhile). */
+  const pick = (variant: VariantRef, code?: string) => {
     onPick(variant);
-    setTerm("");
+    setTerm((current) => (code === undefined || current.trim() === code ? "" : current));
     setStatus({ kind: "added", text: pickedText ? pickedText(variant) : `${variant.sku} seçildi.` });
     ref.current?.focus();
   };
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    const code = term.trim();
-    if (!code || busy.current) return;
-    busy.current = true;
-    setStatus({ kind: "searching" });
+  /** Resolves one code; picks it, or returns what to show instead (no match, several matches, error). */
+  const lookup = async (code: string): Promise<Status | null> => {
     try {
       const exact = await findVariantByCode(api, code);
       if (exact) {
-        pick({ id: exact.id, sku: exact.sku, name: exact.name ?? null, barcode: exact.barcode ?? null });
-        return;
+        pick({ id: exact.id, sku: exact.sku, name: exact.name ?? null, barcode: exact.barcode ?? null }, code);
+        return null;
       }
       const found = await searchVariants(api, code, { limit: 10 });
       const items = found
         .filter((v) => v.status !== "archived")
         .map((v) => ({ id: v.id, sku: v.sku, name: v.name ?? null, barcode: v.barcode ?? null }));
-      if (items.length === 1) pick(items[0]);
-      else setStatus(items.length === 0 ? { kind: "none", term: code } : { kind: "choices", term: code, items });
+      if (items.length === 1) {
+        pick(items[0], code);
+        return null;
+      }
+      return items.length === 0 ? { kind: "none", term: code } : { kind: "choices", term: code, items };
     } catch (err) {
-      setStatus({ kind: "error", message: inventoryErrorMessage(err) });
+      return { kind: "error", message: inventoryErrorMessage(err) };
+    }
+  };
+
+  // A scanner can send the next code while the previous lookup is still running. It used to be dropped silently (a
+  // missing receipt line; #136, seen as a flaky inventory test). Now it is queued (the field is cleared so the next
+  // scan does not append to it) and resolved in order; the first problem (no/several matches, error) stays shown.
+  const queue = useRef<string[]>([]);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const code = term.trim();
+    if (!code) return;
+    if (busy.current) {
+      queue.current.push(code);
+      setTerm("");
+      return;
+    }
+    busy.current = true;
+    let problem: Status | null = null;
+    try {
+      for (let next: string | undefined = code; next !== undefined; next = queue.current.shift()) {
+        setStatus({ kind: "searching" });
+        const result = await lookup(next);
+        problem ??= result;
+      }
     } finally {
       busy.current = false;
     }
+    if (problem) setStatus(problem);
   };
 
   return (
@@ -140,7 +165,7 @@ export function VariantScanner({ label, hint, onPick, pickedText, error, inputRe
             <li key={v.id}>
               <button
                 type="button"
-                onClick={() => pick(v)}
+                onClick={() => pick(v, status.term)}
                 className="flex min-h-12 w-full flex-col items-start justify-center rounded-md border border-line-strong bg-card px-4 py-2 text-left hover:bg-sunken"
               >
                 <span className="font-mono text-body text-fg">{v.sku}</span>

@@ -111,6 +111,8 @@ benzersiz kiracısıyla API'den kurar, sonra hikâyeyi web arayüzünde yürür.
    (`GET /members` var, davet/üyelik API'si yok). Demolar tek sahip kullanıcıyla çalışır; sahibin süpervizör yetkisiyle
    toplama görevi kendine atanır. Davet API'si gelince seeder her role bir sentetik kullanıcı ekleyecek şekilde
    genişletilmeli.
-3. **İçe aktarma ekranı yok:** `/ice-aktarma` yer tutucu; toplu içe aktarma yalnızca API ile yapılabiliyor.
+3. ~~İçe aktarma ekranı yok~~ — #94 ile `/ice-aktarma` sihirbazı ve geçmişi var (gerçek yığın:
+   `real-stack-imports.spec.ts`). Seeder ve LED demo senaryosu kataloğu yine Imports API ile yükler (aynı yardımcı,
+   `demo seed (twice)` ile ortak).
 4. ~~Kalanı kapatma için web eylemi yok~~ — #129 ile sipariş detayında "Kalanı kapat" var; LED senaryosu bu adımı
    arayüzden yapar. Açık kalan: kapatılan kalan sonrası `fulfillmentStatus` değeri (yukarıda, #133).
