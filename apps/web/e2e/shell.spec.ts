@@ -24,8 +24,10 @@ test.describe("shell — desktop", () => {
     // #129: /pano is the real overview now (dashboard.spec.ts covers its tiles per role).
     await expect(page.getByRole("heading", { level: 2, name: "Onay bekleyen siparişler" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Menüyü aç" })).toBeHidden();
+    // #94: /ice-aktarma is the import history + wizard now (imports.spec.ts covers it).
     await page.goto("/ice-aktarma");
-    await expect(page.getByRole("heading", { name: "Bu modül henüz geliştiriliyor" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "İçe aktarma" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "İçe aktarma geçmişi" })).toBeVisible();
   });
 
   test("navigates between modules and marks the active link", async ({ page }) => {
