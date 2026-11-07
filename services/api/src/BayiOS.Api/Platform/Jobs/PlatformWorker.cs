@@ -91,7 +91,7 @@ internal sealed partial class PlatformWorker(
 
         LogStarted(logger, processor.WorkerId);
         return Task.WhenAll(
-            PollAsync("jobs", processor.RunOnceAsync, stoppingToken),
+            PollAsync("jobs", processor.RunOnceAsync, stoppingToken, services.GetService<JobWakeup>()),
             PollAsync("outbox", DispatchAndScheduleAsync, stoppingToken));
     }
 
@@ -114,7 +114,11 @@ internal sealed partial class PlatformWorker(
         return await _dispatcher.RunOnceAsync(cancellationToken);
     }
 
-    private async Task PollAsync(string loop, Func<CancellationToken, Task<int>> runOnce, CancellationToken stoppingToken)
+    /// <param name="wakeup">
+    /// Jobs loop only: a job enqueued by this process (e.g. an accepted AI parse) ends the idle wait at once, so the
+    /// idle backoff never delays a user-visible job; jobs of other instances are still found by polling.
+    /// </param>
+    private async Task PollAsync(string loop, Func<CancellationToken, Task<int>> runOnce, CancellationToken stoppingToken, JobWakeup? wakeup = null)
     {
         var idle = _options.PollInterval;
         while (!stoppingToken.IsCancellationRequested)
@@ -141,7 +145,14 @@ internal sealed partial class PlatformWorker(
 
             try
             {
-                await Task.Delay(idle, clock, stoppingToken);
+                if (wakeup is null)
+                {
+                    await Task.Delay(idle, clock, stoppingToken);
+                }
+                else if (await wakeup.WaitAsync(idle, clock, stoppingToken))
+                {
+                    idle = _options.PollInterval;
+                }
             }
             catch (OperationCanceledException)
             {

@@ -29,6 +29,10 @@ internal sealed class IntegrationsDbContext : DbContext, ITenantScopedDbContext
 
     public DbSet<AiUsageHour> Usage => Set<AiUsageHour>();
 
+    public DbSet<AiTenantSettings> Settings => Set<AiTenantSettings>();
+
+    public DbSet<LearnedAlias> Aliases => Set<LearnedAlias>();
+
     public Guid? CurrentTenantId => _requestContext.TenantId;
 
     public static void Configure(DbContextOptionsBuilder builder, DbConnection connection)
@@ -71,7 +75,15 @@ internal sealed class IntegrationsDbContext : DbContext, ITenantScopedDbContext
             {
                 t.HasCheckConstraint("ck_ai_parse_requests_status", $"status IN ({Quoted(OrderParseStatuses.All)})");
                 t.HasCheckConstraint("ck_ai_parse_requests_channel", $"channel IN ({Quoted(OrderParseChannels.All)})");
-                t.HasCheckConstraint("ck_ai_parse_requests_parser", $"parser IN ({Quoted(ParserKinds.All)})");
+                t.HasCheckConstraint("ck_ai_parse_requests_parser", $"parser IS NULL OR parser IN ({Quoted(ParserKinds.All)})");
+
+                // Parsed (needs_review, approved, rejected) ⇔ the job recorded which parser and prompt it used.
+                t.HasCheckConstraint(
+                    "ck_ai_parse_requests_parsed",
+                    "(status IN ('pending', 'failed')) = (parser IS NULL) AND (parser IS NULL) = (prompt_version IS NULL)");
+                t.HasCheckConstraint(
+                    "ck_ai_parse_requests_failure",
+                    $"(status = 'failed') = (failure_code IS NOT NULL) AND (failure_code IS NULL OR failure_code IN ({Quoted(ParseFailureCodes.All)}))");
                 t.HasCheckConstraint(
                     "ck_ai_parse_requests_fallback_reason", $"fallback_reason IS NULL OR fallback_reason IN ({Quoted(FallbackReasons.All)})");
                 t.HasCheckConstraint("ck_ai_parse_requests_text_sha256", "text_sha256 ~ '^[0-9a-f]{64}$'");
@@ -95,8 +107,6 @@ internal sealed class IntegrationsDbContext : DbContext, ITenantScopedDbContext
             request.Property(r => r.Channel).IsRequired();
             request.Property(r => r.TextSha256).IsRequired().HasColumnType("char(64)");
             request.Property(r => r.Status).IsRequired();
-            request.Property(r => r.Parser).IsRequired();
-            request.Property(r => r.PromptVersion).IsRequired();
             request.Property(r => r.ParsedPayload).HasColumnType("jsonb");
             request.Property(r => r.Review).HasColumnType("jsonb");
             request.Property(r => r.Warnings).IsRequired().HasColumnType("jsonb");
@@ -128,6 +138,33 @@ internal sealed class IntegrationsDbContext : DbContext, ITenantScopedDbContext
             usage.Property(u => u.CacheReadTokens).HasDefaultValue(0L);
             usage.Property(u => u.CacheWriteTokens).HasDefaultValue(0L);
             usage.HasQueryFilter(u => u.TenantId == CurrentTenantId);
+        });
+
+        modelBuilder.Entity<AiTenantSettings>(settings =>
+        {
+            settings.ToTable("ai_settings");
+            settings.HasKey(s => s.TenantId);
+            settings.Property(s => s.TenantId).ValueGeneratedNever();
+            settings.Property(s => s.RowVersion).IsConcurrencyToken();
+            settings.HasQueryFilter(s => s.TenantId == CurrentTenantId);
+        });
+
+        modelBuilder.Entity<LearnedAlias>(alias =>
+        {
+            alias.ToTable("learned_aliases", t =>
+            {
+                t.HasCheckConstraint("ck_learned_aliases_phrase", "length(phrase) BETWEEN 1 AND 200 AND phrase = btrim(phrase)");
+                t.HasCheckConstraint("ck_learned_aliases_confirmations", "confirmations >= 1");
+            });
+            alias.HasKey(a => a.Id);
+            alias.Property(a => a.Id).ValueGeneratedNever();
+            alias.HasAlternateKey(a => new { a.TenantId, a.Id });
+            alias.Property(a => a.Phrase).IsRequired();
+
+            // One decision per phrase and scope (a customer, or the whole tenant: NULL counts as one scope).
+            alias.HasIndex(a => new { a.TenantId, a.CustomerId, a.Phrase }).IsUnique().AreNullsDistinct(false);
+            alias.HasIndex(a => new { a.TenantId, a.VariantId });
+            alias.HasQueryFilter(a => a.TenantId == CurrentTenantId);
         });
 
     }

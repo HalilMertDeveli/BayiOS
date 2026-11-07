@@ -72,4 +72,16 @@ public sealed class AiOptions
     /// <summary>Most active variants the matcher loads for fuzzy matching (exact codes are always looked up in full).</summary>
     [Range(100, 200000)]
     public int MatchCatalogLimit { get; set; } = 25000;
+
+    /// <summary>
+    /// A parse still pending this long after submit is reported (and, when its job finally runs, recorded) as failed
+    /// with <c>ai.parse_timed_out</c>. Longer than the job lease (5 min) plus retries, so a crashed worker's job can
+    /// still be picked up again.
+    /// </summary>
+    [Range(60, 86400)]
+    public int ProcessingDeadlineSeconds { get; set; } = 900;
+
+    /// <summary>Suggested first polling delay returned with 202 and pending status responses (clients back off from it).</summary>
+    [Range(100, 10000)]
+    public int PollAfterMs { get; set; } = 750;
 }

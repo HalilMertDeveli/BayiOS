@@ -23,6 +23,35 @@ namespace BayiOS.Modules.Integrations.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("BayiOS.Modules.Integrations.Domain.AiTenantSettings", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<bool>("AiParsingEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("ai_parsing_enabled");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("row_version");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("TenantId")
+                        .HasName("pk_ai_settings");
+
+                    b.ToTable("ai_settings", "integrations");
+                });
+
             modelBuilder.Entity("BayiOS.Modules.Integrations.Domain.AiUsageHour", b =>
                 {
                     b.Property<Guid>("TenantId")
@@ -90,6 +119,76 @@ namespace BayiOS.Modules.Integrations.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BayiOS.Modules.Integrations.Domain.LearnedAlias", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Confirmations")
+                        .HasColumnType("integer")
+                        .HasColumnName("confirmations");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid?>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<Guid?>("LastParseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("last_parse_id");
+
+                    b.Property<string>("Phrase")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("phrase");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("VariantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("variant_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_learned_aliases");
+
+                    b.HasAlternateKey("TenantId", "Id")
+                        .HasName("ak_learned_aliases_tenant_id_id");
+
+                    b.HasIndex("TenantId", "VariantId")
+                        .HasDatabaseName("ix_learned_aliases_tenant_id_variant_id");
+
+                    b.HasIndex("TenantId", "CustomerId", "Phrase")
+                        .IsUnique()
+                        .HasDatabaseName("ix_learned_aliases_tenant_id_customer_id_phrase");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("TenantId", "CustomerId", "Phrase"), false);
+
+                    b.ToTable("learned_aliases", "integrations", t =>
+                        {
+                            t.HasCheckConstraint("ck_learned_aliases_confirmations", "confirmations >= 1");
+
+                            t.HasCheckConstraint("ck_learned_aliases_phrase", "length(phrase) BETWEEN 1 AND 200 AND phrase = btrim(phrase)");
+                        });
+                });
+
             modelBuilder.Entity("BayiOS.Modules.Integrations.Domain.OrderParseRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -113,6 +212,10 @@ namespace BayiOS.Modules.Integrations.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("channel");
 
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -128,6 +231,10 @@ namespace BayiOS.Modules.Integrations.Infrastructure.Persistence.Migrations
                     b.Property<int>("DurationMs")
                         .HasColumnType("integer")
                         .HasColumnName("duration_ms");
+
+                    b.Property<string>("FailureCode")
+                        .HasColumnType("text")
+                        .HasColumnName("failure_code");
 
                     b.Property<string>("FallbackReason")
                         .HasColumnType("text")
@@ -167,12 +274,10 @@ namespace BayiOS.Modules.Integrations.Infrastructure.Persistence.Migrations
                         .HasColumnName("parsed_payload");
 
                     b.Property<string>("Parser")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("parser");
 
                     b.Property<string>("PromptVersion")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("prompt_version");
 
@@ -231,6 +336,10 @@ namespace BayiOS.Modules.Integrations.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
 
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
                     b.Property<string>("Warnings")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -265,15 +374,19 @@ namespace BayiOS.Modules.Integrations.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_ai_parse_requests_counters", "line_count >= 0 AND matched_count >= 0 AND ambiguous_count >= 0 AND unmatched_count >= 0 AND matched_count + ambiguous_count + unmatched_count = line_count AND input_tokens >= 0 AND output_tokens >= 0 AND cache_read_tokens >= 0 AND cache_write_tokens >= 0 AND duration_ms >= 0");
 
+                            t.HasCheckConstraint("ck_ai_parse_requests_failure", "(status = 'failed') = (failure_code IS NOT NULL) AND (failure_code IS NULL OR failure_code IN ('ai.parse_failed', 'ai.parse_timed_out', 'ai.opt_in_revoked'))");
+
                             t.HasCheckConstraint("ck_ai_parse_requests_fallback_reason", "fallback_reason IS NULL OR fallback_reason IN ('disabled', 'quota_exceeded', 'provider_error', 'timeout', 'refused', 'truncated', 'invalid_output')");
 
                             t.HasCheckConstraint("ck_ai_parse_requests_order", "(status = 'approved') = (order_id IS NOT NULL)");
 
-                            t.HasCheckConstraint("ck_ai_parse_requests_parser", "parser IN ('ai', 'rules')");
+                            t.HasCheckConstraint("ck_ai_parse_requests_parsed", "(status IN ('pending', 'failed')) = (parser IS NULL) AND (parser IS NULL) = (prompt_version IS NULL)");
+
+                            t.HasCheckConstraint("ck_ai_parse_requests_parser", "parser IS NULL OR parser IN ('ai', 'rules')");
 
                             t.HasCheckConstraint("ck_ai_parse_requests_purged", "text_purged_at IS NULL OR (raw_text IS NULL AND parsed_payload IS NULL AND review IS NULL)");
 
-                            t.HasCheckConstraint("ck_ai_parse_requests_status", "status IN ('needs_review', 'approved', 'rejected')");
+                            t.HasCheckConstraint("ck_ai_parse_requests_status", "status IN ('pending', 'failed', 'needs_review', 'approved', 'rejected')");
 
                             t.HasCheckConstraint("ck_ai_parse_requests_text_sha256", "text_sha256 ~ '^[0-9a-f]{64}$'");
                         });

@@ -80,6 +80,52 @@ public static class OrderParseReview
         return new OrderReview(lines, [.. fragments.Distinct(StringComparer.Ordinal)], [.. warnings]);
     }
 
+    /// <summary>
+    /// Where <paramref name="fragment"/> occurs in <paramref name="text"/>, compared like the grounding check
+    /// (case/Turkish-letter folding, whitespace ignored): start offset and length in <paramref name="text"/> (UTF-16
+    /// code units), searching from <paramref name="from"/> first and then from the start; null when not found.
+    /// Folding maps one character to one character, so the offsets are exact positions in the original text.
+    /// </summary>
+    public static (int Start, int Length)? Locate(string text, string fragment, int from = 0)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(fragment);
+        var needle = Compact(fragment);
+        if (needle.Length == 0)
+        {
+            return null;
+        }
+
+        var folded = TurkishText.Fold(text);
+        var positions = new List<int>(text.Length);
+        var haystack = new System.Text.StringBuilder(text.Length);
+        for (var i = 0; i < folded.Length; i++)
+        {
+            if (!char.IsWhiteSpace(folded[i]))
+            {
+                positions.Add(i);
+                haystack.Append(folded[i]);
+            }
+        }
+
+        var compact = haystack.ToString();
+        var start = positions.FindIndex(p => p >= Math.Clamp(from, 0, text.Length));
+        var found = start < 0 ? -1 : compact.IndexOf(needle, start, StringComparison.Ordinal);
+        if (found < 0)
+        {
+            found = compact.IndexOf(needle, StringComparison.Ordinal);
+        }
+
+        if (found < 0)
+        {
+            return null;
+        }
+
+        var first = positions[found];
+        var last = positions[found + needle.Length - 1];
+        return (first, last - first + 1);
+    }
+
     /// <summary>Folded text with all whitespace removed (spans are compared regardless of spacing and case).</summary>
     public static string Compact(string text) =>
         new([.. TurkishText.Fold(text).Where(c => !char.IsWhiteSpace(c))]);

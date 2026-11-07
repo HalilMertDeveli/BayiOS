@@ -29,8 +29,11 @@ internal static class PlatformRuntime
                 o => o.SucceededRetention >= TimeSpan.FromHours(1) && o.DeadRetention >= TimeSpan.FromHours(1) && o.OutboxRetention >= TimeSpan.FromHours(1),
                 "Jobs retention periods must be at least 1 hour.");
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<JobsOptions>>().Value);
+        services.AddSingleton<JobWakeup>();
         services.AddScoped<IBackgroundJobs, BackgroundJobs>();
         services.AddScoped<IOutbox, Outbox>();
+        services.AddScoped<JobTransactions>();
+        services.AddScoped<IJobTransactions>(sp => sp.GetRequiredService<JobTransactions>());
         services.AddSingleton<JobStore>();
         services.AddSingleton(sp => JobHandlerRegistry.FromRegistrations(
             sp.GetServices<JobHandlerRegistration>(), sp.GetServices<OutboxHandlerRegistration>()));

@@ -15587,8 +15587,8 @@
         "tags": [
           "AI assistant"
         ],
-        "summary": "WhatsApp mesaj\u0131n\u0131 ayr\u0131\u015Ft\u0131r\u0131r ve tenant katalo\u011Fuyla e\u015Fle\u015Ftirir; inceleme y\u00FCk\u00FCn\u00FC d\u00F6ner (fiyat/stok i\u00E7ermez)",
-        "description": "The text is masked (phone numbers, e-mail addresses) and parsed by the AI parser when it is enabled, configured and within the tenant\u0027s daily quota; otherwise \u2014 and on any provider error, timeout, refusal or invalid output \u2014 by the deterministic rules parser (fallbackReason \u002B warnings say which and why). Lines are matched only against the tenant\u0027s own catalog: matched lines carry one proposal, ambiguous lines up to 5 candidates and no proposal, unmatched lines none. 429 \u0060ai.rate_limited\u0060 (with Retry-After) when the hourly parse limit is reached. Needs the AI assistant add-on (403 \u0060entitlement.required\u0060, feature \u0060ai_order_parsing\u0060); 403 \u0060entitlement.limit_exceeded\u0060 when the add-on\u0027s monthly parse quota (\u0060ai_parses_per_month\u0060) is used up. Reviewing, approving and rejecting stored parses stay open without the add-on.",
+        "summary": "WhatsApp mesaj\u0131n\u0131 ayr\u0131\u015Ft\u0131rma kuyru\u011Funa al\u0131r (202); sonu\u00E7 durum ucundan izlenir (fiyat/stok i\u00E7ermez)",
+        "description": "Accepts the message and returns 202 with the parse id and \u0060Location\u0060 = the status URL; the parse runs in a background job (ADR 0010 \u00A72.1): poll \u0060GET /ai/order-parses/{id}/status\u0060 with backoff until \u0060state\u0060 is \u0060succeeded\u0060 (then read the review) or \u0060failed\u0060. The text is masked (phone numbers, e-mail addresses, person names in context) before it is stored, and parsed by the AI parser when it is enabled, configured and within the tenant\u0027s daily quota; otherwise \u2014 and on any provider error, timeout, refusal or invalid output \u2014 by the deterministic rules parser (fallbackReason \u002B warnings say which and why). Lines are matched only against the tenant\u0027s own catalog and learned aliases: matched lines carry one proposal, ambiguous lines up to 5 candidates and no proposal, unmatched lines none. 409 \u0060ai.opt_in_required\u0060 when the tenant has not switched AI parsing on (\u0060PUT /ai/settings\u0060, data-policy \u00A77). 429 \u0060ai.rate_limited\u0060 (with Retry-After) when the hourly parse limit is reached. Needs the AI assistant add-on (403 \u0060entitlement.required\u0060, feature \u0060ai_order_parsing\u0060); 403 \u0060entitlement.limit_exceeded\u0060 when the add-on\u0027s monthly parse quota (\u0060ai_parses_per_month\u0060) is used up. Input limits: \u0060GET /ai/settings\u0060. Reviewing, approving and rejecting stored parses stay open without the add-on.",
         "operationId": "Ai_OrderParses_Submit",
         "parameters": [
           {
@@ -15654,12 +15654,12 @@
               }
             }
           },
-          "201": {
-            "description": "Created",
+          "202": {
+            "description": "Accepted",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OrderParseResponse"
+                  "$ref": "#/components/schemas/OrderParseAcceptedResponse"
                 }
               }
             }
@@ -15808,7 +15808,7 @@
         "tags": [
           "AI assistant"
         ],
-        "summary": "Ayr\u0131\u015Ft\u0131rma ve e\u015Fle\u015Fme adaylar\u0131 (ETag d\u00F6ner)",
+        "summary": "Ayr\u0131\u015Ft\u0131rma ve e\u015Fle\u015Fme adaylar\u0131 (ETag d\u00F6ner; i\u015Flenirken status = pending, sat\u0131r yok)",
         "operationId": "Ai_OrderParses_Get",
         "parameters": [
           {
@@ -15868,6 +15868,95 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OrderParseResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "whatsapp.parse"
+      }
+    },
+    "/api/v1/ai/order-parses/{id}/status": {
+      "get": {
+        "tags": [
+          "AI assistant"
+        ],
+        "summary": "Ayr\u0131\u015Ft\u0131rman\u0131n i\u015Flenme durumu: pending, succeeded veya failed (yoklama hedefi)",
+        "description": "Cheap polling target of a submitted parse. \u0060pending\u0060: poll again after \u0060pollAfterMs\u0060, backing off (e.g. \u00D71.5 up to 5 s). \u0060succeeded\u0060: the review is ready at \u0060resultUrl\u0060. \u0060failed\u0060: \u0060failureCode\u0060 is \u0060ai.parse_failed\u0060 (processing gave up), \u0060ai.parse_timed_out\u0060 (not processed within the deadline) or \u0060ai.opt_in_revoked\u0060 (the tenant switched AI off before it ran); fall back to entering the order manually.",
+        "operationId": "Ai_OrderParses_Status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderParseStatusResponse"
                 }
               }
             }
@@ -16250,6 +16339,358 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AiUsageResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "whatsapp.parse"
+      }
+    },
+    "/api/v1/ai/settings": {
+      "get": {
+        "tags": [
+          "AI assistant"
+        ],
+        "summary": "Tenant\u0027\u0131n AI ayr\u0131\u015Ft\u0131rma tercihi (opt-in, varsay\u0131lan kapal\u0131) ve mesaj giri\u015F limitleri (ETag d\u00F6ner)",
+        "operationId": "Ai_Settings_Get",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettingsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "whatsapp.parse"
+      },
+      "put": {
+        "tags": [
+          "AI assistant"
+        ],
+        "summary": "AI ayr\u0131\u015Ft\u0131rmay\u0131 tenant i\u00E7in a\u00E7ar/kapat\u0131r (yaln\u0131zca owner/admin; denetim kayd\u0131 yaz\u0131l\u0131r)",
+        "description": "Opt-in of data-policy \u00A77: while off (the default) the message text is never sent to the AI provider and submitting is refused with 409 \u0060ai.opt_in_required\u0060; switching it off also stops parses still waiting in the queue (\u0060ai.opt_in_revoked\u0060). Needs tenant.settings.manage (owner, admin). If-Match is honoured when sent. Audited as \u0060ai.settings_changed\u0060 (before/after).",
+        "operationId": "Ai_Settings_Update",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettingsResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Precondition Failed",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "tenant.settings.manage"
+      }
+    },
+    "/api/v1/ai/aliases": {
+      "get": {
+        "tags": [
+          "AI assistant"
+        ],
+        "summary": "\u00D6\u011Frenilmi\u015F e\u015Fle\u015Ftirmeler (ifade \u2192 varyant; onaylanan sat\u0131rlardan, WAI-07)",
+        "operationId": "Ai_Aliases_List",
+        "parameters": [
+          {
+            "name": "variantId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "customerId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearnedAliasListResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "whatsapp.parse"
+      }
+    },
+    "/api/v1/ai/aliases/{id}": {
+      "delete": {
+        "tags": [
+          "AI assistant"
+        ],
+        "summary": "\u00D6\u011Frenilmi\u015F bir e\u015Fle\u015Ftirmeyi siler (yanl\u0131\u015F \u00F6\u011Frenilmi\u015Fse)",
+        "operationId": "Ai_Aliases_Delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -18408,6 +18849,84 @@
           }
         }
       },
+      "AiInputLimits": {
+        "required": [
+          "maxInputChars",
+          "maxInputLines",
+          "hourlyParseLimit"
+        ],
+        "type": "object",
+        "properties": {
+          "maxInputChars": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "maxInputLines": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "hourlyParseLimit": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "AiSettingsResponse": {
+        "required": [
+          "aiParsingEnabled",
+          "providerConfigured",
+          "limits",
+          "updatedAt",
+          "updatedBy",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "aiParsingEnabled": {
+            "type": "boolean"
+          },
+          "providerConfigured": {
+            "type": "boolean"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AiInputLimits"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "updatedBy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
       "AiUsageDayTotal": {
         "required": [
           "day",
@@ -18807,6 +19326,18 @@
               "string"
             ],
             "format": "double"
+          },
+          "unit": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "learnAlias": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -21899,6 +22430,63 @@
           }
         }
       },
+      "LearnedAliasListResponse": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LearnedAliasResponse"
+            }
+          }
+        }
+      },
+      "LearnedAliasResponse": {
+        "required": [
+          "id",
+          "phrase",
+          "variantId",
+          "customerId",
+          "confirmations",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "phrase": {
+            "type": "string"
+          },
+          "variantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "customerId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "confirmations": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "LimitValueResponse": {
         "required": [
           "code",
@@ -23077,6 +23665,39 @@
           }
         }
       },
+      "OrderParseAcceptedResponse": {
+        "required": [
+          "id",
+          "status",
+          "statusUrl",
+          "resultUrl",
+          "pollAfterMs"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "statusUrl": {
+            "type": "string"
+          },
+          "resultUrl": {
+            "type": "string"
+          },
+          "pollAfterMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "OrderParseCandidateResponse": {
         "required": [
           "variantId",
@@ -23123,6 +23744,8 @@
         "required": [
           "lineNo",
           "rawText",
+          "textStart",
+          "textLength",
           "productCode",
           "productText",
           "quantity",
@@ -23151,6 +23774,24 @@
           },
           "rawText": {
             "type": "string"
+          },
+          "textStart": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "textLength": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           },
           "productCode": {
             "type": [
@@ -23244,6 +23885,12 @@
               "null",
               "string"
             ]
+          },
+          "selectedUnit": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -23269,7 +23916,10 @@
             "type": "string"
           },
           "parser": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "fallbackReason": {
             "type": [
@@ -23327,10 +23977,12 @@
           "status",
           "channel",
           "customerId",
+          "warehouseId",
           "parser",
           "model",
           "promptVersion",
           "fallbackReason",
+          "failureCode",
           "messageText",
           "textPurged",
           "lines",
@@ -23340,6 +23992,7 @@
           "orderId",
           "createdAt",
           "createdBy",
+          "completedAt",
           "reviewedAt",
           "reviewedBy",
           "version"
@@ -23363,8 +24016,18 @@
             ],
             "format": "uuid"
           },
+          "warehouseId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "parser": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "model": {
             "type": [
@@ -23373,9 +24036,18 @@
             ]
           },
           "promptVersion": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "fallbackReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "failureCode": {
             "type": [
               "null",
               "string"
@@ -23429,6 +24101,13 @@
             ],
             "format": "uuid"
           },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
           "reviewedAt": {
             "type": [
               "null",
@@ -23450,6 +24129,60 @@
               "string"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "OrderParseStatusResponse": {
+        "required": [
+          "id",
+          "state",
+          "parseStatus",
+          "failureCode",
+          "resultUrl",
+          "pollAfterMs",
+          "createdAt",
+          "completedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string"
+          },
+          "parseStatus": {
+            "type": "string"
+          },
+          "failureCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "resultUrl": {
+            "type": "string"
+          },
+          "pollAfterMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -26443,6 +27176,13 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "warehouseId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -27054,6 +27794,20 @@
             "type": [
               "null",
               "string"
+            ]
+          }
+        }
+      },
+      "UpdateAiSettingsRequest": {
+        "required": [
+          "aiParsingEnabled"
+        ],
+        "type": "object",
+        "properties": {
+          "aiParsingEnabled": {
+            "type": [
+              "null",
+              "boolean"
             ]
           }
         }

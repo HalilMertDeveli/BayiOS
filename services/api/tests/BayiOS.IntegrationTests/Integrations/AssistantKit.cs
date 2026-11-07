@@ -4,12 +4,17 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using BayiOS.Api.Platform.Jobs;
 using BayiOS.IntegrationTests.Billing;
 using BayiOS.IntegrationTests.Catalog;
 using BayiOS.IntegrationTests.Infrastructure;
 using BayiOS.IntegrationTests.Orders;
+using BayiOS.Modules.Integrations;
 using BayiOS.Modules.Integrations.Contracts;
+using BayiOS.SharedKernel.Platform.Jobs;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 
 namespace BayiOS.IntegrationTests.Integrations;
@@ -46,7 +51,8 @@ internal sealed class AssistantKit
         ("MTR-1071", "Gaz Teli CG 125", 30m),
     ];
 
-    public static async Task<AssistantKit> CreateAsync(ApiFixture fixture)
+    /// <param name="optIn">Switch the tenant's AI opt-in on (data-policy §7; off by default).</param>
+    public static async Task<AssistantKit> CreateAsync(ApiFixture fixture, bool optIn = true)
     {
         var orders = await OrdersKit.CreateAsync(fixture);
 
@@ -63,16 +69,98 @@ internal sealed class AssistantKit
             variants[sku] = variant;
         }
 
+        if (optIn)
+        {
+            await OptInAsync(orders.Owner);
+        }
+
         return new AssistantKit(orders, variants);
     }
 
-    public static Task<HttpResponseMessage> SubmitAsync(CatalogClient client, string text, Guid? customerId = null, string? key = null) =>
-        client.PostAsync("/api/v1/ai/order-parses", new { text, customerId }, key);
+    /// <summary>Switches the tenant's AI opt-in (owner/admin).</summary>
+    public static async Task<AiSettingsResponse> OptInAsync(CatalogClient owner, bool enabled = true) =>
+        await ReadAsync<AiSettingsResponse>(await owner.SendAsync(HttpMethod.Put, "/api/v1/ai/settings", new { aiParsingEnabled = enabled }), HttpStatusCode.OK);
 
-    public static async Task<OrderParseResponse> SubmitOkAsync(CatalogClient client, string text, Guid? customerId = null)
+    public static Task<HttpResponseMessage> SubmitAsync(CatalogClient client, string text, Guid? customerId = null, string? key = null, Guid? warehouseId = null) =>
+        client.PostAsync("/api/v1/ai/order-parses", new { text, customerId, warehouseId }, key);
+
+    /// <summary>Submits (202), runs the parse job on <paramref name="services"/>' host and returns the finished parse.</summary>
+    public static async Task<OrderParseResponse> SubmitOkAsync(IServiceProvider services, CatalogClient client, string text, Guid? customerId = null, Guid? warehouseId = null)
     {
-        var response = await SubmitAsync(client, text, customerId);
-        return await ReadAsync<OrderParseResponse>(response, HttpStatusCode.Created);
+        var accepted = await ReadAsync<OrderParseAcceptedResponse>(await SubmitAsync(client, text, customerId, warehouseId: warehouseId), HttpStatusCode.Accepted);
+        Assert.Equal("pending", accepted.Status);
+        await ProcessAsync(services, client, accepted.Id);
+        return await ReadAsync<OrderParseResponse>(await client.GetAsync(accepted.ResultUrl), HttpStatusCode.OK);
+    }
+
+    /// <summary>
+    /// Runs the AI parse jobs of the host until the parse has left <c>pending</c>. The processor only claims
+    /// <c>integrations.ai_order_parse</c> jobs (never another test's imports); it may finish other tests' parses too,
+    /// which is harmless — every host of the parallel tests runs with AI off.
+    /// </summary>
+    public static async Task<OrderParseStatusResponse> ProcessAsync(IServiceProvider services, CatalogClient client, Guid parseId, string workerId = "assistant-tests")
+    {
+        var processor = Processor(services, workerId);
+        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(2);
+        while (true)
+        {
+            var status = await ReadAsync<OrderParseStatusResponse>(await client.GetAsync($"/api/v1/ai/order-parses/{parseId}/status"), HttpStatusCode.OK);
+            if (status.State != "pending")
+            {
+                return status;
+            }
+
+            Assert.True(DateTime.UtcNow < deadline, $"Parse {parseId} is still pending.");
+            if (await processor.RunOnceAsync(Ct) == 0)
+            {
+                await Task.Delay(20, Ct);
+            }
+        }
+    }
+
+    /// <summary>Runs AI parse jobs until the tenant has none queued or running.</summary>
+    public static async Task DrainAsync(ApiFixture fixture, IServiceProvider services, Guid tenantId, string workerId = "assistant-drain")
+    {
+        var processor = Processor(services, workerId);
+        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(2);
+        while (await ScalarAsync<long>(
+                   fixture,
+                   "SELECT count(*) FROM platform.jobs WHERE tenant_id = $1 AND type = 'integrations.ai_order_parse' AND status IN ('queued', 'running')",
+                   tenantId) > 0)
+        {
+            Assert.True(DateTime.UtcNow < deadline, $"AI parse jobs of tenant {tenantId} are still queued.");
+            if (await processor.RunOnceAsync(Ct) == 0)
+            {
+                await Task.Delay(20, Ct);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Runs every due AI parse job of every tenant on the shared (AI off) host — for the tests that run alone and must
+    /// start from an empty queue (parses other tests submitted but never processed).
+    /// </summary>
+    public static async Task DrainAllAsync(ApiFixture fixture)
+    {
+        var processor = Processor(fixture.Services, "assistant-drain-all", batchSize: 50);
+        while (await ScalarAsync<long>(
+                   fixture, "SELECT count(*) FROM platform.jobs WHERE type = 'integrations.ai_order_parse' AND status = 'queued' AND run_after <= now()") > 0)
+        {
+            await processor.RunOnceAsync(Ct);
+        }
+    }
+
+    /// <summary>A job processor of the host that claims only AI parse jobs.</summary>
+    public static JobProcessor Processor(IServiceProvider services, string workerId, int batchSize = 10)
+    {
+        var registry = JobHandlerRegistry.FromRegistrations(
+            services.GetServices<JobHandlerRegistration>().Where(r => r.Type == IntegrationsModule.OrderParseJobType), []);
+        return new JobProcessor(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            services.GetRequiredService<JobStore>(),
+            registry,
+            new JobsOptions { WorkerId = workerId, BatchSize = batchSize },
+            NullLogger<JobProcessor>.Instance);
     }
 
     public static Task<HttpResponseMessage> ApproveAsync(CatalogClient client, Guid id, object body, string? key = null) =>
@@ -130,11 +218,28 @@ internal sealed class AssistantKit
 /// Offline Claude Messages API for the host (named HttpClient "anthropic"): canned responses in the wire shape of
 /// <c>POST /v1/messages</c>, request bodies recorded. Never reaches the network; the key is a placeholder.
 /// </summary>
-internal sealed class FakeClaude : HttpMessageHandler
+/// <param name="marker">
+/// Only requests whose message contains this text are this test's: they are recorded and answered from the queue.
+/// Any other request (another test's parse picked up by this host's worker) gets a 500 and is not recorded, so it
+/// can neither consume nor count against this test's canned replies.
+/// </param>
+internal sealed class FakeClaude(string marker) : HttpMessageHandler
 {
     private readonly Queue<(HttpStatusCode Status, string Body)> _responses = new();
 
     public List<string> Requests { get; } = [];
+
+    private TaskCompletionSource? _gate;
+
+    /// <summary>When set, the next one of this test's calls waits for it (a slow provider); later calls do not.</summary>
+    public TaskCompletionSource? Gate
+    {
+        get => _gate;
+        set => _gate = value;
+    }
+
+    /// <summary>Completed when one of this test's calls has started (and is waiting on <see cref="Gate"/>).</summary>
+    public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public FakeClaude Reply(object output, int input = 220, int outputTokens = 400, int cacheRead = 1650)
     {
@@ -171,14 +276,27 @@ internal sealed class FakeClaude : HttpMessageHandler
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        var content = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
+        if (!content.Contains(marker, StringComparison.Ordinal))
+        {
+            return new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
+        }
+
+        (HttpStatusCode Status, string Body) reply;
         lock (Requests)
         {
-            Requests.Add(request.Content is null ? string.Empty : request.Content.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult());
+            Requests.Add(content);
+            reply = _responses.Count > 0 ? _responses.Dequeue() : (HttpStatusCode.InternalServerError, "{}");
+        }
+
+        Entered.TrySetResult();
+        if (Interlocked.Exchange(ref _gate, null) is { } gate)
+        {
+            await gate.Task.WaitAsync(cancellationToken);
         }
 
         await Task.Yield();
-        var (status, body) = _responses.Count > 0 ? _responses.Dequeue() : (HttpStatusCode.InternalServerError, "{}");
-        return new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        return new HttpResponseMessage(reply.Status) { Content = new StringContent(reply.Body, Encoding.UTF8, "application/json") };
     }
 
     public static object Output(params object[] lines) => new { lines, unparsedFragments = Array.Empty<string>(), warnings = Array.Empty<string>() };

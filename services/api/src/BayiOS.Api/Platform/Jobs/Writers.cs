@@ -12,9 +12,9 @@ namespace BayiOS.Api.Platform.Jobs;
 /// instead of leaving a job that no worker will ever claim. Every module registers its handlers in this same
 /// composition root (also when <c>Jobs:Enabled=false</c>), so the API process knows every type a worker can run.
 /// </summary>
-internal sealed class BackgroundJobs(UnitOfWork unitOfWork, IRequestContext requestContext, JobHandlerRegistry registry) : IBackgroundJobs
+internal sealed class BackgroundJobs(UnitOfWork unitOfWork, IRequestContext requestContext, JobHandlerRegistry registry, JobWakeup? wakeup = null) : IBackgroundJobs
 {
-    public Task<Guid?> EnqueueAsync(JobRequest job, CancellationToken cancellationToken)
+    public async Task<Guid?> EnqueueAsync(JobRequest job, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(job);
         ArgumentException.ThrowIfNullOrWhiteSpace(job.Type);
@@ -25,7 +25,7 @@ internal sealed class BackgroundJobs(UnitOfWork unitOfWork, IRequestContext requ
 
         var transaction = unitOfWork.Transaction
             ?? throw new InvalidOperationException("Jobs are enqueued inside the unit of work transaction.");
-        return JobStore.InsertAsync(
+        var id = await JobStore.InsertAsync(
             unitOfWork.Connection,
             transaction,
             new NewJob(
@@ -38,6 +38,14 @@ internal sealed class BackgroundJobs(UnitOfWork unitOfWork, IRequestContext requ
                 job.DedupeKey,
                 requestContext.CorrelationId),
             cancellationToken);
+
+        // Due now: wake this instance's worker once the job is visible (after commit; a rollback discards it).
+        if (id is not null && wakeup is not null && job.RunAfter is null)
+        {
+            unitOfWork.OnCommitted(wakeup.Signal);
+        }
+
+        return id;
     }
 }
 

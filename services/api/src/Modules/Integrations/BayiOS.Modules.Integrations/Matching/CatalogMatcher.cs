@@ -27,7 +27,13 @@ public static class MatchMethods
     public const string Barcode = "barcode";
     public const string Name = "name";
     public const string Similarity = "similarity";
+
+    /// <summary>A phrase a reviewer of the tenant confirmed for this variant before (learned alias, WAI-07).</summary>
+    public const string Alias = "alias";
 }
+
+/// <summary>A learned alias as the matcher sees it: normalised phrase → variant (<see cref="CatalogMatcher.AliasKey"/>).</summary>
+public sealed record AliasEntry(string Phrase, Guid VariantId, bool CustomerSpecific);
 
 /// <param name="Score">0–1 similarity of the candidate to the line (1 for an exact code).</param>
 public sealed record MatchCandidate(Guid VariantId, Guid ProductId, string Sku, string Name, string Unit, string Method, decimal Score);
@@ -44,7 +50,8 @@ public sealed record LineMatch(
 
 /// <summary>
 /// Deterministic matching of parsed lines against the tenant's own catalog (#48, ADR 0010 §2.3) — no AI involved, so
-/// it is fully testable: (1) a product code written in the line equal to a SKU or barcode; (2) the normalised name;
+/// it is fully testable: (1) a product code written in the line equal to a SKU or barcode; (1b) a learned alias of the
+/// tenant (customer-specific first) whose variant is in the catalog; (2) the normalised name;
 /// (3) token similarity (Turkish folding, light stemming, trigram similarity for typos, exact comparison for any token
 /// with digits so "H4" never matches "H7"). A line is <see cref="MatchStatuses.Matched"/> only when the best candidate
 /// covers the line almost completely, has no conflicting number and clearly beats the runner-up; otherwise it is
@@ -85,7 +92,15 @@ public sealed class CatalogMatcher
     private readonly Dictionary<string, List<IndexedEntry>> _byName;
     private readonly Dictionary<string, List<IndexedEntry>> _byToken;
 
-    public CatalogMatcher(IEnumerable<CatalogEntry> catalog)
+    /// <summary>Alias phrase → catalog entry (only aliases whose variant is in the given catalog).</summary>
+    private readonly Dictionary<string, IndexedEntry> _aliases = new(StringComparer.Ordinal);
+
+    /// <param name="aliases">
+    /// Learned aliases of the tenant (WAI-07). Customer-specific ones win over tenant-wide ones for the same phrase.
+    /// An alias whose variant is not in <paramref name="catalog"/> (inactive, deleted) is ignored: aliases can only point
+    /// to existing variants.
+    /// </param>
+    public CatalogMatcher(IEnumerable<CatalogEntry> catalog, IEnumerable<AliasEntry>? aliases = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         _entries = [.. catalog.Select(e => new IndexedEntry(e, EntryTokens(e)))];
@@ -123,6 +138,25 @@ public sealed class CatalogMatcher
                 words.Add(word);
             }
         }
+
+        var byVariant = _entries.GroupBy(e => e.Entry.VariantId).ToDictionary(g => g.Key, g => g.First());
+        foreach (var alias in (aliases ?? []).OrderBy(a => a.CustomerSpecific))
+        {
+            if (alias.Phrase.Length > 0 && byVariant.TryGetValue(alias.VariantId, out var entry))
+            {
+                _aliases[alias.Phrase] = entry; // customer-specific ones come last and override
+            }
+        }
+    }
+
+    /// <summary>
+    /// The normalised phrase of a line as learned aliases store it: product text (+ brand/model when not already in
+    /// it), folded, canonicalised, without stop words — exactly what the matcher compares.
+    /// </summary>
+    public static string AliasKey(ParsedLine line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        return string.Join(' ', PhraseTokens(line).Select(t => t.Text));
     }
 
     private readonly List<string> _digitWords;
@@ -156,6 +190,12 @@ public sealed class CatalogMatcher
         if (phrase.Count == 0)
         {
             return new LineMatch(MatchStatuses.Unmatched, 0, null, false, []);
+        }
+
+        // (b/c) A phrase a reviewer of this tenant confirmed before (customer's own first); proposed, still confirmed.
+        if (_aliases.TryGetValue(string.Join(' ', phrase.Select(t => t.Text)), out var byAlias))
+        {
+            return Exact(byAlias, MatchMethods.Alias, line.Unit, weight: 0.98m);
         }
 
         // (2) The whole normalised name.

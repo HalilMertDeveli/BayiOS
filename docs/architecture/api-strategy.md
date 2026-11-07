@@ -337,6 +337,13 @@ flowchart LR
 | POST | `/ai/order-parses/{id}/approve` (İ) | `ai.review` | Draft sipariş oluşturur → `orderId` |
 | POST | `/ai/order-parses/{id}/reject` (İ) | `ai.review` | |
 
+> **Güncelleme (#121):** `POST /ai/order-parses` (İ) artık `202` + `Location: /ai/order-parses/{id}/status` döner
+> (`{ id, status: pending, statusUrl, resultUrl, pollAfterMs }`); ayrıştırma arka plan job'ında çalışır. Yeni uçlar:
+> `GET /ai/order-parses/{id}/status` (`pending | succeeded | failed`, `Cache-Control: no-store`), `GET /ai/settings`
+> (opt-in + giriş limitleri, ETag) ve `PUT /ai/settings` (`tenant.settings.manage`, If-Match isteğe bağlı),
+> `GET /ai/aliases`, `DELETE /ai/aliases/{id}`. Gövde `{ text, customerId?, warehouseId? }`; onay satırında `unit?`,
+> `learnAlias?`. Yeni kod: `409 ai.opt_in_required`. Aşağıdaki "senkron/201" ifadesi tarihseldir.
+>
 > **Uygulanan durum (#47/#48/#50, JOB 12):** izin `whatsapp.parse` (matris §3.5; `ai.parse`/`ai.review` gruplarının
 > karşılığı), onay ayrıca `orders.create` ister (servis kontrol eder). `POST /ai/order-parses` (İ) senkron çalışır ve
 > `201` + inceleme yükü döner (`202` değil; ADR 0010 uygulama notları); gövde `{ text, customerId? }` (`senderPhone`

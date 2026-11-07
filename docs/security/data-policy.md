@@ -37,9 +37,15 @@ ve maskeli gösterilir.
 - AI'ya yalnızca ayrıştırma için gerekli metin gider (katalog/fiyat verisi gönderilmez, eşleştirme sunucuda — ADR 0010); müşteri adres/telefonu gönderilmez. Metindeki
   telefon numaraları gönderim öncesi maskelenir (`+90 5** *** ** 12`).
   Uygulanan (#47): `TurkishText.MaskPersonalData` Türk mobil numaralarını (son 2 hane kalır) ve e-posta adreslerini
-  (`[e-posta]`) maskeler; barkodlara dokunmaz. Sağlayıcıya ve veritabanına giden metin maskelenmiş metindir. Kişi
-  adları maskelenmez (eşleştirme kalitesi/ürün kararı — threat-model §9 açık soru). AI özelliği varsayılan kapalıdır
-  (`Ai:Enabled=false`); tenant bazında opt-in ayarı henüz yoktur (ürün sahibi kararı + Identity ayarı gerekir).
+  (`[e-posta]`) maskeler; barkodlara dokunmaz. Sağlayıcıya ve veritabanına giden metin maskelenmiş metindir.
+  Kişi adları (#121) **en iyi çaba** ile, yalnızca bağlamla tanınıp `[ad]` ile maskelenir: kendini tanıtma ("Ben Ahmet",
+  "adım …", "isim:", "alıcı:", "teslim alacak kişi …"), hitap öncesi ("Ahmet Bey", "Ayşe Hanım", "Mehmet abi/abla"),
+  unvan sonrası ("Sayın …", "Sn. …") ve selamlama sonrası cümle sonu ("Merhaba Ahmet,"). **Sınırlar:** bağlamsız yazılmış
+  adlar ("Ahmet 0532…" ya da yalnızca "Ahmet"), küçük harfle yazılmış adlar, firma/mağaza adları, imza satırları ve adres
+  içindeki adlar tanınmaz; bu konumlarda büyük harfle başlayan bir ürün kelimesi de maskelenebilir (fazla maskeleme yalnızca
+  incelemeyi etkiler, sipariş kesinleşmeden insan onayı zorunludur). Tam ad tanıma (NER) yoktur; mesajda kişi verisi
+  kalabileceği için sağlayıcı aktarımı §7 opt-in'ine bağlıdır.
+  AI özelliği sunucuda varsayılan kapalıdır (`Ai:Enabled=false`) ve ayrıca **tenant bazında opt-in** gerektirir (§7).
 - Bildirim yükünde kişi adı/fiyat yok.
 - Log ve hata izlemede gövde loglanmaz; yalnızca allowlist alanlar.
 - Preview/dev ortamlarında **yalnızca sentetik veri** (gerçek müşteri verisi kopyalanmaz, prod dump'ı alınmaz).
@@ -53,6 +59,7 @@ ve maskeli gösterilir.
 | Tenant kapanışı sonrası | 30 gün geri alma penceresi → kalıcı silme | Yanlışlıkla kapatmaya karşı |
 | Yedekler | Sağlayıcı yedek rotasyonu (Supabase planına göre) — silinen veri yedeklerden rotasyonla düşer | Plan seçiminde doğrulanacak |
 | AI ayrıştırma ham metni | 30 gün (sonra yalnızca yapılandırılmış taslak kalır) — uygulanan: `integrations.ai_parse_requests` maskelenmiş metni, ayrıştırma çıktısını ve inceleme satırlarını saatlik `integrations.ai_text_retention` job'ı `Ai:TextRetentionDays` (varsayılan 30, en az 1) sonra NULL'lar; sayılar, token'lar ve sipariş bağı kalır. Idempotency yanıt kopyası 24 saatte silinir | Minimizasyon |
+| AI öğrenilmiş eşleştirmeler (`integrations.learned_aliases`, #121) | Tenant silene kadar (`DELETE /ai/aliases/{id}`, denetimli) | Mesaj metni değil, yalnızca onaylanan satırın normalize ürün ifadesi → varyant (isteğe bağlı müşteri); kişi adı maskelemesinden sonra üretilir |
 | Import dosyaları | İş tamamlandıktan 30 gün sonra | Hata ayıklama |
 | Export dosyaları | 7 gün | Tek seferlik indirme |
 | Audit olayları | 2 yıl (değerlendirilecek) — uygulanan: veritabanı tabanı 2 yıl, `Audit:Retention` (varsayılan/en az 730 gün) ile uzatılabilir; saatlik `platform.audit_retention` job'ı siler | Güvenlik. Append-only kuralının tek istisnası; tasarım: data-model §5.11, threat-model §7 |
@@ -101,6 +108,12 @@ Yeni alt işleyen eklemek = bu tabloyu güncellemek + tenant'lara bildirim (DPA'
   belirlemez; ürün sahibi aksiyonu olarak işaretlidir.**
 - Anthropic (ABD) ve Firebase (küresel) aktarımları ayrıca değerlendirilir; AI özelliği tenant bazında açılıp kapatılabilir
   olmalıdır (opt-in).
+  Uygulanan (#121): `integrations.ai_settings` (tenant başına, RLS FORCE), **varsayılan kapalı**. Kapalıyken
+  `POST /ai/order-parses` 409 `ai.opt_in_required` ile reddedilir; hiçbir şey saklanmaz, kuyruğa alınmaz, sayılmaz.
+  Açıp kapatma yalnızca owner/admin (`tenant.settings.manage`, `PUT /ai/settings`) ve `ai.settings_changed` (önce/sonra)
+  olarak denetlenir. Kuyrukta bekleyen bir ayrıştırma, iş çalışmadan önce opt-in kapatılırsa sağlayıcıya gönderilmez
+  (`ai.opt_in_revoked` ile başarısız olur). Metnin sağlayıcıya gitmesi için tenant opt-in'i, `ai_order_parsing` hakkı ve
+  sunucu bayrağı (`Ai:Enabled` + anahtar) birlikte gerekir; hukuki aktarım dayanağı yine ürün sahibi aksiyonudur.
 
 ## 8. Loglama ve PII kuralları
 1. İstek/yanıt gövdesi loglanmaz. Allowlist: method, route şablonu, durum kodu, süre, `tenant_id`, `user_id` (UUID), `correlation_id`.

@@ -44,10 +44,22 @@ internal sealed class CatalogAssistantCatalog(CatalogDbContext catalog) : IAssis
         return [.. rows.Select(ToEntry)];
     }
 
+    public async Task<IReadOnlyList<CatalogEntry>> FindByIdsAsync(IReadOnlyCollection<Guid> variantIds, CancellationToken cancellationToken)
+    {
+        if (variantIds.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = await Query(null, [.. variantIds]).ToListAsync(cancellationToken);
+        return [.. rows.Select(ToEntry)];
+    }
+
     private sealed record Row(Guid VariantId, Guid ProductId, string Sku, string? Barcode, string Name, string? VariantName, string? Brand, string Unit);
 
     /// <param name="codes">Null = every active variant (ordered by product name, SKU); else only these SKUs / barcodes.</param>
-    private IQueryable<Row> Query(string[]? codes) =>
+    /// <param name="ids">Else only these variant ids.</param>
+    private IQueryable<Row> Query(string[]? codes, Guid[]? ids = null) =>
         from variant in catalog.Variants.AsNoTracking()
         join product in catalog.Products.AsNoTracking() on variant.ProductId equals product.Id
         join unit in catalog.Units.AsNoTracking() on variant.UnitId equals unit.Id
@@ -55,6 +67,7 @@ internal sealed class CatalogAssistantCatalog(CatalogDbContext catalog) : IAssis
         from brand in brands.DefaultIfEmpty()
         where variant.Status == Active && product.Status == Active
               && (codes == null || codes.Contains(variant.Sku) || (variant.Barcode != null && codes.Contains(variant.Barcode)))
+              && (ids == null || ids.Contains(variant.Id))
         orderby product.Name, variant.Sku
         select new Row(variant.Id, product.Id, variant.Sku, variant.Barcode, product.Name, variant.Name, brand == null ? null : brand.Name, unit.Code);
 

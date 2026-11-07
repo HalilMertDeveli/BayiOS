@@ -359,11 +359,14 @@ public sealed class BillingApiTests(ApiFixture fixture)
         }
     }
 
-    private static async Task<OrderParseResponse> ParseOkAsync(CatalogClient owner)
+    /// <summary>Accepted for parsing (202) — with the tenant's AI opt-in switched on first (data-policy §7).</summary>
+    private static async Task<OrderParseAcceptedResponse> ParseOkAsync(CatalogClient owner)
     {
+        var optIn = await owner.SendAsync(HttpMethod.Put, "/api/v1/ai/settings", new { aiParsingEnabled = true });
+        Assert.True(optIn.IsSuccessStatusCode, $"opt-in: {(int)optIn.StatusCode} {await optIn.Content.ReadAsStringAsync(Ct)}");
         var response = await owner.PostAsync("/api/v1/ai/order-parses", new { text = Message });
-        Assert.True(response.StatusCode == HttpStatusCode.Created, $"parse: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
-        return JsonSerializer.Deserialize<OrderParseResponse>(await response.Content.ReadAsStringAsync(Ct), JsonSerializerOptions.Web)!;
+        Assert.True(response.StatusCode == HttpStatusCode.Accepted, $"parse: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
+        return JsonSerializer.Deserialize<OrderParseAcceptedResponse>(await response.Content.ReadAsStringAsync(Ct), JsonSerializerOptions.Web)!;
     }
 
     private Task<long> AuditCountAsync(Guid tenantId, string action) =>
