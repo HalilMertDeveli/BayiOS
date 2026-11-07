@@ -1,4 +1,6 @@
 using System.Text.Json;
+using BayiOS.Api.Platform.Observability;
+using BayiOS.SharedKernel.Observability;
 using BayiOS.SharedKernel.Persistence;
 using BayiOS.SharedKernel.Platform.Jobs;
 using BayiOS.SharedKernel.Tenancy;
@@ -19,7 +21,8 @@ internal sealed partial class JobProcessor(
     JobStore store,
     JobHandlerRegistry registry,
     JobsOptions options,
-    ILogger<JobProcessor> logger)
+    ILogger<JobProcessor> logger,
+    IErrorReporter? errorReporter = null)
 {
     public string WorkerId { get; } = options.ResolveWorkerId();
 
@@ -87,9 +90,17 @@ internal sealed partial class JobProcessor(
             await TryRollbackAsync(unitOfWork);
             var status = await store.FailAsync(
                 job.Id, WorkerId, JobErrorSanitizer.Sanitize(ex), options.Backoff(job.Attempts), CancellationToken.None);
+            var jobType = new KeyValuePair<string, object?>("job.type", job.Type);
             if (status == "dead")
             {
+                BayiOsMetrics.JobsDeadLettered.Add(1, jobType);
                 LogJobDead(logger, ex, job.Id, job.Type, job.Attempts);
+                errorReporter?.Report(ex, new ErrorContext(ErrorSources.Job, job.Type, job.TenantId, null, context.CorrelationId));
+            }
+            else if (status is not null)
+            {
+                BayiOsMetrics.JobsRetried.Add(1, jobType);
+                LogJobFailed(logger, ex, job.Id, job.Type, job.Attempts, job.MaxAttempts);
             }
             else
             {

@@ -38,6 +38,16 @@ internal static class PlatformRuntime
         services.AddSingleton<OutboxDispatcher>();
         services.AddHostedService<PlatformWorker>();
 
+        // Readiness part 2 (#55): job queue lag; thresholds in observability.md §4.
+        services.AddOptions<HealthOptions>().BindConfiguration(HealthOptions.Section)
+            .Validate(o => o.QueueLagDegradedAfter > TimeSpan.Zero, "Health:QueueLagDegradedAfter must be positive.")
+            .Validate(
+                o => o.QueueLagUnhealthyAfter == TimeSpan.Zero || o.QueueLagUnhealthyAfter >= o.QueueLagDegradedAfter,
+                "Health:QueueLagUnhealthyAfter must be 0 (off) or at least Health:QueueLagDegradedAfter.")
+            .ValidateOnStart();
+        services.AddHealthChecks()
+            .AddCheck<QueueLagHealthCheck>("job_queue", tags: ["ready"], timeout: TimeSpan.FromSeconds(5));
+
         services.AddJobHandler<IdempotencyCleanupJob>(IdempotencyCleanupJob.Type);
         services.AddJobHandler<QueueCleanupJob>(QueueCleanupJob.Type);
         services.AddJobHandler<AuditRetentionJob>(AuditRetentionJob.Type);

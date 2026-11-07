@@ -4,7 +4,7 @@
 |---|---|
 | Sahip | DevOps Engineer |
 | Durum | v0.2 — deploy hattı **hazır** (`deploy-preview.yml`, `deploy-production.yml` iskeleti, #70) ve Supabase bootstrap'ı hazır (#76); **hiçbir ortam deploy edilmedi**, hesaplar ürün sahibini bekliyor (#138) |
-| İlgili | `environments.md` (ortamlar, sırlar, migration terfisi), `ci-cd.md` (workflow'lar), `hosting-options.md`, `infra/deploy/`, `infra/supabase/bootstrap/` |
+| İlgili | `environments.md` (ortamlar, sırlar, migration terfisi), `ci-cd.md` (workflow'lar), `hosting-options.md`, `infra/deploy/`, `infra/supabase/bootstrap/`, olay anı adımları: `runbooks/rollback.md`, yedek: `backup-and-restore.md`, izleme: `observability.md` |
 | Son güncelleme | 2026-11-07 |
 
 ## 1. Preview ve production ayrımı
@@ -26,7 +26,7 @@ Kurallar: preview'a production verisi gelmez; fork PR'larında deploy ve sır yo
 - İmajda yapılandırma/sır yok; `appsettings.Development.json` imaja girmez. `ASPNETCORE_ENVIRONMENT` varsayılanı `Production`;
   host `Preview`/`Production` olarak ayarlar.
 - **HEALTHCHECK yok** (chiseled imajda kabuk/curl yok). Liveness dışarıdan `GET /health` ile ölçülür: Fly `[[http_service.checks]]`,
-  CI smoke adımı. DB readiness kontrolü API ekibinin işidir (#10); eklendiğinde host kontrolü ona bağlanır.
+  CI smoke adımı. Readiness `GET /health/ready` (DB + yapılandırma + iş kuyruğu gecikmesi; `ready`/`degraded` 200, `unavailable` 503 — eşikler `observability.md` §4) dış izleme ve trafik kararı içindir.
 - `ci-container.yml` (job: **`api container build, smoke & scan`**): imajı derler, `--read-only --cap-drop ALL` ile çalıştırır,
   `/health` = 200 bekler, root olmadığını doğrular, Trivy ile tarar (HIGH+CRITICAL raporlanır; düzeltmesi olan CRITICAL'da kırmızı).
   Registry'ye push ve deploy **yapmaz**.
@@ -65,7 +65,7 @@ zorunlu) → migration → imaj `registry.fly.io/<FLY_APP>:<vX.Y.Z>-<sha12>` →
 2. `fly deploy --config infra/deploy/fly.preview.toml --image registry.fly.io/<app>:<önceki-git-sha>`
    (production'da: `deploy-production.yml`'i önceki etiketle `workflow_dispatch`, `production` environment onayıyla).
 3. DB geri alınmaz: expand → migrate → contract kuralı sayesinde önceki API sürümü güncel şemayla çalışır (§5).
-4. Rollback sonrası incident notu + kök neden issue'su.
+4. Rollback sonrası incident notu + kök neden issue'su (`runbooks/incident-response.md`). Olay anı kontrol listesi: `runbooks/rollback.md`.
 
 Production farkları: `min_machines_running >= 1` (worker + SignalR), 2 makine önerilir, deploy yalnızca etiketten.
 
