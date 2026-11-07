@@ -64,10 +64,32 @@ export function isParseVersionConflict(error: unknown): boolean {
   return error instanceof ApiError && (error.status === 412 || error.code === "concurrency.version_mismatch");
 }
 
+/** 409 `ai.opt_in_required`: the tenant has not switched AI parsing on (data-policy §7). */
+export function isOptInRequired(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "ai.opt_in_required";
+}
+
+export const OPT_IN_REQUIRED_MESSAGE =
+  "AI ile sipariş ayrıştırma bu işletmede kapalı. İşletme sahibi veya yöneticisi bu sayfadan açabilir; mesajınız bu sayfada duruyor.";
+
+/** Status `failureCode` of a parse that could not be processed → Turkish (always offers the manual way). */
+export function parseFailureMessage(code: string | null | undefined): string {
+  switch (code) {
+    case "ai.parse_timed_out":
+      return "Mesaj zamanında işlenemedi. Biraz sonra yeniden deneyin veya siparişi elle oluşturun.";
+    case "ai.opt_in_revoked":
+      return "AI ile ayrıştırma, mesaj işlenmeden önce kapatıldı; mesaj hiçbir yere gönderilmedi. Siparişi elle oluşturabilirsiniz.";
+    default:
+      return "Mesaj ayrıştırılamadı. Yeniden deneyin veya siparişi elle oluşturun.";
+  }
+}
+
 /** User-facing message for any failed assistant call (by problem `code`, never by title). */
 export function assistantErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) return "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.";
   switch (error.code) {
+    case "ai.opt_in_required":
+      return OPT_IN_REQUIRED_MESSAGE;
     case "ai.rate_limited":
       return rateLimitMessage(error);
     case "ai.parse_not_reviewable":

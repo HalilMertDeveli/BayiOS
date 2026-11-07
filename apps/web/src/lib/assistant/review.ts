@@ -170,7 +170,15 @@ export function buildApproveRequest(
     lines: state.lines.map((line) => {
       if (!line.include) return { lineNo: line.lineNo, include: false, variantId: null, quantity: null };
       const quantity = checkQuantity(line.quantityText);
-      return { lineNo: line.lineNo, include: true, variantId: line.variant!.id, quantity: quantity.ok ? quantity.value : null };
+      // The unit the reviewer saw next to the quantity: the API rejects it (422) when it is no longer the variant's
+      // unit, so a quantity is never ordered in a unit nobody looked at. Null when the search did not return a unit.
+      return {
+        lineNo: line.lineNo,
+        include: true,
+        variantId: line.variant!.id,
+        quantity: quantity.ok ? quantity.value : null,
+        unit: line.variant!.unit,
+      };
     }),
   };
 }
@@ -193,21 +201,45 @@ export function lineErrorsFromFields(state: ReviewState, fieldErrors: Record<str
 
 export type MessageSegment = { text: string; lineNo: number | null };
 
+export type SegmentLine = {
+  lineNo: number | string;
+  rawText: string;
+  /** API offsets into messageText (UTF-16 code units); null/absent when the server could not locate the line. */
+  textStart?: number | string | null;
+  textLength?: number | string | null;
+};
+
+/** The API's span of a line when it is usable for this message (in range, non-empty). */
+function offsetSpan(message: string, line: SegmentLine): { start: number; end: number } | null {
+  const start = num(line.textStart);
+  const length = num(line.textLength);
+  if (start === null || length === null || !Number.isInteger(start) || !Number.isInteger(length)) return null;
+  if (start < 0 || length <= 0 || start + length > message.length) return null;
+  return { start, end: start + length };
+}
+
 /**
- * Splits the message into plain-text segments, marking the part each line was read from (`rawText`). The API returns
- * no character offsets (contract gap), so the spans are found by text, in order; a line whose text is not found is not
- * marked. The result is rendered as React text only — never as HTML.
+ * Splits the message into plain-text segments, marking the part each line was read from. The API's character offsets
+ * (`textStart`/`textLength`) are used when present; otherwise the span is found by `rawText`, in order. A line that
+ * cannot be located, or would overlap another, is not marked. The result is rendered as React text only — never as HTML.
  */
-export function messageSegments(message: string, lines: readonly { lineNo: number | string; rawText: string }[]): MessageSegment[] {
+export function messageSegments(message: string, lines: readonly SegmentLine[]): MessageSegment[] {
   const spans: { start: number; end: number; lineNo: number }[] = [];
   let cursor = 0;
   for (const line of lines) {
     const raw = line.rawText.trim();
-    if (!raw) continue;
-    let start = message.indexOf(raw, cursor);
-    if (start < 0) start = message.indexOf(raw);
-    if (start < 0) continue;
-    const end = start + raw.length;
+    const offsets = offsetSpan(message, line);
+    let start: number;
+    let end: number;
+    if (offsets) {
+      ({ start, end } = offsets);
+    } else {
+      if (!raw) continue;
+      start = message.indexOf(raw, cursor);
+      if (start < 0) start = message.indexOf(raw);
+      if (start < 0) continue;
+      end = start + raw.length;
+    }
     if (spans.some((s) => start < s.end && end > s.start)) continue;
     spans.push({ start, end, lineNo: Number(line.lineNo) });
     cursor = end;

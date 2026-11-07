@@ -72,13 +72,17 @@ test("WhatsApp mesajı → inceleme → satır onayı → whatsapp_ai taslak sip
   await page.goto("/siparisler");
   await page.getByRole("link", { name: "WhatsApp siparişi" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "WhatsApp siparişi" })).toBeVisible();
+  // A new tenant has AI parsing off (data-policy §7): the owner switches it on here (audited by the API).
+  await expect(page.getByRole("heading", { name: "AI ile sipariş ayrıştırma kapalı" })).toBeVisible();
+  await page.getByRole("button", { name: "AI ayrıştırmayı aç" }).click();
   await page.getByRole("searchbox", { name: "Müşteri (isteğe bağlı)" }).fill(CUSTOMER.code);
   await page.getByRole("button", { name: "Müşteri ara" }).click();
   await page.getByRole("button", { name: new RegExp(CUSTOMER.name) }).click();
   await page.getByRole("textbox", { name: /^WhatsApp mesajı/ }).fill(`Merhaba,\n3 adet ${PRODUCT.sku}\nTeşekkürler`);
   const submitted = page.waitForResponse((r) => r.url().endsWith("/api/v1/ai/order-parses") && r.request().method() === "POST");
   await page.getByRole("button", { name: "Mesajı ayrıştır" }).click();
-  expect((await submitted).status()).toBe(201);
+  // 202: accepted; the page polls the status until the background parse is done, then opens the review.
+  expect((await submitted).status()).toBe(202);
 
   // ---- Review: rules parser (AI off), the line matched by SKU, pre-filled but not confirmed.
   await expect(page).toHaveURL(/\/siparisler\/whatsapp\/[0-9a-f-]{36}$/);

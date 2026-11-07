@@ -1678,8 +1678,8 @@ export interface paths {
         get: operations["Ai_OrderParses_List"];
         put?: never;
         /**
-         * WhatsApp mesajını ayrıştırır ve tenant kataloğuyla eşleştirir; inceleme yükünü döner (fiyat/stok içermez)
-         * @description The text is masked (phone numbers, e-mail addresses) and parsed by the AI parser when it is enabled, configured and within the tenant's daily quota; otherwise — and on any provider error, timeout, refusal or invalid output — by the deterministic rules parser (fallbackReason + warnings say which and why). Lines are matched only against the tenant's own catalog: matched lines carry one proposal, ambiguous lines up to 5 candidates and no proposal, unmatched lines none. 429 `ai.rate_limited` (with Retry-After) when the hourly parse limit is reached. Needs the AI assistant add-on (403 `entitlement.required`, feature `ai_order_parsing`); 403 `entitlement.limit_exceeded` when the add-on's monthly parse quota (`ai_parses_per_month`) is used up. Reviewing, approving and rejecting stored parses stay open without the add-on.
+         * WhatsApp mesajını ayrıştırma kuyruğuna alır (202); sonuç durum ucundan izlenir (fiyat/stok içermez)
+         * @description Accepts the message and returns 202 with the parse id and `Location` = the status URL; the parse runs in a background job (ADR 0010 §2.1): poll `GET /ai/order-parses/{id}/status` with backoff until `state` is `succeeded` (then read the review) or `failed`. The text is masked (phone numbers, e-mail addresses, person names in context) before it is stored, and parsed by the AI parser when it is enabled, configured and within the tenant's daily quota; otherwise — and on any provider error, timeout, refusal or invalid output — by the deterministic rules parser (fallbackReason + warnings say which and why). Lines are matched only against the tenant's own catalog and learned aliases: matched lines carry one proposal, ambiguous lines up to 5 candidates and no proposal, unmatched lines none. 409 `ai.opt_in_required` when the tenant has not switched AI parsing on (`PUT /ai/settings`, data-policy §7). 429 `ai.rate_limited` (with Retry-After) when the hourly parse limit is reached. Needs the AI assistant add-on (403 `entitlement.required`, feature `ai_order_parsing`); 403 `entitlement.limit_exceeded` when the add-on's monthly parse quota (`ai_parses_per_month`) is used up. Input limits: `GET /ai/settings`. Reviewing, approving and rejecting stored parses stay open without the add-on.
          */
         post: operations["Ai_OrderParses_Submit"];
         delete?: never;
@@ -1695,8 +1695,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Ayrıştırma ve eşleşme adayları (ETag döner) */
+        /** Ayrıştırma ve eşleşme adayları (ETag döner; işlenirken status = pending, satır yok) */
         get: operations["Ai_OrderParses_Get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/order-parses/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ayrıştırmanın işlenme durumu: pending, succeeded veya failed (yoklama hedefi)
+         * @description Cheap polling target of a submitted parse. `pending`: poll again after `pollAfterMs`, backing off (e.g. ×1.5 up to 5 s). `succeeded`: the review is ready at `resultUrl`. `failed`: `failureCode` is `ai.parse_failed` (processing gave up), `ai.parse_timed_out` (not processed within the deadline) or `ai.opt_in_revoked` (the tenant switched AI off before it ran); fall back to entering the order manually.
+         */
+        get: operations["Ai_OrderParses_Status"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1754,6 +1774,61 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tenant'ın AI ayrıştırma tercihi (opt-in, varsayılan kapalı) ve mesaj giriş limitleri (ETag döner) */
+        get: operations["Ai_Settings_Get"];
+        /**
+         * AI ayrıştırmayı tenant için açar/kapatır (yalnızca owner/admin; denetim kaydı yazılır)
+         * @description Opt-in of data-policy §7: while off (the default) the message text is never sent to the AI provider and submitting is refused with 409 `ai.opt_in_required`; switching it off also stops parses still waiting in the queue (`ai.opt_in_revoked`). Needs tenant.settings.manage (owner, admin). If-Match is honoured when sent. Audited as `ai.settings_changed` (before/after).
+         */
+        put: operations["Ai_Settings_Update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Öğrenilmiş eşleştirmeler (ifade → varyant; onaylanan satırlardan, WAI-07) */
+        get: operations["Ai_Aliases_List"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/aliases/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Öğrenilmiş bir eşleştirmeyi siler (yanlış öğrenilmişse) */
+        delete: operations["Ai_Aliases_Delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2137,6 +2212,25 @@ export interface components {
             /** Format: date-time */
             updatedAt: null | string;
         };
+        AiInputLimits: {
+            /** Format: int32 */
+            maxInputChars: number | string;
+            /** Format: int32 */
+            maxInputLines: number | string;
+            /** Format: int32 */
+            hourlyParseLimit: number | string;
+        };
+        AiSettingsResponse: {
+            aiParsingEnabled: boolean;
+            providerConfigured: boolean;
+            limits: components["schemas"]["AiInputLimits"];
+            /** Format: date-time */
+            updatedAt: null | string;
+            /** Format: uuid */
+            updatedBy: null | string;
+            /** Format: int64 */
+            version: number | string;
+        };
         AiUsageDayTotal: {
             /** Format: date */
             day: string;
@@ -2229,6 +2323,8 @@ export interface components {
             variantId: null | string;
             /** Format: double */
             quantity: null | number | string;
+            unit?: null | string;
+            learnAlias?: null | boolean;
         };
         ApproveOrderParseRequest: {
             /** Format: uuid */
@@ -2916,6 +3012,22 @@ export interface components {
             invitation: components["schemas"]["InvitationResponse"];
             token: string;
         };
+        LearnedAliasListResponse: {
+            items: components["schemas"]["LearnedAliasResponse"][];
+        };
+        LearnedAliasResponse: {
+            /** Format: uuid */
+            id: string;
+            phrase: string;
+            /** Format: uuid */
+            variantId: string;
+            /** Format: uuid */
+            customerId: null | string;
+            /** Format: int32 */
+            confirmations: number | string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         LimitValueResponse: {
             code: string;
             /** Format: int64 */
@@ -3191,6 +3303,15 @@ export interface components {
             items: components["schemas"]["OrderSummaryResponse"][];
             page: components["schemas"]["OrderPageInfo"];
         };
+        OrderParseAcceptedResponse: {
+            /** Format: uuid */
+            id: string;
+            status: string;
+            statusUrl: string;
+            resultUrl: string;
+            /** Format: int32 */
+            pollAfterMs: number | string;
+        };
         OrderParseCandidateResponse: {
             /** Format: uuid */
             variantId: string;
@@ -3207,6 +3328,10 @@ export interface components {
             /** Format: int32 */
             lineNo: number | string;
             rawText: string;
+            /** Format: int32 */
+            textStart: null | number | string;
+            /** Format: int32 */
+            textLength: null | number | string;
             productCode: null | string;
             productText: string;
             /** Format: double */
@@ -3228,12 +3353,13 @@ export interface components {
             /** Format: double */
             selectedQuantity: null | number | string;
             selection: null | string;
+            selectedUnit?: null | string;
         };
         OrderParseListItem: {
             /** Format: uuid */
             id: string;
             status: string;
-            parser: string;
+            parser: null | string;
             fallbackReason: null | string;
             summary: components["schemas"]["OrderParseSummary"];
             /** Format: uuid */
@@ -3255,10 +3381,13 @@ export interface components {
             channel: string;
             /** Format: uuid */
             customerId: null | string;
-            parser: string;
+            /** Format: uuid */
+            warehouseId: null | string;
+            parser: null | string;
             model: null | string;
-            promptVersion: string;
+            promptVersion: null | string;
             fallbackReason: null | string;
+            failureCode: null | string;
             messageText: null | string;
             textPurged: boolean;
             lines: components["schemas"]["OrderParseLineResponse"][];
@@ -3272,11 +3401,27 @@ export interface components {
             /** Format: uuid */
             createdBy: null | string;
             /** Format: date-time */
+            completedAt: null | string;
+            /** Format: date-time */
             reviewedAt: null | string;
             /** Format: uuid */
             reviewedBy: null | string;
             /** Format: int64 */
             version: number | string;
+        };
+        OrderParseStatusResponse: {
+            /** Format: uuid */
+            id: string;
+            state: string;
+            parseStatus: string;
+            failureCode: null | string;
+            resultUrl: string;
+            /** Format: int32 */
+            pollAfterMs: null | number | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            completedAt: null | string;
         };
         OrderParseSummary: {
             /** Format: int32 */
@@ -3994,6 +4139,8 @@ export interface components {
             text: null | string;
             /** Format: uuid */
             customerId: null | string;
+            /** Format: uuid */
+            warehouseId?: null | string;
         };
         SubmitOrderRequest: {
             confirmNegativeStock: null | boolean;
@@ -4132,6 +4279,9 @@ export interface components {
             country: null | string;
             contactName: null | string;
             contactPhone: null | string;
+        };
+        UpdateAiSettingsRequest: {
+            aiParsingEnabled: null | boolean;
         };
         UpdateBrandRequest: {
             name: null | string;
@@ -14832,13 +14982,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Created */
-            201: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["OrderParseResponse"];
+                    "application/json": components["schemas"]["OrderParseAcceptedResponse"];
                 };
             };
             /** @description Bad Request */
@@ -14927,6 +15077,67 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderParseResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Ai_OrderParses_Status: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderParseStatusResponse"];
                 };
             };
             /** @description Bad Request */
@@ -15212,6 +15423,242 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Ai_Settings_Get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiSettingsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Ai_Settings_Update: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAiSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiSettingsResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+        };
+    };
+    Ai_Aliases_List: {
+        parameters: {
+            query?: {
+                variantId?: string;
+                customerId?: string;
+                limit?: number | string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearnedAliasListResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Ai_Aliases_Delete: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

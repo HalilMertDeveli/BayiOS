@@ -64,6 +64,8 @@ test.describe("WhatsApp siparişi (mock)", () => {
     const submit = requestsTo(api, "POST", /^\/api\/v1\/ai\/order-parses$/)[0];
     expect(submit.headers["idempotency-key"]).toBeTruthy();
     expect(submit.body).toEqual({ text: "Merhaba abi\n3 adet MOCK-001-1\n5 adet MOCK-002-1\nTeşekkürler", customerId: customerId(1) });
+    // 202 + background parse: the page polled the status before opening the review.
+    expect(requestsTo(api, "GET", /\/api\/v1\/ai\/order-parses\/[^/]+\/status$/).length).toBeGreaterThanOrEqual(2);
 
     // Parser notice, the original message with the two lines marked, no price/stock anywhere.
     await expect(page.getByText("Ayrıştırıcı: Kural tabanlı")).toBeVisible();
@@ -94,8 +96,8 @@ test.describe("WhatsApp siparişi (mock)", () => {
       warehouseId: expect.any(String),
       notes: "Öğleden sonra teslim",
       lines: [
-        { lineNo: 1, include: true, variantId: ctx.catalog.products[0].variants[0].id, quantity: 3 },
-        { lineNo: 2, include: true, variantId: ctx.catalog.products[1].variants[0].id, quantity: 6 },
+        { lineNo: 1, include: true, variantId: ctx.catalog.products[0].variants[0].id, quantity: 3, unit: "ADET" },
+        { lineNo: 2, include: true, variantId: ctx.catalog.products[1].variants[0].id, quantity: 6, unit: "ADET" },
       ],
     });
 
@@ -245,6 +247,44 @@ test.describe("WhatsApp siparişi (mock)", () => {
     });
   }
 
+  test("AI opt-in kapalı (varsayılan): açıklama + sahibin açma düğmesi; açınca mesaj ayrıştırılır (axe)", async ({ page }) => {
+    const ctx = setup(createMockAssistant({ optedIn: false }));
+    const api = await signedIn(page, ctx);
+    await page.goto("/siparisler/whatsapp");
+    await expect(page.getByRole("heading", { name: "AI ile sipariş ayrıştırma kapalı" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: /^WhatsApp mesajı/ })).toHaveCount(0);
+    await expect(page.getByText(/yurt dışındaki AI hizmetine gönderilir/)).toBeVisible();
+    await expectNoSeriousViolations(page);
+    await page.getByRole("button", { name: "AI ayrıştırmayı aç" }).click();
+    expect(requestsTo(api, "PUT", /^\/api\/v1\/ai\/settings$/)[0].body).toEqual({ aiParsingEnabled: true });
+    await page.getByRole("textbox", { name: /^WhatsApp mesajı/ }).fill("2 adet MOCK-001-1");
+    await page.getByRole("button", { name: "Mesajı ayrıştır" }).click();
+    await expect(page).toHaveURL(/\/siparisler\/whatsapp\/[0-9a-f-]{36}$/);
+  });
+
+  test("AI opt-in kapalı: satış rolü açamaz, elle siparişe yönlendirilir", async ({ page }) => {
+    await signedIn(page, { ...setup(createMockAssistant({ optedIn: false })), memberships: [{ ...TENANT_A, role: "sales" }] });
+    await page.goto("/siparisler/whatsapp");
+    await expect(page.getByRole("heading", { name: "AI ile sipariş ayrıştırma kapalı" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "AI ayrıştırmayı aç" })).toHaveCount(0);
+    await expect(page.getByRole("note").filter({ hasText: "işletme sahibi veya yöneticisi" })).toBeVisible();
+  });
+
+  test("arka planda başarısız ayrıştırma: neden yazılır, metin korunur, elle sipariş önerilir", async ({ page }) => {
+    await signedIn(page, setup(createMockAssistant({ failWith: "ai.parse_timed_out", pendingPolls: 4 })));
+    await page.goto("/siparisler/whatsapp");
+    const text = page.getByRole("textbox", { name: /^WhatsApp mesajı/ });
+    await text.fill("2 adet MOCK-001-1");
+    await page.getByRole("button", { name: "Mesajı ayrıştır" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Mesaj ayrıştırılıyor" })).toBeVisible();
+    const alert = page.getByRole("alert").filter({ hasText: "Mesaj ayrıştırılamadı" });
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText("Mesaj zamanında işlenemedi.");
+    await expect(alert.getByRole("link", { name: "Siparişi elle oluştur" })).toHaveAttribute("href", "/siparisler/yeni");
+    await expect(text).toHaveValue("2 adet MOCK-001-1");
+    await expect(page).toHaveURL(/\/siparisler\/whatsapp$/);
+  });
+
   test("erişilebilirlik: giriş ve inceleme ekranı (axe)", async ({ page }) => {
     await signedIn(page, setup());
     await page.goto("/siparisler/whatsapp");
@@ -271,5 +311,25 @@ test.describe("WhatsApp siparişi — mobil (mock)", () => {
     await confirmButton(page).click();
     await expect(page).toHaveURL(/\/siparisler\/[0-9a-f-]{36}$/);
     expect(ctx.orders.orders.at(-1)).toMatchObject({ source: "whatsapp_ai", status: "draft" });
+  });
+
+  test("uzun incelemede taslak düğmesi ekranda kalır (yapışkan) ve içeriği yatay taşırmaz", async ({ page }) => {
+    const ctx = setup();
+    await signedIn(page, ctx);
+    const message = Array.from({ length: 10 }, (_, i) => `${i + 1} adet bilinmeyen parça ${i + 1}`).join("\n");
+    await pasteAndParse(page, message);
+    await expect(page.getByRole("heading", { name: /^Satır \d+$/ })).toHaveCount(10);
+    const viewport = page.viewportSize()!;
+    const inView = async () => {
+      const box = await confirmButton(page).boundingBox();
+      return box !== null && box.y >= 0 && box.y + box.height <= viewport.height;
+    };
+    // At the top of a long review, and in the middle of the lines, the confirm button is still in reach.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    expect(await inView()).toBe(true);
+    await lineCard(page, 5).scrollIntoViewIfNeeded();
+    expect(await inView()).toBe(true);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
   });
 });
