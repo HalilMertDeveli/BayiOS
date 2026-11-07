@@ -3,8 +3,8 @@
 | Alan | Değer |
 |---|---|
 | Sahip | DevOps Engineer |
-| Durum | Kısmen uygulandı — mevcut: `ci-api.yml`, `ci-web.yml`, `ci-container.yml`, `codeql.yml`, `dependency-review.yml`, `ci-migrations.yml`, `ci-gate.yml`; diğerleri plan |
-| Son güncelleme | 2026-11-04 |
+| Durum | Kısmen uygulandı — mevcut: `ci-api.yml`, `ci-web.yml`, `ci-container.yml`, `codeql.yml`, `dependency-review.yml`, `ci-migrations.yml`, `ci-db-bootstrap.yml`, `secret-scan.yml`, `ci-gate.yml`, `deploy-preview.yml`, `deploy-production.yml` (iskelet, kapalı); diğerleri plan |
+| Son güncelleme | 2026-11-07 |
 
 ## 1. Genel kurallar
 - Tüm workflow'larda en üstte `permissions: contents: read`; iş başına gerekenler ayrıca açılır.
@@ -26,13 +26,13 @@
 | `ci-mobile.yml` | PR, push — `apps/mobile/**` (Flutter eklendiğinde) | `subosito/flutter-action` (SHA pin) → `flutter pub get` → `flutter analyze` → `flutter test` → (opsiyonel) `flutter build apk --flavor dev` |
 | `contracts.yml` | PR — `services/api/**`, `packages/contracts/**` | API'den OpenAPI üret → `packages/contracts/openapi.json` ile `git diff --exit-code` (ADR 0007) → `preview` sözleşmesine karşı kırıcı değişiklik diff'i (ör. oasdiff); TS/Dart istemci üretimi derlenir |
 | `ci-migrations.yml` ✅ | PR, push (`preview`, `main`) — `services/api/**`, `infra/docker/initdb/**`, `infra/ci/ef-migrations.sh`, workflow'un kendisi | `infra/ci/ef-migrations.sh` (yerelde aynı komut: `bash infra/ci/ef-migrations.sh`; Docker + .NET SDK gerekir): `dotnet-ef` `Directory.Packages.props`'taki **EF Core sürümüne sabitlenir** → `Microsoft.EntityFrameworkCore.Design` referanslayan her modül projesindeki her DbContext otomatik bulunur (`dotnet ef dbcontext list`; yeni modül için workflow düzenlenmez) → her biri için `migrations has-pending-model-changes` (değişiklik varsa hata) ve `migrations script --idempotent` → boş `postgres:17` (`infra/docker/initdb` ile roller) üzerinde tüm script'ler `bayios_migrator` olarak **iki kez** uygulanır (idempotentlik) → `<şema>.__ef_migrations_history` kayıt sayısı doğrulanır → script'ler `migrations-sql-<sha>` artefaktı (30 gün; deploy adımı bu script'i kullanır, ADR 0005 §6). Job adı: `api migrations script, apply & drift`. Parolalar runner içindeki geçici container için sabit `ci-local-only`; sır yok |
-| `db.yml` | PR — `infra/supabase/**`, `services/api/**/Migrations/**` | (Kalan kısım; migration uygulaması `ci-migrations.yml`'de) Postgres 17 servis container → bootstrap SQL (roller, uzantılar) + tüm modüllerin EF migration'ları (idempotent script) → RLS/GRANT kontrol SQL'i (`anon`/`authenticated` iş şemasında yetkisiz, tüm tenant tablolarında RLS FORCE) |
+| `ci-db-bootstrap.yml` ✅ | PR, push (`preview`, `main`) — `services/api/**/Migrations/**`, `infra/supabase/bootstrap/**`, `infra/deploy/apply-migrations.sh`, `infra/ci/ef-migrations.sh`, `infra/docker/initdb/**`, workflow'un kendisi | `infra/supabase/bootstrap/test.sh`, matris `postgres` (düz `postgres:17`) ve `supabase` (Supabase Postgres imajı — `postgres` superuser değil — + Supabase Auth/GoTrue): bootstrap **iki kez** → EF script'leri `infra/deploy/apply-migrations.sh` ile `bayios_migrator` olarak **iki kez** → `verify.sql` (rol özellikleri, `bayios_app` hiçbir şeyin sahibi değil, `anon`/`authenticated`/`PUBLIC` iş şemalarında yetkisiz, tüm tablolarda ENABLE+FORCE RLS — belgeli istisna `platform.jobs`/`outbox_messages`) → `bayios_app` RLS/trigram smoke → (supabase) access-token hook uçtan uca (gerçek token'da üst düzey `email_verified`) + `postgres` rolü ve TLS'siz URL reddi. Job adları `db bootstrap - migration scripts`, `db bootstrap & deploy-migration rehearsal (<flavor>)` |
 | `codeql.yml` | PR, push `main`/`preview`, haftalık cron | CodeQL `csharp`, `javascript-typescript`, `actions` |
 | `dependency-review.yml` | PR | `actions/dependency-review-action` — `fail-on-severity: high`; lisans deny listesi (ör. ticari/kısıtlı lisanslar) |
-| `secrets.yml` | PR, push | gitleaks (SHA pin) tam geçmiş taraması (`fetch-depth: 0`) |
+| `secret-scan.yml` ✅ | PR (path filtresi yok), push (`main`, `preview`), haftalık cron, elle | gitleaks 8.30.1 resmi release'ten indirilir ve **SHA-256 ile doğrulanır** (üçüncü taraf Action/lisans yok). PR: `base..head` commit'leri (PR içinde eklenip silinen sır da yakalanır); push/cron/elle: tüm geçmiş (`fetch-depth: 0`). Bulgular log'da `--redact`. İzin listesi `.gitleaks.toml`: yalnızca belgeli sentetik **tam değerler**, yalnızca `generic-api-key` kuralı için (path izin listesi yasak — gitleaks dosyayı tüm kurallar için atlar). Job adı `gitleaks secret scan` |
 | `ci-gate.yml` ✅ | PR → `preview`, `main` (path filtresi yok, her zaman koşar) | Job adı **`ci gate`** — tek zorunlu kontrol. Ayrıntı §2.1 |
-| `deploy-preview.yml` | push `preview` | Migration `bayios-preview` → API imajı değişmez etiketle (git SHA) push → `fly deploy --image` (`infra/deploy/fly.preview.toml`) → smoke test (GitHub Environment `preview`). Hosting onayı bekliyor; ayrıntı `deploy-and-rollback.md` |
-| `deploy-production.yml` | tag `v*` (yalnızca `main`'den) | GitHub Environment `production` (**required reviewer: ürün sahibi**) → prod migration → API deploy → smoke → Vercel prod promote |
+| `deploy-preview.yml` ✅ | push `preview` (docs/md/mobil hariç), `workflow_dispatch`; PR'da yalnızca deploy dosyaları değişince **dry run** | `prepare` (sır yok: EF script'leri + `manifest.txt`, imaj, yerel smoke) → `migrate` (Environment `preview`: preflight → `apply-migrations.sh` `bayios_migrator` ile → `verify.sql`) → `deploy-api` (değişmez `registry.fly.io/<app>:<sha>` → `flyctl deploy --image` → smoke) → `deploy-web` (opsiyonel Vercel hook). Sır yoksa "skipped: secrets missing" ile yeşil no-op; yarım yapılandırmada kırmızı. Ayrıntı `deploy-and-rollback.md` §3/§8 |
+| `deploy-production.yml` ✅ (iskelet, kapalı) | tag `v*.*.*`, `workflow_dispatch` (etiket girdisi; rollback için önceki etiket) | `production guard` (repo değişkeni `PRODUCTION_DEPLOY_ENABLED` ≠ `true` → yeşil no-op; aksi halde etiket `main`'de, Environment `production` **required reviewers** içeriyor, `fly.production.toml` var) → `prepare` → tek `release` job'ı (Environment `production` → tek onay): katı preflight → migration → API → smoke → web hook |
 
 ### 2.1 `ci-gate` tasarımı (issue #71)
 - `ci gate` işi, PR head SHA'sı için `pull_request` olayıyla tetiklenen **diğer tüm workflow run'larını** (workflow başına en son
@@ -80,7 +80,8 @@ PR hedef dalı: `preview`. Dependabot security updates açık. FluentAssertions 
 - PR zorunlu; doğrudan push yok
 - Onay: en az 1, **CODEOWNERS = ürün sahibi** (`@HalilMertDeveli` — CODEOWNERS dosyasında), son push sonrası onay yenilenir (dismiss stale)
 - Zorunlu kontroller: yalnızca **`ci gate`** (kaynak: GitHub Actions; `ci-gate.yml` workflow'undaki job adı). Gate; api, web,
-  container, migrations, codeql, dependency-review ve ileride eklenecek mobile*, contracts, db, gitleaks workflow'larını kapsar
+  container, migrations, db-bootstrap, secret-scan (gitleaks), deploy-preview (PR dry run), codeql, dependency-review ve
+  ileride eklenecek mobile*, contracts workflow'larını kapsar
 - Dal güncel olmalı (strict); konuşmalar çözülmeli
 - Force push yok, silme yok; linear history (squash merge)
 - Bypass listesi boş (admin dahil)
