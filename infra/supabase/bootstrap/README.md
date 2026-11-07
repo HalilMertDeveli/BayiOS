@@ -70,7 +70,7 @@ Gerekenler: Docker (yerel `psql` yoksa `postgres:17` imajı kullanılır), proje
       (`is_anonymous: true`) bu ayardan bağımsız olarak her uçta 401 ile reddeder (denetim L-2).
 - [ ] **CAPTCHA (Cloudflare Turnstile)** — kayıt/giriş/parola sıfırlama kötüye kullanımına karşı önerilir (denetim L-3,
       tehdit modeli §6.5). **Önce web entegrasyonu gerekir** (ayrı iş): Supabase'te CAPTCHA açılınca `signUp`/`signIn`/
-      `resetPasswordForEmail` çağrıları `captchaToken` göndermek zorundadır ve web CSP'sine (`apps/web/src/lib/security/headers.ts`)
+      `resetPasswordForEmail` çağrıları `captchaToken` göndermek zorundadır ve web CSP'sine (`apps/web/next.config.ts`)
       `https://challenges.cloudflare.com` (`script-src`, `frame-src`) eklenmelidir. Web desteklemeden açılırsa **kimse giriş
       yapamaz**. Gizli anahtar yalnızca Supabase Dashboard'da durur; site anahtarı web'e `NEXT_PUBLIC_` ile gider.
 - [ ] Rate Limits: e-posta gönderimi (`Email sent`) ve doğrulama/OTP sınırları Supabase varsayılanlarında veya daha sıkı;

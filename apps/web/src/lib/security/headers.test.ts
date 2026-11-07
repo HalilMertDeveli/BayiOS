@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contentSecurityPolicy, originOf, securityHeaders } from "./headers";
+import { contentSecurityPolicy, originOf, securityHeaders } from "../../../next.config";
 
 const directives = (csp: string) =>
   new Map(

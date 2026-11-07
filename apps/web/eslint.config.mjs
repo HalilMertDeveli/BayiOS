@@ -7,7 +7,7 @@ const eslintConfig = defineConfig([
   ...nextTs,
   {
     // Threat-model §3.1: no raw HTML sinks. The CSP cannot use nonces (Cache Components, see
-    // src/lib/security/headers.ts), so React's escaping is the line of defence for inline injection.
+    // next.config.ts), so React's escaping is the line of defence for inline injection.
     rules: {
       "react/no-danger": "error",
       "no-eval": "error",
