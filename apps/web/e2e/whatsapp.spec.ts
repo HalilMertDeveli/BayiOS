@@ -71,6 +71,9 @@ test.describe("WhatsApp siparişi (mock)", () => {
     await expect(page.getByTestId("whatsapp-message").locator("mark")).toHaveCount(2);
     await expect(page.getByText("Sipariş satırı olarak okunmayan kısımlar")).toBeVisible();
     await expect(page.locator("main")).not.toContainText("₺");
+    // #133: the catalog unit's display name (GET /units: ADET → "Adet"), not its code.
+    await expect(lineCard(page, 1).getByText("Birim: Adet", { exact: true })).toBeVisible();
+    await expect(page.locator("main")).not.toContainText("ADET");
 
     // Matched lines are pre-filled but still need a person's confirmation.
     await expect(confirmButton(page)).toBeDisabled();
@@ -116,6 +119,7 @@ test.describe("WhatsApp siparişi (mock)", () => {
     const radios = card.getByRole("radio");
     await expect(radios).toHaveCount(2);
     for (const radio of await radios.all()) await expect(radio).not.toBeChecked();
+    await expect(card.getByRole("radio", { name: /MOCK-003-1/ })).toHaveAccessibleName(/ · Adet · (SKU|Barkod|Ürün adı|Benzerlik) %/);
 
     await page.getByLabel("Satır 2: önerilen ürünü onaylıyorum").check();
     await expect(confirmButton(page)).toBeDisabled();

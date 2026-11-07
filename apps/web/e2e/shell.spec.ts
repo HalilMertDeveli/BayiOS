@@ -74,6 +74,9 @@ test.describe("shell — desktop", () => {
 
   test("skip link moves focus to the main content", async ({ page }) => {
     await page.goto("/pano");
+    // The prerendered HTML holds only the loading fallback (no skip link); the shell is rendered on the client and can
+    // land after `goto` resolves. Tab before that has nothing to focus (the PR #128 flake), so wait for the real shell.
+    await expect(page.getByRole("heading", { level: 1, name: "Pano" })).toBeVisible();
     await page.keyboard.press("Tab");
     const skip = page.getByRole("link", { name: "İçeriğe geç" });
     await expect(skip).toBeFocused();

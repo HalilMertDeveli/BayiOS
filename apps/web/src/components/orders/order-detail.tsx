@@ -302,7 +302,7 @@ function OrderView({
         actions={
           <span className="flex flex-wrap items-center gap-2">
             <OrderStatus status={order.status} />
-            <FulfillmentBadge status={order.fulfillmentStatus} showNone={fulfilment} />
+            <FulfillmentBadge status={order.fulfillmentStatus} orderStatus={order.status} showNone={fulfilment} />
             {order.hasShortage ? <Badge tone="warning">Depoda eksik bildirildi</Badge> : null}
           </span>
         }

@@ -209,6 +209,17 @@ export function motorDemo(size = "full") {
         contactName: `Örnek Yetkili ${n}`,
         contactPhone: `+90 000 000 01 ${n}`,
       },
+      // Billing address (#136: orders carry a billing address snapshot too).
+      billingAddress: {
+        title: "Fatura",
+        line1: `Sentetik Sanayi Sitesi ${i + 1}. Blok No: ${10 + i} Muhasebe`,
+        district,
+        city,
+        postalCode,
+        country: "TR",
+        contactName: `Örnek Yetkili ${n}`,
+        contactPhone: `+90 000 000 01 ${n}`,
+      },
     };
   });
 

@@ -27,7 +27,10 @@ export interface WhatsappIntent {
 
 export interface DemoCustomer {
   id: string;
+  /** Default shipping address. */
   addressId: string;
+  /** Default billing address (#136). */
+  billingAddressId: string;
   code: string;
   name: string;
   group: string;
@@ -56,6 +59,8 @@ export interface DemoCounts {
   orders: number;
   ordersByStatus: Record<string, number>;
   partialFulfilment: number;
+  /** Orders whose detail carries a billing address (#136). */
+  ordersWithBillingAddress: number;
   whatsappOrders: number;
 }
 

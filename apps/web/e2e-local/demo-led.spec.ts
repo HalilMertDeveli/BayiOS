@@ -49,6 +49,8 @@ test("LED demo: toplu katalog içe aktarma → fiyat kademesi → kademeli fiyat
   });
   console.log(`[seed] small LED demo in ${demo.seconds.toFixed(1)} s: ${JSON.stringify(demo.counts)}`);
   expect(demo.counts.ordersByStatus).toMatchObject({ approved: 1, shipped: 1 });
+  // #136: every seeded order carries a billing address (customers have a default billing address; orders choose it).
+  expect(demo.counts.ordersWithBillingAddress).toBe(demo.counts.orders);
   const ist = demo.warehouses.IST;
   const customer = demo.customers.find((c) => c.group === "Kurulum")!; // no dealer list → the default list applies
 
@@ -162,7 +164,15 @@ test("LED demo: toplu katalog içe aktarma → fiyat kademesi → kademeli fiyat
   expect([Number(psuLine.shippedQuantity), Number(psuLine.cancelledQuantity)]).toEqual([ORDERED[PSU] - DAMAGED, DAMAGED]);
   await page.goto(`/siparisler/${orderId}`);
   await expect(page.getByText("Sevk Edildi").first()).toBeVisible();
-  await expect(page.getByText(closed.order.fulfillmentStatus === "full" ? "Tamamı sevk edildi" : "Kısmi sevk").first()).toBeVisible();
+  // #133: the API keeps fulfillmentStatus=partial after the short-close (product decision pending); the UI says so
+  // unambiguously ("Sevk Edildi" + "Kalan kapatıldı") instead of "Kısmi sevk".
+  expect(closed.order.fulfillmentStatus).toBe("partial");
+  await expect(page.getByText("Kalan kapatıldı", { exact: true })).toBeVisible();
+  await expect(page.getByText("Kısmi sevk", { exact: true })).toHaveCount(0);
+  // #136: the order keeps the customer's billing address (snapshot from submit), not "Siparişte kayıtlı adres yok".
+  const addresses = page.getByRole("region", { name: "Adresler" });
+  await expect(addresses).toContainText("Muhasebe Ofisi");
+  await expect(addresses).not.toContainText("Siparişte kayıtlı adres yok");
   await expectStock(page, ist.id, PSU, RECEIVED[PSU] - (ORDERED[PSU] - DAMAGED), 0, RECEIVED[PSU] - (ORDERED[PSU] - DAMAGED));
 
   // ---- 8. Reports: top products, exported as CSV and XLSX (real files from the API).

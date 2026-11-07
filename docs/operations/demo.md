@@ -46,6 +46,8 @@ gerçek kimlik bilgisi repoya asla girmez.
   ve yeniden kullanılır; onları da silmek için `E2E_SUPABASE_NO_BACKUP=1 bash infra/ci/e2e-stack.sh down`.
 - `.demo/credentials.json` silinirse mevcut kullanıcıya yeni şifreyle girilemez: dosyayı geri getirin veya Auth'u
   yukarıdaki gibi sıfırlayın.
+- Seeder mevcut (tam) bir demoyu **güncellemez**. #136 öncesi kurulmuş bir demoda LED ürün adları eski küçük harfle
+  ("i̇ç mekân") ve siparişler fatura adresi olmadan kalır; yeni veri için yukarıdaki gibi sıfırlayıp yeniden kurun.
 
 ## Demo içeriği (tam boy, `--size full`)
 
@@ -56,7 +58,7 @@ gerçek kimlik bilgisi repoya asla girmez.
 | Özel alan değerleri | uyumlu marka (çoklu), model, model yılı aralığı, OEM no (`90001-SNT-###`), taraf, garanti; varyantta parça tipi (Orijinal/Muadil/Yan sanayi) | pixel pitch, kullanım, modül ölçüsü, parlaklık, tarama, LED tipi, güç, voltaj, IP sınıfı, kart ailesi uyumu, seri no takibi bayrağı |
 | Depo / raf | Merkez Depo (raflı, 9 raf, varsayılan) + Dükkân | İstanbul Merkez (raflı, 8 raf, varsayılan) + Ankara Şube + Hasarlı/İade |
 | Fiyat listeleri | Perakende (varsayılan) + Bayi A (%12, fren balatasında 10+ kademe) + Bayi B (%6) | Liste fiyatı (varsayılan; modüllerde 50+ / 200+ kademe) + Entegratör (%8) |
-| Bayi grupları / müşteri (adresli) | Bayi A, Bayi B, Perakende / 12 | Entegratör, Ajans, Kurulum / 10 |
+| Bayi grupları / müşteri (adresli) | Bayi A, Bayi B, Perakende / 12; her müşteride varsayılan teslimat ("Dükkân") + fatura ("Fatura") adresi | Entegratör, Ajans, Kurulum / 10; teslimat ("Merkez") + fatura ("Muhasebe") adresi |
 | İçe aktarma | 1 XLSX (aksesuar/sarf; fiyat + garanti alanı), Imports API: yükle → eşleme → kuru doğrulama → çalıştır | 1 XLSX (güç kaynağı, kablo (metre), montaj, yedek LED; fiyat + teknik alanlar) |
 | Stok | Mal kabulleriyle (ledger), kategori rafına; bazı kalemler kritik seviyede (2) | Aynı; kablo metre (ondalık) |
 | Siparişler (17) | taslak 3 (biri WhatsApp), onay bekliyor 2, onaylandı/rezerve 2, toplanıyor 1, paketlendi 1, kısmi sevk + kalanı kapatıldı 1, sevk edildi 3, tamamlandı 2, iptal 2 (biri onaydan sonra, rezervasyon serbest) | aynı dağılım; proje siparişi (24 kabinet + kartlar + PSU + kablo) dahil |
@@ -65,6 +67,20 @@ gerçek kimlik bilgisi repoya asla girmez.
 Sipariş akışları gerçek uç noktalarla yürür: gönder/onayla (If-Match), toplama görevi atama + başlatma + raf/barkod
 okutma, eksik bildirimi, tamamla → taslak sevkiyat → paket kontrolü → sevk onayı, `close-remaining`, `complete`,
 `cancel`.
+
+- **Adresler (#136):** her sipariş müşterinin teslimat **ve** fatura adresini açıkça seçer (`shippingAddressId`,
+  `billingAddressId`); gönderimden itibaren siparişte ikisinin de kopyası (snapshot) durur, sipariş detayında
+  "Siparişte kayıtlı adres yok" görünmez; taslaklar müşterinin varsayılan adreslerini önizler. Tek istisna taslakken
+  (hiç gönderilmeden) iptal edilen siparişdir: gönderilmediği için kopya yoktur. Tam boy demoda sayım özeti
+  `ordersWithBillingAddress` = 16 / 17.
+- **Türkçe küçük harf (#136):** ürün adlarındaki kullanım etiketi `toLocaleLowerCase("tr-TR")` ile küçültülür
+  ("İç mekân" → "iç mekân"). SKU / mesaj eşleştirmedeki `toLowerCase()` bilinçli olarak kalır: kodlar ASCII'dir ve
+  `tr-TR` ile `VID-ISL` → `vıd-ısl` olur, eşleşme bozulur.
+- **"Kalanı kapat" sonrası etiket (#133):** API siparişi `shipped` yapar ama `fulfillmentStatus = partial` bırakır
+  (kapatılan kalan hiç sevk edilmedi; bunun `full` sayılıp sayılmayacağı ürün kararı, açık). Veri olduğu gibi
+  kalır; arayüz `shipped`/`completed` + `partial` durumunu "Kısmi sevk" yerine **"Sevk Edildi · Kalan kapatıldı"**
+  rozetleriyle gösterir (liste ve detay). Sevkiyat yalnızca kalan kalmadığında `shipped` yaptığı için bu birleşim
+  yalnızca `close-remaining` sonrası oluşur.
 
 ## Uçtan uca demo senaryoları (gerçek yığın, mock yok)
 
@@ -96,5 +112,5 @@ benzersiz kiracısıyla API'den kurar, sonra hikâyeyi web arayüzünde yürür.
    toplama görevi kendine atanır. Davet API'si gelince seeder her role bir sentetik kullanıcı ekleyecek şekilde
    genişletilmeli.
 3. **İçe aktarma ekranı yok:** `/ice-aktarma` yer tutucu; toplu içe aktarma yalnızca API ile yapılabiliyor.
-4. **Kalanı kapatma (`close-remaining`) için web eylemi yok:** sipariş detayı "karar depo/yönetici ekranlarında" der
-   ama böyle bir ekran yok; LED senaryosu bu adımı sahibin kendi token'ıyla API'den yapar.
+4. ~~Kalanı kapatma için web eylemi yok~~ — #129 ile sipariş detayında "Kalanı kapat" var; LED senaryosu bu adımı
+   arayüzden yapar. Açık kalan: kapatılan kalan sonrası `fulfillmentStatus` değeri (yukarıda, #133).

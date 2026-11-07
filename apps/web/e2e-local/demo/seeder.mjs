@@ -39,6 +39,9 @@ export async function summarize(api) {
   const byStatus = {};
   for (const o of orders) byStatus[o.status] = (byStatus[o.status] ?? 0) + 1;
   const partial = orders.filter((o) => o.fulfillmentStatus === "partial").length;
+  // Billing address on the order (#136): a snapshot from submit on, the customer's default as preview on drafts.
+  let withBilling = 0;
+  for (const o of orders) if ((await api.get(`/api/v1/orders/${o.id}`)).order.billingAddress) withBilling++;
   return {
     products: products.length,
     variants: products.reduce((n, p) => n + p.variants.length, 0),
@@ -53,6 +56,7 @@ export async function summarize(api) {
     orders: orders.length,
     ordersByStatus: byStatus,
     partialFulfilment: partial,
+    ordersWithBillingAddress: withBilling,
     whatsappOrders: orders.filter((o) => o.source === "whatsapp_ai").length,
   };
 }
@@ -250,7 +254,8 @@ export async function seedDemo({ cfg, demo, size = "full", owner, tenant, includ
       notes: "Sentetik demo müşterisi.",
     });
     const address = await api.post(`/api/v1/customers/${customer.id}/addresses`, { type: "shipping", isDefault: true, line2: null, ...c.address });
-    customers.push({ ...c, id: customer.id, addressId: address.id });
+    const billing = await api.post(`/api/v1/customers/${customer.id}/addresses`, { type: "billing", isDefault: true, line2: null, ...c.billingAddress });
+    customers.push({ ...c, id: customer.id, addressId: address.id, billingAddressId: billing.id });
   }
   log(`  ${customers.length} customers in ${def.dealerGroups.length} dealer groups, ${1 + def.priceLists.dealer.length} price lists`);
 
@@ -328,8 +333,9 @@ export async function driveOrder(refs, spec, index = 0) {
       if (!variants[sku]) throw new Error(`Order line SKU ${sku} is not in the demo catalog`);
       return { id: null, variantId: variants[sku].id, quantity, unitPrice: null, discountPercent: null, discountAmount: null };
     }),
+    // Both chosen explicitly: from submit on the order keeps a snapshot of each (#136).
     shippingAddressId: customer.addressId,
-    billingAddressId: null,
+    billingAddressId: customer.billingAddressId,
   });
   const id = detail.order.id;
   const act = async (action, body) => {

@@ -26,6 +26,7 @@ import { orderHref } from "@/lib/orders/api";
 import { useSession } from "@/lib/session/session-context";
 import { MessageText } from "./message-text";
 import { ReviewLineCard } from "./review-line-card";
+import { useUnitNames } from "./use-unit-names";
 
 type LoadState = { status: "loading" } | { status: "error"; message: string; notFound: boolean } | { status: "ready"; loaded: LoadedParse };
 
@@ -235,6 +236,7 @@ function ReviewForm({
   const { parse, etag } = loaded;
   const [state, dispatch] = useReducer(reviewReducer, parse, initialReview);
   const warehouses = useWarehouses();
+  const unitName = useUnitNames();
   const names = useCustomerNames(parse.customerId ? [parse.customerId] : []);
   const [customer, setCustomer] = useState<{ id: string; name: string | null; code: string | null } | null>(
     parse.customerId ? { id: parse.customerId, name: null, code: null } : null,
@@ -451,6 +453,7 @@ function ReviewForm({
                     dispatch={dispatch}
                     serverErrors={lineErrors.get(state.lines[i].lineNo)}
                     disabled={disabled}
+                    unitName={unitName}
                   />
                 ))}
               </ol>

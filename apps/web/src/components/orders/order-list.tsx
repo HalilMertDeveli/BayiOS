@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CircleAlert, Lock, MessageSquareText, Plus, Rows3, Rows4, Search, SearchX, ShoppingCart } from "lucide-react";
@@ -109,10 +109,25 @@ function OrderListView({
   const apiKey = toOrderApiQuery(query);
   const [dense, setDense] = usePersistentBoolean("bayios.siparisler.dense");
 
+  // router.replace runs as a transition: until it commits, `query` (useSearchParams) still holds the previous URL. A
+  // second change in that window (e.g. "clear" and then a date) must build on the URL just requested, not on the stale
+  // query; otherwise it silently brings the cleared filters back (#136, seen as a CI flake). Once the URL has caught
+  // up, the URL is the truth again (back/forward included).
+  const pending = useRef<{ search: string; query: OrderListQuery } | null>(null);
+  const currentSearch = toOrderSearchString(query);
+  useEffect(() => {
+    if (pending.current?.search === currentSearch) pending.current = null;
+  }, [currentSearch]);
+
   const navigate = (next: OrderListQuery) => {
     const search = toOrderSearchString(next);
+    // Compared in the form the URL will parse back to (an invalid date input is dropped), so it always catches up.
+    const expected = parseOrderQuery(new URLSearchParams(search));
+    pending.current = search === currentSearch ? null : { search: toOrderSearchString(expected), query: expected };
     router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
   };
+  /** One filter changed: applied on top of the latest requested query. */
+  const setFilter = (patch: Partial<OrderListQuery>) => navigate({ ...(pending.current?.query ?? query), ...patch });
 
   // ---- Search box: local text, pushed to the URL after a pause (same pattern as the other lists). ----
   const [searchText, setSearchText] = useState(query.q);
@@ -286,23 +301,23 @@ function OrderListView({
             label="Durum"
             options={ORDER_STATUS_FILTERS.map((f) => ({ value: f.value, label: f.label }))}
             value={query.status}
-            onChange={(e) => navigate({ ...query, status: e.target.value })}
+            onChange={(e) => setFilter({ status: e.target.value })}
           />
           <Select
             label="Kaynak"
             placeholder="Tüm kaynaklar"
             options={ORDER_SOURCES.map((s) => ({ value: s, label: orderSourceLabels[s] }))}
             value={query.source}
-            onChange={(e) => navigate({ ...query, source: e.target.value })}
+            onChange={(e) => setFilter({ source: e.target.value })}
           />
-          <Input label="Başlangıç tarihi" type="date" value={query.from} max={query.to || undefined} onChange={(e) => navigate({ ...query, from: e.target.value })} />
+          <Input label="Başlangıç tarihi" type="date" value={query.from} max={query.to || undefined} onChange={(e) => setFilter({ from: e.target.value })} />
           <Input
             label="Bitiş tarihi"
             type="date"
             value={query.to}
             min={query.from || undefined}
             error={rangeError ?? undefined}
-            onChange={(e) => navigate({ ...query, to: e.target.value })}
+            onChange={(e) => setFilter({ to: e.target.value })}
           />
         </div>
         {canReadCustomers ? (
@@ -311,7 +326,7 @@ function OrderListView({
             pickedLabel="Müşteri filtresi"
             hint="Ad veya kodun bir kısmı; tam vergi no / telefon."
             value={filterCustomer}
-            onChange={(c) => navigate({ ...query, customerId: c?.id ?? "" })}
+            onChange={(c) => setFilter({ customerId: c?.id ?? "" })}
           />
         ) : null}
         <p className="text-caption text-fg-muted">Tarihler siparişin oluşturulduğu güne göre (UTC) süzülür.</p>
