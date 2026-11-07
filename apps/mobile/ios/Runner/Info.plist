@@ -6,6 +6,8 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Toplama sırasında ürün ve raf barkodlarını okutmak için kamera kullanılır. İzin vermezseniz kodu elle girebilirsiniz.</string>
 	<key>CFBundleDisplayName</key>
 	<string>BayiOS Depo</string>
 	<key>NSCameraUsageDescription</key>
