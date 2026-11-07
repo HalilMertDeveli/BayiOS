@@ -64,21 +64,21 @@ bash infra/ops/restore-drill.sh      # bash + Docker + .NET SDK; ~3,5 dk
 4. `backup.sh` → 5. **boş** `postgres:17` (rol yok) → `restore.sh`
 6. Gerçek `bayios_app` parola girişiyle: tenant görünürlüğü, çapraz tenant INSERT'in RLS ile reddi, kontrol testi (RLS kapatılınca aynı sorgu diğer tenant'ları görür → kontrol boş değil), defter mutabakatı, kaynak = hedef içerik parmak izi
 
-### Son prova sonucu (2026-11-07, Windows 11 + Docker Desktop, `postgres:17` = 17.11, worktree `feature/55-observability-backup`)
+### Son prova sonucu (2026-11-07, Windows 11 + Docker Desktop, `postgres:17` = 17.11, `feature/55-observability-backup` preview @ 6039c6f üzerine)
 
 | Ölçüm | Değer |
 |---|---|
 | Migration script'i | 12 (idempotent, 2 kez uygulandı — `ef-migrations.sh` OK) |
 | Yedeklenen şema | 13 (`audit, billing, catalog, customers, identity, imports, integrations, inventory, orders, platform, pricing, reports, warehouse`) |
 | Tohum | 2 tenant, 65 ürün, 78 defter hareketi, 13 onaylı sipariş, 26 rezervasyon, 13 audit olayı |
-| Dump | 274.645 bayt, `pg_dump` < 1 sn; sha256 doğrulandı |
+| Dump | 274.640 bayt, `pg_dump` 1 sn; sha256 doğrulandı |
 | Tablo / satır | **60 tablo, 430 satır — manifest ile birebir** |
 | RLS | 46 tabloda FORCE RLS; bayraklar kaynakla aynı |
 | Migration geçmişi | 12/12 şema aynı son migration |
 | `bayios_app` | NOSUPERUSER NOBYPASSRLS; 44 tenant tablosunda tenant'sız 0 satır; tenant A seçiliyken başka tenant satırı 0 (A'nın kendi 241 satırı görünür) |
 | Drill kontrolleri | tenant'sız ürün 0 · A'nın ürünü 40/40 · A'dan B'nin ürünü 0 · B'nin defter hareketi 30/30 · A→B çapraz INSERT **RLS ile reddedildi** · kontrol (RLS kapalıyken) 65 · defter mutabakatı 0 uyumsuzluk |
 | Parmak izi (kaynak = hedef) | `drill-a products=40 movements=48 ledger_sum=3976 on_hand=3976 reserved=80 orders=8 …` · `drill-b products=25 movements=30 ledger_sum=1235 on_hand=1235 reserved=50 orders=5 …` |
-| Süre | `pg_restore` < 1 sn; restore + doğrulama 52 sn; prova toplamı 197 sn (migration üretimi dahil) |
+| Süre | `pg_restore` < 1 sn; restore + doğrulama 72 sn; prova toplamı 226 sn (migration üretimi dahil; makinede eşzamanlı test koşusu varken — yüksüz önceki koşu 52 sn / 197 sn) |
 
 Prova her şema değişikliğinde (yeni modül/migration) ve en az ayda bir tekrarlanır; sonuç bu tabloya yazılır. CI'a eklenmesi (`ci-migrations` sonrası) ayrı bir iş — workflow'lar bu PR'ın kapsamı dışında.
 

@@ -87,8 +87,23 @@ internal static class ObservabilitySetup
                     // Probes are noise; exceptions are recorded (redacted) by the error-tracking hook, not raw here.
                     options.Filter = context => !context.Request.Path.StartsWithSegments("/health", StringComparison.Ordinal);
                     options.RecordException = false;
+
+                    // Defence in depth on top of the instrumentation's own query redaction: no query string at all.
+                    options.EnrichWithHttpRequest = static (activity, _) => activity.SetTag("url.query", null);
                 })
-                .AddHttpClientInstrumentation(options => options.RecordException = false)
+                .AddHttpClientInstrumentation(options =>
+                {
+                    options.RecordException = false;
+
+                    // Outgoing URLs (Storage signed URLs, provider calls) keep scheme, host and path only.
+                    options.EnrichWithHttpRequestMessage = static (activity, request) =>
+                    {
+                        if (request.RequestUri is { IsAbsoluteUri: true } uri)
+                        {
+                            activity.SetTag("url.full", uri.GetLeftPart(UriPartial.Path));
+                        }
+                    };
+                })
                 .AddOtlpExporter())
             .WithMetrics(metrics => metrics
                 .AddMeter(BayiOsMetrics.MeterName)

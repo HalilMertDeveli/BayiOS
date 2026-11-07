@@ -61,7 +61,7 @@ Doluysa trace ve metrikler **yalnızca OTLP** ile o uç noktaya gider — sağla
 
 Kaynak öznitelikleri: `service.name`, `service.version` (assembly InformationalVersion), `deployment.environment.name` (`ASPNETCORE_ENVIRONMENT`).
 
-**Trace kaynakları:** ASP.NET Core (gelen istek; `/health*` filtrelenir), HttpClient (Anthropic, Supabase Storage çağrıları), Npgsql (SQL; parametre değerleri yok, metin `$1` yer tutuculu), `BayiOS` ActivitySource. İstek span'ine `bayios.tenant_id` ve `enduser.id` (UUID) eklenir. Query string değerleri instrumentation tarafından varsayılan olarak redakte edilir; istek/yanıt başlıkları yakalanmaz; istisnalar span'e ham olarak yazılmaz (`RecordException=false`) — yalnızca hata izleme kancası (§5) redakte edilmiş halini ekler.
+**Trace kaynakları:** ASP.NET Core (gelen istek; `/health*` filtrelenir), HttpClient (Anthropic, Supabase Storage çağrıları), Npgsql (SQL; parametre değerleri yok, metin `$1` yer tutuculu), `BayiOS` ActivitySource. İstek span'ine `bayios.tenant_id` ve `enduser.id` (UUID) eklenir. Query string'ler span'lere hiç yazılmaz (sunucu span'inde `url.query` silinir, istemci span'inde `url.full` yalnızca şema + host + path — signed URL token'ları dahil); istek/yanıt başlıkları yakalanmaz; istisnalar span'e ham olarak yazılmaz (`RecordException=false`) — yalnızca hata izleme kancası (§5) redakte edilmiş halini ekler.
 
 **Metrikler:** `BayiOS` meter'ı (§3) + ASP.NET Core (`http.server.request.duration`, durum kodu ve route etiketli → 5xx oranı) + HttpClient (`http.client.request.duration`) + `Npgsql` (bağlantı havuzu, komut süreleri) + `System.Runtime` (GC, thread pool).
 
