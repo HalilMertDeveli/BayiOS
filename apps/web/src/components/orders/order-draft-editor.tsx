@@ -34,6 +34,7 @@ import { isOrderVersionConflict, isStaleState, orderErrorMessage, orderFieldErro
 import type { OrderPermissions } from "@/lib/orders/permissions";
 import { formatMoney, formatPercent } from "@/lib/pricing/money";
 import { useSession } from "@/lib/session/session-context";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 import { OrderAddressPickers } from "./order-address-pickers";
 import { LinePrice, lineDiscountText } from "./order-lines";
 import { useCustomerNames, useWarehouses } from "./use-order-reference";
@@ -95,6 +96,7 @@ export function OrderDraftEditor({
   const [saving, setSaving] = useState(false);
   const [keys] = useState(() => new IdempotencyKeys());
   const alertRef = useRef<HTMLDivElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
 
   // New draft: preselect the default warehouse once the list is in.
   const defaultWarehouse = warehouses.status === "ready" ? (warehouses.items.find((w) => w.isDefault && w.status === "active") ?? null) : null;
@@ -127,7 +129,7 @@ export function OrderDraftEditor({
 
   const fail = (message: string) => {
     setFormError(message);
-    requestAnimationFrame(() => alertRef.current?.focus());
+    focusAfterCommit(() => alertRef.current);
   };
 
   const submit = async (event: FormEvent) => {

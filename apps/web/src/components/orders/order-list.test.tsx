@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ApiClient } from "@/lib/api/client";
 import { SessionContext } from "@/lib/session/session-context";
@@ -42,6 +42,24 @@ describe("OrderList filters while a navigation is pending (#136)", () => {
     expect(replace).toHaveBeenLastCalledWith("/siparisler?baslangic=2026-11-02", { scroll: false });
     fireEvent.change(screen.getByLabelText("Bitiş tarihi"), { target: { value: "2026-11-03" } });
     expect(replace).toHaveBeenLastCalledWith("/siparisler?baslangic=2026-11-02&bitis=2026-11-03", { scroll: false });
+  });
+
+  it("a filter and then the debounced search keep both (#152)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      replace.mockClear();
+      params = new URLSearchParams();
+      renderList();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.selectOptions(await screen.findByRole("combobox", { name: "Kaynak" }), "whatsapp_ai");
+      await user.type(screen.getByLabelText("Sipariş no ara"), "000123");
+      await act(async () => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(replace).toHaveBeenLastCalledWith("/siparisler?q=000123&kaynak=whatsapp_ai", { scroll: false });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("two quick filter changes keep both", async () => {

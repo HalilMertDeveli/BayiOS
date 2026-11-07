@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CircleAlert, Lock, MessageSquareText, Plus, Rows3, Rows4, Search, SearchX, ShoppingCart } from "lucide-react";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -32,6 +31,7 @@ import { customerPermissions } from "@/lib/customers/permissions";
 import { formatMoney, formatQuantity } from "@/lib/pricing/money";
 import { useSession } from "@/lib/session/session-context";
 import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
+import { useUrlQuery } from "@/lib/use-url-query";
 import { OrderStatusCell } from "./order-badges";
 import { useCustomerNames } from "./use-order-reference";
 
@@ -101,33 +101,14 @@ function OrderListView({
   /** orders.read limited to task-linked orders without prices (warehouse staff). */
   taskLinkedOnly: boolean;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const query = useMemo(() => parseOrderQuery(searchParams), [searchParams]);
+  // Filters change through navigate / setFilter only: a second change before the URL has caught up builds on the URL
+  // just requested, not on the stale query; otherwise it silently brings the cleared filters back (#136, #152).
+  const { query, latest, navigate } = useUrlQuery(parseOrderQuery, toOrderSearchString);
   const rangeError = dateRangeError(query);
   const apiKey = toOrderApiQuery(query);
   const [dense, setDense] = usePersistentBoolean("bayios.siparisler.dense");
-
-  // router.replace runs as a transition: until it commits, `query` (useSearchParams) still holds the previous URL. A
-  // second change in that window (e.g. "clear" and then a date) must build on the URL just requested, not on the stale
-  // query; otherwise it silently brings the cleared filters back (#136, seen as a CI flake). Once the URL has caught
-  // up, the URL is the truth again (back/forward included).
-  const pending = useRef<{ search: string; query: OrderListQuery } | null>(null);
-  const currentSearch = toOrderSearchString(query);
-  useEffect(() => {
-    if (pending.current?.search === currentSearch) pending.current = null;
-  }, [currentSearch]);
-
-  const navigate = (next: OrderListQuery) => {
-    const search = toOrderSearchString(next);
-    // Compared in the form the URL will parse back to (an invalid date input is dropped), so it always catches up.
-    const expected = parseOrderQuery(new URLSearchParams(search));
-    pending.current = search === currentSearch ? null : { search: toOrderSearchString(expected), query: expected };
-    router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
-  };
   /** One filter changed: applied on top of the latest requested query. */
-  const setFilter = (patch: Partial<OrderListQuery>) => navigate({ ...(pending.current?.query ?? query), ...patch });
+  const setFilter = (patch: Partial<OrderListQuery>) => navigate({ ...latest(), ...patch });
 
   // ---- Search box: local text, pushed to the URL after a pause (same pattern as the other lists). ----
   const [searchText, setSearchText] = useState(query.q);
@@ -142,14 +123,13 @@ function OrderListView({
   }
   useEffect(() => {
     const text = searchText.trim();
-    if (text === query.q) return;
+    if (text === latest().q) return;
     const timer = setTimeout(() => {
       setPushedQ(text);
-      const search = toOrderSearchString({ ...query, q: text });
-      router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
+      navigate({ ...latest(), q: text });
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [searchText, query, pathname, router]);
+  }, [searchText, query, latest, navigate]);
 
   // ---- Data: first page per query; more pages appended with the cursor. ----
   const [data, setData] = useState<ListData | null>(null);

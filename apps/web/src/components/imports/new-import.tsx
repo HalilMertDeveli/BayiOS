@@ -18,6 +18,7 @@ import { canRunType, importPermissions } from "@/lib/imports/permissions";
 import { listPriceLists, type PriceList } from "@/lib/pricing/api";
 import { useSession } from "@/lib/session/session-context";
 import { cn } from "@/lib/cn";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 import { ImportStepper } from "./import-stepper";
 import { ImportsLocked } from "./import-history";
 
@@ -77,6 +78,7 @@ export function NewImport() {
   const [keys] = useState(() => new IdempotencyKeys());
   const inputRef = useRef<HTMLInputElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
   const inputId = useId();
 
   useEffect(() => {
@@ -161,7 +163,7 @@ export function NewImport() {
       if (error instanceof ApiError && [413, 415, 422].includes(error.status)) keys.reset();
       setUploadError(importErrorMessage(error));
       setUploading(false);
-      requestAnimationFrame(() => alertRef.current?.focus());
+      focusAfterCommit(() => alertRef.current);
     }
   };
 

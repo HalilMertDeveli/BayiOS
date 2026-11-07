@@ -1,11 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/ui/toast";
 import { ApiError, type ApiClient, type RequestOptions } from "@/lib/api/client";
 import type { TenantSettings } from "@/lib/api/identity";
 import { SessionContext } from "@/lib/session/session-context";
 import type { FixtureRole } from "@/test/me-fixtures";
+import { frameBeforeCommit } from "@/test/frame-before-commit";
 import { mockSession } from "@/test/session";
 import { OrderSettings } from "./order-settings";
 
@@ -114,5 +115,34 @@ describe("Ayarlar → Sipariş ayarları (#92)", () => {
     expect(await screen.findByRole("combobox", { name: "Stok yetmediğinde" })).toHaveProperty("value", "block");
     expect(screen.queryByText("Ayarlar başkası tarafından değiştirildi")).toBeNull();
     expect(calls.filter((c) => !c.options.method || c.options.method === "GET")).toHaveLength(2);
+  });
+
+  it("a failed save focuses the error even when a frame runs before the update commits (#152)", async () => {
+    frameBeforeCommit();
+    try {
+      const { api } = fakeApi();
+      const failing: ApiClient = {
+        request<T>(path: string, opts: RequestOptions = {}) {
+          if (opts.method === "PATCH") return Promise.reject(new ApiError("x", 500, { code: "server.error" }));
+          return api.request<T>(path, opts);
+        },
+      };
+      renderAs("admin", failing);
+      await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Stok yetmediğinde" }), "warn");
+      await userEvent.click(screen.getByRole("button", { name: "Ayarları kaydet" }));
+      const alert = (await screen.findByText("Ayarlar kaydedilemedi")).closest('[tabindex="-1"]');
+      await waitFor(() => expect(document.activeElement).toBe(alert));
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("412: the reload notice takes focus (the save button it came from is disabled now)", async () => {
+    const { api } = fakeApi({ conflictOnce: true });
+    renderAs("admin", api);
+    await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Stok yetmediğinde" }), "warn");
+    await userEvent.click(screen.getByRole("button", { name: "Ayarları kaydet" }));
+    const notice = (await screen.findByText("Ayarlar başkası tarafından değiştirildi")).closest('[tabindex="-1"]');
+    await waitFor(() => expect(document.activeElement).toBe(notice));
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { ToastProvider } from "@/components/ui/toast";
 import userEvent from "@testing-library/user-event";
 import { ApiError, type ApiClient, type RequestOptions } from "@/lib/api/client";
@@ -7,6 +7,7 @@ import type { OrderDetail } from "@/lib/orders/api";
 import { orderDetail, orderLine } from "@/lib/orders/test-fixtures";
 import { SessionContext } from "@/lib/session/session-context";
 import type { FixtureRole, FixtureRules } from "@/test/me-fixtures";
+import { frameBeforeCommit } from "@/test/frame-before-commit";
 import { TEST_USER, mockSession } from "@/test/session";
 import { OrderDetailPage } from "./order-detail";
 
@@ -189,6 +190,21 @@ describe("submit when the tenant needs no approval (#92)", () => {
     expect(await screen.findByRole("heading", { name: "Gönderilemedi: stok yetersiz" })).toBeTruthy();
     expect(screen.getByText(/taslak olarak kaldı/)).toBeTruthy();
     expect(screen.getByRole("list", { name: "Stoğu yetmeyen satırlar" }).textContent).toContain("istenen 2, satılabilir 1");
+  });
+
+  it("block policy: the shortages heading takes focus even when a frame runs before the update commits (#152)", async () => {
+    frameBeforeCommit();
+    try {
+      const { api } = transitionApi(draft(ME), () => {
+        throw new ApiError("x", 409, { code: "inventory.insufficient_stock", shortages: [SHORTAGE] });
+      });
+      renderWith(api);
+      await userEvent.click(await screen.findByRole("button", { name: "Onaya gönder" }));
+      const heading = await screen.findByRole("heading", { name: "Gönderilemedi: stok yetersiz" });
+      await waitFor(() => expect(document.activeElement).toBe(heading));
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });
 

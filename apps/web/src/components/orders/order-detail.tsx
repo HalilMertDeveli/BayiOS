@@ -33,6 +33,7 @@ import {
 import { orderSourceLabels } from "@/lib/orders/labels";
 import { orderPermissions, type OrderPermissions } from "@/lib/orders/permissions";
 import { useSession } from "@/lib/session/session-context";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 import { FulfillmentBadge, OrderStatus } from "./order-badges";
 import { ReasonDialog, remainingLines } from "./order-actions";
 import { OrderAddresses } from "./order-addresses";
@@ -187,6 +188,7 @@ function OrderView({
   const [dirty, setDirty] = useState(false);
   const noticeRef = useRef<HTMLDivElement>(null);
   const shortagesRef = useRef<HTMLDivElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
 
   const actions = availableActions(order, permissions, currentUserId);
   const editable = isDraftEditable(order, permissions, currentUserId);
@@ -204,7 +206,7 @@ function OrderView({
 
   const show = (next: Notice) => {
     setNotice(next);
-    if (next) requestAnimationFrame(() => noticeRef.current?.focus());
+    if (next) focusAfterCommit(() => noticeRef.current);
   };
 
   const run = async (action: OrderTransition, body?: TransitionBody) => {
@@ -249,7 +251,7 @@ function OrderView({
     setConfirmShortages(null);
     if (isInsufficientStock(error)) {
       setShortages({ action: action === "submit" ? "submit" : "approve", items: readShortages(error) });
-      requestAnimationFrame(() => shortagesRef.current?.querySelector("h2")?.focus());
+      focusAfterCommit(() => shortagesRef.current?.querySelector("h2"));
       return;
     }
     if (reasonFor && error instanceof ApiError && error.status === 422) {

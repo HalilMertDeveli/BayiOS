@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CircleAlert, Plus, Search, SearchX, Users, UsersRound } from "lucide-react";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -25,6 +24,7 @@ import {
 } from "@/lib/customers/list-query";
 import { customerPermissions } from "@/lib/customers/permissions";
 import { useSession } from "@/lib/session/session-context";
+import { useUrlQuery } from "@/lib/use-url-query";
 import { CustomerStatusBadge } from "./customer-status-badge";
 import { useCustomerReference } from "./use-customer-reference";
 
@@ -44,17 +44,12 @@ type MoreState = { status: "idle" } | { status: "loading" } | { status: "error";
 export function CustomerList() {
   const { api, access } = useSession();
   const permissions = customerPermissions(access);
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const query = useMemo(() => parseCustomerQuery(searchParams), [searchParams]);
+  // Filters change through navigate / setFilter only: they build on the URL just requested, not the stale one (#152).
+  const { query, latest, navigate } = useUrlQuery(parseCustomerQuery, toCustomerSearchString);
+  /** One filter changed: applied on top of the latest requested query. */
+  const setFilter = (patch: Partial<CustomerListQuery>) => navigate({ ...latest(), ...patch });
   const apiKey = toCustomerApiQuery(query);
   const { state: reference } = useCustomerReference();
-
-  const navigate = (next: CustomerListQuery) => {
-    const search = toCustomerSearchString(next);
-    router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
-  };
 
   // ---- Search box: local text, pushed to the URL after a pause (same pattern as the product list). ----
   const [searchText, setSearchText] = useState(query.q);
@@ -69,14 +64,13 @@ export function CustomerList() {
   }
   useEffect(() => {
     const text = searchText.trim();
-    if (text === query.q) return;
+    if (text === latest().q) return;
     const timer = setTimeout(() => {
       setPushedQ(text);
-      const search = toCustomerSearchString({ ...query, q: text });
-      router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
+      navigate({ ...latest(), q: text });
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [searchText, query, pathname, router]);
+  }, [searchText, query, latest, navigate]);
 
   // ---- Data: first page per query; more pages appended with the cursor. ----
   const [data, setData] = useState<ListData | null>(null);
@@ -214,7 +208,7 @@ export function CustomerList() {
             label="Durum"
             options={CUSTOMER_STATUS_FILTERS.map((s) => ({ value: s, label: customerStatusFilterLabels[s] }))}
             value={query.status}
-            onChange={(e) => navigate({ ...query, status: e.target.value as CustomerStatusFilter })}
+            onChange={(e) => setFilter({ status: e.target.value as CustomerStatusFilter })}
           />
           <Select
             label="Bayi grubu"
@@ -222,7 +216,7 @@ export function CustomerList() {
             options={[...groups].sort((a, b) => a.name.localeCompare(b.name, "tr")).map((g) => ({ value: g.id, label: g.status === "archived" ? `${g.name} (arşivlenmiş)` : g.name }))}
             value={query.group}
             disabled={reference.status !== "ready"}
-            onChange={(e) => navigate({ ...query, group: e.target.value })}
+            onChange={(e) => setFilter({ group: e.target.value })}
           />
         </div>
         {reference.status === "error" ? <p className="text-caption text-danger-fg">Bayi grupları yüklenemedi: {reference.message}</p> : null}

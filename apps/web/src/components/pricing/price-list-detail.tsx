@@ -19,6 +19,7 @@ import { formatPercent } from "@/lib/pricing/money";
 import { pricingPermissions } from "@/lib/pricing/permissions";
 import { buildPriceListPatch, priceListToValues, validatePriceList, type PriceListFormValues } from "@/lib/pricing/price-list-form";
 import { useSession } from "@/lib/session/session-context";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 import { PriceItems } from "./price-items";
 import { PriceListFields } from "./price-list-fields";
 import { validityText } from "./price-list-index";
@@ -117,6 +118,7 @@ function SettingsAndItems({ loaded, onSaved, onReload }: { loaded: Loaded; onSav
   const [archiveBusy, setArchiveBusy] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
   const set = (patch: Partial<PriceListFormValues>) => setValues((v) => ({ ...v, ...patch }));
 
   const fail = (error: unknown) => {
@@ -132,7 +134,7 @@ function SettingsAndItems({ loaded, onSaved, onReload }: { loaded: Loaded; onSav
     } else {
       setFormError(pricingErrorMessage(error));
     }
-    requestAnimationFrame(() => errorRef.current?.focus());
+    focusAfterCommit(() => errorRef.current);
   };
 
   const submit = async (event: FormEvent) => {

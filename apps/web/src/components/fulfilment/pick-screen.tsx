@@ -54,6 +54,7 @@ import {
 import { withBusyRetry } from "@/lib/inventory/busy-retry";
 import { formatQuantity, parseQuantity, quantityText, toNumber } from "@/lib/inventory/quantity";
 import { useSession } from "@/lib/session/session-context";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 import { ProgressBar, TaskStatusBadge } from "./fulfilment-badges";
 import { ScanFeedback, ScanField, type Feedback } from "./scan-field";
 
@@ -168,6 +169,7 @@ function PickView({
   const [shortageLine, setShortageLine] = useState<TaskLine | null>(null);
   const [confirmComplete, setConfirmComplete] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
 
   // Scans can arrive faster than answers: they are queued and read the latest state through these refs.
   const detailRef = useRef<TaskDetail>(loaded.detail);
@@ -186,7 +188,7 @@ function PickView({
   const totals = taskTotals(lines);
   const nextStep = pickStep(lines, current, location);
 
-  const focusInput = () => requestAnimationFrame(() => inputRef.current?.focus());
+  const focusInput = () => focusAfterCommit(() => inputRef.current);
   useEffect(() => {
     if (canWork) inputRef.current?.focus();
   }, [canWork]);
