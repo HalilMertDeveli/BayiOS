@@ -134,7 +134,7 @@ export const navSections: readonly NavSection[] = [
       {
         href: "/ice-aktarma",
         label: "İçe aktarma",
-        description: "Excel/CSV ile ürün, fiyat ve stok içe aktarma burada olacak.",
+        description: "Excel/CSV ile ürün ve fiyat listesi içe aktarma: kolon eşleme, önizleme, hata raporu ve geri alma.",
         Icon: FileUp,
         visible: (a) => a.canSome("imports.run") || a.canSome("imports.run.stock"),
       },
