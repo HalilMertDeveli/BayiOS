@@ -23,6 +23,9 @@ dependencies:
   uuid: 4.6.0
 
 dev_dependencies:
+  # `flutter drive` screenshot driver (test_driver/integration_test.dart).
+  flutter_driver:
+    sdk: flutter
   flutter_test:
     sdk: flutter
   # MockClient for the real GoTrue client in token-refresh tests.

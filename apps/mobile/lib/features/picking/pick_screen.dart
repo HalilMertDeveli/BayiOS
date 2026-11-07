@@ -218,13 +218,13 @@ class _PickViewState extends ConsumerState<_PickView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.pickingTitle(task.orderNumber)),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: BosSpace.s16),
-            child: Center(child: TaskStatusBadge(task.status)),
-          ),
-        ],
+        // The full order number is what the picker compares with the paper
+        // / label; the status badge sits in the body so it is not truncated.
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(l10n.pickingTitle(task.orderNumber)),
+        ),
       ),
       body: RefreshIndicator(
         onRefresh: c.reload,
@@ -237,6 +237,11 @@ class _PickViewState extends ConsumerState<_PickView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TaskStatusBadge(task.status),
+                  ),
+                  const SizedBox(height: BosSpace.s8),
                   PickProgressBar(value: totals.progress),
                   const SizedBox(height: BosSpace.s4),
                   Text(
@@ -258,7 +263,9 @@ class _PickViewState extends ConsumerState<_PickView> {
               ),
             ),
             const SizedBox(height: BosSpace.s12),
-            if (c.notice case final notice?) ...[
+            // After completion the "Toplama tamamlandı" banner says it all.
+            if (c.notice case final notice?
+                when c.active || notice.tone != PickTone.success) ...[
               _Banner(feedback: notice, key: const Key('pick-notice')),
               const SizedBox(height: BosSpace.s12),
             ],

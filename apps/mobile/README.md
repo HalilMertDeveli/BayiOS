@@ -45,7 +45,8 @@ CI: `.github/workflows/ci-mobile.yml` (`apps/mobile/**` veya `packages/contracts
 | `test/core/auth/*` | Oturum durumu; gerçek GoTrue istemcisiyle süresi dolmuş token'ın yenilenmesi, iptal edilmiş oturum = çıkış |
 | `test/core/session/session_controller_test.dart` | `/me`, tenant çözümleme, askıya alınmış işletme, `tenant.access_denied`/`inactive` |
 | `test/app/*` | Yönlendirme korumaları, izin bazlı gezinme, uçtan uca uygulama akışı (sahte Auth/API) |
-| `test/features/*` | Giriş formu doğrulama/hata, işletme seçici, dokunma hedefleri ≥ 48 dp (`androidTapTargetGuideline`) |
+| `test/features/*` | Giriş formu doğrulama/hata, işletme seçici, pano, dokunma hedefleri ≥ 48 dp (`androidTapTargetGuideline`) |
+| `test/features/picking/*` | Liste durumları/sekmeler, tara eşleşme/yanlış ürün/yanlış raf, adet doğrulama, aynı anahtarla yeniden gönderim, If-Match/412, izin bazlı görünürlük (sahte API sunucusu, idempotent tekrar oynatma) |
 | `test/contract/contract_test.dart` | Kullanılan uç/başlık/alanlar `packages/contracts/openapi.json` ile birebir |
 | `test/features/stock/*` | Stok sorgulama durumları, mal kabul akışı (okutma eşleşme/eşleşmeme, miktar/raf doğrulama, aynı `Idempotency-Key` ile yeniden deneme, `inventory.busy`), izin bazlı gizleme + 403, düzeltme + negatif stok onayı |
 
@@ -77,6 +78,16 @@ Gerçek Supabase Auth + API'ye karşı: giriş → işletme → pano → çıkı
    Emülatör kamerası gerçek etiket okuyamadığından kodlar elle giriş alanından girilir; kamera ekranı bir kez açılıp
    "Kodu elle gir" ile kapatılır (önce `adb shell pm grant com.bayios.bayios_mobile android.permission.CAMERA`).
 
+6. **Toplama smoke** (`integration_test/picking_smoke_test.dart`, **yazar**: okutur ve görevi tamamlar — yalnızca demo
+   işletmede, smoke için açılmış bir siparişle). Kodlar elle giriş alanından yazılır (emülatör kamerasının önünde
+   gerçek barkod yoktur); doğru raf/barkod ekrandan okunur. Ekran görüntüleri `$BAYIOS_SCREENSHOT_DIR`'e yazılır:
+   ```bash
+   BAYIOS_SCREENSHOT_DIR=/tmp/shots flutter drive -d emulator-5554 \
+     --driver=test_driver/integration_test.dart --target=integration_test/picking_smoke_test.dart \
+     --dart-define-from-file=env/dev.json --dart-define-from-file=env/smoke.json \
+     --dart-define=BAYIOS_SMOKE_ORDER=<sipariş no> --dart-define=BAYIOS_SMOKE_WRONG_CODE=<başka ürünün barkodu>
+   ```
+
 ## Stok ve mal kabul (#43)
 - `/stok` (`inventory.read`): barkod/SKU/ad ile arama; depo/raf bazında eldeki, rezerve, satılabilir ve minimum stok.
 - `/stok/mal-kabul` (`inventory.receive`): API'de taslak mal kabul yoktur; satırlar cihazda toplanır, tek
@@ -84,6 +95,25 @@ Gerçek Supabase Auth + API'ye karşı: giriş → işletme → pano → çıkı
 - `/stok/duzeltme` (`inventory.adjust`): bakiye satırından açılır; tür, miktar, zorunlu sebep.
 - Barkod: `mobile_scanner` (kamera) + her ekranda elle giriş alanı (el terminali / klavye-kama okuyucu da buraya yazar).
   Stok miktarı yalnızca ledger uçlarıyla değişir; uygulama miktar "ayarlamaz".
+
+## Görevler ve toplama (#41, #42)
+- **Pano:** bana atanan / toplanıyor / havuz sayıları (`GET /picking-tasks/mine`), sıradaki 3 görev, hızlı erişim.
+  Yalnızca `tasks.read.all` (ör. viewer) → aktif görev sayısı (`GET /picking-tasks`). Selamlama adı: `/me fullName`
+  → Supabase `user_metadata.full_name` → e-postanın `@` öncesi (web ile aynı).
+- **Görev listesi** (`/gorevler`): `tasks.read.own` → "Bana atanan" + "Havuz"; `tasks.read.all` → "Tümü" (keyset
+  sayfalama). Aşağı çekerek yenileme, boş/hata durumları.
+- **Toplama ekranı** (`/gorevler/:id`): raf sırasıyla satırlar, raf kodu/barkod/miktarlar, sipariş bilgisi (fiyatsız,
+  `orders.read`). Raf okut → ürün okut (kamera `mobile_scanner` veya elle giriş/klavye-kama okuyucu), okutma başına adet
+  (0'dan büyük, en çok 3 ondalık, satırda kalandan fazla değil), eksik bildirimi, tamamla (eksik varsa onay).
+  Yanlış ürün/raf/bilinmeyen kod/fazla toplama: büyük kırmızı uyarı + titreşim/ses (`HapticFeedback`/`SystemSound`,
+  ek izin yok); satır sayılmaz (API reddeder, hiçbir şey değişmez).
+- **İdempotens:** her okutma/eksik/tamamla/üstlen bir `IdempotentAction`; cevap kaybolursa "Tekrar gönder" aynı anahtarı
+  ve gövdeyi gönderir (API kayıtlı yanıtı tekrar oynatır, bir kez sayılır). `*.busy` 409 bir kez otomatik, aynı anahtarla.
+- **Eşzamanlılık:** "Görevi tamamla" `If-Match: W/"<sürüm>"` gönderir; 412 → "Görev değişmiş" + yeniden yükleme.
+  Okutma ve eksik bildirimi web ile aynı şekilde If-Match'siz gider: API her okutmayı kilit altında doğrular; araya
+  giren başka bir okutma yüzünden geçerli okutmaların 412 almaması için. Üstlenme yarışını API satır kilidi çözer (409).
+- **Kamera izni:** Android `CAMERA` (zorunlu donanım değil), iOS `NSCameraUsageDescription`; reddedilirse veya kamera
+  yoksa "Kodu elle gir" yolu.
 
 ## Yapı ve yeni özellik ekleme
 ```
