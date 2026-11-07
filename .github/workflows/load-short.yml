@@ -1,0 +1,80 @@
+name: load-short
+
+# Short load + reservation-race soak (#58): Postgres 17 (EF migrations, bayios_app, RLS) + API (Release, Production)
+# + a throwaway ES256 JWKS (tools/load/auth.mjs), driven by k6 (official image, pinned by digest). Fails on any
+# oversell, any unexpected response in the race, or a broken ledger = balances invariant (tools/load/verify.sql).
+# The full stepped mix and the 200-iteration soak run locally: docs/testing/load-2026-11.md.
+# No secrets: passwords and the signing key are generated per run inside the runner. ci-gate picks this up.
+
+on:
+  pull_request:
+    branches: [preview, main]
+    paths:
+      - "services/api/**"
+      - "tools/load/**"
+      - "infra/ci/ef-migrations.sh"
+      - "infra/docker/initdb/**"
+      - ".github/workflows/load-short.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  load:
+    name: load short
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: services/api/global.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Start the load stack (Postgres 17 + migrations, API, test JWKS)
+        run: bash tools/load/stack.sh up
+
+      - name: k6 — reservation race soak (25 iterations) + short mix (5 and 10 it/s)
+        run: bash tools/load/run.sh ci
+
+      - name: Ledger = balances, no oversell
+        run: bash tools/load/stack.sh verify
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### load short"
+            for f in "$RUNNER_TEMP"/bayios-load/ci-*-summary.json; do
+              [ -f "$f" ] || continue
+              node -e 'const d=require(process.argv[1]);const m=d.metrics;const p=m.http_req_duration.values;console.log(`- ${require("path").basename(process.argv[1])}: ${m.http_reqs.values.count} requests, p95 ${p["p(95)"].toFixed(1)} ms, p99 ${p["p(99)"].toFixed(1)} ms, failed ${(m.http_req_failed.values.rate*100).toFixed(2)} %`)' "$f"
+            done
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Upload logs and k6 summaries
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: load-short
+          path: |
+            ${{ runner.temp }}/bayios-load/*.log
+            ${{ runner.temp }}/bayios-load/*-summary.json
+          retention-days: 7
+
+      - name: Stop the load stack
+        if: always()
+        run: bash tools/load/stack.sh down
