@@ -312,7 +312,7 @@ public class JobsTests(ApiFixture fixture)
     {
         var type = NewType();
         HostedProbe.Reset(type);
-        await using var host = fixture.WithWebHostBuilder(builder =>
+        await using var host = fixture.Derive(builder =>
         {
             builder.UseSetting("Jobs:Enabled", "true");
             builder.UseSetting("Jobs:PollInterval", "00:00:00.100");
@@ -357,7 +357,7 @@ public class JobsTests(ApiFixture fixture)
 
     /// <summary>A host whose registry knows <paramref name="type"/>: <see cref="IBackgroundJobs"/> rejects unregistered types (#89).</summary>
     private WebApplicationFactory<Program> HostKnowing(string type) =>
-        fixture.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddJobHandler<HostedProbe>(type)));
+        fixture.Derive(builder => builder.ConfigureTestServices(services => services.AddJobHandler<HostedProbe>(type)));
 
     private static async Task<Guid> EnqueueAsAsync(IServiceProvider services, CatalogClient member, JobRequest job)
     {

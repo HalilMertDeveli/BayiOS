@@ -104,7 +104,7 @@ public sealed class DisplayNamesTests(ApiFixture fixture)
     public async Task Names_are_resolved_in_one_batch_per_response()
     {
         var calls = new ConcurrentQueue<(string Port, int Ids)>();
-        await using var counted = fixture.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        await using var counted = fixture.Derive(builder => builder.ConfigureTestServices(services =>
         {
             services.AddScoped<OrderReferenceNames>();
             services.RemoveAll<IOrderReferenceNames>();

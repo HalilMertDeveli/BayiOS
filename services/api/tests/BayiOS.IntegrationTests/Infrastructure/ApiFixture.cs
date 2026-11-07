@@ -182,6 +182,82 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         return (result.ExitCode ?? -1, result.Stdout, result.Stderr);
     }
 
+    // #153: WebApplicationFactory<T> keeps the clients it creates and the factories derived from it in plain List<T>s
+    // (_clients, _derivedFactories) and starts its host lazily without a lock. This fixture is shared by every test
+    // class, and xUnit runs collections in parallel, so concurrent CreateClient/WithWebHostBuilder calls could drop an
+    // item or leave a null slot in those lists; DisposeAsync then walks them and throws NullReferenceException
+    // ("Assembly fixture ... threw in DisposeAsync" → one Cleanup Failure per test). Every entry point that mutates
+    // the factory's state goes through this one gate. Lock is re-entrant, so nested calls (CreateClient → Services) are fine.
+    private readonly Lock _gate = new();
+
+    /// <summary>The gate itself, for the #153 regression test's consistent snapshot of the factory lists.</summary>
+    internal Lock Gate => _gate;
+
+    /// <inheritdoc cref="WebApplicationFactory{TEntryPoint}.Services"/>
+    public override IServiceProvider Services
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return base.Services;
+            }
+        }
+    }
+
+    /// <summary>Thread-safe <see cref="WebApplicationFactory{TEntryPoint}.CreateClient()"/> (#153).</summary>
+    public new HttpClient CreateClient()
+    {
+        lock (_gate)
+        {
+            return base.CreateClient();
+        }
+    }
+
+    /// <summary>Thread-safe <see cref="WebApplicationFactory{TEntryPoint}.CreateClient(WebApplicationFactoryClientOptions)"/> (#153).</summary>
+    public new HttpClient CreateClient(WebApplicationFactoryClientOptions options)
+    {
+        lock (_gate)
+        {
+            return base.CreateClient(options);
+        }
+    }
+
+    /// <summary>Thread-safe <see cref="WebApplicationFactory{TEntryPoint}.CreateDefaultClient(DelegatingHandler[])"/> (#153).</summary>
+    public new HttpClient CreateDefaultClient(params DelegatingHandler[] handlers)
+    {
+        lock (_gate)
+        {
+            return base.CreateDefaultClient(handlers);
+        }
+    }
+
+    /// <summary>Thread-safe <see cref="WebApplicationFactory{TEntryPoint}.CreateDefaultClient(Uri, DelegatingHandler[])"/> (#153).</summary>
+    public new HttpClient CreateDefaultClient(Uri baseAddress, params DelegatingHandler[] handlers)
+    {
+        lock (_gate)
+        {
+            return base.CreateDefaultClient(baseAddress, handlers);
+        }
+    }
+
+    /// <summary>
+    /// A second API host on the same database with extra configuration — the thread-safe replacement for
+    /// <c>WithWebHostBuilder</c> on the shared fixture (#153). Dispose it in the test (<c>await using</c>); the
+    /// fixture disposes it again at the end of the run (idempotent).
+    /// </summary>
+    public WebApplicationFactory<Program> Derive(Action<IWebHostBuilder> configure)
+    {
+        lock (_gate)
+        {
+            return base.WithWebHostBuilder(configure);
+        }
+    }
+
+    /// <summary>Not thread-safe on the shared fixture (#153). Use <see cref="Derive"/>.</summary>
+    [Obsolete("Not thread-safe on the shared fixture (#153): use ApiFixture.Derive(...).", error: true)]
+    public new WebApplicationFactory<Program> WithWebHostBuilder(Action<IWebHostBuilder> configuration) => Derive(configuration);
+
     public HttpClient CreateClientFor(Guid userId, string? email = null)
     {
         var client = CreateClient();

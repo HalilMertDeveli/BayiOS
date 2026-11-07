@@ -30,7 +30,7 @@ public class QueueLagReadinessTests(ApiFixture fixture)
             jobId, QueueCleanupJob.Type, "queue-lag-test:" + jobId.ToString("N"));
         try
         {
-            await using var factory = fixture.WithWebHostBuilder(builder => builder
+            await using var factory = fixture.Derive(builder => builder
                 .UseSetting("Health:QueueLagDegradedAfter", "00:01:00")
                 .UseSetting("Health:QueueLagUnhealthyAfter", "00:00:00"));
 

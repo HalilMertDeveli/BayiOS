@@ -283,7 +283,7 @@ public sealed class ConditionalPermissionsTests(ApiFixture fixture)
     {
         // A host whose authorization context "forgets" to record service checks: every record-level gate pass is then
         // unchecked, as if the endpoint's service never applied its condition.
-        await using var forgetful = fixture.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        await using var forgetful = fixture.Derive(builder => builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<IAuthorizationContext>();
             services.AddScoped<AuthorizationContext>();
