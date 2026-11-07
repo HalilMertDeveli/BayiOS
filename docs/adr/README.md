@@ -20,6 +20,7 @@ Kabul edilmiş bir ADR değiştirilmez; yeni bir ADR yazılır ve eskisi "Yerini
 | [0008](0008-web-stack-nextjs.md) | Web: Next.js 16 + React 19 + TS + Tailwind v4 + TanStack | Kabul edildi | 2026-11-04 |
 | [0009](0009-mobile-stack-flutter.md) | Mobil: Flutter + Riverpod + dio + go_router | Kabul edildi | 2026-11-04 |
 | [0010](0010-ai-order-parsing-human-in-the-loop.md) | AI sipariş ayrıştırma: yapılandırılmış çıktı, deterministik eşleştirme, insan onayı | Kabul edildi | 2026-11-04 |
+| [0011](0011-mobile-foundation-riverpod.md) | Mobil temel: Riverpod 3 (kod üretimsiz), elle modeller + sözleşme testi, sabit sürümler | Kabul edildi | 2026-11-08 |
 
 ## İlgili belgeler
 - [Sistem mimarisi](../architecture/system-architecture.md)

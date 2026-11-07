@@ -1,0 +1,6 @@
+{
+  "BAYIOS_ENV": "dev",
+  "BAYIOS_API_BASE_URL": "http://10.0.2.2:5280",
+  "BAYIOS_SUPABASE_URL": "http://10.0.2.2:54321",
+  "BAYIOS_SUPABASE_PUBLISHABLE_KEY": ""
+}
