@@ -35,7 +35,11 @@ export function safeNextPath(value: string | null | undefined, fallback: string 
   try {
     const url = new URL(value, "http://bayios.invalid");
     if (url.origin !== "http://bayios.invalid") return fallback;
-    return `${url.pathname}${url.search}${url.hash}`;
+    // Normalisation can turn a safe-looking input into a protocol-relative one ("/.//evil" → "//evil"), so the
+    // returned path is checked again, not only the raw input.
+    const path = `${url.pathname}${url.search}${url.hash}`;
+    if (path.startsWith("//") || path.startsWith("/\\")) return fallback;
+    return path;
   } catch {
     return fallback;
   }

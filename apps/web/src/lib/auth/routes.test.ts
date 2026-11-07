@@ -9,7 +9,19 @@ describe("safeNextPath", () => {
     expect(safeNextPath(input)).toBe(expected);
   });
 
-  it.each([null, "", "https://evil.example", "//evil.example/x", "/\\evil.example", "javascript:alert(1)", "urunler"])(
+  it.each([
+    null,
+    "",
+    "https://evil.example",
+    "//evil.example/x",
+    "/\\evil.example",
+    "javascript:alert(1)",
+    "urunler",
+    // Security audit M-1: inputs that only become protocol-relative after URL normalisation.
+    "/.//evil.example/phish",
+    "/x/..//evil.example",
+    "/./%2e//evil.example",
+  ])(
     "rejects %s",
     (input) => {
       expect(safeNextPath(input)).toBe("/pano");
