@@ -58,9 +58,12 @@ const DEFAULTS: Responses = {
     days: [],
   },
   "/api/v1/reports/critical-stock": {
-    threshold: 0,
+    mode: "thresholds",
+    threshold: null,
     warehouseId: null,
-    items: [{ id: "v1", productId: "p1", sku: "KRT-1", name: "Kritik", unit: "ADET", onHand: 0, reserved: 0, available: 0 }],
+    includeOutOfStock: false,
+    thresholdsConfigured: true,
+    items: [{ id: "v1", productId: "p1", sku: "KRT-1", name: "Kritik", unit: "ADET", onHand: 2, reserved: 0, available: 2, minQuantity: 5 }],
     page: { nextCursor: "x", hasMore: true, limit: 100 },
   },
   "/api/v1/picking-tasks/mine": {
@@ -159,6 +162,29 @@ describe("Dashboard per role (MOCK /me permissions, MOCK API)", () => {
     fail = false;
     await userEvent.click(within(critical).getByRole("button", { name: "Tekrar dene" }));
     expect(await within(critical).findByText("1+")).toBeTruthy();
+  });
+
+  it("critical stock tile: counts variants under their minimum, asks for thresholds mode (#137)", async () => {
+    const { paths } = renderAs("owner");
+    const critical = tile("Kritik stok");
+    expect(await within(critical).findByText("ürün minimum stokta veya altında")).toBeTruthy();
+    expect(within(critical).getByText(/satılabilir 2 \/ min\. 5 ADET/)).toBeTruthy();
+    const call = paths.find((p) => p.startsWith("/api/v1/reports/critical-stock"))!;
+    const query = new URLSearchParams(call.split("?")[1]);
+    expect(query.has("threshold")).toBe(false);
+    expect(query.has("includeOutOfStock")).toBe(false);
+  });
+
+  it("critical stock tile: empty state explains how to set thresholds, or that nothing is under its minimum", async () => {
+    const none = { mode: "thresholds", threshold: null, warehouseId: null, includeOutOfStock: false, items: [], page: { nextCursor: null, hasMore: false, limit: 100 } };
+    renderAs("manager", { ...DEFAULTS, "/api/v1/reports/critical-stock": { ...none, thresholdsConfigured: false } });
+    expect(await within(tile("Kritik stok")).findByText(/Henüz minimum stok tanımlanmadı/)).toBeTruthy();
+  });
+
+  it("critical stock tile: thresholds set and nothing critical", async () => {
+    const none = { mode: "thresholds", threshold: null, warehouseId: null, includeOutOfStock: false, items: [], page: { nextCursor: null, hasMore: false, limit: 100 } };
+    renderAs("manager", { ...DEFAULTS, "/api/v1/reports/critical-stock": { ...none, thresholdsConfigured: true } });
+    expect(await within(tile("Kritik stok")).findByText("Minimum stoğun altına inen ürün yok.")).toBeTruthy();
   });
 
   it("empty states: nothing pending, nothing today", async () => {

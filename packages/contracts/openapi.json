@@ -5854,6 +5854,741 @@
         "x-permission": "inventory.adjust"
       }
     },
+    "/api/v1/inventory/thresholds": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Minimum stok e\u015Fikleri: variantId / variantIds (virg\u00FClle, en \u00E7ok 100) / warehouseId filtresi; warehouseId bo\u015F sat\u0131r = varyant\u0131n genel e\u015Fi\u011Fi",
+        "operationId": "Inventory_ListThresholds",
+        "parameters": [
+          {
+            "name": "variantId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "variantIds",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "warehouseId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockThresholdPageResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "inventory.read"
+      },
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Varyant (\u002B depo) i\u00E7in minimum stok e\u015Fi\u011Fini olu\u015Fturur veya de\u011Fi\u015Ftirir (upsert, son yazan kazan\u0131r); depo bo\u015F = genel e\u015Fik, depo = o depoda ge\u00E7erli istisna",
+        "operationId": "Inventory_SetThreshold",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours.",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetStockThresholdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockThresholdResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockThresholdResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "catalog.write"
+      }
+    },
+    "/api/v1/inventory/thresholds/{id}": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Tek minimum stok e\u015Fi\u011Fi (ETag d\u00F6ner)",
+        "operationId": "Inventory_GetThreshold",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockThresholdResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "inventory.read"
+      },
+      "put": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "E\u015Fi\u011Fin minimum miktar\u0131n\u0131 de\u011Fi\u015Ftirir (If-Match zorunlu)",
+        "operationId": "Inventory_UpdateThreshold",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStockThresholdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockThresholdResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Precondition Failed",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "catalog.write"
+      },
+      "delete": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "E\u015Fi\u011Fi kald\u0131r\u0131r (If-Match zorunlu)",
+        "operationId": "Inventory_DeleteThreshold",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Precondition Failed",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "catalog.write"
+      }
+    },
+    "/api/v1/inventory/thresholds/bulk": {
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Toplu e\u015Fik yaz\u0131m\u0131 (en \u00E7ok 500 sat\u0131r, hepsi ya da hi\u00E7biri): minQuantity ile ayarla, remove: true ile kald\u0131r",
+        "operationId": "Inventory_BulkThresholds",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours.",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkStockThresholdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkStockThresholdResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "catalog.write"
+      }
+    },
     "/api/v1/warehouses": {
       "get": {
         "tags": [
@@ -15533,7 +16268,7 @@
         "tags": [
           "Reports"
         ],
-        "summary": "Kritik stok: kullan\u0131labilir (eldeki \u2212 rezerve) \u2264 e\u015Fik olan aktif varyantlar, SKU s\u0131ras\u0131yla keyset sayfalama",
+        "summary": "Kritik stok (REP-03): varsay\u0131lan olarak her aktif varyant kendi minimum stok e\u015Fi\u011Fine g\u00F6re (kullan\u0131labilir = eldeki \u2212 rezerve \u2264 e\u015Fik; e\u015Fi\u011Fi olmayanlar hari\u00E7, includeOutOfStock=true ile kullan\u0131labilir \u2264 0 olanlar dahil); threshold verilirse t\u00FCm aktif varyantlar bu sabit e\u015Fi\u011Fe g\u00F6re. SKU s\u0131ras\u0131yla keyset sayfalama",
         "operationId": "Reports_CriticalStock",
         "parameters": [
           {
@@ -15545,6 +16280,13 @@
           },
           {
             "name": "warehouseId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeOutOfStock",
             "in": "query",
             "schema": {
               "type": "string"
@@ -18279,7 +19021,9 @@
           "reserved",
           "available",
           "version",
-          "updatedAt"
+          "updatedAt",
+          "minQuantity",
+          "belowMinimum"
         ],
         "type": "object",
         "properties": {
@@ -18340,6 +19084,18 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "minQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "belowMinimum": {
+            "type": "boolean"
           }
         }
       },
@@ -18433,6 +19189,113 @@
               "string"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "BulkStockThresholdItem": {
+        "required": [
+          "variantId",
+          "warehouseId",
+          "minQuantity",
+          "remove"
+        ],
+        "type": "object",
+        "properties": {
+          "variantId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "warehouseId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "minQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "remove": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "BulkStockThresholdRequest": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/BulkStockThresholdItem"
+            }
+          }
+        }
+      },
+      "BulkStockThresholdResponse": {
+        "required": [
+          "created",
+          "updated",
+          "removed",
+          "unchanged",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "created": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "updated": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "removed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "unchanged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StockThresholdResponse"
+            }
           }
         }
       },
@@ -19655,7 +20518,8 @@
           "unit",
           "onHand",
           "reserved",
-          "available"
+          "available",
+          "minQuantity"
         ],
         "type": "object",
         "properties": {
@@ -19699,21 +20563,37 @@
               "string"
             ],
             "format": "double"
+          },
+          "minQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
       "CriticalStockReportResponse": {
         "required": [
+          "mode",
           "threshold",
           "warehouseId",
+          "includeOutOfStock",
+          "thresholdsConfigured",
           "items",
           "page"
         ],
         "type": "object",
         "properties": {
+          "mode": {
+            "type": "string"
+          },
           "threshold": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
             "type": [
+              "null",
               "number",
               "string"
             ],
@@ -19725,6 +20605,12 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "includeOutOfStock": {
+            "type": "boolean"
+          },
+          "thresholdsConfigured": {
+            "type": "boolean"
           },
           "items": {
             "type": "array",
@@ -24598,6 +25484,12 @@
               "string"
             ],
             "format": "int32"
+          },
+          "includeOutOfStock": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -24970,6 +25862,39 @@
           },
           "allowsFraction": {
             "type": "boolean"
+          }
+        }
+      },
+      "SetStockThresholdRequest": {
+        "required": [
+          "variantId",
+          "warehouseId",
+          "minQuantity"
+        ],
+        "type": "object",
+        "properties": {
+          "variantId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "warehouseId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "minQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -25422,6 +26347,80 @@
           },
           "available": {
             "type": "number"
+          }
+        }
+      },
+      "StockThresholdPageResponse": {
+        "required": [
+          "items",
+          "page"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StockThresholdResponse"
+            }
+          },
+          "page": {
+            "$ref": "#/components/schemas/InventoryPageInfo"
+          }
+        }
+      },
+      "StockThresholdResponse": {
+        "required": [
+          "id",
+          "variantId",
+          "warehouseId",
+          "minQuantity",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "variantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warehouseId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "minQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -26555,6 +27554,23 @@
               "null",
               "object"
             ]
+          }
+        }
+      },
+      "UpdateStockThresholdRequest": {
+        "required": [
+          "minQuantity"
+        ],
+        "type": "object",
+        "properties": {
+          "minQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },

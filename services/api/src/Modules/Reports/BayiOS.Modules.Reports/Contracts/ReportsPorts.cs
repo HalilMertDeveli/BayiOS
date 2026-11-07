@@ -24,6 +24,21 @@ public interface IReportInventorySource
 
     /// <summary>Ledger movements per day and type: count, Σ positive quantities, Σ |negative quantities|.</summary>
     Task<IReadOnlyList<ReportMovementDay>> MovementsByDayAsync(DateTimeOffset startUtc, DateTimeOffset endUtc, Guid? warehouseId, CancellationToken cancellationToken);
+
+    // ---- Minimum stock thresholds (#137). The effective minimum and its precedence are Inventory's
+    // (IStockThresholdQueries): one warehouse → override, else default; all warehouses → default, else Σ overrides. ----
+
+    /// <summary>Effective minimum of each given variant that has one in the scope.</summary>
+    Task<IReadOnlyDictionary<Guid, decimal>> MinimumsAsync(IReadOnlyCollection<Guid> variantIds, Guid? warehouseId, CancellationToken cancellationToken);
+
+    /// <summary>Variants with a minimum whose available stock is ≤ that minimum (no balance = 0).</summary>
+    Task<IReadOnlyList<Guid>> VariantsAtOrBelowMinimumAsync(Guid? warehouseId, CancellationToken cancellationToken);
+
+    /// <summary>Variants whose available stock is above their minimum, or above 0 when they have none.</summary>
+    Task<IReadOnlyList<Guid>> VariantsAboveMinimumOrZeroAsync(Guid? warehouseId, CancellationToken cancellationToken);
+
+    /// <summary>True when any variant has a minimum in the scope.</summary>
+    Task<bool> AnyMinimumAsync(Guid? warehouseId, CancellationToken cancellationToken);
 }
 
 /// <param name="Name">Product name, plus the variant name when it has one.</param>
@@ -37,6 +52,12 @@ public interface IReportCatalogSource
     /// <paramref name="excluded"/>, at most <paramref name="limit"/>.
     /// </summary>
     Task<IReadOnlyList<ReportVariant>> ActiveVariantsAsync(IReadOnlyCollection<Guid> excluded, string? afterSku, int limit, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Active variants of active products among <paramref name="included"/>, ordered by SKU, strictly after
+    /// <paramref name="afterSku"/>, at most <paramref name="limit"/>.
+    /// </summary>
+    Task<IReadOnlyList<ReportVariant>> ActiveVariantsInAsync(IReadOnlyCollection<Guid> included, string? afterSku, int limit, CancellationToken cancellationToken);
 }
 
 /// <param name="GrandTotal">Σ grand_total of the orders (in <paramref name="Currency"/>).</param>

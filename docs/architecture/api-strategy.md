@@ -276,7 +276,12 @@ flowchart LR
 | GET/PATCH | `/warehouses/{id}` (M) | | |
 | GET/POST | `/warehouses/{id}/locations` | | |
 | PATCH | `/locations/{id}` (M) | `tenant.manage` | |
-| GET | `/inventory/balances` (variantId, warehouseId, locationId, q, belowThreshold) | `inventory.read` | on_hand, reserved, available. `q` uygulandı (#86, inventory-and-orders §6); `belowThreshold` henüz yok |
+| GET | `/inventory/balances` (variantId, warehouseId, locationId, q, belowThreshold) | `inventory.read` | on_hand, reserved, available. `q` uygulandı (#86, inventory-and-orders §6). #137: her satırda `minQuantity` (satırın deposundaki etkin minimum: depo istisnası, yoksa genel eşik; yoksa null) ve `belowMinimum` (varyantın o depodaki tüm raflarının satılabilir toplamı ≤ minQuantity). `belowThreshold` filtresi henüz yok (liste görünümü: kritik stok raporu) |
+| GET | `/inventory/thresholds` (variantId, variantIds ≤ 100, warehouseId, limit, cursor) | `inventory.read` | #137 minimum stok eşikleri; `warehouseId = null` satır = genel eşik. Keyset (id) |
+| GET | `/inventory/thresholds/{id}` | `inventory.read` | ETag |
+| POST | `/inventory/thresholds` (İ) | `catalog.write` | Upsert (variantId, warehouseId?) → 201 yeni / 200 güncellendi veya aynı; son yazan kazanır |
+| POST | `/inventory/thresholds/bulk` (İ) | `catalog.write` | 1–500 satır, hepsi ya da hiçbiri: `{variantId, warehouseId?, minQuantity}` ayarla, `{…, remove: true}` kaldır; yanıt created/updated/removed/unchanged + satırlar |
+| PUT / DELETE | `/inventory/thresholds/{id}` (M) | `catalog.write` | If-Match zorunlu (428 / 412) |
 | GET | `/inventory/availability?variantIds=…&warehouseId=` | `inventory.read` | Sipariş ekranı |
 | GET | `/inventory/movements` (variantId, warehouseId, type, from, to) | `inventory.read` | Stok kartı, keyset |
 | POST | `/inventory/receipts` (İ) | `inventory.receive` | §4.1 |
@@ -356,7 +361,7 @@ flowchart LR
 | GET | `/openapi/v1.json` | yalnızca local/preview |
 
 ### 12.13 Reports (#53) — entitlement yok (dışa aktarma hiçbir pakette kilitlenmez, roles-permissions §5)
-| GET | `/reports/critical-stock` (threshold, warehouseId, limit, cursor) | `reports.read` | REP-03: aktif varyantlardan kullanılabilir (Σ eldeki − Σ rezerve) ≤ eşik; hiç bakiyesi olmayan = 0. SKU sırasıyla keyset (100, en fazla 500). Eşik isteğin parametresidir (varsayılan 0) — `inventory.stock_thresholds` (data-model §5.13) henüz yok |
+| GET | `/reports/critical-stock` (threshold, warehouseId, includeOutOfStock, limit, cursor) | `reports.read` | REP-03: aktif varyantlardan kullanılabilir (Σ eldeki − Σ rezerve; hiç bakiyesi olmayan = 0) ≤ eşik. SKU sırasıyla keyset (100, en fazla 500). **#137:** `threshold` verilmezse `mode = thresholds` — her varyant kendi etkin minimumuna göre (data-model §5.7 `stock_thresholds`), minimumu olmayanlar hariç; `includeOutOfStock=true` ile minimumu olmayan ve kullanılabilir ≤ 0 olanlar da. `threshold` verilirse `mode = fixed` (eski davranış: tüm aktif varyantlar ≤ eşik); ikisi birlikte 422. Yanıt: `mode`, `threshold` (fixed'de değer, aksi null), `includeOutOfStock`, `thresholdsConfigured` (kapsamda en az bir eşik var mı), satırda `minQuantity` |
 | GET | `/reports/orders` (from, to, status) | `reports.read` | REP-04: oluşturma günü (Europe/Istanbul) × güncel durum × para birimi; adet ve genel toplam |
 | GET | `/reports/top-products` (from, to, limit) | `reports.read` | REP-06: onaylanmış ve sonrası (approved, picking, packed, shipped, completed) siparişlerin satırları; miktar, sipariş sayısı, tutar (satır toplamı, KDV hariç) |
 | GET | `/reports/stock-movements` (from, to, warehouseId) | `reports.read` | REP-07: ledger, gün × hareket tipi: adet, giriş, çıkış miktarı (maliyet yok) |
@@ -368,7 +373,13 @@ flowchart LR
 > **Uygulanan durum (#53):** Yeni **Reports** modülü salt okunur; iş verisi tutmaz. Veriyi sahibi modüllerin şemasından,
 > `BayiOS.Api/Platform/ReportsPorts.cs` içindeki port adaptörleri okur (her biri yalnız kendi modülünün DbContext'i ve
 > bağlantısı üzerinden, istek transaction'ında: RLS + açık `tenant_id` filtresi; iki modülün tablolarını birleştiren
-> sorgu yok — kritik stok, Inventory'den "eşik üstü" varyant kimliklerini alır, Catalog'da bunları dışlayarak sayfalar).
+> sorgu yok — kritik stok, Inventory'den "eşik üstü" varyant kimliklerini alır, Catalog'da bunları dışlayarak sayfalar;
+> #137 eşik modunda Inventory'nin `IStockThresholdQueries` sözleşmesinden "minimumunda/altında" kimlikleri alır ve
+> Catalog'da yalnızca onları sayfalar, satırları sayfa okunurken yeniden doğrular). **Sözleşme değişikliği (#137):**
+> varsayılan davranış değişti — `threshold` parametresiz çağrı artık eşik modudur (önceden eşik 0'dı); eski sonucu almak
+> için `threshold=0` gönderin. `CriticalStockReportResponse.threshold` artık nullable; `mode`, `includeOutOfStock`,
+> `thresholdsConfigured` ve `CriticalStockItem.minQuantity` eklendi. Dışa aktarmada "Eşik" kolonu satırın karşılaştırıldığı
+> değerdir (sabit eşik ya da varyantın minimumu).
 > Tarih aralığı varsayılan son 30 gün, en fazla 366 gün; gün = Europe/Istanbul takvim günü (sabit UTC+03:00).
 > **İzinler:** sales (dipnot 4, kayıt düzeyi K) yalnızca sipariş raporları (`orders`, `top-products`) — diğerleri
 > `403 reports.orders_and_customers_only`; warehouse_staff hiçbiri (`403 auth.forbidden`). Tutarlar yalnızca koşulsuz

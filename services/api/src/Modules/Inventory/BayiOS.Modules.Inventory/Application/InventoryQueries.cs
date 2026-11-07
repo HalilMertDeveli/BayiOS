@@ -13,6 +13,9 @@ namespace BayiOS.Modules.Inventory.Application;
 /// <param name="Term">Text search (SKU / name contains, barcode equals), resolved through Catalog; null = no search.</param>
 internal sealed record BalanceQuery(Guid? VariantId, Guid? WarehouseId, Guid? LocationId, int Limit, Guid? After, string? Term = null);
 
+/// <param name="VariantIds">Empty = every variant.</param>
+internal sealed record ThresholdQuery(IReadOnlyList<Guid> VariantIds, Guid? WarehouseId, int Limit, Guid? After);
+
 internal sealed record MovementQuery(Guid? VariantId, Guid? WarehouseId, string? Type, Guid? SourceId, int Limit, InventoryCursor? After);
 
 /// <summary>Read side: tenant-filtered EF queries (RLS underneath), keyset paginated.</summary>
@@ -25,6 +28,7 @@ internal sealed class InventoryQueries(
 {
     public const string BalanceSort = "id";
     public const string MovementSort = "-occurredAt";
+    public const string ThresholdSort = "threshold-id";
 
     /// <summary>
     /// Most variants a balance text search may match. The variants come from Catalog through a port (no cross-schema
@@ -72,9 +76,88 @@ internal sealed class InventoryQueries(
 
         var rows = await balances.OrderBy(b => b.Id).Take(query.Limit + 1).ToListAsync(cancellationToken);
         var hasMore = rows.Count > query.Limit;
-        var items = rows.Take(query.Limit).Select(ToResponse).ToList();
+        var page = rows.Take(query.Limit).ToList();
+        var minimums = await WarehouseMinimumsAsync(page, cancellationToken);
+        var items = page.Select(b =>
+        {
+            var key = (b.VariantId, b.WarehouseId);
+            var (min, available) = minimums.GetValueOrDefault(key);
+            return ToResponse(b, min, min is { } m && available <= m);
+        }).ToList();
         var next = hasMore ? new InventoryCursor(BalanceSort, string.Empty, items[^1].Id).Encode() : null;
         return new BalancePageResponse(items, new InventoryPageInfo(next, hasMore, query.Limit));
+    }
+
+    /// <summary>
+    /// For each (variant, warehouse) of the page: the effective minimum in that warehouse (override, else default) and
+    /// the variant's available stock summed over every bin of the warehouse (not only the bins on the page).
+    /// </summary>
+    private async Task<Dictionary<(Guid VariantId, Guid WarehouseId), (decimal? Min, decimal Available)>> WarehouseMinimumsAsync(
+        List<InventoryBalance> page, CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<(Guid, Guid), (decimal?, decimal)>();
+        if (page.Count == 0)
+        {
+            return result;
+        }
+
+        var variantIds = page.Select(b => b.VariantId).Distinct().ToList();
+        var thresholds = await db.Thresholds.AsNoTracking()
+            .Where(t => variantIds.Contains(t.VariantId))
+            .Select(t => new { t.VariantId, t.WarehouseId, t.MinQuantity })
+            .ToListAsync(cancellationToken);
+        if (thresholds.Count == 0)
+        {
+            return result;
+        }
+
+        var warehouseIds = page.Select(b => b.WarehouseId).Distinct().ToList();
+        var sums = await db.Balances.AsNoTracking()
+            .Where(b => variantIds.Contains(b.VariantId) && warehouseIds.Contains(b.WarehouseId))
+            .GroupBy(b => new { b.VariantId, b.WarehouseId })
+            .Select(g => new { g.Key.VariantId, g.Key.WarehouseId, Available = g.Sum(b => b.OnHand) - g.Sum(b => b.Reserved) })
+            .ToListAsync(cancellationToken);
+        foreach (var sum in sums)
+        {
+            var min = thresholds.FirstOrDefault(t => t.VariantId == sum.VariantId && t.WarehouseId == sum.WarehouseId)?.MinQuantity
+                ?? thresholds.FirstOrDefault(t => t.VariantId == sum.VariantId && t.WarehouseId == null)?.MinQuantity;
+            result[(sum.VariantId, sum.WarehouseId)] = (min, sum.Available);
+        }
+
+        return result;
+    }
+
+    /// <summary>Thresholds ordered by id (UUIDv7); keyset on id. Filters: variants, warehouse (exact; null rows = defaults).</summary>
+    public async Task<StockThresholdPageResponse> ListThresholdsAsync(ThresholdQuery query, CancellationToken cancellationToken)
+    {
+        var thresholds = db.Thresholds.AsNoTracking();
+        if (query.VariantIds is { Count: > 0 } variantIds)
+        {
+            var ids = variantIds.ToList();
+            thresholds = thresholds.Where(t => ids.Contains(t.VariantId));
+        }
+
+        if (query.WarehouseId is { } warehouseId)
+        {
+            thresholds = thresholds.Where(t => t.WarehouseId == warehouseId);
+        }
+
+        if (query.After is { } after)
+        {
+            thresholds = thresholds.Where(t => t.Id.CompareTo(after) > 0);
+        }
+
+        var rows = await thresholds.OrderBy(t => t.Id).Take(query.Limit + 1).ToListAsync(cancellationToken);
+        var hasMore = rows.Count > query.Limit;
+        var items = rows.Take(query.Limit).Select(ToResponse).ToList();
+        var next = hasMore ? new InventoryCursor(ThresholdSort, string.Empty, items[^1].Id).Encode() : null;
+        return new StockThresholdPageResponse(items, new InventoryPageInfo(next, hasMore, query.Limit));
+    }
+
+    public async Task<StockThresholdResponse?> GetThresholdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var row = await db.Thresholds.AsNoTracking().SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
+        return row is null ? null : ToResponse(row);
     }
 
     /// <summary>Movement history (stock card), newest first; keyset on (occurred_at, id) descending.</summary>
@@ -157,8 +240,11 @@ internal sealed class InventoryQueries(
                 r.Id, r.OrderLineId, r.VariantId, r.WarehouseId, r.LocationId, r.Quantity - r.ConsumedQuantity - r.ReleasedQuantity, r.Status))];
     }
 
-    private static BalanceResponse ToResponse(InventoryBalance b) =>
-        new(b.Id, b.VariantId, b.WarehouseId, b.LocationId, b.OnHand, b.Reserved, b.OnHand - b.Reserved, b.Version, b.UpdatedAt);
+    private static BalanceResponse ToResponse(InventoryBalance b, decimal? minQuantity, bool belowMinimum) =>
+        new(b.Id, b.VariantId, b.WarehouseId, b.LocationId, b.OnHand, b.Reserved, b.OnHand - b.Reserved, b.Version, b.UpdatedAt, minQuantity, belowMinimum);
+
+    private static StockThresholdResponse ToResponse(StockThreshold t) =>
+        new(t.Id, t.VariantId, t.WarehouseId, t.MinQuantity, t.Version, t.CreatedAt, t.UpdatedAt);
 
     private static MovementResult ToResponse(InventoryMovement m) =>
         new(m.Id, m.VariantId, m.WarehouseId, m.LocationId, m.Type, m.Quantity, m.UnitCost, m.SourceType, m.SourceId,

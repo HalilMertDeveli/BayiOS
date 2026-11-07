@@ -50,6 +50,7 @@ import { UNITS_HREF } from "./reference-shared";
 import { ProductStatusBadge } from "./product-status-badge";
 import { useCatalogReference, type CatalogReference } from "./use-catalog-reference";
 import { VariantFields, variantErrorKeys } from "./variant-fields";
+import { StockThresholdsSection } from "./stock-thresholds-section";
 import { VariantsSection } from "./variants-section";
 
 type Loaded = { product: Product; etag: string };
@@ -634,6 +635,10 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, 
 
       {product ? (
         <VariantsSection product={product} variantFields={variantFields} readOnly={readOnly} onChanged={onVariantsChanged} onConflict={onReload} />
+      ) : null}
+
+      {product && access.canSome("inventory.read") ? (
+        <StockThresholdsSection product={product} units={reference.units} readOnly={readOnly || archived} />
       ) : null}
 
       {brandDialog ? (

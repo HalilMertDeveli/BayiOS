@@ -249,16 +249,27 @@ function TodayOrdersTile() {
 
 function CriticalStockTile() {
   const { api } = useSession();
-  const { state, retry } = useTile<CriticalStockReport>((signal) => getCriticalStock(api, { threshold: "0", warehouseId: "" }, null, signal), reportErrorMessage);
+  // #137: each variant against its own minimum stock (the report's default mode), all warehouses.
+  const { state, retry } = useTile<CriticalStockReport>(
+    (signal) => getCriticalStock(api, { threshold: null, warehouseId: "" }, null, signal),
+    reportErrorMessage,
+  );
   return (
     <Tile id="critical" title="Kritik stok" Icon={PackageMinus} href={reportHref("critical-stock")} linkLabel="Kritik stok raporu" state={state} retry={retry}>
       {(report) =>
         report.items.length === 0 ? (
-          <p className="text-body text-fg-muted">Satılabilir stoğu tükenen ürün yok.</p>
+          report.thresholdsConfigured ? (
+            <p className="text-body text-fg-muted">Minimum stoğun altına inen ürün yok.</p>
+          ) : (
+            <p className="text-body text-fg-muted">
+              Henüz minimum stok tanımlanmadı. Ürün düzenleme ekranındaki “Minimum stok” bölümünden (depoya özel eşik için ürünün stok sayfasından) değer
+              girin; satılabilir miktarı bu değere inen ürünler burada sayılır.
+            </p>
+          )
         ) : (
           <>
-            <Kpi value={countText(report.items.length, report.page.hasMore)} label="üründe satılabilir stok yok" />
-            <RowList label="Stoğu tükenen ürünler">
+            <Kpi value={countText(report.items.length, report.page.hasMore)} label="ürün minimum stokta veya altında" />
+            <RowList label="Minimum stoğun altındaki ürünler">
               {report.items.slice(0, TILE_ROWS).map((item) => (
                 <li key={item.id} className="flex items-center justify-between gap-3 py-1.5 text-body">
                   <span className="flex min-w-0 flex-col">
@@ -266,7 +277,8 @@ function CriticalStockTile() {
                     <span className="truncate text-caption text-fg-muted">{item.name}</span>
                   </span>
                   <span className="shrink-0 text-caption text-fg-muted tabular-nums">
-                    satılabilir {formatQuantity(item.available)} {item.unit}
+                    satılabilir {formatQuantity(item.available)}
+                    {item.minQuantity !== null && item.minQuantity !== undefined ? ` / min. ${formatQuantity(item.minQuantity)}` : ""} {item.unit}
                   </span>
                 </li>
               ))}

@@ -35,7 +35,7 @@ public sealed class ReportsApiTests(ApiFixture fixture)
         await ReportsKit.ExecuteAsync(fixture, "UPDATE catalog.product_variants SET status = 'archived', archived_at = now() WHERE id = $1", archived);
 
         var report = await ReportsKit.OkAsync<CriticalStockReportResponse>(kit.Owner, "/api/v1/reports/critical-stock?threshold=2");
-        Assert.Equal(2m, report.Threshold);
+        Assert.Equal((CriticalStockModes.Fixed, (decimal?)2m), (report.Mode, report.Threshold));
         Assert.Equal(["CRT-LOW", "CRT-NEVER", "CRT-RESERVED"], report.Items.Select(i => i.Sku));
         var reservedRow = report.Items.Single(i => i.Id == reserved);
         Assert.Equal((5m, 4m, 1m), (reservedRow.OnHand, reservedRow.Reserved, reservedRow.Available));
@@ -54,8 +54,13 @@ public sealed class ReportsApiTests(ApiFixture fixture)
             kit.TenantId);
         Assert.Equal(truth.Select(r => (string)r[0]!), report.Items.Select(i => i.Sku));
 
-        // Threshold 0 keeps only the never-stocked one; a higher threshold includes the rest.
-        Assert.Equal(["CRT-NEVER"], (await ReportsKit.OkAsync<CriticalStockReportResponse>(kit.Owner, "/api/v1/reports/critical-stock")).Items.Select(i => i.Sku));
+        // Threshold 0 keeps only the never-stocked one; a higher threshold includes the rest. Without a threshold the
+        // report uses each variant's minimum stock (#137): none is set here, so nothing is listed.
+        Assert.Equal(["CRT-NEVER"], (await ReportsKit.OkAsync<CriticalStockReportResponse>(kit.Owner, "/api/v1/reports/critical-stock?threshold=0")).Items.Select(i => i.Sku));
+        var byMinimum = await ReportsKit.OkAsync<CriticalStockReportResponse>(kit.Owner, "/api/v1/reports/critical-stock");
+        Assert.Equal((CriticalStockModes.Thresholds, (decimal?)null, false), (byMinimum.Mode, byMinimum.Threshold, byMinimum.ThresholdsConfigured));
+        Assert.Empty(byMinimum.Items);
+        Assert.Equal(["CRT-NEVER"], (await ReportsKit.OkAsync<CriticalStockReportResponse>(kit.Owner, "/api/v1/reports/critical-stock?includeOutOfStock=true")).Items.Select(i => i.Sku));
         Assert.Equal(4, (await ReportsKit.OkAsync<CriticalStockReportResponse>(kit.Owner, "/api/v1/reports/critical-stock?threshold=10")).Items.Count);
 
         // Keyset paging returns the same rows once each.
@@ -73,7 +78,7 @@ public sealed class ReportsApiTests(ApiFixture fixture)
 
         // Per warehouse: a second, empty warehouse makes every active variant critical there.
         var second = await kit.Owner.CreatedAsync<WarehouseResponse>("/api/v1/warehouses", new { code = "W2", name = "İkinci Depo" });
-        var inSecond = await ReportsKit.OkAsync<CriticalStockReportResponse>(kit.Owner, $"/api/v1/reports/critical-stock?warehouseId={second.Id}");
+        var inSecond = await ReportsKit.OkAsync<CriticalStockReportResponse>(kit.Owner, $"/api/v1/reports/critical-stock?threshold=0&warehouseId={second.Id}");
         Assert.Equal(4, inSecond.Items.Count);
         Assert.All(inSecond.Items, i => Assert.Equal(0m, i.OnHand));
 

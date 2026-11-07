@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { PackageCheck } from "lucide-react";
+import Link from "next/link";
+import { Gauge, PackageCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CheckboxField } from "@/components/ui/checkbox-field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { formatQuantity, parseDecimalInput, toDecimalInput } from "@/lib/pricing/money";
-import { getCriticalStock, type CriticalStockItem } from "@/lib/reports/api";
+import { getCriticalStock, type CriticalStockFilter, type CriticalStockItem } from "@/lib/reports/api";
 import { reportDefinition } from "@/lib/reports/definitions";
 import { reportErrorMessage } from "@/lib/reports/errors";
 import { useSession } from "@/lib/session/session-context";
@@ -16,18 +18,19 @@ import { useReport, useReportUrl } from "./use-report";
 
 const REPORT = reportDefinition("critical-stock");
 
-/** Threshold from the URL (`esik`, API decimal "2.5"); invalid or missing → "0". */
-function thresholdOf(value: string | null): string {
-  if (!value) return "0";
+/** Fixed threshold from the URL (`esik`, API decimal "2.5"); missing or invalid → null = each product's minimum stock. */
+function thresholdOf(value: string | null): string | null {
+  if (!value) return null;
   const parsed = parseDecimalInput(value, 3);
-  return parsed.ok ? parsed.value : "0";
+  return parsed.ok ? parsed.value : null;
 }
 
 type More = { key: string; items: CriticalStockItem[]; nextCursor: string | null; hasMore: boolean };
 
 /**
- * REP-03: active variants whose available quantity (on hand − reserved) is ≤ the threshold; variants with no balance
- * count as 0. Server-side keyset paging in SKU order ("Daha fazla yükle").
+ * REP-03 (#137): by default every active variant against its own minimum stock (available = on hand − reserved ≤
+ * minimum; variants without one are left out unless "stoğu tükenenler" is on). A fixed threshold (`esik`) lists every
+ * active variant at or below that value instead. Server-side keyset paging in SKU order ("Daha fazla yükle").
  */
 export function CriticalStockReportView() {
   return (
@@ -42,7 +45,8 @@ function CriticalStockReportBody() {
   const { today, params, update } = useReportUrl();
   const threshold = thresholdOf(params.get("esik"));
   const warehouseId = params.get("depo") ?? "";
-  const filter = { threshold, warehouseId };
+  const includeOutOfStock = threshold === null && params.get("tukenen") === "1";
+  const filter: CriticalStockFilter = { threshold, warehouseId, includeOutOfStock };
   const key = JSON.stringify(filter);
   const { state, reload } = useReport(key, (signal) => getCriticalStock(api, filter, null, signal));
   const [more, setMore] = useState<More | null>(null);
@@ -70,8 +74,16 @@ function CriticalStockReportBody() {
 
   const filters = (
     <div className="flex flex-wrap items-start gap-3">
-      <ThresholdForm value={threshold} onApply={(value) => update({ esik: value === "0" ? null : value })} />
+      <ThresholdForm value={threshold} onApply={(value) => update({ esik: value, tukenen: value ? null : params.get("tukenen") })} />
       <WarehouseFilter value={warehouseId} onChange={(id) => update({ depo: id })} />
+      {threshold === null ? (
+        <CheckboxField
+          label="Eşiği olmayan, stoğu tükenmiş ürünleri de göster"
+          hint="Minimum stok girilmemiş ürünlerden satılabilir miktarı 0 veya altında olanlar."
+          checked={includeOutOfStock}
+          onChange={(checked) => update({ tukenen: checked ? "1" : null })}
+        />
+      ) : null}
     </div>
   );
 
@@ -91,16 +103,32 @@ function CriticalStockReportBody() {
         </span>
       ),
     },
+    {
+      key: "minimum",
+      header: "Min. stok",
+      numeric: true,
+      width: "8rem",
+      cell: (r) => (r.minQuantity === null || r.minQuantity === undefined ? <span className="text-fg-muted">—</span> : formatQuantity(r.minQuantity)),
+    },
   ];
 
+  const notConfigured = first !== null && threshold === null && !first.thresholdsConfigured;
+  const exportFilters = {
+    ...(threshold !== null ? { threshold } : {}),
+    ...(warehouseId ? { warehouseId } : {}),
+    ...(includeOutOfStock ? { includeOutOfStock: true } : {}),
+  };
+
   return (
-    <ReportFrame report={REPORT} filters={filters} exportFilters={{ threshold, ...(warehouseId ? { warehouseId } : {}) }} today={today}>
+    <ReportFrame report={REPORT} filters={filters} exportFilters={exportFilters} today={today}>
       {state.status === "error" ? (
         <ReportError message={state.message} onRetry={reload} />
       ) : (
         <section aria-label="Kritik stoktaki ürünler" className="flex flex-col gap-3">
           <p className="text-caption text-fg-muted">
-            Satılabilir = eldeki − rezerve. Eşik: {formatQuantity(threshold)} · {first ? `${items.length.toLocaleString("tr-TR")} ürün gösteriliyor` : "yükleniyor"}
+            Satılabilir = eldeki − rezerve.{" "}
+            {threshold === null ? "Her ürün kendi minimum stoğuna göre değerlendirilir" : `Sabit eşik: ${formatQuantity(threshold)}`} ·{" "}
+            {first ? `${items.length.toLocaleString("tr-TR")} ürün gösteriliyor` : "yükleniyor"}
             {hasMore ? " (devamı var)" : ""}.
           </p>
           <Table
@@ -111,12 +139,30 @@ function CriticalStockReportBody() {
             loading={state.status !== "ready"}
             maxHeight="60vh"
             empty={
-              <EmptyState
-                headingLevel="h2"
-                icon={<PackageCheck className="size-6" />}
-                title="Kritik stokta ürün yok"
-                description="Tüm aktif ürünlerin satılabilir miktarı eşiğin üzerinde. Daha yüksek bir eşikle kontrol edebilirsiniz."
-              />
+              notConfigured && !includeOutOfStock ? (
+                <EmptyState
+                  headingLevel="h2"
+                  icon={<Gauge className="size-6" />}
+                  title="Henüz minimum stok tanımlanmadı"
+                  description="Kritik stok, ürünlere girilen minimum stoğa göre hesaplanır. Ürün düzenleme ekranındaki “Minimum stok” bölümünden (depoya özel eşik için ürünün stok sayfasından) değer girin ya da yukarıda sabit bir eşik deneyin."
+                  action={
+                    <Link href="/urunler" className="text-body font-medium text-brand-fg underline-offset-2 hover:underline">
+                      Ürünlere git
+                    </Link>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  headingLevel="h2"
+                  icon={<PackageCheck className="size-6" />}
+                  title="Kritik stokta ürün yok"
+                  description={
+                    threshold === null
+                      ? "Minimum stoğu tanımlı tüm aktif ürünlerin satılabilir miktarı eşiğin üzerinde."
+                      : "Tüm aktif ürünlerin satılabilir miktarı eşiğin üzerinde. Daha yüksek bir eşikle kontrol edebilirsiniz."
+                  }
+                />
+              )
             }
           />
           {moreError ? (
@@ -137,7 +183,7 @@ function CriticalStockReportBody() {
   );
 }
 
-function ThresholdForm({ value, onApply }: { value: string; onApply: (value: string) => void }) {
+function ThresholdForm({ value, onApply }: { value: string | null; onApply: (value: string | null) => void }) {
   const [text, setText] = useState(() => toDecimalInput(value));
   const [shown, setShown] = useState(value);
   const [error, setError] = useState<string | undefined>();
@@ -148,7 +194,12 @@ function ThresholdForm({ value, onApply }: { value: string; onApply: (value: str
   }
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    const parsed = parseDecimalInput(text || "0", 3);
+    if (text.trim() === "") {
+      setError(undefined);
+      onApply(null);
+      return;
+    }
+    const parsed = parseDecimalInput(text, 3);
     if (!parsed.ok) {
       setError("0 veya daha büyük, en fazla 3 ondalıklı bir sayı girin.");
       return;
@@ -164,6 +215,7 @@ function ThresholdForm({ value, onApply }: { value: string; onApply: (value: str
           label="Kritik eşik"
           inputMode="decimal"
           className="w-40"
+          placeholder="Ürün eşiği"
           value={text}
           aria-invalid={error ? true : undefined}
           aria-describedby="critical-threshold-help"
@@ -174,7 +226,7 @@ function ThresholdForm({ value, onApply }: { value: string; onApply: (value: str
         </Button>
       </div>
       <p id="critical-threshold-help" className={error ? "text-caption text-danger-fg" : "text-caption text-fg-muted"}>
-        {error ?? "Satılabilir miktarı bu değere eşit veya altında olanlar listelenir."}
+        {error ?? "Boş: her ürünün kendi minimum stoğu. Değer girerseniz tüm ürünler bu sabit eşiğe göre listelenir."}
       </p>
     </form>
   );

@@ -38,6 +38,36 @@ public interface IStockQueries
     Task<IReadOnlyList<ReservationAllocation>> GetOpenReservationsAsync(Guid orderId, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Minimum stock (critical stock) questions other modules may ask (PRD CAT-12, REP-03; data-model §5.13). A variant's
+/// <b>effective minimum</b> depends on the scope:
+/// <list type="bullet">
+/// <item>one warehouse: the warehouse override of the variant, else its tenant-wide default (warehouse NULL);</item>
+/// <item>all warehouses (<c>warehouseId</c> null): the tenant-wide default, else the sum of the variant's warehouse
+/// overrides.</item>
+/// </list>
+/// Available = Σ on_hand − Σ reserved over the scope's balance rows; a variant without any balance row has 0.
+/// A variant is <b>critical</b> when it has an effective minimum and available ≤ minimum.
+/// Unlocked reads in the request transaction (RLS + explicit tenant filter).
+/// </summary>
+public interface IStockThresholdQueries
+{
+    /// <summary>Effective minimum of each given variant that has one in the scope.</summary>
+    Task<IReadOnlyDictionary<Guid, decimal>> EffectiveMinimumsAsync(IReadOnlyCollection<Guid> variantIds, Guid? warehouseId, CancellationToken cancellationToken);
+
+    /// <summary>Variants (any catalog status) that are critical in the scope.</summary>
+    Task<IReadOnlyList<Guid>> CriticalVariantsAsync(Guid? warehouseId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The complement used when variants without a minimum also count when out of stock: variants whose available is
+    /// above their effective minimum, or above 0 when they have none. Every other active variant is critical or out of stock.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> VariantsAboveMinimumOrZeroAsync(Guid? warehouseId, CancellationToken cancellationToken);
+
+    /// <summary>True when any variant has an effective minimum in the scope.</summary>
+    Task<bool> AnyThresholdAsync(Guid? warehouseId, CancellationToken cancellationToken);
+}
+
 /// <summary>Movement types (ADR 0004 §1). Quantities are signed; the sign must match the type.</summary>
 public static class MovementTypes
 {
