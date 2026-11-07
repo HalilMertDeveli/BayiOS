@@ -61,6 +61,11 @@ export interface DemoCounts {
   partialFulfilment: number;
   /** Orders whose detail carries a billing address (#136). */
   ordersWithBillingAddress: number;
+  /** Minimum stock thresholds (#137): rows (defaults + per-warehouse overrides). */
+  stockThresholds: number;
+  /** Critical-stock report in thresholds mode, all warehouses; and with out-of-stock variants without a minimum. */
+  criticalStock: number;
+  criticalStockWithOutOfStock: number;
   whatsappOrders: number;
 }
 
@@ -76,6 +81,13 @@ export interface SeededDemo {
   customers: DemoCustomer[];
   priceLists: { default: string; dealer: Record<string, { id: string; name: string; discountPercent: number }> };
   orders: { target: string; id: string; number: string; status: string; fulfillmentStatus: string }[];
+  /** Minimum stock thresholds the seeder set (#137). */
+  thresholds: {
+    critical: { sku: string; available: number; min: number }[];
+    fine: { sku: string; available: number; min: number }[];
+    override: { sku: string; warehouse: string; warehouseId: string; available: number; min: number };
+    outOfStock: string[];
+  };
   counts: DemoCounts;
   seconds: number;
 }

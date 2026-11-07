@@ -60,7 +60,7 @@ gerçek kimlik bilgisi repoya asla girmez.
 | Fiyat listeleri | Perakende (varsayılan) + Bayi A (%12, fren balatasında 10+ kademe) + Bayi B (%6) | Liste fiyatı (varsayılan; modüllerde 50+ / 200+ kademe) + Entegratör (%8) |
 | Bayi grupları / müşteri (adresli) | Bayi A, Bayi B, Perakende / 12; her müşteride varsayılan teslimat ("Dükkân") + fatura ("Fatura") adresi | Entegratör, Ajans, Kurulum / 10; teslimat ("Merkez") + fatura ("Muhasebe") adresi |
 | İçe aktarma | 1 XLSX (aksesuar/sarf; fiyat + garanti alanı), Imports API: yükle → eşleme → kuru doğrulama → çalıştır | 1 XLSX (güç kaynağı, kablo (metre), montaj, yedek LED; fiyat + teknik alanlar) |
-| Stok | Mal kabulleriyle (ledger), kategori rafına; bazı kalemler kritik seviyede (2) | Aynı; kablo metre (ondalık) |
+| Stok | Mal kabulleriyle (ledger), kategori rafına; bazı kalemler kritik seviyede (2); bir kalem hiç stoklanmaz; 7 minimum stok eşiği (aşağıda) | Aynı; kablo metre (ondalık) |
 | Siparişler (17) | taslak 3 (biri WhatsApp), onay bekliyor 2, onaylandı/rezerve 2, toplanıyor 1, paketlendi 1, kısmi sevk + kalanı kapatıldı 1, sevk edildi 3, tamamlandı 2, iptal 2 (biri onaydan sonra, rezervasyon serbest) | aynı dağılım; proje siparişi (24 kabinet + kartlar + PSU + kablo) dahil |
 | WhatsApp | §1.3 mesajı; kural tabanlı ayrıştırıcı (AI kapalı) → insan onaylı taslak | §2.3 proje mesajı → taslak |
 
@@ -73,6 +73,17 @@ okutma, eksik bildirimi, tamamla → taslak sevkiyat → paket kontrolü → sev
   "Siparişte kayıtlı adres yok" görünmez; taslaklar müşterinin varsayılan adreslerini önizler. Tek istisna taslakken
   (hiç gönderilmeden) iptal edilen siparişdir: gönderilmediği için kopya yoktur. Tam boy demoda sayım özeti
   `ordersWithBillingAddress` = 16 / 17.
+- **Minimum stok eşikleri (#137):** siparişlerden sonraki gerçek bakiyelerden (deterministik; SKU sırası, önce demonun
+  düşük stoklu kalemleri) `POST /inventory/thresholds/bulk` ile, tam sayı (adet/takım/kutu):
+  - 4 varyant tüm depolarda kritik (satılabilir ≤ minimum), biri tam eşit (ör. LED `VID-ISL-2K` 2 / min. 2);
+  - bunlardan biri ikinci depoda (Motor: Dükkân, LED: Ankara Şube) stoğunun altında bir depo eşiği alır → genelde ve
+    ana depoda kritik, o depoda kritik değil;
+  - 2 varyantta stoğun yarısı kadar minimum (tanımlı ama kritik değil);
+  - eşiksiz ve 0 stoklu bir varyant (Motor `KPR-NMAX155-AYN`, LED `KAB-P391-IC-500-AS`; hiç mal kabulü yapılmaz,
+    siparişte kullanılmaz): raporda yalnızca "stokta olmayanlar dahil" ile görünür.
+  Pano "Kritik stok" kutucuğu ve rapor bu dört ürünü gösterir. Sayım özeti: `stockThresholds` 7, `criticalStock` 4,
+  `criticalStockWithOutOfStock` 5 (her iki demo). Eşikler kiracı ilk kurulurken yazılır; ikinci koşu hiçbir şey
+  değiştirmez.
 - **Türkçe küçük harf (#136):** ürün adlarındaki kullanım etiketi `toLocaleLowerCase("tr-TR")` ile küçültülür
   ("İç mekân" → "iç mekân"). SKU / mesaj eşleştirmedeki `toLowerCase()` bilinçli olarak kalır: kodlar ASCII'dir ve
   `tr-TR` ile `VID-ISL` → `vıd-ısl` olur, eşleşme bozulur.

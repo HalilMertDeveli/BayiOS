@@ -238,6 +238,8 @@ export function ledDemo(size = "full") {
       shop: category === "LED Modül" || category === "Kabinet" ? rng.int(5, 30) : 0,
     }),
     lowStock: ["VID-ISL-2K"],
+    // Never received and no minimum stock threshold (#137 demo): listed only with "stokta olmayanlar dahil".
+    outOfStock: ["KAB-P391-IC-500-AS"],
     orders: small
       ? [
           { target: "approved", customer: 1, lines: [[mod("P25", "IC"), 20]] },

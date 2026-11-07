@@ -55,7 +55,25 @@ test("LED demo: toplu katalog içe aktarma → fiyat kademesi → kademeli fiyat
   const ist = demo.warehouses.IST;
   const customer = demo.customers.find((c) => c.group === "Kurulum")!; // no dealer list → the default list applies
 
+  // #137: minimum stock thresholds make the critical-stock report and dashboard tile meaningful.
+  const { critical, override, outOfStock } = demo.thresholds;
+  expect(critical).toHaveLength(4);
+  expect(critical.every((c) => c.available <= c.min)).toBe(true);
+  expect(critical.some((c) => c.available === c.min)).toBe(true);
+  type Critical = { items: { sku: string }[] };
+  const report = async (query = "") => (await demo.api.get<Critical>(`/api/v1/reports/critical-stock${query}`)).items.map((i) => i.sku);
+  const all = await report();
+  expect([...all].sort()).toEqual(critical.map((c) => c.sku).sort());
+  // The per-warehouse override is below the stock there: critical overall, not in that warehouse.
+  expect(override.min).toBeLessThan(override.available);
+  expect(await report(`?warehouseId=${override.warehouseId}`)).not.toContain(override.sku);
+  // No threshold and 0 stock: only with "include out of stock".
+  expect(all).not.toContain(outOfStock[0]);
+  expect(await report("?includeOutOfStock=true")).toContain(outOfStock[0]);
+
   await signIn(page, owner.email, owner.password, owner.fullName);
+  const tile = page.getByRole("list", { name: "Minimum stoğun altındaki ürünler" });
+  for (const c of critical) await expect(tile).toContainText(c.sku);
 
   // ---- 1. Bulk catalog import: supplier XLSX (15 products with prices and technical attributes).
   const imported = await runCatalogImport(demo.api, demo.def, demo.priceLists.default, (line) => console.log(`[import] ${line}`));

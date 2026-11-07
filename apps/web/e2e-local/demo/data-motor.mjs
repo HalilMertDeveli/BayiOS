@@ -260,6 +260,8 @@ export function motorDemo(size = "full") {
     // Received into the main warehouse shelves (category shelf); fast movers also in the shop.
     stock: (variant, category) => ({ main: rng.int(12, 45), shop: category === "Elektrik" || category === "Fren" ? rng.int(2, 6) : 0 }),
     lowStock: [sku(1, 4, "OR"), sku(0, 6)],
+    // Never received and no minimum stock threshold (#137 demo): listed only with "stokta olmayanlar dahil".
+    outOfStock: ["KPR-NMAX155-AYN"],
     orders: small
       ? [
           { target: "approved", customer: 1, lines: [[sku(1, 2), 1]] },
