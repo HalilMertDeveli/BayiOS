@@ -22,7 +22,7 @@ public class ReadinessTests(ApiFixture fixture)
     [Fact]
     public async Task Ready_returns_503_and_liveness_stays_200_when_database_is_down()
     {
-        await using var broken = fixture.WithWebHostBuilder(builder =>
+        await using var broken = fixture.Derive(builder =>
             builder.UseSetting("ConnectionStrings:Default", "Host=127.0.0.1;Port=1;Database=x;Username=x;Password=x;Timeout=2"));
         var client = broken.CreateClient();
 
@@ -39,7 +39,7 @@ public class ReadinessTests(ApiFixture fixture)
     public async Task Unconfigured_instance_starts_but_is_not_ready_and_rejects_tokens()
     {
         // Mirrors the container smoke test (no env): process must start, yet fail closed.
-        await using var unconfigured = fixture.WithWebHostBuilder(builder => builder
+        await using var unconfigured = fixture.Derive(builder => builder
             .UseSetting("ConnectionStrings:Default", string.Empty)
             .UseSetting("Auth:Authority", string.Empty)
             .UseSetting("Auth:Audience", string.Empty));

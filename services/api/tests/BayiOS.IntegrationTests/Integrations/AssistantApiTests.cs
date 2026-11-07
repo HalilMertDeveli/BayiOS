@@ -204,8 +204,8 @@ public sealed class AssistantApiTests(ApiFixture fixture)
     [Fact]
     public async Task The_hourly_parse_limit_is_shared_by_all_instances_and_answers_429()
     {
-        await using var limited = fixture.WithWebHostBuilder(b => b.UseSetting("Ai:HourlyParseLimit", "5"));
-        await using var other = fixture.WithWebHostBuilder(b => b.UseSetting("Ai:HourlyParseLimit", "5"));
+        await using var limited = fixture.Derive(b => b.UseSetting("Ai:HourlyParseLimit", "5"));
+        await using var other = fixture.Derive(b => b.UseSetting("Ai:HourlyParseLimit", "5"));
         var kit = await AssistantKit.CreateAsync(fixture);
 
         // Ten concurrent parses spread over two API instances: exactly five pass.
@@ -225,7 +225,7 @@ public sealed class AssistantApiTests(ApiFixture fixture)
         var claude = new FakeClaude()
             .Reply(FakeClaude.Output(FakeClaude.Line("10 adet h4 ampul", "h4 ampul", 10m, "adet")))
             .Fail();
-        await using var host = fixture.WithWebHostBuilder(builder =>
+        await using var host = fixture.Derive(builder =>
         {
             builder.UseSetting("Ai:Enabled", "true");
             builder.UseSetting("Ai:DailyCallLimit", "2");

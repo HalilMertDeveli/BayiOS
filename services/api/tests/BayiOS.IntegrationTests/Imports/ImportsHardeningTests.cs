@@ -190,7 +190,7 @@ public class ImportsHardeningTests(ApiFixture fixture)
     public async Task Upload_rate_limit_is_per_tenant_and_shared_by_every_api_instance()
     {
         var kit = await ImportsKit.CreateAsync(fixture);
-        await using var second = fixture.WithWebHostBuilder(_ => { });
+        await using var second = fixture.Derive(_ => { });
         using var hostA = fixture.CreateClientFor(kit.Owner.UserId);
         using var hostB = second.CreateClient();
         hostB.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", TestTokens.Create(kit.Owner.UserId));

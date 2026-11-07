@@ -239,18 +239,18 @@ public class PlatformMaintenanceTests(ApiFixture fixture)
     [Fact]
     public async Task Ip_hash_key_shorter_than_32_bytes_stops_startup_and_a_long_one_is_accepted()
     {
-        await using (var weak = fixture.WithWebHostBuilder(builder => builder.UseSetting("Audit:IpHashKey", "test-only-too-short")))
+        await using (var weak = fixture.Derive(builder => builder.UseSetting("Audit:IpHashKey", "test-only-too-short")))
         {
             var error = Assert.ThrowsAny<Exception>(() => weak.Services);
             Assert.Contains("Audit:IpHashKey", error.ToString(), StringComparison.Ordinal);
         }
 
-        await using (var shortRetention = fixture.WithWebHostBuilder(builder => builder.UseSetting("Audit:Retention", "365.00:00:00")))
+        await using (var shortRetention = fixture.Derive(builder => builder.UseSetting("Audit:Retention", "365.00:00:00")))
         {
             Assert.Contains("Audit:Retention", Assert.ThrowsAny<Exception>(() => shortRetention.Services).ToString(), StringComparison.Ordinal);
         }
 
-        await using var strong = fixture.WithWebHostBuilder(builder => builder.UseSetting("Audit:IpHashKey", new string('k', 32)));
+        await using var strong = fixture.Derive(builder => builder.UseSetting("Audit:IpHashKey", new string('k', 32)));
         Assert.NotNull(strong.Services.GetRequiredService<JobHandlerRegistry>());
     }
 
