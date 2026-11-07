@@ -43,6 +43,7 @@ import {
 } from "@/lib/imports/mapping";
 import type { ImportPermissions } from "@/lib/imports/permissions";
 import { useSession } from "@/lib/session/session-context";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 import { priceListLabel, usePriceListOptions } from "./new-import";
 
 const NOT_IMPORTED = "";
@@ -136,6 +137,7 @@ function MappingForm({
   const [announcement, setAnnouncement] = useState("");
   const [validateKeys] = useState(() => new IdempotencyKeys());
   const alertRef = useRef<HTMLDivElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
   const priceLists = usePriceListOptions(permissions.prices);
   const formId = useId();
 
@@ -175,7 +177,7 @@ function MappingForm({
     const clientErrors = validateDraft({ type: job.type, fields: data.fields, draft, priceListId, saveTemplate, templateName, canWritePrices: permissions.prices });
     setErrors(clientErrors);
     if (hasErrors(clientErrors)) {
-      requestAnimationFrame(() => alertRef.current?.focus());
+      focusAfterCommit(() => alertRef.current);
       return;
     }
     setSaving(true);
@@ -190,7 +192,7 @@ function MappingForm({
       if (error instanceof ApiError && error.status === 422) setServerErrors(mappingFieldErrors(error));
       setFormError(saved ? `Eşleme kaydedildi ancak önizleme başlatılamadı: ${importErrorMessage(error)}` : importErrorMessage(error));
       setSaving(false);
-      requestAnimationFrame(() => alertRef.current?.focus());
+      focusAfterCommit(() => alertRef.current);
     }
   };
 

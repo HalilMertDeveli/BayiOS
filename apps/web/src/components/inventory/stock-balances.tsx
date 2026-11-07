@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Boxes, CircleAlert, PackagePlus, Rows3, Rows4, ScanBarcode, SearchX, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -17,6 +16,7 @@ import { inventoryErrorMessage, isSearchTooBroad } from "@/lib/inventory/errors"
 import { inventoryPermissions } from "@/lib/inventory/permissions";
 import { formatQuantity } from "@/lib/inventory/quantity";
 import { useSession } from "@/lib/session/session-context";
+import { useUrlQuery } from "@/lib/use-url-query";
 import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
 import { AvailableQuantity, CriticalBadge, MinimumCell } from "./quantity-cells";
 import { useLocationNames, useVariantDirectory, useWarehouseNames, useWarehouses } from "./use-inventory-data";
@@ -39,19 +39,14 @@ type MoreState = { status: "idle" } | { status: "loading" } | { status: "error";
 export function StockBalances() {
   const { api, access } = useSession();
   const permissions = inventoryPermissions(access);
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const query = parseBalanceQuery(searchParams);
+  // Filters change through navigate / setFilter only: they build on the URL just requested, not the stale one (#152).
+  const { query, latest, navigate } = useUrlQuery(parseBalanceQuery, toBalanceSearch);
+  /** One filter changed: applied on top of the latest requested query. */
+  const setFilter = (patch: Partial<BalanceListQuery>) => navigate({ ...latest(), ...patch });
   const queryKey = toBalanceSearch(query);
   const [dense, setDense] = usePersistentBoolean("bayios.stok.dense");
   const { state: warehouses } = useWarehouses();
   const warehouseById = useWarehouseNames(warehouses);
-
-  const navigate = (next: BalanceListQuery) => {
-    const search = toBalanceSearch(next);
-    router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
-  };
 
   const [searchText, setSearchText] = useState(query.q);
   const [seenQ, setSeenQ] = useState(query.q);
@@ -119,7 +114,7 @@ export function StockBalances() {
 
   const submitSearch = (event: FormEvent) => {
     event.preventDefault();
-    navigate({ ...query, q: searchText.trim() });
+    setFilter({ q: searchText.trim() });
   };
 
   const hasCriteria = query.q !== "" || query.warehouseId !== "";
@@ -187,7 +182,7 @@ export function StockBalances() {
         title="Aramayı daraltın"
         description={`"${current.term}" çok fazla ürünle eşleşiyor. Daha uzun bir SKU, barkod veya ürün adı yazın.`}
         action={
-          <Button variant="secondary" onClick={() => navigate({ warehouseId: query.warehouseId, q: "" })}>
+          <Button variant="secondary" onClick={() => setFilter({ q: "" })}>
             Aramayı temizle
           </Button>
         }
@@ -199,7 +194,7 @@ export function StockBalances() {
         title="Ürün bulunamadı"
         description={`"${current.term}" ile eşleşen stok kaydı yok. SKU, barkod veya ürün adını kontrol edin.`}
         action={
-          <Button variant="secondary" onClick={() => navigate({ warehouseId: query.warehouseId, q: "" })}>
+          <Button variant="secondary" onClick={() => setFilter({ q: "" })}>
             Aramayı temizle
           </Button>
         }
@@ -268,7 +263,7 @@ export function StockBalances() {
             }
             value={query.warehouseId}
             disabled={warehouses.status !== "ready"}
-            onChange={(e) => navigate({ ...query, warehouseId: e.target.value })}
+            onChange={(e) => setFilter({ warehouseId: e.target.value })}
           />
           <form role="search" aria-label="Stokta ara" onSubmit={submitSearch} className="flex items-start gap-2">
             <Input

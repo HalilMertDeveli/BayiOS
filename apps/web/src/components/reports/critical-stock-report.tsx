@@ -74,7 +74,7 @@ function CriticalStockReportBody() {
 
   const filters = (
     <div className="flex flex-wrap items-start gap-3">
-      <ThresholdForm value={threshold} onApply={(value) => update({ esik: value, tukenen: value ? null : params.get("tukenen") })} />
+      <ThresholdForm value={threshold} onApply={(value) => update(value ? { esik: value, tukenen: null } : { esik: null })} />
       <WarehouseFilter value={warehouseId} onChange={(id) => update({ depo: id })} />
       {threshold === null ? (
         <CheckboxField

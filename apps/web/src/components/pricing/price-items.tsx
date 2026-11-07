@@ -19,6 +19,7 @@ import { itemRowErrors, pricingErrorMessage, pricingFieldErrors, type RowErrors 
 import { buildUpsertItems, draftFromItem, newDraftRow, validateDraftRows, type DraftRow } from "@/lib/pricing/items-form";
 import { formatMoney, formatQuantity } from "@/lib/pricing/money";
 import { useSession } from "@/lib/session/session-context";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 
 type ItemsState =
   | { status: "loading" }
@@ -51,6 +52,7 @@ export function PriceItems({ priceList, canEdit }: { priceList: PriceList; canEd
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const alertRef = useRef<HTMLDivElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
   const currency = priceList.currency;
 
   useEffect(() => {
@@ -113,7 +115,7 @@ export function PriceItems({ priceList, canEdit }: { priceList: PriceList; canEd
     setDraft((rows) => rows.filter((r) => r.key !== key));
   };
 
-  const focusAlert = () => requestAnimationFrame(() => alertRef.current?.focus());
+  const focusAlert = () => focusAfterCommit(() => alertRef.current);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useUrlQuery } from "@/lib/use-url-query";
 import { istanbulToday, rangeError, rangeFromParams, type DateRange } from "@/lib/reports/date-range";
 import { reportErrorMessage } from "@/lib/reports/errors";
 
@@ -47,28 +47,29 @@ export function useReport<T>(key: string | null, load: (signal: AbortSignal) => 
   return { state, reload };
 }
 
+const copyParams = (params: { toString(): string }) => new URLSearchParams(params.toString());
+const paramsToString = (params: URLSearchParams) => params.toString();
+
 /**
  * Report filters in the URL (shareable, back button): `baslangic` / `bitis` (yyyy-MM-dd, default last 30 days) plus
  * report-specific parameters. "Today" is the Istanbul calendar day, fixed for the page's lifetime.
  */
 export function useReportUrl() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
+  // Patches build on the URL just requested, not on the stale search params (#152): see useUrlQuery.
+  const { searchParams: params, latest, navigate } = useUrlQuery(copyParams, paramsToString);
   const [today] = useState(() => istanbulToday());
   const range = rangeFromParams(params, today);
 
   const update = useCallback(
     (patch: Record<string, string | null>) => {
-      const next = new URLSearchParams(params.toString());
+      const next = new URLSearchParams(latest());
       for (const [name, value] of Object.entries(patch)) {
         if (value === null || value === "") next.delete(name);
         else next.set(name, value);
       }
-      const search = next.toString();
-      router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
+      navigate(next);
     },
-    [params, pathname, router],
+    [latest, navigate],
   );
 
   const setRange = useCallback((next: DateRange) => update({ baslangic: next.from, bitis: next.to }), [update]);

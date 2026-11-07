@@ -24,6 +24,7 @@ import {
   type OrderSettingsValues,
 } from "@/lib/settings/order-settings-form";
 import { useSession } from "@/lib/session/session-context";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 
 type Loaded = { settings: TenantSettings; etag: string };
 type LoadState = { status: "loading" } | { status: "error"; message: string } | ({ status: "ready" } & Loaded);
@@ -103,6 +104,8 @@ export function OrderSettingsForm({ loaded, onSaved, onReload }: { loaded: Loade
   const [conflict, setConflict] = useState(false);
   const [saving, setSaving] = useState(false);
   const alertRef = useRef<HTMLDivElement>(null);
+  const conflictRef = useRef<HTMLDivElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
   const set = (patch: Partial<OrderSettingsValues>) => setValues((v) => ({ ...v, ...patch }));
 
   const patch = buildSettingsPatch(loaded.settings, values);
@@ -115,7 +118,7 @@ export function OrderSettingsForm({ loaded, onSaved, onReload }: { loaded: Loade
 
   const fail = (message: string) => {
     setFormError(message);
-    requestAnimationFrame(() => alertRef.current?.focus());
+    focusAfterCommit(() => alertRef.current);
   };
 
   const submit = async (event: FormEvent) => {
@@ -138,6 +141,7 @@ export function OrderSettingsForm({ loaded, onSaved, onReload }: { loaded: Loade
       setSaving(false);
       if (isVersionConflict(error)) {
         setConflict(true);
+        focusAfterCommit(() => conflictRef.current);
         return;
       }
       if (error instanceof ApiError && error.status === 422) {
@@ -159,6 +163,7 @@ export function OrderSettingsForm({ loaded, onSaved, onReload }: { loaded: Loade
     <form noValidate onSubmit={submit} aria-label="Sipariş ayarları" className="flex flex-col gap-5">
       {conflict ? (
         <FormAlert
+          ref={conflictRef}
           tone="warning"
           title="Ayarlar başkası tarafından değiştirildi"
           actions={

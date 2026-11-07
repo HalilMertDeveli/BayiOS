@@ -16,6 +16,7 @@ import { featureLabel, limitLabel, moduleStatusLabels, planLabel, subscriptionSt
 import { trialDaysLeft } from "@/lib/billing/trial";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/lib/session/session-context";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 
 type Data = { catalog: BillingCatalog; subscription: Subscription; modules: TenantModule[]; usage: Usage };
 type LoadState = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; data: Data };
@@ -211,6 +212,7 @@ function ModuleStore({ data, canManage, onChanged }: { data: Data; canManage: bo
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const keys = useRef(new Map<string, string>());
   const errorRef = useRef<HTMLDivElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
   const descriptions = new Map(data.catalog.modules.map((m) => [m.code, m] as const));
 
   /** One Idempotency-Key per module + action until it succeeds (a retry after a network error is replayed, not repeated). */
@@ -244,7 +246,7 @@ function ModuleStore({ data, canManage, onChanged }: { data: Data; canManage: bo
     } catch (e) {
       setConfirming(null);
       setError({ code: module.code, message: billingErrorMessage(e) });
-      requestAnimationFrame(() => errorRef.current?.focus());
+      focusAfterCommit(() => errorRef.current);
       // The store state changed meanwhile (already active, trial used, …): show the current list.
       if (isStaleModuleState(e)) onChanged();
     } finally {

@@ -20,6 +20,7 @@ import { pricingErrorMessage, pricingFieldErrors } from "@/lib/pricing/errors";
 import { priceRuleLabels, priceSourceLabels, vatModeLabel } from "@/lib/pricing/labels";
 import { currencyOptions, formatMoney, formatPercent, formatQuantity, isZeroDecimal, parseDecimalInput } from "@/lib/pricing/money";
 import { useSession } from "@/lib/session/session-context";
+import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 
 type Line = { key: string; variant: VariantRef; quantity: string };
 
@@ -41,6 +42,7 @@ export function PriceQuotePanel() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<PriceQuote | null>(null);
   const resultRef = useRef<HTMLHeadingElement>(null);
+  const focusAfterCommit = useFocusAfterCommit();
 
   const addLine = (variant: VariantRef) => {
     setResult(null);
@@ -70,7 +72,7 @@ export function PriceQuotePanel() {
         }),
       });
       setResult(quote);
-      requestAnimationFrame(() => resultRef.current?.focus());
+      focusAfterCommit(() => resultRef.current);
     } catch (error) {
       setResult(null);
       if (error instanceof ApiError && error.status === 422) {
