@@ -82,7 +82,11 @@ internal sealed partial class TenantContextMiddleware(RequestDelegate next, ILog
             }
         }
 
-        await next(context);
+        // Allowlisted ids for every log line of the request (data-policy §8.1); never e-mail or role names.
+        using (logger.BeginScope(new Dictionary<string, object?> { ["UserId"] = userId, ["TenantId"] = requestContext.TenantId }))
+        {
+            await next(context);
+        }
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Tenant access denied for user {UserId} to tenant {TenantId}")]

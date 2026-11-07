@@ -37,7 +37,11 @@ internal static class DatabaseSetup
         return services;
     }
 
-    /// <summary><c>/health/ready</c>: 200 when the database answers, 503 otherwise. <c>/health</c> stays dependency-free.</summary>
+    /// <summary>
+    /// <c>/health/ready</c> (observability.md §4): <c>ready</c> 200 when every ready check is healthy, <c>degraded</c> 200
+    /// when one is degraded (job queue lag), <c>unavailable</c> 503 otherwise. <c>/health</c> stays dependency-free.
+    /// The anonymous response carries the status word only — no check names, hosts or errors.
+    /// </summary>
     public static IEndpointRouteBuilder MapReadiness(this IEndpointRouteBuilder app)
     {
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
@@ -46,7 +50,12 @@ internal static class DatabaseSetup
             ResponseWriter = (context, report) =>
             {
                 context.Response.ContentType = "application/json";
-                var status = report.Status == HealthStatus.Healthy ? "ready" : "unavailable";
+                var status = report.Status switch
+                {
+                    HealthStatus.Healthy => "ready",
+                    HealthStatus.Degraded => "degraded",
+                    _ => "unavailable",
+                };
                 return context.Response.WriteAsync(JsonSerializer.Serialize(new { status }));
             },
         });

@@ -196,6 +196,10 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Auth:Audience", TestTokens.Audience);
         // Background worker off in the shared host; job/outbox tests drive the worker explicitly (Platform/JobsTests).
         builder.UseSetting("Jobs:Enabled", "false");
+        // Nothing drains the queue in the shared host, so queued jobs of other tests age: keep readiness out of the
+        // queue-lag "degraded" state here; ReadinessTests / QueueLagTests set the thresholds they exercise.
+        builder.UseSetting("Health:QueueLagDegradedAfter", "3650.00:00:00");
+        builder.UseSetting("Health:QueueLagUnhealthyAfter", "00:00:00");
         builder.ConfigureTestServices(services =>
             services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
                 options.BackchannelHttpHandler = new TestJwksHandler()));

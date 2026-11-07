@@ -1,0 +1,104 @@
+# Example Prometheus alerting rules for BayiOS (#55, docs/operations/alerts.md). Metric names as exported by the
+# OpenTelemetry Collector's prometheus exporter (dots → underscores, counters get _total). Thresholds are starting
+# points for the pilot (1–2 tenants); tune after two weeks of real traffic. Severity: critical = page now,
+# warning = look within the working day. Every alert links to its runbook.
+groups:
+  - name: bayios-stock
+    rules:
+      - alert: BayiOSReservationShortageSpike
+        # Many approvals refused for missing stock: a stuck receipt/import, a wrong negative-stock policy or a ledger bug.
+        expr: sum(increase(bayios_inventory_reservation_shortages_total[15m])) > 10
+          and sum(increase(bayios_inventory_reservation_shortages_total[15m])) > 3 * sum(increase(bayios_orders_approved_total[15m]))
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Rezervasyonlar stok yetersizliğinden reddediliyor (15 dk: {{ $value }})"
+          runbook: docs/operations/runbooks/stock-inconsistency.md
+
+      - alert: BayiOSNegativeStockConfirmed
+        # Under the warn policy a user pushed stock below zero; each one deserves a look (pilot volumes are small).
+        expr: sum(increase(bayios_inventory_negative_stock_confirmed_total[1h])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "Eksi stok onayı verildi (1 saat: {{ $value }})"
+          runbook: docs/operations/runbooks/stock-inconsistency.md
+
+      - alert: BayiOSNegativeStockConfirmedBurst
+        expr: sum(increase(bayios_inventory_negative_stock_confirmed_total[1h])) >= 5
+        labels: { severity: critical }
+        annotations:
+          summary: "Saatte 5+ eksi stok onayı — sayım/mutabakat başlatın"
+          runbook: docs/operations/runbooks/stock-inconsistency.md
+
+  - name: bayios-jobs
+    rules:
+      - alert: BayiOSJobDeadLettered
+        expr: sum by (job_type) (increase(bayios_jobs_dead_lettered_total[15m])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "Dead job: {{ $labels.job_type }}"
+          runbook: docs/operations/runbooks/job-queue-stuck.md
+
+      - alert: BayiOSJobQueueLagging
+        expr: max(bayios_jobs_queue_lag_seconds) > 300
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "İş kuyruğu gecikmesi {{ $value }} sn (eşik 5 dk; readiness 'degraded')"
+          runbook: docs/operations/runbooks/job-queue-stuck.md
+
+      - alert: BayiOSJobQueueStuck
+        expr: max(bayios_jobs_queue_lag_seconds) > 1800
+        labels: { severity: critical }
+        annotations:
+          summary: "İş kuyruğu 30 dk'dır boşalmıyor"
+          runbook: docs/operations/runbooks/job-queue-stuck.md
+
+      - alert: BayiOSImportFailures
+        expr: sum(increase(bayios_imports_failed_total[1h])) >= 3
+        labels: { severity: warning }
+        annotations:
+          summary: "Son 1 saatte {{ $value }} içe aktarma başarısız"
+          runbook: docs/operations/runbooks/job-queue-stuck.md
+
+      - alert: BayiOSAiFallbackRate
+        expr: sum(increase(bayios_ai_fallbacks_total{reason!="quota_exceeded"}[15m])) >= 5
+        labels: { severity: warning }
+        annotations:
+          summary: "AI sağlayıcısı başarısız; kural tabanlı ayrıştırıcıya düşülüyor ({{ $value }} / 15 dk)"
+          runbook: docs/operations/runbooks/ai-provider-outage.md
+
+  - name: bayios-http
+    rules:
+      - alert: BayiOSHigh5xxRate
+        expr: |
+          sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"5..", http_route!~"/health.*"}[5m]))
+            / clamp_min(sum(rate(http_server_request_duration_seconds_count[5m])), 1e-9) > 0.02
+          and sum(increase(bayios_http_server_errors_total[5m])) >= 5
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "5xx oranı %2'nin üstünde"
+          runbook: docs/operations/runbooks/incident-response.md
+
+      - alert: BayiOSAuthFailuresSpike
+        # 401 storm with normal traffic: JWKS / Supabase Auth problem (or an attack).
+        expr: |
+          sum(rate(http_server_request_duration_seconds_count{http_response_status_code="401"}[5m]))
+            / clamp_min(sum(rate(http_server_request_duration_seconds_count[5m])), 1e-9) > 0.3
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "İsteklerin %30'u 401 — kimlik sağlayıcısını kontrol edin"
+          runbook: docs/operations/runbooks/auth-provider-outage.md
+
+  - name: bayios-availability
+    rules:
+      - alert: BayiOSApiDown
+        # From a blackbox/uptime probe of /health/ready (probe_success is the blackbox exporter's metric).
+        expr: probe_success{job="bayios-ready"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "/health/ready başarısız (503 veya erişilemiyor)"
+          runbook: docs/operations/runbooks/incident-response.md

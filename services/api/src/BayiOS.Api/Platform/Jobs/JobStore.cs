@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BayiOS.SharedKernel.Observability;
 using BayiOS.SharedKernel.Persistence;
 using Npgsql;
 using NpgsqlTypes;
@@ -180,8 +181,20 @@ internal sealed class JobStore(NpgsqlDataSource dataSource)
                 SELECT id FROM platform.jobs
                 WHERE status = 'running' AND locked_until < now()
                 FOR UPDATE SKIP LOCKED)
+            RETURNING type, status
             """);
-        return await command.ExecuteNonQueryAsync(cancellationToken);
+        var swept = 0;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            swept++;
+            if (reader.GetString(1) == "dead")
+            {
+                BayiOsMetrics.JobsDeadLettered.Add(1, new KeyValuePair<string, object?>("job.type", reader.GetString(0)));
+            }
+        }
+
+        return swept;
     }
 
     public static string Serialize(object? payload) =>

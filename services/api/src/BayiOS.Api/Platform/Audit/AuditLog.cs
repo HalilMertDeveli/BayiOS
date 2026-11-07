@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using BayiOS.SharedKernel.Observability;
 using BayiOS.SharedKernel.Persistence;
 using BayiOS.SharedKernel.Platform.Audit;
 using BayiOS.SharedKernel.Tenancy;
@@ -88,6 +89,10 @@ internal sealed class AuditLog(
         command.Parameters.Add(Nullable("correlation", NpgsqlDbType.Text, requestContext.CorrelationId));
         command.Parameters.Add(new NpgsqlParameter<DateTimeOffset>("occurred_at", clock.GetUtcNow()));
         await command.ExecuteNonQueryAsync(cancellationToken);
+
+        // Business counters (orders approved, negative stock confirmed, import failures) count committed work only.
+        var action = auditEvent.Action;
+        unitOfWork.OnCommitted(() => BayiOsMetrics.RecordCommittedAudit(action));
     }
 
     private byte[]? IpHash(HttpContext? http)

@@ -1,6 +1,7 @@
 using BayiOS.Api.Platform;
 using BayiOS.Api.Platform.Auth;
 using BayiOS.Api.Platform.Jobs;
+using BayiOS.Api.Platform.Observability;
 using BayiOS.Api.Platform.Persistence;
 using BayiOS.Api.Platform.Tenancy;
 using BayiOS.Modules.Billing;
@@ -16,6 +17,7 @@ using BayiOS.Modules.Reports;
 using BayiOS.Modules.Warehouse;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddBayiOsObservability();
 
 builder.Services.AddOpenApi("v1", options => options.AddBayiOsSecurity().AddBayiOsContract());
 builder.Services.AddProblemDetails(options =>
@@ -59,6 +61,7 @@ builder.Services.AddBillingPorts();
 var app = builder.Build();
 
 app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseBayiOsRequestLogging();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseRouting();

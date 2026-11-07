@@ -1,5 +1,6 @@
 using BayiOS.Modules.Inventory.Contracts;
 using BayiOS.Modules.Inventory.Infrastructure.Persistence;
+using BayiOS.SharedKernel.Observability;
 using BayiOS.SharedKernel.Platform.Audit;
 using Npgsql;
 
@@ -297,6 +298,7 @@ internal sealed class InventoryService(
         var insufficient = new InventoryError(409, "inventory.insufficient_stock", "Available stock is insufficient for one or more lines", Shortages: shortages);
         if (NegativeStockDecision(policy, command.ConfirmNegativeStock, shortages, insufficient) is { } decision)
         {
+            CountReservationShortage(decision);
             return decision;
         }
 
@@ -308,6 +310,7 @@ internal sealed class InventoryService(
             var rows = candidates.GetValueOrDefault(line.VariantId) ?? [];
             if (rows.Count == 0)
             {
+                CountReservationShortage(insufficient);
                 return insufficient with { Shortages = [new StockShortage(line.VariantId, found[line.VariantId].Sku, warehouse.Id, null, line.Quantity, 0m)] };
             }
 
@@ -522,6 +525,11 @@ internal sealed class InventoryService(
 
     private static InventoryError AlreadyReserved() =>
         new(409, "inventory.already_reserved", "An order line already has an active reservation");
+
+    /// <summary>Operational signal (#55): a reservation refused for shortage. Tag only, no tenant or variant id.</summary>
+    private static void CountReservationShortage(InventoryError error) =>
+        BayiOsMetrics.ReservationShortages.Add(
+            1, new KeyValuePair<string, object?>("decision", error.ConfirmationRequired ? "confirmation_required" : "blocked"));
 
     /// <summary>
     /// Negative-stock policy (§2.4, PRD TEN-12): <c>block</c> → the given error; <c>warn</c> → 409 asking for explicit

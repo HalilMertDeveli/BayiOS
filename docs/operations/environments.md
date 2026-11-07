@@ -39,7 +39,10 @@ API (uygulanmış): ConnectionStrings__Default, ConnectionStrings__Migrator (yal
 Auth__Authority (= JWT issuer, https://<ref>.supabase.co/auth/v1), Auth__Audience, Auth__JwksUrl (opsiyonel;
 varsayılan {Authority}/.well-known/jwks.json), Cors__AllowedOrigins__0..n,
 Audit__IpHashKey (sır; opsiyonel), Audit__Retention (opsiyonel, varsayılan 730.00:00:00),
-Jobs__Enabled, Jobs__SucceededRetention / Jobs__DeadRetention / Jobs__OutboxRetention (opsiyonel; 7 / 30 / 7 gün)
+Jobs__Enabled, Jobs__SucceededRetention / Jobs__DeadRetention / Jobs__OutboxRetention (opsiyonel; 7 / 30 / 7 gün),
+Health__QueueLagDegradedAfter / Health__QueueLagUnhealthyAfter (opsiyonel; 5 dk / 30 dk, observability.md §4),
+OTEL_EXPORTER_OTLP_ENDPOINT (boş = OpenTelemetry kapalı, hiçbir şey dışarı gitmez), OTEL_EXPORTER_OTLP_PROTOCOL,
+OTEL_EXPORTER_OTLP_HEADERS (sır), OTEL_SERVICE_NAME, ErrorTracking__Provider (none|otel; varsayılan none)
 API (henüz uygulanmadı, ad önerisi): SUPABASE_URL, SUPABASE_SECRET_KEY, STORAGE_BUCKET_IMPORTS, ANTHROPIC_API_KEY,
 AI_MODE (mock|live), AI_DAILY_TENANT_QUOTA, FCM_SERVICE_ACCOUNT_JSON
 Web: NEXT_PUBLIC_API_BASE_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY

@@ -9,6 +9,7 @@ using BayiOS.Modules.Integrations.Matching;
 using BayiOS.Modules.Integrations.Parsing;
 using BayiOS.SharedKernel.Authorization;
 using BayiOS.SharedKernel.Entitlements;
+using BayiOS.SharedKernel.Observability;
 using BayiOS.SharedKernel.Platform.Audit;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -191,6 +192,7 @@ internal sealed partial class OrderParseService(
         if (parser is not null)
         {
             await meter.RecordFallbackAsync(TenantId, UserId, CancellationToken.None);
+            BayiOsMetrics.AiFallbacks.Add(1, new KeyValuePair<string, object?>("reason", reason));
             LogFallback(logger, TenantId, reason);
         }
 

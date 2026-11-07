@@ -15,6 +15,7 @@ public sealed class UnitOfWork(NpgsqlDataSource dataSource, RequestContext reque
     private NpgsqlConnection? _connection;
     private NpgsqlTransaction? _transaction;
     private bool _completed;
+    private List<Action>? _onCommitted;
 
     /// <summary>The shared connection. Module DbContexts are configured with it.</summary>
     public NpgsqlConnection Connection => _connection ??= dataSource.CreateConnection();
@@ -74,12 +75,30 @@ public sealed class UnitOfWork(NpgsqlDataSource dataSource, RequestContext reque
         requestContext.TenantId = tenantId;
     }
 
+    /// <summary>
+    /// Registers a side-effect-free callback (e.g. a metric increment) that runs only after this unit of work
+    /// commits; a rollback discards it. Callbacks must not throw or touch the database.
+    /// </summary>
+    public void OnCommitted(Action callback)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+        (_onCommitted ??= []).Add(callback);
+    }
+
     public async Task CommitAsync(CancellationToken cancellationToken)
     {
         if (Transaction is { } transaction)
         {
             await transaction.CommitAsync(cancellationToken);
             _completed = true;
+            if (_onCommitted is { } callbacks)
+            {
+                _onCommitted = null;
+                foreach (var callback in callbacks)
+                {
+                    callback();
+                }
+            }
         }
     }
 
@@ -89,6 +108,7 @@ public sealed class UnitOfWork(NpgsqlDataSource dataSource, RequestContext reque
         {
             await transaction.RollbackAsync(cancellationToken);
             _completed = true;
+            _onCommitted = null;
         }
     }
 
