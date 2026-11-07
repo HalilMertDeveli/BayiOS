@@ -53,6 +53,20 @@ describe("createApiClient", () => {
     expect(result).toEqual({ data: { id: "x" }, status: 201, etag: 'W/"3"' });
   });
 
+  it("sends FormData as is (multipart): no JSON body, no Content-Type so the browser adds the boundary", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: "job" }, { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const api = createApiClient(base);
+    const form = new FormData();
+    form.append("type", "products");
+
+    await api.request("/api/v1/import-jobs", { method: "POST", tenant: true, idempotencyKey: "k", body: form });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.body).toBe(form);
+    expect((init.headers as Headers).get("Content-Type")).toBeNull();
+  });
+
   it("omits X-Tenant-Id on user-level endpoints and Authorization when signed out", async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({}));
     vi.stubGlobal("fetch", fetchMock);

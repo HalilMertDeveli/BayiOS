@@ -28,6 +28,7 @@ export type Permission =
   | "pricelists.assign"
   | "imports.run"
   | "imports.run.stock"
+  | "imports.rollback"
   | "reports.read"
   | "reports.export"
   | "inventory.read"
