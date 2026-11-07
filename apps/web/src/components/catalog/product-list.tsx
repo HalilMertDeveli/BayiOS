@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CircleAlert, Package, Plus, Rows3, Rows4, Search, SearchX, SlidersHorizontal, Tags } from "lucide-react";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -31,6 +30,7 @@ import {
 import { catalogPermissions } from "@/lib/catalog/permissions";
 import { useSession } from "@/lib/session/session-context";
 import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
+import { useUrlQuery } from "@/lib/use-url-query";
 import { ProductStatusBadge } from "./product-status-badge";
 import { useCatalogReference } from "./use-catalog-reference";
 
@@ -54,18 +54,13 @@ function primaryVariant(product: Product) {
 export function ProductList() {
   const { api, access } = useSession();
   const permissions = catalogPermissions(access);
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const query = useMemo(() => parseListQuery(searchParams), [searchParams]);
+  // Filters change through navigate / setFilter only: they build on the URL just requested, not the stale one (#152).
+  const { query, latest, navigate } = useUrlQuery(parseListQuery, toSearchString);
+  /** One filter changed: applied on top of the latest requested query. */
+  const setFilter = (patch: Partial<ProductListQuery>) => navigate({ ...latest(), ...patch });
   const apiKey = toApiQuery(query);
   const { state: reference } = useCatalogReference();
   const [dense, setDense] = usePersistentBoolean("bayios.urunler.dense");
-
-  const navigate = (next: ProductListQuery) => {
-    const search = toSearchString(next);
-    router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
-  };
 
   // ---- Search box: local text, pushed to the URL after a pause. ----
   const [searchText, setSearchText] = useState(query.q);
@@ -81,14 +76,13 @@ export function ProductList() {
   }
   useEffect(() => {
     const text = searchText.trim();
-    if (text === query.q) return;
+    if (text === latest().q) return;
     const timer = setTimeout(() => {
       setPushedQ(text);
-      const search = toSearchString({ ...query, q: text });
-      router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
+      navigate({ ...latest(), q: text });
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [searchText, query, pathname, router]);
+  }, [searchText, query, latest, navigate]);
 
   // ---- Data: first page per query; more pages appended with the cursor. ----
   const [data, setData] = useState<ListData | null>(null);
@@ -247,7 +241,7 @@ export function ProductList() {
             options={ready ? categoryOptions(ready.categories) : []}
             value={query.categoryId}
             disabled={!ready}
-            onChange={(e) => navigate({ ...query, categoryId: e.target.value })}
+            onChange={(e) => setFilter({ categoryId: e.target.value })}
           />
           <Select
             label="Marka"
@@ -255,19 +249,19 @@ export function ProductList() {
             options={ready ? [...ready.brands].sort((a, b) => a.name.localeCompare(b.name, "tr")).map((b) => ({ value: b.id, label: b.name })) : []}
             value={query.brandId}
             disabled={!ready}
-            onChange={(e) => navigate({ ...query, brandId: e.target.value })}
+            onChange={(e) => setFilter({ brandId: e.target.value })}
           />
           <Select
             label="Durum"
             options={STATUS_FILTERS.map((s) => ({ value: s, label: statusFilterLabels[s] }))}
             value={query.status}
-            onChange={(e) => navigate({ ...query, status: e.target.value as StatusFilter })}
+            onChange={(e) => setFilter({ status: e.target.value as StatusFilter })}
           />
           <Select
             label="Sıralama"
             options={(Object.keys(sortLabels) as SortOption[]).map((s) => ({ value: s, label: sortLabels[s] }))}
             value={query.sort}
-            onChange={(e) => navigate({ ...query, sort: e.target.value as SortOption })}
+            onChange={(e) => setFilter({ sort: e.target.value as SortOption })}
           />
         </div>
         {ready && filterableFields(ready.fields).length > 0 ? (
@@ -275,7 +269,7 @@ export function ProductList() {
             key={JSON.stringify(query.attributes)}
             fields={filterableFields(ready.fields)}
             applied={query.attributes}
-            onApply={(attributes) => navigate({ ...query, attributes })}
+            onApply={(attributes) => setFilter({ attributes })}
           />
         ) : null}
         {reference.status === "error" ? (
