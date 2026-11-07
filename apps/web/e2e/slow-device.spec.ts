@@ -1,6 +1,8 @@
 /**
- * Slow device (#152): the CPU is throttled 6× (Chromium DevTools protocol), so React commits an update made after an
- * `await` later than the next animation frame, and a URL filter change takes longer to commit.
+ * Slow device (#152): the CPU is throttled 20× (Chromium DevTools protocol), so React may commit an update made after an
+ * `await` later than the next animation frame, and a URL filter change takes longer to commit. The old
+ * requestAnimationFrame focus failed here only now and then (a timing race); the deterministic check is the Vitest
+ * one with a frame forced before the commit (src/test/frame-before-commit.ts). The filter race failed every run.
  * - Focus: an error / notice that appears after a failed save must take focus (not stay on <body> or a disabled button).
  * - URL filters: two quick changes must both end up in the URL (the second builds on the pending one, not the stale URL).
  * MOCK: Supabase Auth and the BayiOS API are faked with page.route (support/mock-backend.ts). All data is synthetic.
@@ -12,7 +14,7 @@ import { createMockCatalog } from "./support/mock-catalog";
 
 test.use({ viewport: DESKTOP });
 
-async function throttleCpu(page: Page, rate = 6) {
+async function throttleCpu(page: Page, rate = 20) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate });
 }
