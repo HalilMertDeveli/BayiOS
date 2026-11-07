@@ -7,17 +7,24 @@ import 'package:flutter/foundation.dart';
 /// what comes from `GET /api/v1/me`.
 @immutable
 class AuthUser {
-  const AuthUser({required this.id, this.email});
+  const AuthUser({required this.id, this.email, this.fullName});
 
   final String id;
   final String? email;
 
-  @override
-  bool operator ==(Object other) =>
-      other is AuthUser && other.id == id && other.email == email;
+  /// `user_metadata.full_name` from the web sign-up, when set. Display only:
+  /// the greeting falls back to it when `GET /me` has no `fullName`.
+  final String? fullName;
 
   @override
-  int get hashCode => Object.hash(id, email);
+  bool operator ==(Object other) =>
+      other is AuthUser &&
+      other.id == id &&
+      other.email == email &&
+      other.fullName == fullName;
+
+  @override
+  int get hashCode => Object.hash(id, email, fullName);
 }
 
 /// A change of the auth session.

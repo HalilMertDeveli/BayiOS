@@ -79,7 +79,248 @@
   "dashboardWelcomeAnonymous": "Hoş geldiniz",
   "dashboardTenantLabel": "İşletme",
   "dashboardRoleLabel": "Rolünüz",
-  "dashboardPlaceholder": "Görevler, toplama, sayım ve stok sorgulama ekranları yakında burada olacak.",
+  "dashboardTasksTitle": "Görevlerim",
+  "dashboardCountAssigned": "Bana atanan",
+  "dashboardCountInProgress": "Toplanıyor",
+  "dashboardCountPool": "Havuzda",
+  "dashboardCountActive": "Aktif görev",
+  "dashboardOpenTasks": "Sıradaki görevlerim",
+  "dashboardNoTasks": "Şu an size atanmış aktif görev yok.",
+  "dashboardNoTasksPoolHint": "Havuzda {count} görev bekliyor; birini üstlenebilirsiniz.",
+  "@dashboardNoTasksPoolHint": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "dashboardQuickLinks": "Hızlı erişim",
+  "dashboardLinkMyTasks": "Görevlerim",
+  "dashboardLinkPool": "Havuzdaki görevler",
+  "dashboardLinkAllTasks": "Tüm aktif görevler",
+  "dashboardTasksFailed": "Görevler yüklenemedi.",
+
+  "tasksNavLabel": "Görevler",
+  "tasksTitle": "Depo görevleri",
+  "tasksTabAssigned": "Bana atanan",
+  "tasksTabPool": "Havuz",
+  "tasksTabAll": "Tümü",
+  "tasksEmptyAssigned": "Size atanmış aktif görev yok.",
+  "tasksEmptyAssignedHint": "Havuzdan bir görev üstlenebilir veya yöneticinizin atamasını bekleyebilirsiniz. Aşağı çekerek yenileyin.",
+  "tasksEmptyPool": "Havuzda bekleyen görev yok.",
+  "tasksEmptyAll": "Aktif toplama görevi yok.",
+  "tasksEmptyHint": "Aşağı çekerek yenileyin.",
+  "tasksLoadMore": "Daha fazla göster",
+  "tasksOrder": "Sipariş {number}",
+  "@tasksOrder": {
+    "placeholders": { "number": { "type": "String" } }
+  },
+  "tasksLines": "{count} satır",
+  "@tasksLines": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "tasksProgress": "{picked} / {total} toplandı",
+  "@tasksProgress": {
+    "placeholders": { "picked": { "type": "String" }, "total": { "type": "String" } }
+  },
+  "tasksShort": "{quantity} eksik",
+  "@tasksShort": {
+    "placeholders": { "quantity": { "type": "String" } }
+  },
+  "tasksAssignee": "Atanan: {name}",
+  "@tasksAssignee": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "tasksAssignedToMe": "Size atandı",
+  "tasksInPool": "Havuzda",
+  "tasksTypePutaway": "Rafa geri koyma",
+  "tasksStatusOpen": "Bekliyor",
+  "tasksStatusInProgress": "Toplanıyor",
+  "tasksStatusCompleted": "Tamamlandı",
+  "tasksStatusCompletedWithShortage": "Eksikle tamamlandı",
+  "tasksStatusCancelled": "İptal",
+
+  "pickingTitle": "Sipariş {number}",
+  "@pickingTitle": {
+    "placeholders": { "number": { "type": "String" } }
+  },
+  "pickingDefaultTitle": "Toplama görevi",
+  "pickingNotFound": "Görev bulunamadı. Size atanmamış, başkasına atanmış veya kaldırılmış olabilir.",
+  "pickingBackToTasks": "Görevlere dön",
+  "pickingProgress": "{picked} / {total} toplandı · {open} satır kaldı",
+  "@pickingProgress": {
+    "placeholders": { "picked": { "type": "String" }, "total": { "type": "String" }, "open": { "type": "int" } }
+  },
+  "pickingLinesTitle": "Toplama listesi (raf sırası)",
+  "pickingLineQuantity": "{picked} / {total} {unit}",
+  "@pickingLineQuantity": {
+    "placeholders": { "picked": { "type": "String" }, "total": { "type": "String" }, "unit": { "type": "String" } }
+  },
+  "pickingLineDone": "Tamam",
+  "pickingNoLocation": "Rafsız",
+  "pickingRemaining": "Kalan {quantity} {unit}",
+  "@pickingRemaining": {
+    "placeholders": { "quantity": { "type": "String" }, "unit": { "type": "String" } }
+  },
+  "pickingBarcode": "Barkod {code}",
+  "@pickingBarcode": {
+    "placeholders": { "code": { "type": "String" } }
+  },
+  "pickingStepLocation": "1. Rafı okutun: {code}",
+  "@pickingStepLocation": {
+    "placeholders": { "code": { "type": "String" } }
+  },
+  "pickingStepItem": "2. Ürünü okutun: {sku}",
+  "@pickingStepItem": {
+    "placeholders": { "sku": { "type": "String" } }
+  },
+  "pickingStepItemNoLocation": "Ürünü okutun: {sku}",
+  "@pickingStepItemNoLocation": {
+    "placeholders": { "sku": { "type": "String" } }
+  },
+  "pickingShelfChip": "Raf: {label}",
+  "@pickingShelfChip": {
+    "placeholders": { "label": { "type": "String" } }
+  },
+  "pickingChangeShelf": "Rafı değiştir",
+  "pickingScanCamera": "Kamerayla okut",
+  "pickingScanTitleShelf": "Raf etiketini okut",
+  "pickingScanTitleItem": "Ürün barkodunu okut",
+  "pickingManualLabel": "Kodu elle girin",
+  "pickingManualHintShelf": "Raf barkodu veya raf kodu",
+  "pickingManualHintItem": "Ürün barkodu veya SKU",
+  "pickingManualSubmit": "Gönder",
+  "pickingQuantityLabel": "Okutma başına adet",
+  "pickingQuantityDecrease": "Adet azalt",
+  "pickingQuantityIncrease": "Adet artır",
+  "pickingQuantityErrorEmpty": "Adet girin.",
+  "pickingQuantityErrorInvalid": "Geçerli bir sayı girin (ör. 2 veya 1,5).",
+  "pickingQuantityErrorNotPositive": "Adet 0'dan büyük olmalı.",
+  "pickingQuantityErrorDecimals": "En fazla 3 ondalık basamak girilebilir.",
+  "pickingQuantityErrorOverOpen": "En fazla {max} girilebilir (satırda kalan).",
+  "@pickingQuantityErrorOverOpen": {
+    "placeholders": { "max": { "type": "String" } }
+  },
+  "pickingReportShortage": "Eksik bildir",
+  "pickingSwitchToLine": "Bu satıra geç",
+  "pickingComplete": "Görevi tamamla",
+  "pickingCompleteBlocked": "Tamamlamak için her satırı toplayın veya eksik bildirin ({count} satır açık).",
+  "@pickingCompleteBlocked": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "pickingCompleteShortTitle": "Eksikle tamamlansın mı?",
+  "pickingCompleteShortBody": "{lines} satırda toplam {quantity} eksik var. Toplananlardan taslak sevkiyat oluşur; eksikler için karar yöneticinizde.",
+  "@pickingCompleteShortBody": {
+    "placeholders": { "lines": { "type": "int" }, "quantity": { "type": "String" } }
+  },
+  "pickingCompleteShortConfirm": "Eksikle tamamla",
+  "pickingCancel": "Vazgeç",
+  "pickingCompleted": "Sipariş {number}: toplama tamamlandı.",
+  "@pickingCompleted": {
+    "placeholders": { "number": { "type": "String" } }
+  },
+  "pickingDoneTitle": "Toplama tamamlandı",
+  "pickingDoneShipment": "Toplananlardan taslak sevkiyat oluşturuldu. Paket kontrolü ve sevk onayı sevkiyat ekranından yapılır.",
+  "pickingDoneNoShipment": "Hiç ürün toplanmadığı için sevkiyat oluşmadı.",
+  "pickingCancelledTitle": "Görev iptal edildi",
+  "pickingCancelledBody": "Sipariş iptal edildiği veya kapatıldığı için görev iptal edildi; okutma yapılamaz.",
+  "pickingPoolTitle": "Görev havuzda",
+  "pickingPoolClaimBody": "Toplamaya başlamak için görevi üstlenin.",
+  "pickingPoolReadOnly": "Görev henüz kimseye atanmamış; liste salt okunur.",
+  "pickingClaim": "Üstlen ve başla",
+  "pickingClaimed": "Görev size atandı; okutmaya başlayın.",
+  "pickingClaimFailed": "Görev alınamadı",
+  "pickingOtherAssigneeTitle": "Görev başka personele atanmış",
+  "pickingOtherAssigneeBody": "Atanan: {name}. Liste salt okunur; yalnızca atanan kişi toplayabilir.",
+  "@pickingOtherAssigneeBody": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "pickingOtherAssigneeBodyAnonymous": "Liste salt okunur; yalnızca atanan kişi toplayabilir.",
+  "pickingNoPickPermission": "Rolünüz toplama yapmaya izin vermiyor; liste salt okunur.",
+  "pickingSending": "Gönderiliyor…",
+  "pickingBusyRetrying": "Görev meşgul; bir kez daha deneniyor…",
+  "pickingReady": "Okutmaya hazır.",
+  "pickingAllLinesDone": "Tüm satırlar bitti; görevi tamamlayın.",
+  "pickingScanAccepted": "{sku} +{quantity}",
+  "@pickingScanAccepted": {
+    "placeholders": { "sku": { "type": "String" }, "quantity": { "type": "String" } }
+  },
+  "pickingScanAcceptedBody": "{picked} / {total} {unit} toplandı.",
+  "@pickingScanAcceptedBody": {
+    "placeholders": { "picked": { "type": "String" }, "total": { "type": "String" }, "unit": { "type": "String" } }
+  },
+  "pickingScanLineDone": "Satır tamam.",
+  "pickingScanSaved": "Okutma kaydedildi",
+  "pickingShelfScanned": "Raf okutuldu: {label}",
+  "@pickingShelfScanned": {
+    "placeholders": { "label": { "type": "String" } }
+  },
+  "pickingShelfNext": "Şimdi ürünü okutun: {sku}.",
+  "@pickingShelfNext": {
+    "placeholders": { "sku": { "type": "String" } }
+  },
+  "pickingShelfEmpty": "Bu rafta toplanacak ürün kalmadı.",
+  "pickingShelfUnknown": "Bu raf görev listesinde yok; ürünü okutursanız sistem kontrol eder.",
+  "pickingScanNotSaved": "Okutma kaydedilmedi",
+  "pickingScanResendHint": "“Tekrar gönder” ile aynı okutma bir kez sayılır.",
+  "pickingResend": "Tekrar gönder",
+  "pickingRejectWrongItem": "Yanlış ürün",
+  "pickingRejectWrongLocation": "Yanlış raf",
+  "pickingRejectUnknownLocation": "Raf bulunamadı",
+  "pickingRejectLocationRequired": "Önce rafı okutun",
+  "pickingRejectOverPick": "Fazla toplama",
+  "pickingRejectUnknownCode": "Barkod tanınmadı",
+  "pickingErrorAlreadyAssigned": "Bu görevi az önce başka biri aldı. Havuzdan başka bir görev seçin.",
+  "pickingErrorNotAssignee": "Bu görev size atanmamış. Havuzdan üstlenin veya yöneticinizden atama isteyin.",
+  "pickingErrorInvalidTransition": "Bu işlem görevin şu anki durumunda yapılamaz; görev siz bakarken değişmiş olabilir. Güncel hâli yüklendi.",
+  "pickingErrorOrderNotFulfillable": "Sipariş artık toplanabilir durumda değil (iptal edilmiş veya kapanmış olabilir). Yöneticinize danışın.",
+  "pickingErrorBusy": "Görev şu an başka bir işlem tarafından kullanılıyor. Birkaç saniye sonra tekrar deneyin.",
+  "pickingErrorBusyFinal": "Kayıt hâlâ başka bir işlem tarafından kullanılıyor. Birkaç saniye sonra yeniden deneyin; aynı işlem gönderilir, çift kayıt oluşmaz.",
+  "pickingErrorUnknownCode": "Bu barkod/SKU hiçbir ürünle eşleşmiyor. Etiketi kontrol edip tekrar okutun.",
+  "pickingErrorWrongItem": "Okutulan ürün bu görevde yok. Ürünü rafına bırakın ve listedeki ürünü okutun.",
+  "pickingErrorLocationRequired": "Önce raf (lokasyon) barkodunu okutun, sonra ürünü.",
+  "pickingErrorUnknownLocation": "Bu raf barkodu bu depoda yok. Raf etiketini kontrol edin.",
+  "pickingErrorWrongLocation": "Bu ürün okutulan raftan toplanmıyor. Listede gösterilen rafa gidin.",
+  "pickingErrorOverPick": "Bu satırda istenenden fazla ürün okuttunuz. Fazlasını rafa geri koyun.",
+  "pickingErrorLineClosed": "Bu satırda toplanacak ürün kalmadı.",
+  "pickingErrorShortageExceedsOpen": "Eksik miktarı, satırda açık kalan miktardan fazla olamaz.",
+  "pickingErrorIncomplete": "Tüm satırlar toplanmadan veya eksik bildirilmeden görev tamamlanamaz.",
+  "pickingErrorFraction": "Bu ürünün birimi küsurat kabul etmiyor; tam sayı girin.",
+  "pickingErrorNotFound": "Görev bulunamadı veya size atanmamış. Görev listesine dönün.",
+  "pickingConflictTitle": "Görev değişmiş",
+  "pickingConflictBody": "Görev siz bakarken güncellendi; güncel hâli yüklendi. Kontrol edip yeniden tamamlayın.",
+  "pickingCompleteFailed": "Görev tamamlanamadı",
+  "pickingShortageTitle": "{sku} için eksik bildir",
+  "@pickingShortageTitle": {
+    "placeholders": { "sku": { "type": "String" } }
+  },
+  "pickingShortageBody": "Ürün rafta yoksa, hasarlıysa veya yetmiyorsa bildirin. Sipariş işaretlenir ve yöneticiye bildirim gider.",
+  "pickingShortageReasonLabel": "Sebep",
+  "pickingShortageReasonRequired": "Bir eksik sebebi seçin.",
+  "pickingShortageReasonNotFound": "Rafta bulunamadı",
+  "pickingShortageReasonDamaged": "Hasarlı",
+  "pickingShortageReasonInsufficient": "Raftaki miktar yetersiz",
+  "pickingShortageQuantityLabel": "Eksik miktar ({unit})",
+  "@pickingShortageQuantityLabel": {
+    "placeholders": { "unit": { "type": "String" } }
+  },
+  "pickingShortageOpenHint": "Açık kalan: {quantity}",
+  "@pickingShortageOpenHint": {
+    "placeholders": { "quantity": { "type": "String" } }
+  },
+  "pickingShortageSubmit": "Eksik bildir",
+  "pickingShortageReported": "{sku}: {quantity} eksik bildirildi",
+  "@pickingShortageReported": {
+    "placeholders": { "sku": { "type": "String" }, "quantity": { "type": "String" } }
+  },
+  "pickingShortageReportedBody": "Sipariş işaretlendi; yönetici bilgilendirildi.",
+  "pickingShortageLabel": "{quantity} eksik · {reason}",
+  "@pickingShortageLabel": {
+    "placeholders": { "quantity": { "type": "String" }, "reason": { "type": "String" } }
+  },
+  "pickingOrderTitle": "Sipariş bilgisi",
+  "pickingOrderCustomer": "Müşteri",
+  "pickingOrderWarehouse": "Depo",
+  "pickingOrderDelivery": "İstenen teslim",
+  "pickingOrderNotes": "Not",
+  "pickingOrderShortageFlag": "Bu siparişte eksik bildirimi var.",
+  "pickingOrderUnavailable": "Sipariş ayrıntısı yüklenemedi; toplama listesi kullanılabilir.",
 
   "roleOwner": "İşletme sahibi",
   "roleAdmin": "Yönetici",

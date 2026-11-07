@@ -90,8 +90,23 @@ class SupabaseAuthRepository implements AuthRepository {
     }
   }
 
-  static AuthUser? _toUser(sb.User? user) =>
-      user == null ? null : AuthUser(id: user.id, email: user.email);
+  static AuthUser? _toUser(sb.User? user) => user == null
+      ? null
+      : AuthUser(
+          id: user.id,
+          email: user.email,
+          fullName: metadataFullName(user.userMetadata),
+        );
+}
+
+/// `user_metadata.full_name` as the web sign-up stores it
+/// (apps/web/src/components/auth/sign-up-form.tsx), trimmed; null when it is
+/// absent, blank or not a string.
+String? metadataFullName(Map<String, dynamic>? metadata) {
+  final value = metadata?['full_name'];
+  if (value is! String) return null;
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
 }
 
 /// Supabase Auth error code / status → [AuthFailureKind]

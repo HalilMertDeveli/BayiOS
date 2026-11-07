@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- API + Supabase Auth over HTTPS (release blocks cleartext by default). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Barcode/QR scanning (picking, goods receipt, stock lookup; mobile_scanner), asked at runtime on first use.
+         Not required: without a camera (or permission) the code is typed in by hand. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="BayiOS Depo"
         android:allowBackup="false"
