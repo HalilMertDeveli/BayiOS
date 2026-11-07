@@ -30,7 +30,7 @@ public class ObservabilityTests(ApiFixture fixture)
     {
         var owner = await CatalogClient.NewTenantOwnerAsync(fixture);
         var capture = new CapturingLoggerProvider();
-        await using var factory = fixture.WithWebHostBuilder(builder => builder.ConfigureLogging(logging => logging.AddProvider(capture)));
+        await using var factory = fixture.Derive(builder => builder.ConfigureLogging(logging => logging.AddProvider(capture)));
         var client = factory.CreateClient();
         var token = TestTokens.Create(owner.UserId, Email);
         var correlation = Guid.NewGuid().ToString("N");
@@ -70,7 +70,7 @@ public class ObservabilityTests(ApiFixture fixture)
     {
         const string password = "Pw-NotReal-123";
         var capture = new CapturingLoggerProvider();
-        await using var broken = fixture.WithWebHostBuilder(builder => builder
+        await using var broken = fixture.Derive(builder => builder
             .UseSetting("ConnectionStrings:Default", $"Host=127.0.0.1;Port=1;Database=x;Username=bayios_app;Password={password};Timeout=2")
             .ConfigureLogging(logging => logging.AddProvider(capture)));
         var client = broken.CreateClient();
