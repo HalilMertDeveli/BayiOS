@@ -5,7 +5,6 @@ import 'package:bayios_mobile/core/session/session_controller.dart';
 import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/dashboard/dashboard_data.dart';
-import 'package:bayios_mobile/features/picking/camera_scanner.dart';
 import 'package:bayios_mobile/features/picking/pick_controller.dart';
 import 'package:bayios_mobile/features/picking/pick_session.dart';
 import 'package:bayios_mobile/features/picking/picking_api.dart';
@@ -14,6 +13,7 @@ import 'package:bayios_mobile/features/picking/scan_alerts.dart';
 import 'package:bayios_mobile/features/picking/shortage_dialog.dart';
 import 'package:bayios_mobile/features/picking/tasks_providers.dart';
 import 'package:bayios_mobile/features/picking/tasks_widgets.dart';
+import 'package:bayios_mobile/features/stock/scanner.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -140,20 +140,23 @@ class _PickViewState extends ConsumerState<_PickView> {
   }
 
   Future<void> _openCamera() async {
-    final scanner = ref.read(codeScannerProvider);
-    final outcome = await scanner(
-      context,
-      shelf: controller.step == PickStep.location,
-    );
+    final l10n = AppLocalizations.of(context);
+    // The shared camera scanner of #43 (lib/features/stock/scanner.dart).
+    final code = await ref
+        .read(barcodeScannerProvider)
+        .scan(
+          context,
+          title: controller.step == PickStep.location
+              ? l10n.pickingScanTitleShelf
+              : l10n.pickingScanTitleItem,
+        );
     if (!mounted) return;
-    switch (outcome) {
-      case ScannedCode(:final code):
-        await controller.handleCode(code);
-      case ManualEntryRequested():
-        _manualFocus.requestFocus();
-      case null:
-        break;
+    if (code == null) {
+      // Closed, "Kodu elle gir", no camera or no permission: type it.
+      _manualFocus.requestFocus();
+      return;
     }
+    await controller.handleCode(code);
   }
 
   Future<void> _submitManual() async {

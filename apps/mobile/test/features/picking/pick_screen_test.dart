@@ -1,8 +1,6 @@
 import 'package:bayios_mobile/core/api/api_client.dart';
-import 'package:bayios_mobile/features/picking/camera_scanner.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../helpers/pump.dart';
 import 'fake_picking_server.dart';
@@ -126,23 +124,22 @@ void main() {
   });
 
   testWidgets('camera scan goes through the same flow', (tester) async {
-    scanner.outcomes.addAll(const [
-      ScannedCode('LOC-A0101'),
-      ScannedCode('8690001'),
-    ]);
+    scanner.codes.addAll(['LOC-A0101', '8690001']);
     await open(tester);
     await tester.tap(find.byKey(const Key('pick-camera')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('pick-camera')));
     await tester.pumpAndSettle();
-    expect(scanner.shelfFlags, [true, false]);
+    expect(scanner.titles, [
+      l10n.pickingScanTitleShelf,
+      l10n.pickingScanTitleItem,
+    ]);
     expect(server.appliedScans, 1);
   });
 
   testWidgets('camera unavailable → manual entry gets the focus', (
     tester,
   ) async {
-    scanner.outcomes.add(const ManualEntryRequested());
     await open(tester);
     await tester.tap(find.byKey(const Key('pick-camera')));
     await tester.pumpAndSettle();
@@ -320,27 +317,5 @@ void main() {
     await tester.tap(find.text(l10n.pickingBackToTasks));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('task-task-1')), findsOneWidget);
-  });
-
-  testWidgets('camera permission denied: message + manual entry', (
-    tester,
-  ) async {
-    var manual = 0;
-    usePhoneSize(tester);
-    await pumpScreen(
-      tester,
-      Scaffold(
-        body: ScannerErrorView(
-          error: const MobileScannerException(
-            errorCode: MobileScannerErrorCode.permissionDenied,
-          ),
-          onManual: () => manual++,
-        ),
-      ),
-    );
-    expect(find.text(l10n.pickingCameraPermissionDenied), findsOneWidget);
-    await expectAccessibleTargets(tester);
-    await tester.tap(find.byKey(const Key('camera-error-manual')));
-    expect(manual, 1);
   });
 }

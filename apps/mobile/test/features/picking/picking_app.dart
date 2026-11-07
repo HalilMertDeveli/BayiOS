@@ -2,9 +2,9 @@ import 'package:bayios_mobile/core/auth/auth_controller.dart';
 import 'package:bayios_mobile/core/auth/auth_repository.dart';
 import 'package:bayios_mobile/core/providers.dart';
 import 'package:bayios_mobile/core/session/active_tenant_store.dart';
-import 'package:bayios_mobile/features/picking/camera_scanner.dart';
 import 'package:bayios_mobile/features/picking/picking_api.dart';
 import 'package:bayios_mobile/features/picking/scan_alerts.dart';
+import 'package:bayios_mobile/features/stock/scanner.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -35,14 +35,16 @@ const ownerPermissions = [
 ];
 const viewerPermissions = ['tenant.read', 'tasks.read.all', 'orders.read'];
 
-/// Scanner stand-in: returns the queued outcomes in order.
-class FakeScanner {
-  final outcomes = <ScanOutcome?>[];
-  final shelfFlags = <bool>[];
+/// Stand-in for the shared camera scanner: returns the queued codes in
+/// order (null = closed / "Kodu elle gir") and records the titles.
+class FakeScanner implements BarcodeScanner {
+  final codes = <String?>[];
+  final titles = <String>[];
 
-  Future<ScanOutcome?> call(BuildContext context, {required bool shelf}) async {
-    shelfFlags.add(shelf);
-    return outcomes.isEmpty ? null : outcomes.removeAt(0);
+  @override
+  Future<String?> scan(BuildContext context, {required String title}) async {
+    titles.add(title);
+    return codes.isEmpty ? null : codes.removeAt(0);
   }
 }
 
@@ -86,7 +88,7 @@ Future<void> pumpPickingApp(
       activeTenantStoreProvider.overrideWithValue(MemoryActiveTenantStore()),
       pickingApiProvider.overrideWithValue(pickingApiFor(server)),
       scanAlertsProvider.overrideWithValue(alerts ?? RecordingAlerts()),
-      codeScannerProvider.overrideWithValue(fakeScanner.call),
+      barcodeScannerProvider.overrideWithValue(fakeScanner),
     ],
   );
   await tester.pumpAndSettle();

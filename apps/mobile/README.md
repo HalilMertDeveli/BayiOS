@@ -112,8 +112,9 @@ Gerçek Supabase Auth + API'ye karşı: giriş → işletme → pano → çıkı
 - **Eşzamanlılık:** "Görevi tamamla" `If-Match: W/"<sürüm>"` gönderir; 412 → "Görev değişmiş" + yeniden yükleme.
   Okutma ve eksik bildirimi web ile aynı şekilde If-Match'siz gider: API her okutmayı kilit altında doğrular; araya
   giren başka bir okutma yüzünden geçerli okutmaların 412 almaması için. Üstlenme yarışını API satır kilidi çözer (409).
-- **Kamera izni:** Android `CAMERA` (zorunlu donanım değil), iOS `NSCameraUsageDescription`; reddedilirse veya kamera
-  yoksa "Kodu elle gir" yolu.
+- **Kamera:** #43 ile ortak tarayıcı (`lib/features/stock/scanner.dart`, `barcodeScannerProvider`). İzin: Android
+  `CAMERA` (zorunlu donanım değil), iOS tek `NSCameraUsageDescription`; reddedilirse, kamera yoksa veya tarayıcı
+  kapatılırsa elle giriş alanına odaklanılır.
 
 ## Yapı ve yeni özellik ekleme
 ```
