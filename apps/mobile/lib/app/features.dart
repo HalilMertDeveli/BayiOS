@@ -1,6 +1,7 @@
 import 'package:bayios_mobile/app/feature.dart';
 import 'package:bayios_mobile/features/dashboard/dashboard_feature.dart';
 import 'package:bayios_mobile/features/profile/profile_feature.dart';
+import 'package:bayios_mobile/features/stock/stock_feature.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Every feature of the signed-in app, in bottom-navigation order.
@@ -8,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 final List<AppFeature> appFeatures = [
   dashboardFeature,
   // Next features go here, e.g. pickingFeature, stockLookupFeature, …
+  stockFeature,
   profileFeature,
 ];
 

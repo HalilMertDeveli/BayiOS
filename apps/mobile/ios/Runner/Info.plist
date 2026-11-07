@@ -8,6 +8,8 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>BayiOS Depo</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Barkod ve raf etiketlerini okutmak için kamera kullanılır.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

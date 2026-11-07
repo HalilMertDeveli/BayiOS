@@ -47,6 +47,7 @@ CI: `.github/workflows/ci-mobile.yml` (`apps/mobile/**` veya `packages/contracts
 | `test/app/*` | Yönlendirme korumaları, izin bazlı gezinme, uçtan uca uygulama akışı (sahte Auth/API) |
 | `test/features/*` | Giriş formu doğrulama/hata, işletme seçici, dokunma hedefleri ≥ 48 dp (`androidTapTargetGuideline`) |
 | `test/contract/contract_test.dart` | Kullanılan uç/başlık/alanlar `packages/contracts/openapi.json` ile birebir |
+| `test/features/stock/*` | Stok sorgulama durumları, mal kabul akışı (okutma eşleşme/eşleşmeme, miktar/raf doğrulama, aynı `Idempotency-Key` ile yeniden deneme, `inventory.busy`), izin bazlı gizleme + 403, düzeltme + negatif stok onayı |
 
 ## Emülatör smoke (gerçek yerel yığın)
 Gerçek Supabase Auth + API'ye karşı: giriş → işletme → pano → çıkış (`integration_test/smoke_test.dart`).
@@ -70,6 +71,19 @@ Gerçek Supabase Auth + API'ye karşı: giriş → işletme → pano → çıkı
      --dart-define-from-file=env/dev.json --dart-define-from-file=env/smoke.json
    ```
    Elle smoke: `flutter run --dart-define-from-file=env/dev.json`, demo hesabıyla giriş → pano işletme adını ve rolü gösterir.
+5. Stok smoke (`integration_test/stock_smoke_test.dart`, #43) **yazar**: demo tenant'ta bir mal kabul (ledger `receipt`
+   hareketi) oluşturur — yalnızca yerel/demo yığında çalıştırın. Ürün/raf `--dart-define` ile verilir
+   (`BAYIOS_SMOKE_SKU`, `BAYIOS_SMOKE_BARCODE`, `BAYIOS_SMOKE_BIN`, `BAYIOS_SMOKE_QTY`; dosyanın başındaki örneğe bakın).
+   Emülatör kamerası gerçek etiket okuyamadığından kodlar elle giriş alanından girilir; kamera ekranı bir kez açılıp
+   "Kodu elle gir" ile kapatılır (önce `adb shell pm grant com.bayios.bayios_mobile android.permission.CAMERA`).
+
+## Stok ve mal kabul (#43)
+- `/stok` (`inventory.read`): barkod/SKU/ad ile arama; depo/raf bazında eldeki, rezerve, satılabilir ve minimum stok.
+- `/stok/mal-kabul` (`inventory.receive`): API'de taslak mal kabul yoktur; satırlar cihazda toplanır, tek
+  `POST /inventory/receipts` ile gönderilir. Bağlantı koparsa satırlar kilitlenir, "Tekrar dene" aynı anahtarı gönderir.
+- `/stok/duzeltme` (`inventory.adjust`): bakiye satırından açılır; tür, miktar, zorunlu sebep.
+- Barkod: `mobile_scanner` (kamera) + her ekranda elle giriş alanı (el terminali / klavye-kama okuyucu da buraya yazar).
+  Stok miktarı yalnızca ledger uçlarıyla değişir; uygulama miktar "ayarlamaz".
 
 ## Yapı ve yeni özellik ekleme
 ```
