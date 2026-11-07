@@ -1,7 +1,7 @@
-import { ModulePlaceholder, placeholderMetadata } from "@/components/shell/module-placeholder";
+import { ImportHistory } from "@/components/imports/import-history";
 
-export const metadata = placeholderMetadata("/ice-aktarma");
+export const metadata = { title: "İçe aktarma" };
 
 export default function IceAktarmaPage() {
-  return <ModulePlaceholder href="/ice-aktarma" />;
+  return <ImportHistory />;
 }

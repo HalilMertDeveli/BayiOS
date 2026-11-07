@@ -9,10 +9,11 @@
  *   returns for that role under the given tenant rules).
  * The real end-to-end run (local Supabase + API, no mocks) lives in e2e-local/ — see apps/web/README.md.
  */
-import type { BrowserContext, Page, Route } from "@playwright/test";
+import type { BrowserContext, Page, Request, Route } from "@playwright/test";
 import { createMockAssistant, handleAssistant, type MockAssistant } from "./mock-assistant";
 import { createMockBilling, handleBilling, mockEntitlements, type MockBilling } from "./mock-billing";
 import { createMockReports, handleReports, type MockReports } from "./mock-reports";
+import { createMockImports, handleImports, type MockImports } from "./mock-imports";
 import { createMockCatalog, handleCatalog, type MockCatalog } from "./mock-catalog";
 import { createMockCommerce, handleCommerce, type MockCommerce } from "./mock-commerce";
 import { createMockFulfilment, handleFulfilment, type MockFulfilment } from "./mock-fulfilment";
@@ -159,7 +160,18 @@ export type ApiMockOptions = {
   billing?: MockBilling;
   /** Reports API (mock-reports.ts). Defaults to synthetic numbers; null disables it. */
   reports?: MockReports | null;
+  /** Imports API (mock-imports.ts): history, wizard, rollback. Defaults to an empty history; null disables it. */
+  imports?: MockImports | null;
 };
+
+/** JSON request body for the request log; null for none or a non-JSON body (e.g. a multipart import upload). */
+function jsonBody(request: Request): unknown {
+  try {
+    return request.postDataJSON?.() ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /** MOCK default tenant rules for /me (see ApiMockOptions.rules). */
 export const MOCK_RULES: Partial<FixtureRules> = { salesCanApproveOrders: false };
@@ -174,6 +186,7 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
   const assistant = options.assistant === undefined ? createMockAssistant() : options.assistant;
   const billing = options.billing ?? createMockBilling();
   const reports = options.reports === undefined ? createMockReports() : options.reports;
+  const imports = options.imports === undefined ? createMockImports() : options.imports;
   if (inventory) billing.activeWarehouses = () => inventory.warehouses.filter((w) => w.status === "active").length;
   const state = {
     memberships: options.memberships ?? [TENANT_A],
@@ -189,6 +202,7 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
     assistant,
     billing,
     reports,
+    imports,
     requests: [] as { method: string; path: string; search: string; headers: Record<string, string>; body: unknown }[],
   };
 
@@ -207,7 +221,7 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
         },
       });
     }
-    state.requests.push({ method, path, search: url.search, headers: request.headers(), body: request.postDataJSON?.() ?? null });
+    state.requests.push({ method, path, search: url.search, headers: request.headers(), body: jsonBody(request) });
 
     if (path === "/api/v1/meta") return json(route, 200, { name: "BayiOS API (mock)", version: "0.0.0", environment: "Mock" });
     const tenantHeader = request.headers()["x-tenant-id"];
@@ -291,6 +305,11 @@ if (path === "/api/v1/tenant/settings" && (method === "GET" || method === "PATCH
       state.settings = { ...state.settings, ...body };
       state.settingsVersion += 1;
       return json(route, 200, state.settings, { ETag: etag() });
+    }
+    // Imports first: its multipart upload body must not reach handlers that parse JSON bodies.
+    if (imports) {
+      const role = state.memberships.find((m) => m.tenantId === tenantHeader)?.role ?? "viewer";
+      if (await handleImports(route, imports, role, state.rules)) return;
     }
     {
       const role = state.memberships.find((m) => m.tenantId === tenantHeader)?.role ?? "viewer";

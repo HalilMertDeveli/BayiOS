@@ -86,6 +86,7 @@ export type ApiClientOptions = {
 
 export type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+  /** JSON-serialised — except FormData, which is sent as multipart/form-data as is. */
   body?: unknown;
   /** Sends X-Tenant-Id. Required by every tenant-scoped endpoint. */
   tenant?: boolean;
@@ -141,14 +142,16 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       }
       if (request.idempotencyKey) headers.set(IDEMPOTENCY_HEADER, request.idempotencyKey);
       if (request.ifMatch) headers.set("If-Match", request.ifMatch);
-      if (request.body !== undefined) headers.set("Content-Type", request.contentType ?? "application/json");
+      // FormData (multipart uploads): the browser sets Content-Type with the boundary itself.
+      const form = typeof FormData !== "undefined" && request.body instanceof FormData ? request.body : null;
+      if (request.body !== undefined && !form) headers.set("Content-Type", request.contentType ?? "application/json");
 
       let response: Response;
       try {
         response = await fetch(`${apiBaseUrl()}${path}`, {
           method,
           headers,
-          body: request.body === undefined ? undefined : JSON.stringify(request.body),
+          body: request.body === undefined ? undefined : (form ?? JSON.stringify(request.body)),
           signal: request.signal,
         });
       } catch (error) {
