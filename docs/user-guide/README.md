@@ -41,7 +41,8 @@ Sağ üstte **Aktif işletme** adı, birden çok işletmeniz varsa **İşletme s
 
 ![Telefonda menü](../../apps/web/docs/screenshots/mobile-drawer.png)
 
-> **Pano** ekranı şimdilik yalnızca "Sistem durumu"nu gösterir; bekleyen onay ve görev özeti henüz yoktur.
+> **Pano** rolünüze göre özet kutuları gösterir: onay bekleyen siparişler, bugünkü siparişler, kritik stok (minimum stoğun
+> altındaki ürünler), görevlerim, incelenecek WhatsApp siparişleri ve paket durumu. Yalnızca yetkiniz olan kutular görünür.
 
 ## Her yerde geçerli birkaç kural
 - **"Kayıt başkası tarafından değiştirildi"** uyarısı görürseniz siz düzenlerken bir başkası aynı kaydı

@@ -27,7 +27,12 @@ ya da **Değişiklikleri geri al** ile vazgeçin. Başarılıysa "Sipariş ayarl
 ### Diğer ayarlar
 - **Özel alanlar** — bkz. [Ürünler ve özel alanlar](03-urunler-ve-ozel-alanlar.md).
 - **Paket ve modüller** (sahip ve yönetici) — bkz. [Paket, deneme süresi ve modüller](12-paket-deneme-moduller.md).
-- Ekip, roller ve işletme profili ayarları **henüz geliştiriliyor**.
+- **Ekip** — çalışan daveti, rol değiştirme, askıya alma, sahiplik devri; bkz. [Roller ve izinler](02-roller-ve-izinler.md).
+- **İş kuralları** (sahip ve yönetici) — satış personeli onayı ve iskonto sınırı, alış fiyatı görünürlüğü, depo personeli
+  barkod atama / mal kabul onayı, stok yetmediğinde davranış. İki adımlı doğrulama seçeneği "Yakında" olarak görünür ve
+  henüz uygulanmaz.
+- **Marka, kategori ve birimler** — bkz. [Ürünler ve özel alanlar](03-urunler-ve-ozel-alanlar.md).
+- İşletme profili (logo, vergi no, adres, telefon) ayarları **henüz geliştiriliyor**.
 
 ## Sık hatalar ve mesajlar
 | Mesaj | Ne yapmalı |
@@ -42,4 +47,4 @@ ya da **Değişiklikleri geri al** ile vazgeçin. Başarılıysa "Sipariş ayarl
 ## İpuçları
 - Öneki yıl başında değiştirmek numaralandırmayı daha anlaşılır yapar; numaralar önek ve yıl bazında sıralanır.
 - Satış personelinin onay yetkisi, iskonto sınırı, alış fiyatı görünürlüğü, depo personelinin barkod atama/mal kabul onayı
-  gibi kurallar bu ekranda **henüz yoktur**.
+  gibi kurallar bu sayfada değil, **Ayarlar → İş kuralları** sayfasındadır.

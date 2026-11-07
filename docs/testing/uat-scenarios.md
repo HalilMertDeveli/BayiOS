@@ -16,8 +16,8 @@
 - Tarayıcı: masaüstü Chrome/Edge + bir Android telefonda Chrome (depo senaryoları). Barkod okuyucu (USB/Bluetooth, klavye modu, Enter sonekli) önerilir.
 
 ### 1.2 Kullanıcılar
-Üye davet ekranı olmadığından (bilinen sınırlama) rol kullanıcıları pilot öncesi **BayiOS ekibi** tarafından tanımlanır.
-Her işletme için: `sahip` (owner), `yonetici` (admin), `mudur` (manager), `satis` (sales), `depo` (warehouse_staff), `izleyici` (viewer).
+Rol kullanıcıları **Ayarlar → Ekip** ekranından davetle eklenir (UAT-18); davet e-postası gönderilmez, bağlantı kişiye
+elle iletilir. Pilot öncesi BayiOS ekibi kullanıcıları hazırlayabilir. Her işletme için: `sahip` (owner), `yonetici` (admin), `mudur` (manager), `satis` (sales), `depo` (warehouse_staff), `izleyici` (viewer).
 
 ### 1.3 Ortak ön koşul seti
 - **P0**: Hesap ve işletme oluşturulmuş (UAT-01).
@@ -52,6 +52,8 @@ Her işletme için: `sahip` (owner), `yonetici` (admin), `mudur` (manager), `sat
 | UAT-15 | yonetici | P1 | **Ayarlar → Paket ve modüller** → bir modülde etkinleştir/kapat arayın | Sayfa görünür; düğmeler yok; "Modülleri yalnızca işletme sahibi etkinleştirebilir veya kapatabilir." | Negatif (yetkisiz rol) | | |
 | UAT-16 | satis | M'de mudur'un oluşturduğu taslak | Taslağı açıp satır değiştirmeye çalışın; sonra **Siparişi iptal et** arayın | "Bu taslağı başka bir kullanıcı oluşturdu; …"; satırlar salt okunur; iptal düğmesi yok | Negatif (yetkisiz rol) | | |
 | UAT-17 | Herhangi | M ve L | M kullanıcısıyla, L'deki bir siparişin adresini (`/siparisler/{L-id}`) açın | "Sipariş bulunamadı" (kayıt varlığına dair ipucu yok) | Güvenlik (kritik) | | |
+| UAT-18 | sahip → yeni kullanıcı | M | **Ayarlar → Ekip** → davet: sentetik e-posta, rol Satış → **Davet bağlantısı oluştur** → bağlantıyı başka bir tarayıcıda açın → aynı e-postayla kaydolup adresi doğrulayın → daveti kabul edin | Bağlantı 7 gün geçerli; kabul sonrası kişi M'de Satış rolüyle görünür ve satış menüsünü görür. Farklı e-postayla oturum açılmışsa davet kabul edilmez | Yetki / güvenlik | | Gerçek yığın E2E: `real-stack-invitations.spec.ts` |
+| UAT-19 | yonetici, sahip | UAT-18 | yonetici: Satış üyesini Operasyon müdürü yapın; başka bir yöneticiyi yönetmeyi deneyin. sahip: üyeyi **askıya al** → üye bir işlem yapsın → **yeniden aç** | Yönetici yalnızca kendi altındaki rolleri yönetir; askıya alınan üye bir sonraki işleminde işletmeye erişemez, açılınca tekrar erişir; son işletme sahibi askıya alınamaz | Yetki | | Oturum kapatılmaz (bilinen sınırlama) |
 
 ### 2.3 Ürünler ve özel alanlar
 | ID | Rol | Ön koşul | Adımlar | Beklenen sonuç | Kapsam | Sonuç | Not |
@@ -65,13 +67,14 @@ Her işletme için: `sahip` (owner), `yonetici` (admin), `mudur` (manager), `sat
 | UAT-26 | mudur ve yonetici | UAT-20 | İki tarayıcıda aynı ürünü açın; birinde kaydedin, diğerinde farklı değişiklik kaydedin | İkinci kayıtta "Kayıt başkası tarafından değiştirildi"; **Yeniden yükle** sonrası güncel değer | Eşzamanlılık | | |
 | UAT-27 | mudur | M | Ürünü **Arşivle** → listede arayın → ürünü açıp **Arşivden çıkar** | Arşivli ürün listede ve yeni siparişte görünmez; geri alınınca görünür | Motor | | |
 
-### 2.4 Toplu aktarma (sunucu tarafı — web ekranı yok)
+### 2.4 Toplu aktarma (web sihirbazı, kılavuz bölüm 4)
 | ID | Rol | Ön koşul | Adımlar | Beklenen sonuç | Kapsam | Sonuç | Not |
 |---|---|---|---|---|---|---|---|
-| UAT-30 | sahip | M | Menüden **İçe aktarma**'ya girin | "Bu modül henüz geliştiriliyor" ekranı; sahte veri yok | Sınırlama doğrulama | | |
-| UAT-31 | BayiOS ekibi (sahip adına) | M, sentetik 200 satırlık `.xlsx` (5 hatalı satır, 2 tekrar SKU) | API ile yükle → eşleme → önizleme → hata raporu CSV → başlat | Önizlemede 5 hata + 2 tekrar; hata CSV'si Excel'de Türkçe karakterlerle açılır; geçerli satırlar aktarılır | Motor | | Web sihirbazı #94 |
-| UAT-32 | BayiOS ekibi | UAT-31 | Bir ürünü web'den elle değiştirin; aktarmayı geri alın | Oluşturulan ürünler arşivlenir; elle değiştirilen satır "çakışma" olur ve dokunulmaz; ikinci geri alma reddedilir | Negatif | | |
-| UAT-33 | BayiOS ekibi | M | 10 MB üstü veya 10.000 satır üstü dosya; makrolu dosya | Yükleme reddedilir | Negatif | | |
+| UAT-30 | mudur | M | Menüden **İçe aktarma**'ya girin | "İçe aktarma için yetkiniz yok" (op. müdürü yalnızca stok aktarabilir; stok aktarma henüz yok) | Negatif (yetkisiz rol) | | |
+| UAT-31 | sahip | M, sentetik 200 satırlık `.xlsx` (5 hatalı satır, 2 tekrar SKU) | **İçe aktarma → Yeni içe aktarma** → Ürünler → dosya → kolon eşleme (önerileri kontrol edin) → **Kaydet ve önizle** → **Hata raporunu indir (CSV)** → "N satırı aktar" | Önizlemede Hatalı = 7 (5 hata + 2 tekrar SKU); hata CSV'si Excel'de Türkçe karakterlerle açılır; yalnızca geçerli satırlar aktarılır; geçmiş listesinde görünür | Motor | | Gerçek yığın E2E: `real-stack-imports.spec.ts` |
+| UAT-32 | sahip | UAT-31 | Bir ürünü elle değiştirin; sonuç ekranında **Geri al**; sonra tekrar geri almayı deneyin | Eklenen ürünler arşivlenir; elle değiştirilen satır "Çakışma (dokunulmadı)"; ikinci geri alma "Bu aktarma zaten geri alındı …" ile reddedilir | Negatif | | |
+| UAT-33 | sahip | M | 10 MB üstü dosya; 10.000 satır üstü dosya; `.xlsm` dosya | "Dosya 10 MB sınırını aşıyor." / "Dosyada 10.000'den fazla satır var." / "Makro içeren Excel dosyaları (.xlsm) kabul edilmez." | Negatif | | |
+| UAT-34 | sahip | M, fiyat listesi Perakende | Fiyat listesi kalemleri aktarması, hedef liste Perakende; eşlemeyi şablon olarak kaydedin; aynı başlıklı ikinci dosyada **Şablonu uygula** | Fiyatlar listeye yazılır; şablon eşlemeyi tek seferde doldurur | Motor | | |
 
 ### 2.5 Depo, raf ve mal kabul
 | ID | Rol | Ön koşul | Adımlar | Beklenen sonuç | Kapsam | Sonuç | Not |
@@ -92,6 +95,8 @@ Her işletme için: `sahip` (owner), `yonetici` (admin), `mudur` (manager), `sat
 | UAT-52 | mudur | Ürünün tüm stoğu onaylı siparişe ayrılmış | Stok düş (düzeltme çıkışı) 1 | "Satılabilir stok yetersiz. Siparişler için ayrılmış (rezerve) stok düzeltmeyle düşülemez." | Negatif (stok yetersiz) | | |
 | UAT-53 | sahip, sonra mudur | Politika **Uyar**; satılabilir 2 | Stok düş 5 → pencere → önce **Vazgeç**, sonra tekrar **Yine de kaydet** | Vazgeç: "Düzeltme kaydedilmedi: eksi stok onaylanmadı."; Yine de kaydet: stok −3, hareket geçmişinde görünür | Negatif stok | | |
 | UAT-54 | mudur | Politika **İzin verme**; satılabilir 2 | Stok düş 5 | "Stok yetersiz: işlem negatif stok kuralına takıldı." | Negatif (stok yetersiz) | | |
+| UAT-55 | mudur | P1, ürünün satılabilir stoğu 4 | Ürünü açın → **Minimum stok** 5 → **Minimum stoku kaydet**; **Stok** listesi ve **Pano**'ya bakın | Stok hareketi oluşmaz; Stok'ta **Min. stok** 5 ve **Kritik** rozeti; panoda **Kritik stok** kutusu ürünü sayar | Motor | | |
+| UAT-56 | mudur | UAT-55, iki depo | **Stok** → ürünün SKU'su → **Minimum stok** bölümünde ikinci depoya 1 girin; kritik stok raporunda depo filtresiyle bakın | İkinci depoda depo eşiği (1), diğer depoda genel eşik (5) geçerli; satış veya depo personeli değer giremez | Motor / yetki | | |
 
 ### 2.7 Müşteriler, bayi grupları, fiyat listeleri
 | ID | Rol | Ön koşul | Adımlar | Beklenen sonuç | Kapsam | Sonuç | Not |
@@ -120,6 +125,8 @@ Her işletme için: `sahip` (owner), `yonetici` (admin), `mudur` (manager), `sat
 | UAT-79 | satis | Satış iskonto sınırı %0 (varsayılan) | Taslakta satıra %5 iskonto girip kaydedin | "İşletmenizde satış personeli için iskonto sınırı %0; …" | Negatif (yetkisiz) | | |
 | UAT-80 | mudur ×2 | Onay Bekliyor sipariş, satılabilir tam 3 | İki tarayıcıda iki farklı 3 adetlik siparişi aynı anda onaylayın | Yalnızca biri onaylanır; diğeri "Stok yetersiz" — stok asla çift ayrılmaz | Eşzamanlılık (kritik) | | |
 | UAT-81 | mudur | L, `KAB-P391-IC-500` satılabilir 18 | 24 adetlik kabinet siparişi onayı | Politikaya göre engellenir veya uyarılır; ekranda eksik satır gösterilir | LED / negatif | | |
+| UAT-82 | mudur | UAT-114 sonrası kısmi sevk edilmiş sipariş | Sipariş sayfasında **Kalanı kapat** → sebep seçin | Kalan rezervasyon serbest bırakılır (Stok'ta Ayrılmış azalır); zaman çizelgesinde kalanın kapatıldığı görünür | Motor | | Gerçek yığın E2E: `demo-led.spec.ts` |
+| UAT-83 | mudur | Sevk edilmiş sipariş | **Tamamla** | "Sipariş tamamlandı"; durum Tamamlandı; tamamlanma zamanı görünür | Motor | | |
 
 ### 2.9 WhatsApp siparişi (kural tabanlı)
 | ID | Rol | Ön koşul | Adımlar | Beklenen sonuç | Kapsam | Sonuç | Not |
@@ -156,7 +163,7 @@ Her işletme için: `sahip` (owner), `yonetici` (admin), `mudur` (manager), `sat
 | ID | Rol | Ön koşul | Adımlar | Beklenen sonuç | Kapsam | Sonuç | Not |
 |---|---|---|---|---|---|---|---|
 | UAT-130 | izleyici | 2.8–2.10 tamam | **Raporlar → Sipariş durumları** → Son 7 gün → **Excel (XLSX)** ve **CSV** | Sayılar sipariş listesiyle tutarlı; dosyalar Excel'de Türkçe karakterlerle açılır | Motor | | |
-| UAT-131 | mudur | P1 | **Kritik stok**, eşik 5 | Satılabilir ≤ 5 aktif ürünler; Satılabilir = eldeki − rezerve | Motor | | |
+| UAT-131 | mudur | UAT-55 | **Kritik stok** (eşik kutusu boş); sonra **Kritik eşik** 5 → **Uygula** | Boşken yalnızca satılabilir ≤ kendi minimum stoğu olan ürünler, **Min. stok** kolonu dolu; sabit eşikte satılabilir ≤ 5 olan tüm aktif ürünler. Satılabilir = eldeki − rezerve | Motor | | |
 | UAT-132 | mudur | 2.10 tamam | **Toplama görevleri**, **Stok hareketleri** | Tamamlanan / eksikle tamamlanan görevler ve sevkiyat/mal kabul/düzeltme hareketleri görünür | Motor | | |
 | UAT-133 | satis | P1 | **Raporlar** | Yalnızca Sipariş durumları ve En çok sipariş edilen ürünler; "Rolünüz yalnızca sipariş raporlarını görebilir." | Negatif (yetkisiz rol) | | |
 | UAT-134 | mudur | P1 | Başlangıç > bitiş; 400 günlük aralık | "Başlangıç tarihi bitiş tarihinden sonra olamaz." / "Tarih aralığı en fazla 366 gün olabilir." | Negatif | | |
@@ -179,6 +186,7 @@ Her işletme için: `sahip` (owner), `yonetici` (admin), `mudur` (manager), `sat
 | UAT-151 | sahip | P1 | Önek "Ş-1"; "1AB" | "Yalnızca İngilizce büyük harf (A–Z) ve rakam (0–9) kullanın; …" / "Önek bir harfle (A–Z) başlamalı." | Negatif | | |
 | UAT-152 | sahip, yonetici | P1 | İki tarayıcıda aynı anda ayar değiştirip kaydedin | İkinci kayıtta "Ayarlar başkası tarafından değiştirildi"; **Güncel ayarları yükle** | Eşzamanlılık | | |
 | UAT-153 | sahip | P1 | Varsayılan KDV %10 → yeni ürün | Yeni ürün formunda KDV 10 önerilir | Ayarlar | | |
+| UAT-154 | sahip, satis | P1 | **Ayarlar → İş kuralları** → "Satış personeli sipariş onaylayabilir" kapatın, kaydedin; satis ile bir siparişi onaylamayı deneyin | Satış personeli onaylayamaz ("Satış personelinin sipariş onaylaması işletme ayarlarında kapalı. …"); kural geri açılınca onaylar | Ayarlar / yetki | | |
 
 ### 2.14 KVKK — müşteri anonimleştirme
 | ID | Rol | Ön koşul | Adımlar | Beklenen sonuç | Kapsam | Sonuç | Not |
@@ -203,4 +211,7 @@ Her işletme için: `sahip` (owner), `yonetici` (admin), `mudur` (manager), `sat
 
 ## 4. Bu listede bilerek olmayanlar
 Telefon uygulaması, seri numarası, ödeme, bayi portalı, canlı AI ayrıştırma (açılınca UAT-90…99 AI ile tekrarlanacak),
-web içe aktarma sihirbazı (#94), üye davet/rol yönetimi, sayım/transfer, sipariş "Tamamlandı" ve "Kalanı kapat" ekranları.
+sayım/transfer, stok/müşteri toplu aktarma, işletme profili/logo, 2FA.
+
+Güncelleme (2026-11-07, #60): içe aktarma sihirbazı (#149), ekip/davet (#132, #134), iş kuralları, Tamamla / Kalanı kapat
+(#131) ve minimum stok / kritik stok (#151) senaryoları eklendi: UAT-18, 19, 30–34, 55, 56, 82, 83, 131, 154.

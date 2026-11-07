@@ -63,5 +63,6 @@ tarih ve müşteriye göre süzün. Sipariş sayfasında zaman çizelgesi, satı
 ## İpuçları
 - Sipariş numaraları **Ayarlar**'daki önekle oluşur (ör. SIP-2026-000123).
 - Depoda eksik bildirilirse sipariş sayfasında "Depoda eksik bildirildi" uyarısı görünür.
-- Sevk edilen siparişi **Tamamlandı** yapma ve kısmi sevkten sonra **kalanı kapatma** ekranda henüz yoktur
-  (bkz. [Bilinen sınırlamalar](bilinen-sinirlamalar.md)).
+- Kısmen sevk edilen siparişte kalan miktar gönderilmeyecekse sipariş sayfasında **Kalanı kapat**'a basın ve bir sebep
+  seçin; kalan rezervasyon serbest bırakılır (sipariş onaylama yetkisi gerekir). Sevkiyat tamamlanan siparişi teslimattan
+  sonra **Tamamla** ile kapatın.

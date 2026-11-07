@@ -70,4 +70,5 @@ Birden çok işletmenin üyesiyseniz girişten sonra **İşletme seç** ekranı 
 - Sektörü yanlış seçtiyseniz endişelenmeyin: özel alanları **Ayarlar → Özel alanlar** ekranından ekleyip arşivleyebilirsiniz.
 - KDV, fiyat gösterimi ve negatif stok ayarları sonradan **Ayarlar** sayfasından değiştirilebilir. Para birimi sonradan ekrandan değiştirilemez.
 - LED şablonundaki "Seri no takibi" yalnızca Evet/Hayır bilgisidir; BayiOS henüz seri numarası takibi yapmaz.
-- Çalışma arkadaşlarınızı ekrandan davet etme özelliği henüz yoktur (bkz. [Bilinen sınırlamalar](bilinen-sinirlamalar.md)).
+- Çalışma arkadaşlarınızı **Ayarlar → Ekip** ekranından davet edersiniz; davet bağlantısını kişiye siz iletirsiniz
+  (e-posta gönderilmez). Bkz. [Roller ve izinler](02-roller-ve-izinler.md).
