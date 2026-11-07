@@ -120,6 +120,20 @@ Ayrıntı: `docs/operations/ci-cd.md`.
 3. CI'da otomatik "retry until pass" yok. (Playwright `retries` yalnızca rapor amaçlı 1 olabilir; yeniden denemede geçen test "flaky" olarak raporlanır ve issue zorunlu.)
 4. Kök neden bulunana kadar ilgili PR'lar merge edilmez; acil durumda ürün sahibi kararı gerekir ve STATUS.md'ye yazılır.
 5. Zamana bağlı testlerde `TimeProvider` (fake clock) kullanılır; `Task.Delay` ile senkronizasyon yasak.
+6. **Yeniden üretme:** CI koşucusu yerel makineden yavaştır. Web E2E flake'i yerelde
+   `E2E_PORT=<boş port> CI=1 npx playwright test <spec> --repeat-each 20 --retries 0` ile, gerekirse CDP
+   `Emulation.setCPUThrottlingRate` (ör. 6×) ya da çekirdek sayısından fazla `--workers` ile yük bindirerek üretilir;
+   düzeltme aynı koşulda tekrar koşturularak kanıtlanır.
+
+### 7.1 Bilinen web E2E flake kök nedenleri (#136)
+| Belirti | Kök neden | Doğru düzeltme |
+|---|---|---|
+| `İçeriğe geç` / `main#main` odak testi (shell) | `/pano` gibi rotaların önceden üretilen HTML'i yalnızca yükleniyor iskeletini içerir; kabuk (atlama bağlantısı dahil) istemcide çizilir ve `goto` döndükten sonra gelebilir. Erken `Tab` odaklanacak öğe bulamaz. | Klavyeden önce gerçek kabuğu bekle (ör. `h1` görünür). |
+| Hata uyarısı odak testi (rapor dışa aktarma 429) | **Uygulama hatası:** `await` sonrası `setState` + `requestAnimationFrame(() => ref.focus())`. React güncellemeyi sonraki görevde işler; yük altında kare önce çalışır, uyarı henüz DOM'da yoktur ve odak `<body>`'de kalır (klavye/ekran okuyucu kullanıcısı da etkilenir). | Odağı commit sonrası `useEffect`'te ver (`export-buttons.tsx`). Aynı kalıp (`rAF` + `await` sonrası state) başka bileşenlerde de var; yeni kodda kullanılmaz. |
+| Sipariş listesi filtreleri: "temizle" sonrası tarih süzmede satır sayısı yanlış | **Uygulama hatası:** `router.replace` bir geçiş (transition); tamamlanana kadar `useSearchParams` eski URL'yi verir. Hemen ardından gelen filtre değişikliği yeni URL'yi eski sorgudan kurdu ve temizlenen `kaynak` filtresini geri getirdi (`?kaynak=whatsapp_ai&baslangic=…`). Sunucu/makine yükü pencereyi açar (yerelde RSC gecikmesiyle üretildi). | `order-list.tsx`: bekleyen gezinme varken değişiklik son istenen sorgunun üstüne kurulur; URL yetişince URL esas (geri/ileri dahil). Birim testi `order-list.test.tsx` dondurulmuş `useSearchParams` ile. Aynı kalıp diğer listelerde de olabilir. |
+| Askıya alınan işletme testi: "Stok" bağlantısı bulunamadı (sayfa erken uyarıyla değişti) | `waitForLoadState("networkidle")` durum daha önce bir kez oluştuysa hemen döner; yük altında hidrasyon sırasında 500 ms ağ sessizliği olur, liste istekleri sonra başlar ve test işletmeyi askıya aldıktan sonra 403 alır. | `networkidle` ile senkronizasyon yapılmaz; isteklerin görünür sonucu beklenir ("N ürün gösteriliyor", filtreler etkin). |
+| Mal kabul: hızlı iki okutmada 1 satır | **Uygulama hatası:** `VariantScanner` önceki arama sürerken gelen okutmayı sessizce atıyordu (`busy` ise `return`); ayrıca arama bitince alanı koşulsuz boşaltıp arada yazılan sonraki kodu siliyordu — el tarayıcısıyla eksik satır. | Okutma kuyruğa alınır (alan boşaltılır), sırayla çözülür; ilk sorun (bulunamadı/çok sonuç/hata) gösterilir; alan yalnızca hâlâ aranan kodu içeriyorsa boşaltılır. Birim testi `variant-scanner.test.tsx`. Aynı testin son adımı ayrıca ekleme duyurusu beklenmeden kaydediyordu (test yarışı). |
+| Fiyat sorgusu "En az bir ürün ekleyin" | Ürün ekleme (barkod/SKU araması) asenkron; test eklenme duyurusunu beklemeden gönderdi. | `"<SKU> eklendi."` durum mesajını bekle (kullanıcının gördüğü sinyal). |
 
 ## 8. Release readiness kontrol listesi
 - [ ] Tüm CI kapıları `main` adayı commit'te yeşil

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileDown, FileSpreadsheet } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,12 @@ export function ExportButtons({ report, filters, today }: { report: ReportId; fi
   const [keys] = useState(() => new IdempotencyKeys());
   const alertRef = useRef<HTMLDivElement>(null);
 
+  // Focus the error once it is on screen. Not requestAnimationFrame in the catch: that update comes after an await, so
+  // React commits it on a later task and a frame can run first (alert not mounted yet; focus stays on <body>).
+  useEffect(() => {
+    if (result?.tone === "error") alertRef.current?.focus();
+  }, [result]);
+
   const run = async (format: ExportFormat) => {
     if (!filters || busy) return;
     const body = { format, ...filters };
@@ -37,7 +43,6 @@ export function ExportButtons({ report, filters, today }: { report: ReportId; fi
       setResult({ tone: "success", text: `${FORMAT_LABELS[format]} dosyası indirildi: ${file.filename}` });
     } catch (error) {
       setResult({ tone: "error", text: exportErrorMessage(error) });
-      requestAnimationFrame(() => alertRef.current?.focus());
     } finally {
       setBusy(null);
     }

@@ -56,7 +56,11 @@ test("suspended while working (403 tenant.inactive): the page is replaced; switc
   await page.goto("/urunler");
   await expect(page.getByRole("heading", { level: 1, name: "Ürünler" })).toBeVisible();
   // The list's own requests must be done first: a 403 for them would replace the page before the click (race).
-  await page.waitForLoadState("networkidle");
+  // Not waitForLoadState("networkidle"): it resolves at once if the page was idle earlier (e.g. while hydrating under
+  // CPU load, before these requests started) — the flake seen in CI (#136). Wait for their visible results instead:
+  // the product page answered, and the filters enabled (brands, units, categories and custom fields answered).
+  await expect(page.getByText(/^\d+ ürün gösteriliyor/)).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Marka" })).toBeEnabled();
 
   api.inactiveTenants.push(TENANT_A.tenantId);
   await page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Stok" }).click();

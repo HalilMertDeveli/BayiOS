@@ -89,6 +89,10 @@ test.describe("kalanı kapat / tamamla (mock)", () => {
 
     await expect(page.getByText("SIP-2026-000001: Kalan miktar kapatıldı; kalan rezervasyon serbest bırakıldı")).toBeVisible();
     await expect(page.getByText("Sevk Edildi").first()).toBeVisible();
+    // #133: the data stays fulfillmentStatus=partial; the badge says the rest was closed, not "Kısmi sevk".
+    expect(ctx.orders.orders[0].fulfillmentStatus).toBe("partial");
+    await expect(page.getByText("Kalan kapatıldı", { exact: true })).toBeVisible();
+    await expect(page.getByText("Kısmi sevk", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("list", { name: "Durum geçmişi" })).toContainText("Kalan miktar kapatıldı");
     const [close] = posts(api, 1, "close-remaining");
     expect(close.body).toEqual({ reason: "Stok tedarik edilemiyor: Tedarikçi üretimi durdurdu" });
@@ -104,6 +108,7 @@ test.describe("kalanı kapat / tamamla (mock)", () => {
     await actions.getByRole("button", { name: "Tamamla" }).click();
     await expect(page.getByText("SIP-2026-000001: Sipariş tamamlandı")).toBeVisible();
     await expect(page.getByText("Tamamlandı").first()).toBeVisible();
+    await expect(page.getByText("Kalan kapatıldı", { exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: "İşlemler" })).toHaveCount(0);
     const [complete] = posts(api, 1, "complete");
     expect(complete.headers["if-match"]).toBe('W/"2"');

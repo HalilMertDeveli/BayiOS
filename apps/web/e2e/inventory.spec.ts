@@ -192,6 +192,8 @@ test.describe("mal kabul (mock)", () => {
     // The next receipt is a new attempt with a new key.
     await scanner.fill("MOCK-003-1");
     await scanner.press("Enter");
+    // The lookup is async: saving before the line is added has nothing to save (a flake, #136).
+    await expect(page.getByRole("status").filter({ hasText: "MOCK-003-1 eklendi." })).toBeVisible();
     await page.getByRole("button", { name: "Mal kabulü kaydet" }).click();
     await expect(page.getByText("1 satır, toplam 1 birim stoğa girdi.")).toBeVisible();
     expect(requestsTo(api, "POST", "/api/v1/inventory/receipts")[2].headers["idempotency-key"]).not.toBe(posts[0].headers["idempotency-key"]);

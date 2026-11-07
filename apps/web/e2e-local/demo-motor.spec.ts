@@ -70,6 +70,9 @@ test("motor demo: bayi WhatsApp'tan fren seti → inceleme → onay → barkodla
   await expect(regions.first()).toBeVisible();
   // (The previous route stays in the DOM hidden, so the check is scoped to the review lines.)
   await expect(regions.filter({ hasText: "₺" }), "no prices on the review screen").toHaveCount(0);
+  // #133: the card shows the catalog unit's display name ("Takım"), never its code ("takim").
+  const unitNames = new Map((await demo.api.get<{ items: { code: string; name: string }[] }>("/api/v1/units")).items.map((u) => [u.code, u.name]));
+  expect(unitNames.get("takim")).toBe("Takım");
   const handled = new Set<string>();
   for (const intent of intents) {
     const region = regions.filter({ hasText: intent.raw });
@@ -80,6 +83,8 @@ test("motor demo: bayi WhatsApp'tan fren seti → inceleme → onay → barkodla
     if (byCode) {
       await expect(region.getByText("Eşleşti", { exact: true })).toBeVisible();
       await expect(region).toContainText(intent.sku);
+      const unit = demo.variants[intent.sku].unit;
+      await expect(region.getByText(`Birim: ${unitNames.get(unit)}`, { exact: true })).toBeVisible();
       await region.getByLabel(`${name}: önerilen ürünü onaylıyorum`, { exact: true }).check();
     } else {
       // "cg 125 arka balata": original and aftermarket pads both fit → the reviewer picks the dealer's usual Muadil.

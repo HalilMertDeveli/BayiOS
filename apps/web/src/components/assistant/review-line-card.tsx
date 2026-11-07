@@ -35,12 +35,15 @@ export function ReviewLineCard({
   dispatch,
   serverErrors,
   disabled,
+  unitName = unitLabel,
 }: {
   line: OrderParseLine;
   review: ReviewLine;
   dispatch: (action: ReviewAction) => void;
   serverErrors?: readonly string[];
   disabled?: boolean;
+  /** Catalog unit code → display name ("takim" → "Takım", useUnitNames); defaults to the message-unit labels. */
+  unitName?: (code: string | null | undefined) => string | null;
 }) {
   const headingId = useId();
   const n = review.lineNo;
@@ -122,7 +125,7 @@ export function ReviewLineCard({
                 <p className="flex flex-wrap items-baseline gap-x-2">
                   <span className="font-mono text-body font-medium text-fg">{review.variant.sku}</span>
                   <span className="text-body text-fg">{review.variant.name ?? ""}</span>
-                  {review.variant.unit ? <span className="text-caption text-fg-muted">Birim: {review.variant.unit}</span> : null}
+                  {review.variant.unit ? <span className="text-caption text-fg-muted">Birim: {unitName(review.variant.unit)}</span> : null}
                 </p>
                 {review.variant.source === "proposed" ? (
                   <CheckboxField
@@ -165,7 +168,7 @@ export function ReviewLineCard({
                         <span className="flex flex-col">
                           <span className="font-mono text-body text-fg">{c.sku}</span>
                           <span className="text-caption text-fg-muted">
-                            {c.name} · {c.unit} · {matchMethodLabels[c.method] ?? c.method} {confidenceText(c.score)}
+                            {c.name} · {unitName(c.unit)} · {matchMethodLabels[c.method] ?? c.method} {confidenceText(c.score)}
                           </span>
                         </span>
                       </label>

@@ -69,7 +69,8 @@ export function ledDemo(size = "full") {
       for (const dims of sizes) {
         const price = rng.price(pitch.value < 3 ? 1400 : 650, pitch.value < 3 ? 2600 : 1300);
         products.push({
-          name: `LED modül P${pitch.value} ${use.label.toLowerCase()} ${dims.replace("x", "×")} mm (sentetik)`,
+          // Turkish lower case: "İç mekân" → "iç mekân" (toLowerCase() gives "i̇" = i + combining dot, #136).
+          name: `LED modül P${pitch.value} ${use.label.toLocaleLowerCase("tr-TR")} ${dims.replace("x", "×")} mm (sentetik)`,
           category: "LED Modül",
           brand: rng.pick(BRANDS),
           unit: "adet",
@@ -97,7 +98,7 @@ export function ledDemo(size = "full") {
     for (const use of small ? USES.slice(0, 1) : USES) {
       const price = rng.price(5200, 9800);
       products.push({
-        name: `Kabinet P${pitch.value} ${use.label.toLowerCase()} 500×500 mm (sentetik)`,
+        name: `Kabinet P${pitch.value} ${use.label.toLocaleLowerCase("tr-TR")} 500×500 mm (sentetik)`,
         category: "Kabinet",
         brand: "Kurgu Display",
         unit: "adet",
@@ -193,6 +194,17 @@ export function ledDemo(size = "full") {
         contactName: `Örnek Yetkili ${n}`,
         contactPhone: `+90 000 000 02 ${n}`,
       },
+      // Invoices go to the accounting office (#136: orders carry a billing address snapshot too).
+      billingAddress: {
+        title: "Muhasebe",
+        line1: `Örnek Teknopark ${i + 1}. Bina Muhasebe Ofisi`,
+        district,
+        city,
+        postalCode,
+        country: "TR",
+        contactName: `Örnek Muhasebe ${n}`,
+        contactPhone: `+90 000 000 12 ${n}`,
+      },
     };
   });
 
@@ -226,6 +238,8 @@ export function ledDemo(size = "full") {
       shop: category === "LED Modül" || category === "Kabinet" ? rng.int(5, 30) : 0,
     }),
     lowStock: ["VID-ISL-2K"],
+    // Never received and no minimum stock threshold (#137 demo): listed only with "stokta olmayanlar dahil".
+    outOfStock: ["KAB-P391-IC-500-AS"],
     orders: small
       ? [
           { target: "approved", customer: 1, lines: [[mod("P25", "IC"), 20]] },

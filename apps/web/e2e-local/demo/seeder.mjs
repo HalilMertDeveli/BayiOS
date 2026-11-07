@@ -39,6 +39,13 @@ export async function summarize(api) {
   const byStatus = {};
   for (const o of orders) byStatus[o.status] = (byStatus[o.status] ?? 0) + 1;
   const partial = orders.filter((o) => o.fulfillmentStatus === "partial").length;
+  // Billing address on the order (#136): a snapshot from submit on, the customer's default as preview on drafts.
+  let withBilling = 0;
+  for (const o of orders) if ((await api.get(`/api/v1/orders/${o.id}`)).order.billingAddress) withBilling++;
+  // Minimum stock thresholds (#137) and the critical-stock report in thresholds mode (all warehouses).
+  const thresholds = await api.all("/api/v1/inventory/thresholds");
+  const critical = await api.all("/api/v1/reports/critical-stock");
+  const criticalWithOutOfStock = await api.all("/api/v1/reports/critical-stock?includeOutOfStock=true");
   return {
     products: products.length,
     variants: products.reduce((n, p) => n + p.variants.length, 0),
@@ -53,6 +60,10 @@ export async function summarize(api) {
     orders: orders.length,
     ordersByStatus: byStatus,
     partialFulfilment: partial,
+    ordersWithBillingAddress: withBilling,
+    stockThresholds: thresholds.length,
+    criticalStock: critical.length,
+    criticalStockWithOutOfStock: criticalWithOutOfStock.length,
     whatsappOrders: orders.filter((o) => o.source === "whatsapp_ai").length,
   };
 }
@@ -250,7 +261,8 @@ export async function seedDemo({ cfg, demo, size = "full", owner, tenant, includ
       notes: "Sentetik demo müşterisi.",
     });
     const address = await api.post(`/api/v1/customers/${customer.id}/addresses`, { type: "shipping", isDefault: true, line2: null, ...c.address });
-    customers.push({ ...c, id: customer.id, addressId: address.id });
+    const billing = await api.post(`/api/v1/customers/${customer.id}/addresses`, { type: "billing", isDefault: true, line2: null, ...c.billingAddress });
+    customers.push({ ...c, id: customer.id, addressId: address.id, billingAddressId: billing.id });
   }
   log(`  ${customers.length} customers in ${def.dealerGroups.length} dealer groups, ${1 + def.priceLists.dealer.length} price lists`);
 
@@ -268,8 +280,13 @@ export async function seedDemo({ cfg, demo, size = "full", owner, tenant, includ
   for (const l of want.whatsapp ? def.whatsapp.lines : []) demand[l.sku] = (demand[l.sku] ?? 0) + l.quantity;
   const stock = {};
   for (const [sku, v] of Object.entries(variants)) {
-    const s = def.stock(v, v.category);
+    const s = def.stock(v, v.category); // always called: keeps the seeded RNG sequence identical
     const main = def.lowStock.includes(sku) ? 2 : s.main;
+    if (def.outOfStock?.includes(sku)) {
+      if (demand[sku]) throw new Error(`${sku} is out of stock by design but an order or WhatsApp line needs it`);
+      stock[sku] = { main: 0, shop: 0 };
+      continue;
+    }
     stock[sku] = { main: Math.max(main, Math.ceil(demand[sku] ?? 0) + (demand[sku] ? 5 : 0)), shop: s.shop };
   }
   const receive = async (code, lines, reference) => {
@@ -280,7 +297,9 @@ export async function seedDemo({ cfg, demo, size = "full", owner, tenant, includ
   const mainShelf = (v) => (warehouses[mainCode].usesLocations ? (warehouses[mainCode].locations[v.category]?.id ?? Object.values(warehouses[mainCode].locations)[0].id) : null);
   await receive(
     mainCode,
-    Object.entries(stock).map(([sku, s]) => ({ variantId: variants[sku].id, locationId: mainShelf(variants[sku]), quantity: s.main, unitCost: round2(variants[sku].price * 0.6) })),
+    Object.entries(stock)
+      .filter(([, s]) => s.main > 0)
+      .map(([sku, s]) => ({ variantId: variants[sku].id, locationId: mainShelf(variants[sku]), quantity: s.main, unitCost: round2(variants[sku].price * 0.6) })),
     "IRS-DEMO-MERKEZ",
   );
   const shopLines = Object.entries(stock).filter(([, s]) => s.shop > 0).map(([sku, s]) => ({ variantId: variants[sku].id, locationId: null, quantity: s.shop, unitCost: round2(variants[sku].price * 0.6) }));
@@ -307,8 +326,64 @@ export async function seedDemo({ cfg, demo, size = "full", owner, tenant, includ
     log(`  whatsapp: parse ${whatsapp.parseId} (${whatsapp.parser}) → draft ${whatsapp.orderNumber}`);
   }
 
+  // ---- Minimum stock thresholds (#137): a meaningful critical-stock tile and report.
+  const thresholds = await seedThresholds(refs);
+  log(`  thresholds: ${thresholds.critical.map((c) => `${c.sku} ${c.available}≤${c.min}`).join(", ")}; override ${thresholds.override.sku} @${thresholds.override.warehouse} → ${thresholds.override.min}; no threshold, 0 stock: ${def.outOfStock?.join(", ") ?? "—"}`);
+
   const counts = await summarize(api);
-  return { skipped: false, ...refs, orders, whatsapp, counts, seconds: (Date.now() - started) / 1000 };
+  return { skipped: false, ...refs, orders, whatsapp, thresholds, counts, seconds: (Date.now() - started) / 1000 };
+}
+
+/** Units without fractions in both sector templates (thresholds are whole numbers there). */
+const WHOLE_UNITS = new Set(["adet", "takim", "kutu", "paket", "koli", "set", "cift"]);
+
+/**
+ * Minimum stock thresholds from the stock as it stands after the scripted orders (deterministic: same seed → same
+ * balances; candidates in SKU order), via POST /inventory/thresholds/bulk:
+ * - 4 variants critical across all warehouses (available ≤ minimum), the second one exactly equal; the demo's
+ *   low-stock items come first;
+ * - one of them (a variant that also sits in the second warehouse) gets a per-warehouse override there that is below
+ *   its stock in that warehouse → critical overall and in the main warehouse, NOT critical in the second one;
+ * - 2 variants with a minimum well below their stock (configured, not critical);
+ * - `def.outOfStock`: no threshold and 0 stock (shown only with "stokta olmayanlar dahil").
+ */
+export async function seedThresholds(refs) {
+  const { api, def, variants, warehouses } = refs;
+  const second = def.warehouses[1];
+  const secondId = warehouses[second.code].id;
+  const total = new Map();
+  const inSecond = new Map();
+  for (const b of await api.all("/api/v1/inventory/balances")) {
+    total.set(b.variantId, (total.get(b.variantId) ?? 0) + Number(b.available));
+    if (b.warehouseId === secondId) inSecond.set(b.variantId, (inSecond.get(b.variantId) ?? 0) + Number(b.available));
+  }
+  const candidates = Object.entries(variants)
+    .filter(([sku, v]) => WHOLE_UNITS.has(v.unit) && !def.outOfStock?.includes(sku))
+    .map(([sku, v]) => ({ sku, id: v.id, available: total.get(v.id) ?? 0, second: inSecond.get(v.id) ?? 0 }))
+    .filter((c) => Number.isInteger(c.available) && c.available >= 1)
+    .sort((a, b) => (a.sku < b.sku ? -1 : a.sku > b.sku ? 1 : 0));
+  const override = candidates.find((c) => Number.isInteger(c.second) && c.second >= 2);
+  if (!override) throw new Error(`No variant with stock in ${second.code} for the per-warehouse threshold override`);
+  const lowFirst = [...def.lowStock.map((sku) => candidates.find((c) => c.sku === sku)).filter(Boolean), ...candidates];
+  const others = [...new Set(lowFirst)].filter((c) => c !== override);
+  const critical = [override, ...others.slice(0, 3)].map((c, i) => ({ ...c, min: i === 1 ? c.available : c.available + 3 + i }));
+  const fine = others
+    .slice(3)
+    .filter((c) => c.available >= 10)
+    .slice(0, 2)
+    .map((c) => ({ ...c, min: Math.floor(c.available / 2) }));
+  const overrideMin = override.second - 1;
+  const items = [
+    ...[...critical, ...fine].map((c) => ({ variantId: c.id, warehouseId: null, minQuantity: c.min, remove: null })),
+    { variantId: override.id, warehouseId: secondId, minQuantity: overrideMin, remove: null },
+  ];
+  await api.post("/api/v1/inventory/thresholds/bulk", { items });
+  return {
+    critical: critical.map(({ sku, available, min }) => ({ sku, available, min })),
+    fine: fine.map(({ sku, available, min }) => ({ sku, available, min })),
+    override: { sku: override.sku, warehouse: second.code, warehouseId: secondId, available: override.second, min: overrideMin },
+    outOfStock: def.outOfStock ?? [],
+  };
 }
 
 /** Creates one order and drives it to its target state with the real endpoints. */
@@ -328,8 +403,9 @@ export async function driveOrder(refs, spec, index = 0) {
       if (!variants[sku]) throw new Error(`Order line SKU ${sku} is not in the demo catalog`);
       return { id: null, variantId: variants[sku].id, quantity, unitPrice: null, discountPercent: null, discountAmount: null };
     }),
+    // Both chosen explicitly: from submit on the order keeps a snapshot of each (#136).
     shippingAddressId: customer.addressId,
-    billingAddressId: null,
+    billingAddressId: customer.billingAddressId,
   });
   const id = detail.order.id;
   const act = async (action, body) => {

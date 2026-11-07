@@ -43,6 +43,20 @@ export const fulfillmentMeta: Record<string, { label: string; tone: BadgeTone }>
   full: { label: "Tamamı sevk edildi", tone: "success" },
 };
 
+/**
+ * The fulfilment label in the context of the order status (#133). After "Kalanı kapat" (close-remaining) the API moves
+ * the order to shipped but keeps fulfillment_status = partial (the closed rest was never shipped; whether that should
+ * read "full" is a pending product decision). Shipping only reaches shipped when nothing remains (then "full"), so
+ * shipped/completed + partial always means "partly shipped, the rest closed" — shown as such instead of "Kısmi sevk",
+ * which next to "Sevk Edildi" looked like an open partial shipment.
+ */
+export function fulfillmentMetaFor(fulfillmentStatus: string, orderStatus?: string): { label: string; tone: BadgeTone } {
+  if (fulfillmentStatus === "partial" && (orderStatus === "shipped" || orderStatus === "completed")) {
+    return { label: "Kalan kapatıldı", tone: "neutral" };
+  }
+  return fulfillmentMeta[fulfillmentStatus] ?? { label: fulfillmentStatus, tone: "neutral" };
+}
+
 export const ORDER_SOURCES = ["manual", "whatsapp_ai", "import", "mobile"] as const;
 
 export const orderSourceLabels: Record<string, string> = {

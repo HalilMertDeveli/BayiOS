@@ -21,7 +21,8 @@ import { logApiErrors } from "./support/real-stack";
 /**
  * PILOT DEMO #57 — "Demo LED Elektronik" on the REAL stack (nothing mocked). A small version of the synthetic demo is
  * seeded through the public API as its owner, then: the supplier catalog (generated XLSX) is bulk-imported through
- * the Imports API (the web has no import screen yet — /ice-aktarma is a placeholder) and shows up in the catalog →
+ * the Imports API (the same helper the demo seeder uses; the web wizard /ice-aktarma (#94) is covered on the real
+ * stack by real-stack-imports.spec.ts) and shows up in the catalog →
  * a quantity tier (20+) is added on the default price list in the UI → goods receipt by barcode onto shelves → an
  * order of 25 gets the tier price → picking with a damaged-goods shortage → partial shipment → short-close of the rest
  * on the order detail ("Kalanı kapat") → stock and reservations from the ledger → top-products report exported as CSV and XLSX.
@@ -49,10 +50,30 @@ test("LED demo: toplu katalog içe aktarma → fiyat kademesi → kademeli fiyat
   });
   console.log(`[seed] small LED demo in ${demo.seconds.toFixed(1)} s: ${JSON.stringify(demo.counts)}`);
   expect(demo.counts.ordersByStatus).toMatchObject({ approved: 1, shipped: 1 });
+  // #136: every seeded order carries a billing address (customers have a default billing address; orders choose it).
+  expect(demo.counts.ordersWithBillingAddress).toBe(demo.counts.orders);
   const ist = demo.warehouses.IST;
   const customer = demo.customers.find((c) => c.group === "Kurulum")!; // no dealer list → the default list applies
 
+  // #137: minimum stock thresholds make the critical-stock report and dashboard tile meaningful.
+  const { critical, override, outOfStock } = demo.thresholds;
+  expect(critical).toHaveLength(4);
+  expect(critical.every((c) => c.available <= c.min)).toBe(true);
+  expect(critical.some((c) => c.available === c.min)).toBe(true);
+  type Critical = { items: { sku: string }[] };
+  const report = async (query = "") => (await demo.api.get<Critical>(`/api/v1/reports/critical-stock${query}`)).items.map((i) => i.sku);
+  const all = await report();
+  expect([...all].sort()).toEqual(critical.map((c) => c.sku).sort());
+  // The per-warehouse override is below the stock there: critical overall, not in that warehouse.
+  expect(override.min).toBeLessThan(override.available);
+  expect(await report(`?warehouseId=${override.warehouseId}`)).not.toContain(override.sku);
+  // No threshold and 0 stock: only with "include out of stock".
+  expect(all).not.toContain(outOfStock[0]);
+  expect(await report("?includeOutOfStock=true")).toContain(outOfStock[0]);
+
   await signIn(page, owner.email, owner.password, owner.fullName);
+  const tile = page.getByRole("list", { name: "Minimum stoğun altındaki ürünler" });
+  for (const c of critical) await expect(tile).toContainText(c.sku);
 
   // ---- 1. Bulk catalog import: supplier XLSX (15 products with prices and technical attributes).
   const imported = await runCatalogImport(demo.api, demo.def, demo.priceLists.default, (line) => console.log(`[import] ${line}`));
@@ -162,7 +183,15 @@ test("LED demo: toplu katalog içe aktarma → fiyat kademesi → kademeli fiyat
   expect([Number(psuLine.shippedQuantity), Number(psuLine.cancelledQuantity)]).toEqual([ORDERED[PSU] - DAMAGED, DAMAGED]);
   await page.goto(`/siparisler/${orderId}`);
   await expect(page.getByText("Sevk Edildi").first()).toBeVisible();
-  await expect(page.getByText(closed.order.fulfillmentStatus === "full" ? "Tamamı sevk edildi" : "Kısmi sevk").first()).toBeVisible();
+  // #133: the API keeps fulfillmentStatus=partial after the short-close (product decision pending); the UI says so
+  // unambiguously ("Sevk Edildi" + "Kalan kapatıldı") instead of "Kısmi sevk".
+  expect(closed.order.fulfillmentStatus).toBe("partial");
+  await expect(page.getByText("Kalan kapatıldı", { exact: true })).toBeVisible();
+  await expect(page.getByText("Kısmi sevk", { exact: true })).toHaveCount(0);
+  // #136: the order keeps the customer's billing address (snapshot from submit), not "Siparişte kayıtlı adres yok".
+  const addresses = page.getByRole("region", { name: "Adresler" });
+  await expect(addresses).toContainText("Muhasebe Ofisi");
+  await expect(addresses).not.toContainText("Siparişte kayıtlı adres yok");
   await expectStock(page, ist.id, PSU, RECEIVED[PSU] - (ORDERED[PSU] - DAMAGED), 0, RECEIVED[PSU] - (ORDERED[PSU] - DAMAGED));
 
   // ---- 8. Reports: top products, exported as CSV and XLSX (real files from the API).

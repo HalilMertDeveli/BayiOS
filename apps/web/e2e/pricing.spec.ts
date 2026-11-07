@@ -254,6 +254,8 @@ test.describe("fiyat sorgula (mock)", () => {
     const scanner = page.getByRole("textbox", { name: "Ürün ekle" });
     await scanner.fill("MOCK-002-1");
     await scanner.press("Enter");
+    // The lookup is async: submitting before the line is added validly reports "En az bir ürün ekleyin." (a flake).
+    await expect(page.getByText("MOCK-002-1 eklendi.")).toBeVisible();
     await page.getByRole("button", { name: "Fiyatları sorgula" }).click();
     const row = page.getByRole("table", { name: "Çözümlenen fiyatlar" }).getByRole("row", { name: /MOCK-002-1/ });
     await expect(row).toContainText("₺120,00");
