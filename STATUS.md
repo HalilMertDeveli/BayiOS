@@ -1,43 +1,42 @@
 # STATUS — Gerçek proje durumu
 
-> Yalnızca doğrulanmış durum. Son güncelleme: 2026-11-07 (release candidate RC-1 ölçüldü, #60; Faz A tamam).
+> Yalnızca doğrulanmış durum. Son güncelleme: 2026-11-07 (Faz B mühendislik kısmı tamam; kalan maddeler ürün sahibi kararı bekliyor).
 > İş emirleri, bağımlılık grafiği ve aktif atamalar: `docs/operations/work-orders.md`. Yol haritası: #148.
 
 ## Mevcut faz
-**Faz A (pilota hazır sürüm) tamam** — #60 RC raporu ile kapanıyor; kalan iki madde ürün sahibi kararı bekliyor (#98, #57'nin
-seri no kısmı → #147). Release candidate: `preview` @ `ba83e85` — rapor `docs/operations/release-candidate.md`.
-Öneri: barındırma onayı + Supabase Auth ayarlarından sonra preview ortamında **kontrollü pilota uygun, production'a değil**.
+**Faz B (canlıya hazırlık) — mühendislik kısmı tamam, sahip kararları bekleniyor.** `preview` @ `1955dbd`.
+- Birleşenler: #155 (#152 odak/URL kancaları) · #156 deploy pipeline + migration adımı, Supabase bootstrap, gitleaks
+  (#70, #76) · #157 gözlemlenebilirlik, yedek/geri yükleme provası, rollback, runbook'lar (#55) · #158 güvenlik denetimi,
+  WCAG 2.2 AA denetimi, k6 yük + rezervasyon soak, fixture yarışı (#54, #58, #153) · #159 açık yönlendirme (M-1) ·
+  #161 web güvenlik başlıkları/CSP, API rate limit, sipariş no kilidi, L-1…L-4, benzersiz id (#160) · #162 erişim reddi
+  audit olayları (#89) · #163 AI ayrıştırma 202 + arka plan işi, tenant opt-in (varsayılan kapalı), öğrenilmiş eşleştirmeler (#121).
+- Ürün sahibini bekleyen: #138 hesaplar (Supabase/Fly/Vercel/domain) → #10 preview doğrulaması ve #70 ilk gerçek deploy;
+  #139 hukuki metinler → #83 KVKK onayı; #61 kararlar (AI anahtarı + model, plan limitleri, gözlem backend'i, RPO/RTO,
+  alarm kanalı, marka rengi); #121 canlı değerlendirme + Anthropic aktarımının hukuki dayanağı; #98, #147.
+- Denetimden kalan riskler (`docs/security/audit-2026-11.md`): `script-src 'unsafe-inline'` (PPR/nonce uyumsuz), JS'ten
+  okunabilir Supabase çerezi (BFF gerekir), tenant başına toplam limit önerisi, CAPTCHA web entegrasyonu, a11y A-2/A-3/A-5 (Low).
 
-Çekirdek iş akışı `preview`'de API + web olarak tamam ve gerçek yığında (web + API + Postgres + Supabase Auth) uçtan uca
-test ediliyor: kayıt/onboarding → katalog + özel alanlar → içe aktarma sihirbazı → stok defteri + depo/raf + minimum stok →
-müşteri + fiyat listeleri → sipariş + rezervasyon → toplama/paketleme/sevkiyat → stok çıkışı → raporlar. Flutter BLOCKED
-(SDK). Hosting/preview URL'leri sahip onayına bağlı (#138).
+Faz A (pilota hazır sürüm) tamam — RC-1 raporu `docs/operations/release-candidate.md`: kontrollü pilota uygun, production'a değil.
 
 ## GitHub
 - Repo: https://github.com/HalilMertDeveli/BayiOS (public) · dallar: `main`, `preview` (ikisi de ruleset korumalı)
 - Rulesets: PR zorunlu, force-push/silme yasak, review thread çözümü zorunlu. Bypass yok.
 - Güvenlik: secret scanning + push protection, CodeQL, Dependabot (hedef `preview`). 2026-11-07: açık secret-scanning,
   code-scanning ve Dependabot uyarısı 0.
-- Birleşen PR'lar: #62–#65, #67, #72–#75, #77, #80–#82, #84, #85, #88, #90, #91, #93, #95, #97, #99–#101, #103, #104, #106–#110, #112–#114, #116–#120, #122–#128, #130–#132, #134, #135, #149–#151 (toplam 54).
+- Birleşen PR'lar: #62–#65, #67, #72–#75, #77, #80–#82, #84, #85, #88, #90, #91, #93, #95, #97, #99–#101, #103, #104, #106–#110, #112–#114, #116–#120, #122–#128, #130–#132, #134, #135, #149–#151, #154–#159, #161–#163 (toplam 63).
 - Zorunlu kontroller: `api build & test`, `web lint, typecheck, test & build`, `dependency review`, `ci gate` (path-filtreli işler dahil: container, migrations, `e2e real stack`).
 
 ## Durum panosu (aktif)
-Aktif ajan yok. Son dalga (2026-11-07, Faz A):
-- #149 web içe aktarma sihirbazı + geçmiş (#94 kapandı) · #151 ürün/depo bazında minimum stok eşikleri, eşiğe göre kritik
-  stok, pano kutusu, `Min. stok` kolonu (#137 kapandı) · #150 demo verisi, kararsız test kök nedenleri, UI gözlemleri
-  (#136, #133 kapandı).
-- #60 RC raporu + kılavuz/UAT/tehdit modeli düzeltmeleri (bu güncelleme). Ölçüm sırasında bulunan test altyapısı yarışı: #153.
-- Önceki: pilot blokerleri (#129: ekip/davet, iş kuralları, marka/kategori/birim, Tamamla/Kalanı kapat, pano), demo
-  işletmeler (#130), kullanıcı kılavuzu + UAT (#128), AI WhatsApp (#120, #122, varsayılan kapalı), paketler (#124), raporlar (#125).
-
-Sıradaki: **Faz B** (ürün sahibi "başla" demeden başlamaz) — #138 canlı ortam hesapları ve #139 hukuki hazırlık (ürün sahibi),
-#70 deploy migration adımı · #76 Supabase bootstrap · #10 preview doğrulaması, #55 izleme/yedek/runbook, #54 güvenlik
-denetimi · #58 regresyon/yük, #121 AI canlı öncesi, #89 erişim reddi audit'i · #83 onboarding devamı, #152, #153.
-Sonra Faz C (Flutter, BLOCKED), Faz D pilot (#140), Faz E büyüme.
+Aktif ajan yok. Faz B dalgası (2026-11-07) yukarıda. Sıradaki: ürün sahibi kararları (#138, #139, #61); sonra Faz C
+(Flutter, BLOCKED: SDK), Faz D pilot (#140), Faz E büyüme. Faz başlangıcı ürün sahibinin "başla" demesine bağlı.
 
 İş emri durumu: `docs/operations/work-orders.md`.
 
-## Test durumu (`preview` @ `ba83e85`, 2026-11-07 — ayrıntı ve komutlar: `docs/operations/release-candidate.md` §3)
+## Test durumu
+Son ölçüm (`preview` @ `1955dbd`, PR #163 CI): API 989 test · 988 geçti · 0 kaldı · 1 atlandı (canlı AI) · web Vitest
+704/704 · Playwright 296/296 · gerçek yığın E2E, k6 short, migration drift, CodeQL, gitleaks yeşil. Yük: `docs/testing/load-2026-11.md`.
+
+### RC-1 ölçümü (`preview` @ `ba83e85`, 2026-11-07 — ayrıntı ve komutlar: `docs/operations/release-candidate.md` §3)
 | Alan | Sonuç |
 |---|---|
 | API (`dotnet test`, Testcontainers Postgres 17) | 875 toplam · 874 geçti · 0 kaldı · 1 atlandı (canlı AI testi, yalnızca anahtar varken) — CI 2 dk 42 sn, yerel 114 sn. Bir yerel koşuda fixture kapanış yarışı (#153) |
