@@ -1,0 +1,99 @@
+{
+  "@@locale": "tr",
+
+  "appTitle": "BayiOS Depo",
+
+  "loading": "Yükleniyor…",
+  "retry": "Tekrar dene",
+  "sessionLoading": "Oturum bilgileri yükleniyor…",
+
+  "offlineBanner": "Sunucuya ulaşılamıyor. Bağlantınızı kontrol edin.",
+  "offlineBannerChecking": "Bağlantı kontrol ediliyor…",
+
+  "signInTitle": "Giriş yap",
+  "signInSubtitle": "Depo hesabınızın e-posta adresi ve şifresiyle giriş yapın.",
+  "signInWebHint": "Hesap oluşturma, işletme kurulumu ve şifre sıfırlama web uygulamasından yapılır.",
+  "emailLabel": "E-posta",
+  "passwordLabel": "Şifre",
+  "showPassword": "Şifreyi göster",
+  "hidePassword": "Şifreyi gizle",
+  "signInButton": "Giriş yap",
+  "signingIn": "Giriş yapılıyor…",
+  "validationEmailRequired": "E-posta adresinizi girin.",
+  "validationEmailInvalid": "Geçerli bir e-posta adresi girin (ör. ad@firma.com).",
+  "validationPasswordRequired": "Şifrenizi girin.",
+
+  "authInvalidCredentials": "E-posta adresi veya şifre hatalı.",
+  "authEmailNotConfirmed": "E-posta adresiniz henüz doğrulanmadı. Gelen kutunuzdaki doğrulama bağlantısına tıklayıp tekrar deneyin.",
+  "authRateLimited": "Çok sayıda deneme yapıldı. Lütfen birkaç dakika bekleyip tekrar deneyin.",
+  "authNetwork": "Kimlik doğrulama sunucusuna ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.",
+  "authSessionExpired": "Oturumunuzun süresi doldu. Lütfen yeniden giriş yapın.",
+  "authUnknown": "Giriş yapılamadı. Lütfen tekrar deneyin.",
+
+  "errorUnauthorized": "Oturumunuzun süresi doldu. Lütfen yeniden giriş yapın.",
+  "errorForbidden": "Bu işlem için yetkiniz yok. Gerekirse işletme yöneticinizle görüşün.",
+  "errorTenantAccessDenied": "Bu işletmeye erişiminiz yok. Lütfen erişebildiğiniz bir işletme seçin.",
+  "errorTenantInactive": "Bu işletme askıya alınmış veya kapatılmış; işlem yapılamıyor. Başka bir işletme seçin veya işletme sahibiyle görüşün.",
+  "errorDisabledByTenantRule": "Bu işlem işletmenizin ayarlarında rolünüz için kapatılmış. Gerekirse işletme yöneticinizle görüşün.",
+  "errorEntitlementRequired": "Bu özellik işletmenizin paketinde bulunmuyor. İşletme sahibiyle görüşün.",
+  "errorEntitlementLimit": "İşletmenizin paket sınırına ulaşıldı. İşletme sahibiyle görüşün.",
+  "errorNotFound": "Aradığınız kayıt bulunamadı.",
+  "errorMalformed": "İstek işlenemedi. Ekranı yenileyip tekrar deneyin.",
+  "errorValidation": "Bazı alanlar geçersiz. Lütfen işaretli alanları düzeltip tekrar deneyin.",
+  "errorConflict": "İşlem mevcut durumla çakışıyor. Ekranı yenileyip tekrar deneyin.",
+  "errorIdempotencyInProgress": "İsteğiniz hâlâ işleniyor. Birkaç saniye sonra tekrar deneyin.",
+  "errorIdempotencyKeyReused": "Bu işlem daha önce farklı bilgilerle gönderilmiş. Ekranı yenileyip tekrar deneyin.",
+  "errorVersionMismatch": "Kayıt siz çalışırken değişti. Ekranı yenileyip tekrar deneyin.",
+  "errorPreconditionRequired": "Kayıt sürümü doğrulanamadı. Ekranı yenileyip tekrar deneyin.",
+  "errorRateLimited": "Çok sayıda istek gönderildi. Lütfen biraz bekleyip tekrar deneyin.",
+  "errorRateLimitedRetryAfter": "Çok sayıda istek gönderildi. {seconds} saniye sonra tekrar deneyin.",
+  "@errorRateLimitedRetryAfter": {
+    "placeholders": { "seconds": { "type": "int" } }
+  },
+  "errorServer": "Beklenmeyen bir hata oluştu. Lütfen biraz sonra tekrar deneyin.",
+  "errorNetwork": "Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.",
+  "errorTimeout": "Sunucu zamanında yanıt vermedi. Bağlantınızı kontrol edip tekrar deneyin.",
+  "errorClientUpgradeRequired": "Bu uygulama sürümü artık desteklenmiyor. Lütfen uygulamayı güncelleyin.",
+
+  "tenantPickerTitle": "İşletme seçin",
+  "tenantPickerSubtitle": "Hangi işletmede çalışacağınızı seçin.",
+  "tenantStatusSuspended": "Askıya alındı",
+  "tenantStatusClosed": "Kapatıldı",
+  "tenantStatusUnavailable": "Kullanılamıyor",
+  "tenantInactiveNotice": "Seçtiğiniz işletme askıya alınmış veya kapatılmış. Başka bir işletme seçin.",
+  "tenantCurrent": "Şu anki işletme",
+  "noMembershipTitle": "Henüz bir işletmeye üye değilsiniz",
+  "noMembershipBody": "İşletme oluşturma ve davet kabulü web uygulamasından yapılır. Daveti kabul ettikten sonra burada tekrar deneyin.",
+
+  "signOut": "Çıkış yap",
+  "switchTenant": "İşletme değiştir",
+
+  "navDashboard": "Pano",
+  "navProfile": "Profil",
+
+  "dashboardTitle": "Depo panosu",
+  "dashboardWelcome": "Hoş geldiniz, {name}",
+  "@dashboardWelcome": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "dashboardWelcomeAnonymous": "Hoş geldiniz",
+  "dashboardTenantLabel": "İşletme",
+  "dashboardRoleLabel": "Rolünüz",
+  "dashboardPlaceholder": "Görevler, toplama, sayım ve stok sorgulama ekranları yakında burada olacak.",
+
+  "roleOwner": "İşletme sahibi",
+  "roleAdmin": "Yönetici",
+  "roleManager": "Operasyon müdürü",
+  "roleSales": "Satış",
+  "roleWarehouseStaff": "Depo personeli",
+  "roleViewer": "İzleyici",
+  "roleUnknown": "Diğer",
+
+  "profileTitle": "Profil",
+  "profileEmailLabel": "E-posta",
+  "profileTenantLabel": "İşletme",
+  "profileRoleLabel": "Rol",
+
+  "configErrorTitle": "Uygulama yapılandırılmamış",
+  "configErrorBody": "Bu derlemede sunucu adresleri eksik veya geçersiz. Uygulamayı --dart-define-from-file ile derleyin (apps/mobile/README.md)."
+}
