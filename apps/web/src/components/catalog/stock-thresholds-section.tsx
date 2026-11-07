@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ type Load = { status: "loading" } | { status: "error"; message: string } | { sta
  * the variant's stock page. Visible to everyone with inventory.read; editable with catalog.write.
  */
 export function StockThresholdsSection({ product, units, readOnly }: { product: Product; units: readonly Unit[]; readOnly: boolean }) {
+  const uid = useId();
   const { api } = useSession();
   const { toast } = useToast();
   const variants = product.variants.filter((v) => v.status !== "archived");
@@ -97,9 +98,9 @@ export function StockThresholdsSection({ product, units, readOnly }: { product: 
   };
 
   return (
-    <section aria-labelledby="sec-thresholds" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <section aria-labelledby={`${uid}-sec-thresholds`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
       <div className="flex flex-col gap-1">
-        <h2 id="sec-thresholds" className="text-h3 text-fg">
+        <h2 id={`${uid}-sec-thresholds`} className="text-h3 text-fg">
           Minimum stok
         </h2>
         <p className="text-caption text-fg-muted">
@@ -139,7 +140,7 @@ export function StockThresholdsSection({ product, units, readOnly }: { product: 
                     </span>
                   </div>
                   <Input
-                    id={`threshold-${v.id}`}
+                    id={`${uid}-threshold-${v.id}`}
                     label={`${v.sku} minimum stok`}
                     hideLabel
                     inputMode={unit?.allowsFraction ? "decimal" : "numeric"}

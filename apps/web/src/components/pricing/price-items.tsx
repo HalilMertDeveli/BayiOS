@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, useId } from "react";
 import { CircleAlert, Layers, Pencil, Trash2, X } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { useVariantDirectory } from "@/components/inventory/use-inventory-data";
@@ -38,6 +38,7 @@ function variantLabel(ref: VariantRef | null | undefined, id: string) {
  * with Intl in the list currency; nothing is computed here.
  */
 export function PriceItems({ priceList, canEdit }: { priceList: PriceList; canEdit: boolean }) {
+  const uid = useId();
   const { api } = useSession();
   const { toast } = useToast();
   const [state, setState] = useState<ItemsState>({ status: "loading" });
@@ -209,9 +210,9 @@ export function PriceItems({ priceList, canEdit }: { priceList: PriceList; canEd
   ];
 
   return (
-    <section aria-labelledby="sec-items" className="flex flex-col gap-4">
+    <section aria-labelledby={`${uid}-sec-items`} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="sec-items" className="flex items-center gap-2 text-h3 text-fg">
+        <h2 id={`${uid}-sec-items`} className="flex items-center gap-2 text-h3 text-fg">
           <Layers className="size-5" aria-hidden="true" />
           Fiyatlar ve miktar kademeleri
         </h2>

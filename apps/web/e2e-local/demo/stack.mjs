@@ -186,6 +186,14 @@ export class Api {
         await sleep(retryAfter * 1000);
         continue;
       }
+      // General API rate limit (threat-model §6.5; 60 writes / 300 reads per user+tenant and minute): the rejected call
+      // did nothing, so waiting Retry-After and resending (same Idempotency-Key) is safe. Hourly quotas
+      // (ai.rate_limited, import/export limits) are not waited for.
+      if (response.status === 429 && parsed?.code === "rate_limit.exceeded" && retryAfter > 0 && retryAfter <= 60 && attempt < 200) {
+        if (attempt === 0) console.warn(`[api] rate limited on ${method} ${path}; waiting ${retryAfter} s (Retry-After)`);
+        await sleep(retryAfter * 1000);
+        continue;
+      }
       const result = { status: response.status, body: parsed, etag: response.headers.get("etag"), headers: response.headers };
       const ok = expect ? expect.includes(response.status) : response.status < 400;
       if (!ok) throw new ApiError(method, path, response.status, parsed);

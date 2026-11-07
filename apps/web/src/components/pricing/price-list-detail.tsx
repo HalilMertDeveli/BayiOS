@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { Archive, ArrowLeft, CircleAlert, RotateCcw, Star } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
@@ -103,6 +103,7 @@ export function PriceListDetail({ priceListId }: { priceListId: string }) {
 }
 
 function SettingsAndItems({ loaded, onSaved, onReload }: { loaded: Loaded; onSaved: (list: PriceList, etag: string) => void; onReload: () => void }) {
+  const uid = useId();
   const { api, access } = useSession();
   const permissions = pricingPermissions(access);
   const { toast } = useToast();
@@ -242,8 +243,8 @@ function SettingsAndItems({ loaded, onSaved, onReload }: { loaded: Loaded; onSav
       ) : null}
 
       {canEdit ? (
-        <section aria-labelledby="sec-settings" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
-          <h2 id="sec-settings" className="text-h3 text-fg">
+        <section aria-labelledby={`${uid}-sec-settings`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+          <h2 id={`${uid}-sec-settings`} className="text-h3 text-fg">
             Liste ayarları
           </h2>
           <form noValidate onSubmit={submit} aria-label="Liste ayarları" className="flex flex-col gap-4">

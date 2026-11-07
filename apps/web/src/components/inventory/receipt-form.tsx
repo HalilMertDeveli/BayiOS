@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { ArrowLeft, Lock, PackagePlus, Trash2 } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
@@ -36,6 +36,7 @@ type Done = { lines: number; total: number; warehouseId: string };
 
 /** W09 / M05 goods receipt: scan or search variants into lines, set quantities and locations, post once. */
 export function ReceiptForm() {
+  const uid = useId();
   const { api, access } = useSession();
   const permissions = inventoryPermissions(access);
   const { state: warehouses } = useWarehouses();
@@ -216,8 +217,8 @@ export function ReceiptForm() {
           ) : null}
         </section>
 
-        <section aria-labelledby="receipt-lines" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
-          <h2 id="receipt-lines" className="text-h3 text-fg">
+        <section aria-labelledby={`${uid}-receipt-lines`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+          <h2 id={`${uid}-receipt-lines`} className="text-h3 text-fg">
             Ürünler
           </h2>
           <VariantScanner

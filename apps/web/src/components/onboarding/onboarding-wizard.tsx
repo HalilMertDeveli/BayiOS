@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
@@ -77,6 +77,7 @@ const newIdempotencyKey = () => crypto.randomUUID();
  * and the currency (PATCH /tenant). Identity cannot call Catalog, so the client applies the template.
  */
 export function OnboardingWizard() {
+  const uid = useId();
   const router = useRouter();
   const { state, api, reload } = useSession();
   const { toast } = useToast();
@@ -330,7 +331,7 @@ export function OnboardingWizard() {
         ) : null}
 
         {step === 1 ? (
-          <fieldset className="flex flex-col gap-3" aria-describedby={errors.sector ? "sector-error" : undefined}>
+          <fieldset className="flex flex-col gap-3" aria-describedby={errors.sector ? `${uid}-sector-error` : undefined}>
             <legend className="mb-2 text-body text-fg-muted">
               Sektörünüz hazır birimleri, kategorileri ve ürün özel alanlarını belirler.
             </legend>
@@ -357,7 +358,7 @@ export function OnboardingWizard() {
               </label>
             ))}
             {errors.sector ? (
-              <p id="sector-error" role="alert" className="text-caption text-danger-fg">
+              <p id={`${uid}-sector-error`} role="alert" className="text-caption text-danger-fg">
                 {errors.sector}
               </p>
             ) : null}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useId } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, CircleAlert, Gift, Lock, PackagePlus, Puzzle } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
@@ -131,10 +131,11 @@ function PlanPageView({ canManage }: { canManage: boolean }) {
 }
 
 function CurrentPlan({ subscription }: { subscription: Subscription }) {
+  const uid = useId();
   const daysLeft = subscription.status === "trialing" ? trialDaysLeft(subscription.trialEndsAt) : null;
   return (
-    <section aria-labelledby="current-plan" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
-      <h2 id="current-plan" className="text-h3 text-fg">
+    <section aria-labelledby={`${uid}-current-plan`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+      <h2 id={`${uid}-current-plan`} className="text-h3 text-fg">
         Mevcut paket
       </h2>
       <div className="flex flex-wrap items-center gap-2">
@@ -162,9 +163,10 @@ function CurrentPlan({ subscription }: { subscription: Subscription }) {
 }
 
 function UsageSection({ usage }: { usage: Usage }) {
+  const uid = useId();
   return (
-    <section aria-labelledby="usage" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
-      <h2 id="usage" className="text-h3 text-fg">
+    <section aria-labelledby={`${uid}-usage`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+      <h2 id={`${uid}-usage`} className="text-h3 text-fg">
         Kullanım ve sınırlar
       </h2>
       {usage.items.length === 0 ? (
@@ -205,6 +207,7 @@ function UsageSection({ usage }: { usage: Usage }) {
 type Pending = { code: string; action: "activate" | "deactivate" };
 
 function ModuleStore({ data, canManage, onChanged }: { data: Data; canManage: boolean; onChanged: () => void }) {
+  const uid = useId();
   const { api } = useSession();
   const { toast } = useToast();
   const [busy, setBusy] = useState<Pending | null>(null);
@@ -255,9 +258,9 @@ function ModuleStore({ data, canManage, onChanged }: { data: Data; canManage: bo
   };
 
   return (
-    <section aria-labelledby="modules" className="flex flex-col gap-3">
+    <section aria-labelledby={`${uid}-modules`} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <h2 id="modules" className="text-h3 text-fg">
+        <h2 id={`${uid}-modules`} className="text-h3 text-fg">
           Ek modüller
         </h2>
         <p className="text-caption text-fg-muted">
@@ -350,9 +353,10 @@ function ModuleStore({ data, canManage, onChanged }: { data: Data; canManage: bo
 }
 
 function PlanCatalog({ catalog, current }: { catalog: BillingCatalog; current: string }) {
+  const uid = useId();
   return (
-    <section aria-labelledby="plans" className="flex flex-col gap-3">
-      <h2 id="plans" className="text-h3 text-fg">
+    <section aria-labelledby={`${uid}-plans`} className="flex flex-col gap-3">
+      <h2 id={`${uid}-plans`} className="text-h3 text-fg">
         Paketler
       </h2>
       <ul aria-label="Paketler" className="grid gap-3 md:grid-cols-2">

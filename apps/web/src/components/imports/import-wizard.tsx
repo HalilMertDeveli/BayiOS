@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, useId } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CircleAlert, FileDown, LoaderCircle, Play, RotateCcw, Undo2 } from "lucide-react";
@@ -166,13 +166,14 @@ function Counts({ items, label }: { items: { label: string; value: number; tone?
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
+  const uid = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     headingRef.current?.focus();
   }, [title]);
   return (
-    <section aria-labelledby="import-step-title" className="flex flex-col gap-5 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
-      <h2 id="import-step-title" ref={headingRef} tabIndex={-1} className="text-h2 text-fg focus:outline-none">
+    <section aria-labelledby={`${uid}-import-step-title`} className="flex flex-col gap-5 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+      <h2 id={`${uid}-import-step-title`} ref={headingRef} tabIndex={-1} className="text-h2 text-fg focus:outline-none">
         {title}
       </h2>
       {children}
@@ -405,6 +406,7 @@ function ResultStep({
   onBack: () => void;
   onReload: () => void;
 }) {
+  const uid = useId();
   const { api } = useSession();
   const start = useJobAction((id, key) => startImport(api, id, key), onJob, onReload);
   const [rollbackOpen, setRollbackOpen] = useState(false);
@@ -478,8 +480,8 @@ function ResultStep({
       ) : null}
 
       {r ? (
-        <section aria-labelledby="rollback-summary" className="flex flex-col gap-3 rounded-md border border-line p-3">
-          <h3 id="rollback-summary" className="text-h3 text-fg">
+        <section aria-labelledby={`${uid}-rollback-summary`} className="flex flex-col gap-3 rounded-md border border-line p-3">
+          <h3 id={`${uid}-rollback-summary`} className="text-h3 text-fg">
             Geri alma
           </h3>
           {job.status === "rolling_back" ? (

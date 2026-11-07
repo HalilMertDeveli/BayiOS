@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, useId } from "react";
 import { Archive, Pencil, Plus, Search, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -178,6 +178,7 @@ const KNOWN = new Set(["name"]);
  * receives the saved brand.
  */
 export function BrandDialog({ brand, onClose, onSaved }: { brand: Brand | null; onClose: () => void; onSaved: (brand: Brand) => void }) {
+  const uid = useId();
   const { api } = useSession();
   const { toast } = useToast();
   const [name, setName] = useState(brand?.name ?? "");
@@ -209,7 +210,7 @@ export function BrandDialog({ brand, onClose, onSaved }: { brand: Brand | null; 
     }
   };
 
-  const formId = "brand-form";
+  const formId = `${useId()}-brand-form`;
   return (
     <Dialog
       open
@@ -237,7 +238,7 @@ export function BrandDialog({ brand, onClose, onSaved }: { brand: Brand | null; 
           </FormAlert>
         ) : null}
         <Input
-          id="brand-name"
+          id={`${uid}-brand-name`}
           label="Marka adı"
           required
           maxLength={BRAND_NAME_MAX}

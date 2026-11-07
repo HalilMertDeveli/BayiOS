@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronRight, CircleAlert, ClipboardList, Lock, RefreshCw, Truck } from "lucide-react";
@@ -80,6 +80,7 @@ export function TaskList() {
 }
 
 function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: FulfilmentPermissions }) {
+  const uid = useId();
   const { api, state } = useSession();
   const { toast } = useToast();
   const router = useRouter();
@@ -202,9 +203,9 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
               key={t}
               type="button"
               role="tab"
-              id={`tab-${t}`}
+              id={`${uid}-tab-${t}`}
               aria-selected={tab === t}
-              aria-controls="task-panel"
+              aria-controls={`${uid}-task-panel`}
               onClick={() => {
                 setTab(t);
                 setNotice(null);
@@ -220,7 +221,7 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
         </div>
       ) : null}
 
-      <div id="task-panel" role={tabs.length > 1 ? "tabpanel" : undefined} aria-labelledby={tabs.length > 1 ? `tab-${tab}` : undefined} className="flex flex-col gap-3">
+      <div id={`${uid}-task-panel`} role={tabs.length > 1 ? "tabpanel" : undefined} aria-labelledby={tabs.length > 1 ? `${uid}-tab-${tab}` : undefined} className="flex flex-col gap-3">
         {tab === "all" ? (
           <Select
             label="Durum"

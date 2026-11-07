@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useId } from "react";
 import Link from "next/link";
 import { CircleAlert, Plus, Search, SearchX, Users, UsersRound } from "lucide-react";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -42,6 +42,7 @@ type MoreState = { status: "idle" } | { status: "loading" } | { status: "error";
  * API returns them: 11-digit (TCKN) numbers arrive masked in lists (data-policy §2).
  */
 export function CustomerList() {
+  const uid = useId();
   const { api, access } = useSession();
   const permissions = customerPermissions(access);
   // Filters change through navigate / setFilter only: they build on the URL just requested, not the stale one (#152).
@@ -229,9 +230,9 @@ export function CustomerList() {
         ) : null}
       </section>
 
-      <section aria-labelledby="customer-results" className="flex flex-col gap-3">
+      <section aria-labelledby={`${uid}-customer-results`} className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="customer-results" className="text-h3 text-fg">
+          <h2 id={`${uid}-customer-results`} className="text-h3 text-fg">
             Müşteri listesi
           </h2>
           <p role="status" className="text-caption text-fg-muted">

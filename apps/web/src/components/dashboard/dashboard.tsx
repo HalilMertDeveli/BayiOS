@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Bot, ChevronRight, CircleAlert, ClipboardCheck, ClipboardList, LayoutDashboard, PackageMinus, ShoppingCart, Sparkles, type LucideIcon } from "lucide-react";
 import { OrderStatus } from "@/components/orders/order-badges";
@@ -117,7 +117,8 @@ function Tile<T>({
   retry: () => void;
   children: (data: T) => ReactNode;
 }) {
-  const headingId = `tile-${id}`;
+  // Unique per instance: a hidden (kept-alive) previous route may hold the same tile (a11y audit A-1).
+  const headingId = `${useId()}-tile-${id}`;
   return (
     <section aria-labelledby={headingId} aria-busy={state.status === "loading" || undefined} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
       <h2 id={headingId} className="flex items-center gap-2 text-h3 text-fg">

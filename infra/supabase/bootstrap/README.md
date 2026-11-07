@@ -62,9 +62,19 @@ Gerekenler: Docker (yerel `psql` yoksa `postgres:17` imajı kullanılır), proje
 ## 3. Auth ayarları kontrol listesi (Dashboard → Authentication) — ortam başına
 - [ ] **Confirm email: AÇIK** (AF-01: doğrulanmamış e-posta ile tenant oluşturulmaz).
 - [ ] **Secure email change: AÇIK** (davet kabulü buna dayanır: `auth.users.email` yalnızca yeni adres doğrulanınca değişir).
-- [ ] Secure password change: AÇIK (önerilir).
-- [ ] **Minimum password length ≥ 8**; Password requirements: harf + rakam (web 8+ harf+rakam ister; RC-1 R-13).
-- [ ] Anonymous sign-ins: KAPALI · Manual linking: KAPALI · Signups: AÇIK (self-servis kayıt).
+- [ ] **Secure password change: AÇIK** (güvenlik denetimi 2026-11 L-3: çalınan bir oturum, yakın zamanda giriş/yeniden
+      kimlik doğrulama olmadan parolayı değiştiremez). Yerel yığında da açık (`infra/supabase/local/supabase/config.toml`).
+- [ ] **Minimum password length ≥ 8**; **Password requirements: `letters_digits`** (harf + rakam; web 8+ harf+rakam ister;
+      RC-1 R-13, denetim L-3). Yerel yığında da aynı.
+- [ ] Anonymous sign-ins: KAPALI · Manual linking: KAPALI · Signups: AÇIK (self-servis kayıt). API anonim oturumları
+      (`is_anonymous: true`) bu ayardan bağımsız olarak her uçta 401 ile reddeder (denetim L-2).
+- [ ] **CAPTCHA (Cloudflare Turnstile)** — kayıt/giriş/parola sıfırlama kötüye kullanımına karşı önerilir (denetim L-3,
+      tehdit modeli §6.5). **Önce web entegrasyonu gerekir** (ayrı iş): Supabase'te CAPTCHA açılınca `signUp`/`signIn`/
+      `resetPasswordForEmail` çağrıları `captchaToken` göndermek zorundadır ve web CSP'sine (`apps/web/next.config.ts`)
+      `https://challenges.cloudflare.com` (`script-src`, `frame-src`) eklenmelidir. Web desteklemeden açılırsa **kimse giriş
+      yapamaz**. Gizli anahtar yalnızca Supabase Dashboard'da durur; site anahtarı web'e `NEXT_PUBLIC_` ile gider.
+- [ ] Rate Limits: e-posta gönderimi (`Email sent`) ve doğrulama/OTP sınırları Supabase varsayılanlarında veya daha sıkı;
+      onay/sıfırlama e-postaları arası en az 60 sn (yerel yığındaki `max_frequency = "1s"` yalnızca E2E hızı içindir).
 - [ ] URL Configuration: **Site URL** = ortamın web adresi; **Redirect URLs** yalnızca o ortamın
       `https://<web-host>/auth/callback` adresleri (preview için Vercel preview alias'ı; geniş joker kullanmayın).
 - [ ] **JWT signing keys: asimetrik (ES256)**. Settings → JWT Keys → legacy secret'ı geçirin, ES256 standby anahtar

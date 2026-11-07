@@ -104,7 +104,7 @@ internal sealed class Order : ITenantOwned
     public Guid TenantId { get; private init; }
 
     /// <summary>Tenant-unique, gapless per prefix and year: <c>{prefix}-2026-000123</c>, prefix from the tenant setting (PRD ORD-14).</summary>
-    public string Number { get; private init; } = string.Empty;
+    public string Number { get; private set; } = string.Empty;
 
     /// <summary>→ customers.customers (no cross-module FK).</summary>
     public Guid CustomerId { get; set; }
@@ -207,9 +207,24 @@ internal sealed class Order : ITenantOwned
         GrandTotal = totals.GrandTotal;
     }
 
+    /// <summary>
+    /// Sets the number once, right before the new order is saved: the gapless counter row stays locked from this
+    /// point until commit, so it is taken as late as possible (security audit 2026-11 M-3).
+    /// </summary>
+    public void AssignNumber(string number)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(number);
+        if (Number.Length > 0)
+        {
+            throw new InvalidOperationException("The order already has a number.");
+        }
+
+        Number = number;
+    }
+
+    /// <summary>A new draft without a number; <see cref="AssignNumber"/> must be called before it is saved.</summary>
     public static Order Create(
         Guid tenantId,
-        string number,
         Guid customerId,
         Guid warehouseId,
         string source,
@@ -221,7 +236,6 @@ internal sealed class Order : ITenantOwned
         {
             Id = Guid.CreateVersion7(),
             TenantId = tenantId,
-            Number = number,
             CustomerId = customerId,
             WarehouseId = warehouseId,
             Source = source,

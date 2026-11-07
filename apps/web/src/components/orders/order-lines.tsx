@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { PackageCheck, TriangleAlert } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
@@ -104,10 +105,11 @@ export function OrderLinesTable({ detail, showFulfilment }: { detail: OrderDetai
 
 /** Totals and the VAT breakdown exactly as the API computed them (OrderMath, PRD ORD-04). */
 export function OrderTotalsPanel({ totals, currency }: { totals: OrderTotals; currency: string }) {
+  const uid = useId();
   const money = (v: OrderTotals["subtotal"]) => formatMoney(v, currency) ?? "—";
   return (
-    <section aria-labelledby="order-totals" className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
-      <h2 id="order-totals" className="text-h3 text-fg">
+    <section aria-labelledby={`${uid}-order-totals`} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+      <h2 id={`${uid}-order-totals`} className="text-h3 text-fg">
         Toplamlar <span className="text-caption font-normal text-fg-muted">({vatModeLabel(totals.pricesIncludeTax)} fiyatlar)</span>
       </h2>
       {totals.hasUnpricedLines ? (
@@ -161,11 +163,12 @@ export function ShortagesPanel({
   /** submit: the tenant needs no approval, the submit tried to approve at once and the order stayed a draft (#92). */
   action?: "approve" | "submit";
 }) {
+  const uid = useId();
   const submit = action === "submit";
   const lineOf = (variantId: string) => lines.find((l) => l.variantId === variantId);
   return (
-    <section aria-labelledby="order-shortages" className="flex flex-col gap-3 rounded-lg border border-danger-border bg-danger-bg p-4 text-danger-fg">
-      <h2 id="order-shortages" tabIndex={-1} className="flex items-center gap-2 text-h3">
+    <section aria-labelledby={`${uid}-order-shortages`} className="flex flex-col gap-3 rounded-lg border border-danger-border bg-danger-bg p-4 text-danger-fg">
+      <h2 id={`${uid}-order-shortages`} tabIndex={-1} className="flex items-center gap-2 text-h3">
         <TriangleAlert className="size-5" aria-hidden="true" />
         {submit ? "Gönderilemedi: stok yetersiz" : "Onaylanamadı: stok yetersiz"}
       </h2>
@@ -204,6 +207,7 @@ export function ShortagesPanel({
  * short-close move to the Warehouse picking/packing/shipment APIs (JOB 10) and are not done from this screen.
  */
 export function FulfilmentSection({ detail }: { detail: OrderDetail }) {
+  const uid = useId();
   const columns: TableColumn<OrderLine>[] = [
     { key: "item", header: "Ürün", cell: (l) => <span className="font-mono text-caption">{l.sku}</span> },
     { key: "qty", header: "Sipariş", numeric: true, cell: (l) => formatQuantity(l.quantity) },
@@ -214,8 +218,8 @@ export function FulfilmentSection({ detail }: { detail: OrderDetail }) {
   ];
   const dateTime = new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Istanbul" });
   return (
-    <section aria-labelledby="order-fulfilment" className="flex flex-col gap-3">
-      <h2 id="order-fulfilment" className="text-h3 text-fg">
+    <section aria-labelledby={`${uid}-order-fulfilment`} className="flex flex-col gap-3">
+      <h2 id={`${uid}-order-fulfilment`} className="text-h3 text-fg">
         Depo ve sevkiyat
       </h2>
       {detail.order.hasShortage ? (

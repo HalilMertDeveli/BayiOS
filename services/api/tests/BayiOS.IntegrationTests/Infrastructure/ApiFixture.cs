@@ -276,6 +276,10 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         // queue-lag "degraded" state here; ReadinessTests / QueueLagTests set the thresholds they exercise.
         builder.UseSetting("Health:QueueLagDegradedAfter", "3650.00:00:00");
         builder.UseSetting("Health:QueueLagUnhealthyAfter", "00:00:00");
+        // One test user may do hundreds of calls a second here. The limiter stays ON (same code path) with a budget no
+        // test reaches; Security/RateLimitingTests derive hosts with the real, small limits.
+        builder.UseSetting("RateLimiting:ReadsPerMinute", "1000000");
+        builder.UseSetting("RateLimiting:WritesPerMinute", "1000000");
         builder.ConfigureTestServices(services =>
             services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
                 options.BackchannelHttpHandler = new TestJwksHandler()));

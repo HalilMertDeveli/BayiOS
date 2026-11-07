@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { Bot } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, type TableColumn } from "@/components/ui/table";
@@ -25,6 +26,7 @@ export function AiUsageReportView() {
 }
 
 function AiUsageReportBody() {
+  const uid = useId();
   const { api } = useSession();
   const { today, range, rangeError, setRange } = useReportUrl();
   const key = rangeError ? null : JSON.stringify(range);
@@ -81,7 +83,7 @@ function AiUsageReportBody() {
               points={fillDays(listDays(report), report.days.map((d) => ({ day: d.day, value: Number(d.parseRequests) })))}
             />
           ) : null}
-          <ReportSection id="ai-by-day" title="Günlük döküm">
+          <ReportSection id={`${uid}-ai-by-day`} title="Günlük döküm">
             <Table caption="Günlük AI kullanımı" columns={columns} rows={report?.days ?? []} getRowId={(r) => r.day} loading={!report} loadingRows={3} maxHeight="28rem" density="compact" />
           </ReportSection>
         </>

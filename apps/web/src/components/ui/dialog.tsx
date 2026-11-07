@@ -80,8 +80,9 @@ export function Dialog({
       ref={ref}
       role={role === "alertdialog" ? "alertdialog" : undefined}
       aria-modal="true"
-      aria-labelledby={titleId}
-      aria-describedby={description ? descriptionId : undefined}
+      // Only while open: the title/description are not rendered when closed (no dangling id references).
+      aria-labelledby={open ? titleId : undefined}
+      aria-describedby={open && description ? descriptionId : undefined}
       onClick={(event) => {
         if (dismissOnBackdrop && event.target === event.currentTarget) onClose();
       }}

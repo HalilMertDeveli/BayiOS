@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, useId } from "react";
 import { CircleAlert, Lock, RotateCcw, Save, X } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ const FIELD_KEYS = ["requireOrderApproval", "orderNumberPrefix", "negativeStockP
  * and price display. GET/PATCH /tenant/settings (tenant.settings.manage) with If-Match; a 412 asks to reload.
  */
 export function OrderSettings() {
+  const uid = useId();
   const { api, access } = useSession();
   const canManage = access.can("tenant.settings.manage");
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
@@ -62,9 +63,9 @@ export function OrderSettings() {
   };
 
   return (
-    <section aria-labelledby="order-settings" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <section aria-labelledby={`${uid}-order-settings`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
       <div className="flex flex-col gap-1">
-        <h2 id="order-settings" className="text-h3 text-fg">
+        <h2 id={`${uid}-order-settings`} className="text-h3 text-fg">
           Sipariş ayarları
         </h2>
         <p className="text-caption text-fg-muted">Sipariş onayı, sipariş numaraları, stok yetmediğinde ne olacağı ve KDV varsayılanları.</p>

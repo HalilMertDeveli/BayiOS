@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { ArrowLeft, Calculator, X } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
@@ -32,6 +32,7 @@ let lineCounter = 0;
  * price is shown as "Fiyat yok" — never as 0. Read-only and side-effect free.
  */
 export function PriceQuotePanel() {
+  const uid = useId();
   const { api } = useSession();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [date, setDate] = useState("");
@@ -174,8 +175,8 @@ export function PriceQuotePanel() {
       </form>
 
       {result ? (
-        <section aria-labelledby="quote-result" className="flex flex-col gap-3">
-          <h2 id="quote-result" ref={resultRef} tabIndex={-1} className="text-h3 text-fg">
+        <section aria-labelledby={`${uid}-quote-result`} className="flex flex-col gap-3">
+          <h2 id={`${uid}-quote-result`} ref={resultRef} tabIndex={-1} className="text-h3 text-fg">
             Sonuç — {result.currency}, {new Intl.DateTimeFormat("tr-TR", { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${result.date}T00:00:00Z`))}
           </h2>
           {result.lines.some((l) => l.status !== "priced") ? (

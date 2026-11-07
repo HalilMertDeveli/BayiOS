@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { Archive, ArrowLeft, CircleAlert, ListPlus, Pencil, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -314,7 +314,7 @@ function CustomFieldDialog({
     }
   };
 
-  const formId = "custom-field-form";
+  const formId = `${useId()}-custom-field-form`;
   return (
     <Dialog
       open

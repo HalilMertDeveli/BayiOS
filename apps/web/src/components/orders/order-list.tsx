@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useId } from "react";
 import Link from "next/link";
 import { CircleAlert, Lock, MessageSquareText, Plus, Rows3, Rows4, Search, SearchX, ShoppingCart } from "lucide-react";
 import { CustomerPicker } from "@/components/customers/customer-picker";
@@ -101,6 +101,7 @@ function OrderListView({
   /** orders.read limited to task-linked orders without prices (warehouse staff). */
   taskLinkedOnly: boolean;
 }) {
+  const uid = useId();
   // Filters change through navigate / setFilter only: a second change before the URL has caught up builds on the URL
   // just requested, not on the stale query; otherwise it silently brings the cleared filters back (#136, #152).
   const { query, latest, navigate } = useUrlQuery(parseOrderQuery, toOrderSearchString);
@@ -319,9 +320,9 @@ function OrderListView({
         ) : null}
       </section>
 
-      <section aria-labelledby="order-results" className="flex flex-col gap-3">
+      <section aria-labelledby={`${uid}-order-results`} className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="order-results" className="text-h3 text-fg">
+          <h2 id={`${uid}-order-results`} className="text-h3 text-fg">
             Sipariş listesi
           </h2>
           <div className="flex items-center gap-3">

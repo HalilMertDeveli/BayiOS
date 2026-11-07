@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Archive, ArchiveRestore, ArrowLeft, CircleAlert, RotateCcw, ShieldAlert } from "lucide-react";
@@ -163,6 +163,7 @@ function CustomerForm({
   /** A new customer was created: the page starts the next visit from an empty form (#96). */
   onCreated?: () => void;
 }) {
+  const uid = useId();
   const { api, access } = useSession();
   const permissions = customerPermissions(access);
   const router = useRouter();
@@ -349,8 +350,8 @@ function CustomerForm({
 
       <form noValidate onSubmit={submit} aria-label={customer ? "Müşteriyi düzenle" : "Yeni müşteri"} className="flex flex-col gap-4">
         <fieldset disabled={readOnly} className="flex flex-col gap-4">
-          <section aria-labelledby="sec-firm" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
-            <h2 id="sec-firm" className="text-h3 text-fg">
+          <section aria-labelledby={`${uid}-sec-firm`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+            <h2 id={`${uid}-sec-firm`} className="text-h3 text-fg">
               Firma bilgileri
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -380,8 +381,8 @@ function CustomerForm({
             </div>
           </section>
 
-          <section aria-labelledby="sec-contact" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
-            <h2 id="sec-contact" className="text-h3 text-fg">
+          <section aria-labelledby={`${uid}-sec-contact`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+            <h2 id={`${uid}-sec-contact`} className="text-h3 text-fg">
               İletişim
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -398,8 +399,8 @@ function CustomerForm({
             />
           </section>
 
-          <section aria-labelledby="sec-commercial" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
-            <h2 id="sec-commercial" className="text-h3 text-fg">
+          <section aria-labelledby={`${uid}-sec-commercial`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+            <h2 id={`${uid}-sec-commercial`} className="text-h3 text-fg">
               Ticari koşullar
             </h2>
             {!permissions.assignPriceLists ? (
@@ -466,8 +467,8 @@ function CustomerForm({
             ) : null}
           </section>
 
-          <section aria-labelledby="sec-notes" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
-            <h2 id="sec-notes" className="text-h3 text-fg">
+          <section aria-labelledby={`${uid}-sec-notes`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+            <h2 id={`${uid}-sec-notes`} className="text-h3 text-fg">
               Notlar
             </h2>
             <Textarea label="İç not" rows={3} maxLength={NOTES_MAX} value={values.notes} error={errors.notes} hint="Yalnızca ekibiniz görür." onChange={(e) => set({ notes: e.target.value })} />
@@ -489,8 +490,8 @@ function CustomerForm({
       {loaded && !anonymized ? <AddressSection customer={loaded.customer} initial={loaded.addresses} canEdit={permissions.write && !archived} onChange={onAddresses} /> : null}
 
       {loaded && permissions.anonymize && !anonymized ? (
-        <section aria-labelledby="sec-kvkk" className="flex flex-col gap-3 rounded-lg border border-danger-border bg-card p-4 shadow-e1 sm:p-6">
-          <h2 id="sec-kvkk" className="flex items-center gap-2 text-h3 text-fg">
+        <section aria-labelledby={`${uid}-sec-kvkk`} className="flex flex-col gap-3 rounded-lg border border-danger-border bg-card p-4 shadow-e1 sm:p-6">
+          <h2 id={`${uid}-sec-kvkk`} className="flex items-center gap-2 text-h3 text-fg">
             <ShieldAlert className="size-5 text-danger-fg" aria-hidden="true" />
             KVKK: kişisel verileri sil
           </h2>

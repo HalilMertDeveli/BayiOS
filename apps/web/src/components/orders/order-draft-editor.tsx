@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, useId } from "react";
 import { useRouter } from "next/navigation";
 import { RotateCcw, Save, X } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
@@ -76,6 +76,7 @@ export function OrderDraftEditor({
   /** New draft created (the page resets the form when it is left, see useResetAfterCreate). */
   onCreated?: () => void;
 }) {
+  const uid = useId();
   const { api, access } = useSession();
   const showAddresses = access.canSome("customers.read");
   const router = useRouter();
@@ -219,12 +220,12 @@ export function OrderDraftEditor({
         </FormAlert>
       ) : null}
 
-      <section aria-labelledby="draft-header" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
-        <h2 id="draft-header" className="text-h3 text-fg">
+      <section aria-labelledby={`${uid}-draft-header`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+        <h2 id={`${uid}-draft-header`} className="text-h3 text-fg">
           Müşteri ve teslimat
         </h2>
         <CustomerPicker
-          id="f-customerId"
+          id={`${uid}-f-customerId`}
           label="Müşteri"
           pickedLabel="Müşteri"
           hint="Ad veya kodun bir kısmı; tam vergi no / telefon / WhatsApp. Yalnızca aktif müşteriler."
@@ -272,8 +273,8 @@ export function OrderDraftEditor({
         <Textarea label="Not" value={values.notes} error={errors.notes} maxLength={2000} onChange={(e) => set({ notes: e.target.value })} />
       </section>
 
-      <section aria-labelledby="draft-lines" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
-        <h2 id="draft-lines" className="text-h3 text-fg">
+      <section aria-labelledby={`${uid}-draft-lines`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+        <h2 id={`${uid}-draft-lines`} className="text-h3 text-fg">
           Satırlar
         </h2>
         <VariantScanner

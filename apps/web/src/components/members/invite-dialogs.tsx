@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, useId } from "react";
 import { Check, Copy, RefreshCw, Send } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ export function toIssuedLink(issued: IssuedInvitation, renewed: boolean): Issued
 
 /** E-mail + role → POST /members/invitations. 409 already_pending offers a new link for the existing invitation. */
 export function InviteDialog({ roles, onClose, onIssued }: { roles: readonly Role[]; onClose: () => void; onIssued: (link: IssuedLink) => void }) {
+  const uid = useId();
   const { api } = useSession();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<string>(roles.includes("sales") ? "sales" : (roles[roles.length - 1] ?? ""));
@@ -99,13 +100,13 @@ export function InviteDialog({ roles, onClose, onIssued }: { roles: readonly Rol
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Vazgeç
           </Button>
-          <Button type="submit" form="invite-form" loading={busy} icon={<Send className="size-4" />}>
+          <Button type="submit" form={`${uid}-invite-form`} loading={busy} icon={<Send className="size-4" />}>
             Davet bağlantısı oluştur
           </Button>
         </>
       }
     >
-      <form id="invite-form" noValidate onSubmit={submit} aria-label="Davet formu" className="flex flex-col gap-4">
+      <form id={`${uid}-invite-form`} noValidate onSubmit={submit} aria-label="Davet formu" className="flex flex-col gap-4">
         {formError ? (
           <FormAlert
             ref={alertRef}

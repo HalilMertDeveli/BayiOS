@@ -75,6 +75,12 @@ internal static class AuthenticationSetup
                         {
                             context.Fail("Token has no valid 'sub' claim.");
                         }
+                        else if (IsAnonymousSession(context.Principal))
+                        {
+                            // Supabase anonymous sign-in (security audit 2026-11 L-2): no e-mail, no verification — not a
+                            // BayiOS identity. Rejected on every endpoint, whatever the project's Auth setting says.
+                            context.Fail("Anonymous sessions are not accepted.");
+                        }
 
                         return Task.CompletedTask;
                     },
@@ -117,6 +123,13 @@ internal static class AuthenticationSetup
 
         return services;
     }
+
+    public const string AnonymousClaim = "is_anonymous";
+
+    /// <summary>Supabase marks anonymous users with <c>is_anonymous: true</c>; a malformed value is treated as anonymous.</summary>
+    internal static bool IsAnonymousSession(System.Security.Claims.ClaimsPrincipal? principal) =>
+        principal?.FindFirst(AnonymousClaim)?.Value is { } value
+        && !(bool.TryParse(value, out var anonymous) && !anonymous);
 
     private static AuthSettings? TryGet(IOptions<AuthSettings> settings)
     {
