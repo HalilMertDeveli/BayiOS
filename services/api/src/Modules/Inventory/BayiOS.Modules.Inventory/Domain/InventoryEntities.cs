@@ -126,3 +126,35 @@ internal sealed class StockReservation : ITenantOwned
 
     public Guid? UpdatedBy { get; private set; }
 }
+
+/// <summary>
+/// inventory.stock_thresholds — minimum stock of a variant (PRD CAT-12, REP-03). <see cref="WarehouseId"/> null is the
+/// tenant-wide default of the variant; a row with a warehouse overrides the default in that warehouse. Configuration,
+/// not stock: changing it writes no movement. Written by <c>ThresholdStore</c> SQL (version + 1 per change).
+/// </summary>
+internal sealed class StockThreshold : ITenantOwned
+{
+    private StockThreshold()
+    {
+    }
+
+    public Guid Id { get; private set; }
+
+    public Guid TenantId { get; private set; }
+
+    public Guid VariantId { get; private set; }
+
+    public Guid? WarehouseId { get; private set; }
+
+    public decimal MinQuantity { get; private set; }
+
+    public long Version { get; private set; }
+
+    public DateTimeOffset CreatedAt { get; private set; }
+
+    public Guid? CreatedBy { get; private set; }
+
+    public DateTimeOffset? UpdatedAt { get; private set; }
+
+    public Guid? UpdatedBy { get; private set; }
+}

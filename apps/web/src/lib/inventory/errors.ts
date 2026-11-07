@@ -19,6 +19,8 @@ const KNOWN: [RegExp, string][] = [
   [/^Code must be 1–(\d+) characters without whitespace\.$/, "Boşluk içermeyen bir kod girin."],
   [/^Must be between 0 and 1000000\.$/, "0 ile 1.000.000 arasında bir sayı girin."],
   [/^Only true is accepted/, "Varsayılan depo kaldırılamaz; bunun yerine başka bir depoyu varsayılan yapın."],
+  [/^Must be between 0 and (\d+) with at most 3 decimals\.$/, "0 veya daha büyük, en fazla 3 ondalıklı bir minimum stok girin."],
+  [/^The same variant and warehouse appear more than once\.$/, "Aynı ürün ve depo için birden fazla eşik girilmiş."],
 ];
 
 export function translateInventoryFieldMessage(message: string | undefined): string {

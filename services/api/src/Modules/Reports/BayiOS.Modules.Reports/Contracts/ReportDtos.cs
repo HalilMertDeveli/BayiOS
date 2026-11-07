@@ -2,14 +2,43 @@ namespace BayiOS.Modules.Reports.Contracts;
 
 public sealed record ReportPageInfo(string? NextCursor, bool HasMore, int Limit);
 
-/// <summary>REP-03: an active variant whose available stock is at or below the threshold. No prices.</summary>
+/// <summary>REP-03: an active variant whose available stock is at or below its minimum (or the explicit threshold). No prices.</summary>
 /// <param name="Id">Variant id.</param>
 /// <param name="Available">On hand − reserved (may be negative under the warn/allow stock policy).</param>
-public sealed record CriticalStockItem(Guid Id, Guid ProductId, string Sku, string Name, string Unit, decimal OnHand, decimal Reserved, decimal Available);
+/// <param name="MinQuantity">
+/// The variant's effective minimum stock in the report's scope (#137; warehouse override, else default; all
+/// warehouses: default, else Σ overrides). Null when it has none — such rows appear only with an explicit threshold
+/// or with <c>includeOutOfStock</c> (available ≤ 0).
+/// </param>
+public sealed record CriticalStockItem(
+    Guid Id, Guid ProductId, string Sku, string Name, string Unit, decimal OnHand, decimal Reserved, decimal Available, decimal? MinQuantity);
 
-/// <param name="Threshold">The caller's threshold (variants carry no minimum stock yet).</param>
+/// <summary>Which rule selected the rows of a critical-stock report.</summary>
+public static class CriticalStockModes
+{
+    /// <summary>Default: each variant against its own minimum stock threshold (available ≤ minimum).</summary>
+    public const string Thresholds = "thresholds";
+
+    /// <summary>The request named <c>threshold</c>: every active variant with available ≤ that value (pre-#137 behaviour).</summary>
+    public const string Fixed = "fixed";
+}
+
+/// <param name="Mode"><c>thresholds</c> (default) or <c>fixed</c> (an explicit <c>threshold</c> was given).</param>
+/// <param name="Threshold">The explicit threshold in <c>fixed</c> mode; null in <c>thresholds</c> mode.</param>
 /// <param name="WarehouseId">Null = every warehouse summed.</param>
-public sealed record CriticalStockReportResponse(decimal Threshold, Guid? WarehouseId, IReadOnlyList<CriticalStockItem> Items, ReportPageInfo Page);
+/// <param name="IncludeOutOfStock">Thresholds mode: variants without a minimum are listed too when available ≤ 0.</param>
+/// <param name="ThresholdsConfigured">
+/// Any variant has a minimum in the scope. False with an empty thresholds-mode report means "nothing is configured",
+/// not "nothing is critical".
+/// </param>
+public sealed record CriticalStockReportResponse(
+    string Mode,
+    decimal? Threshold,
+    Guid? WarehouseId,
+    bool IncludeOutOfStock,
+    bool ThresholdsConfigured,
+    IReadOnlyList<CriticalStockItem> Items,
+    ReportPageInfo Page);
 
 /// <param name="GrandTotal">Null when the caller may not see sell prices (prices.read.sell).</param>
 public sealed record OrderStatusTotal(string Status, string Currency, long OrderCount, decimal? GrandTotal);
@@ -75,6 +104,8 @@ public sealed record AiUsageReportResponse(DateOnly From, DateOnly To, AiUsageTo
 /// <param name="To">Last day (inclusive); default: today, or 29 days after <paramref name="From"/>.</param>
 /// <param name="Statuses">Orders report: order statuses to include (empty = all).</param>
 /// <param name="Limit">Top products: how many (1–100, default 20).</param>
+/// <param name="Threshold">Critical stock: explicit threshold (fixed mode); omit to use each variant's minimum stock.</param>
+/// <param name="IncludeOutOfStock">Critical stock (thresholds mode): also variants without a minimum whose available ≤ 0.</param>
 public sealed record ReportExportRequest(
     string? Format = null,
     DateOnly? From = null,
@@ -82,4 +113,5 @@ public sealed record ReportExportRequest(
     Guid? WarehouseId = null,
     decimal? Threshold = null,
     IReadOnlyList<string>? Statuses = null,
-    int? Limit = null);
+    int? Limit = null,
+    bool? IncludeOutOfStock = null);

@@ -136,6 +136,7 @@ internal sealed class ReportExportService(
             (_, _, _, { }, _, _) when kind != ReportKinds.CriticalStock => "threshold",
             (_, _, _, _, { Count: > 0 }, _) when kind != ReportKinds.Orders => "statuses",
             (_, _, _, _, _, { }) when kind != ReportKinds.TopProducts => "limit",
+            _ when request.IncludeOutOfStock is not null && kind != ReportKinds.CriticalStock => "includeOutOfStock",
             _ => null,
         };
     }
@@ -149,7 +150,9 @@ internal sealed class ReportExportService(
             case ReportKinds.CriticalStock:
                 {
                     var result = await reports.CriticalStockAsync(
-                        new CriticalStockQuery(request.Threshold, request.WarehouseId, ReportService.MaxCriticalPageSize, null), export: true, cancellationToken);
+                        new CriticalStockQuery(request.Threshold, request.WarehouseId, ReportService.MaxCriticalPageSize, null, request.IncludeOutOfStock ?? false),
+                        export: true,
+                        cancellationToken);
                     return result.Error ?? (AppResult<ReportTable>)ReportTables.CriticalStock(result.Value!, stamp);
                 }
 
@@ -210,9 +213,12 @@ internal static class ReportTables
             new("Kullanılabilir", ReportColumnType.Decimal),
             new("Eşik", ReportColumnType.Decimal),
         ]);
+
+        // "Eşik" = the value the row was compared with: the explicit threshold (fixed mode) or the variant's minimum
+        // stock (thresholds mode; empty for out-of-stock rows without a minimum).
         foreach (var item in report.Items)
         {
-            table.Add(item.Sku, item.Name, item.Unit, item.OnHand, item.Reserved, item.Available, report.Threshold);
+            table.Add(item.Sku, item.Name, item.Unit, item.OnHand, item.Reserved, item.Available, report.Threshold ?? item.MinQuantity);
         }
 
         return table;

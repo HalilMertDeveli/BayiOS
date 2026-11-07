@@ -6,6 +6,7 @@ using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace BayiOS.Modules.Inventory.Api;
@@ -56,8 +57,245 @@ internal static class InventoryEndpoints
             .ProducesRetryableConflict("inventory.busy")
             .ProducesStockProblems();
 
+        // Minimum stock thresholds (#137): read with inventory.read, managed with catalog.write (product data, PRD CAT-12).
+        group.MapGet("/thresholds", ListThresholds).WithName("Inventory_ListThresholds")
+            .WithSummary("Minimum stok eşikleri: variantId / variantIds (virgülle, en çok 100) / warehouseId filtresi; warehouseId boş satır = varyantın genel eşiği")
+            .RequirePermission(Permissions.InventoryRead);
+        group.MapGet("/thresholds/{id:guid}", GetThreshold).WithName("Inventory_GetThreshold")
+            .WithSummary("Tek minimum stok eşiği (ETag döner)")
+            .RequirePermission(Permissions.InventoryRead)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+        group.MapPost("/thresholds", SetThreshold).WithName("Inventory_SetThreshold")
+            .WithSummary("Varyant (+ depo) için minimum stok eşiğini oluşturur veya değiştirir (upsert, son yazan kazanır); depo boş = genel eşik, depo = o depoda geçerli istisna")
+            .RequirePermission(Permissions.CatalogWrite)
+            .RequireIdempotencyKey()
+            .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesRetryableConflict("inventory.busy");
+        group.MapPost("/thresholds/bulk", BulkThresholds).WithName("Inventory_BulkThresholds")
+            .WithSummary("Toplu eşik yazımı (en çok 500 satır, hepsi ya da hiçbiri): minQuantity ile ayarla, remove: true ile kaldır")
+            .RequirePermission(Permissions.CatalogWrite)
+            .RequireIdempotencyKey()
+            .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesRetryableConflict("inventory.busy");
+        group.MapPut("/thresholds/{id:guid}", UpdateThreshold).WithName("Inventory_UpdateThreshold")
+            .WithSummary("Eşiğin minimum miktarını değiştirir (If-Match zorunlu)")
+            .RequirePermission(Permissions.CatalogWrite)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status412PreconditionFailed)
+            .ProducesProblem(StatusCodes.Status428PreconditionRequired)
+            .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesRetryableConflict("inventory.busy");
+        group.MapDelete("/thresholds/{id:guid}", DeleteThreshold).WithName("Inventory_DeleteThreshold")
+            .WithSummary("Eşiği kaldırır (If-Match zorunlu)")
+            .RequirePermission(Permissions.CatalogWrite)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status412PreconditionFailed)
+            .ProducesProblem(StatusCodes.Status428PreconditionRequired)
+            .ProducesRetryableConflict("inventory.busy");
+
         return app;
     }
+
+    private const int MaxThresholdVariantIds = 100;
+
+    /// <param name="variantIds">Virgülle ayrılmış varyant kimlikleri (en çok 100).</param>
+    /// <param name="warehouseId">Yalnızca bu deponun istisnaları.</param>
+    private static async Task<Results<Ok<StockThresholdPageResponse>, ProblemHttpResult>> ListThresholds(
+        HttpRequest http,
+        InventoryQueries queries,
+        string? variantId,
+        string? variantIds,
+        string? warehouseId,
+        string? limit,
+        string? cursor,
+        CancellationToken cancellationToken)
+    {
+        if (RejectUnknownQuery(http, "variantId", "variantIds", "warehouseId", "limit", "cursor") is { } unknown)
+        {
+            return unknown;
+        }
+
+        if (!TryParseGuid(variantId, out var variant) || !TryParseGuid(warehouseId, out var warehouse))
+        {
+            return Malformed("variantId and warehouseId must be UUIDs");
+        }
+
+        var ids = new List<Guid>();
+        if (variant is { } single)
+        {
+            ids.Add(single);
+        }
+
+        if (!string.IsNullOrEmpty(variantIds))
+        {
+            foreach (var part in variantIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!Guid.TryParse(part, out var id))
+                {
+                    return Malformed("variantIds must be a comma-separated list of UUIDs");
+                }
+
+                ids.Add(id);
+            }
+        }
+
+        ids = [.. ids.Distinct()];
+        if (ids.Count > MaxThresholdVariantIds)
+        {
+            return Malformed($"At most {MaxThresholdVariantIds} variant ids are allowed");
+        }
+
+        if (ParsePaging(limit, cursor, InventoryQueries.ThresholdSort, out var pageSize, out var keyset) is { } pagingProblem)
+        {
+            return pagingProblem;
+        }
+
+        return TypedResults.Ok(await queries.ListThresholdsAsync(new ThresholdQuery(ids, warehouse, pageSize, keyset?.Id), cancellationToken));
+    }
+
+    private static async Task<Results<Ok<StockThresholdResponse>, ProblemHttpResult>> GetThreshold(
+        Guid id, InventoryQueries queries, HttpContext http, CancellationToken cancellationToken)
+    {
+        if (await queries.GetThresholdAsync(id, cancellationToken) is not { } threshold)
+        {
+            return TypedResults.Problem(ApiProblems.Create(StatusCodes.Status404NotFound, "resource.not_found", "Resource not found"));
+        }
+
+        http.Response.Headers.ETag = ETag(threshold.Version);
+        return TypedResults.Ok(threshold);
+    }
+
+    private static async Task<Results<Created<StockThresholdResponse>, Ok<StockThresholdResponse>, ProblemHttpResult>> SetThreshold(
+        SetStockThresholdRequest request, ThresholdService thresholds, HttpContext http, CancellationToken cancellationToken)
+    {
+        var errors = new Dictionary<string, string[]>();
+        Require(errors, "variantId", request.VariantId);
+        Require(errors, "minQuantity", request.MinQuantity);
+        if (errors.Count > 0)
+        {
+            return TypedResults.Problem(ApiProblems.Validation(errors));
+        }
+
+        var result = await thresholds.SetAsync(request.VariantId!.Value, request.WarehouseId, request.MinQuantity!.Value, cancellationToken);
+        if (result.Error is { } error)
+        {
+            return Problem(http, error);
+        }
+
+        var (threshold, created) = (result.Value!.Threshold, result.Value.Created);
+        http.Response.Headers.ETag = ETag(threshold.Version);
+        return created
+            ? TypedResults.Created($"/api/v1/inventory/thresholds/{threshold.Id}", threshold)
+            : TypedResults.Ok(threshold);
+    }
+
+    private static async Task<Results<Ok<BulkStockThresholdResponse>, ProblemHttpResult>> BulkThresholds(
+        BulkStockThresholdRequest request, ThresholdService thresholds, HttpContext http, CancellationToken cancellationToken)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var items = request.Items ?? [];
+        var changes = new List<ThresholdChange>();
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            if (item is null)
+            {
+                errors[$"items[{i}]"] = ["Required."];
+                continue;
+            }
+
+            Require(errors, $"items[{i}].variantId", item.VariantId);
+            var remove = item.Remove ?? false;
+            if (remove && item.MinQuantity is not null)
+            {
+                errors[$"items[{i}].minQuantity"] = ["Omit minQuantity when remove is true."];
+            }
+            else if (!remove)
+            {
+                Require(errors, $"items[{i}].minQuantity", item.MinQuantity);
+            }
+
+            if (item.VariantId is { } variantId)
+            {
+                changes.Add(new ThresholdChange(variantId, item.WarehouseId, remove ? null : item.MinQuantity));
+            }
+        }
+
+        if (items.Count == 0)
+        {
+            errors["items"] = [$"Between 1 and {ThresholdService.MaxBulkItems} items are required."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return TypedResults.Problem(ApiProblems.Validation(errors));
+        }
+
+        var result = await thresholds.BulkAsync(changes, single: false, cancellationToken);
+        return result.Error is { } error ? Problem(http, error) : TypedResults.Ok(result.Value);
+    }
+
+    private static async Task<Results<Ok<StockThresholdResponse>, ProblemHttpResult>> UpdateThreshold(
+        Guid id,
+        UpdateStockThresholdRequest request,
+        [FromHeader(Name = "If-Match")] string? ifMatch,
+        ThresholdService thresholds,
+        HttpContext http,
+        CancellationToken cancellationToken)
+    {
+        if (IfMatch(ifMatch, out var version) is { } precondition)
+        {
+            return precondition;
+        }
+
+        var result = await thresholds.UpdateAsync(id, request.MinQuantity, version, cancellationToken);
+        if (result.Error is { } error)
+        {
+            return Problem(http, error);
+        }
+
+        http.Response.Headers.ETag = ETag(result.Value!.Version);
+        return TypedResults.Ok(result.Value);
+    }
+
+    private static async Task<Results<NoContent, ProblemHttpResult>> DeleteThreshold(
+        Guid id,
+        [FromHeader(Name = "If-Match")] string? ifMatch,
+        ThresholdService thresholds,
+        HttpContext http,
+        CancellationToken cancellationToken)
+    {
+        if (IfMatch(ifMatch, out var version) is { } precondition)
+        {
+            return precondition;
+        }
+
+        var result = await thresholds.DeleteAsync(id, version, cancellationToken);
+        return result.Error is { } error ? Problem(http, error) : TypedResults.NoContent();
+    }
+
+    private static ProblemHttpResult? IfMatch(string? ifMatch, out long version)
+    {
+        version = 0;
+        if (string.IsNullOrWhiteSpace(ifMatch))
+        {
+            return TypedResults.Problem(ApiProblems.Create(
+                StatusCodes.Status428PreconditionRequired, "precondition.required", "If-Match header is required"));
+        }
+
+        var trimmed = ifMatch.Trim();
+        if (trimmed.StartsWith("W/", StringComparison.Ordinal))
+        {
+            trimmed = trimmed[2..];
+        }
+
+        return long.TryParse(trimmed.Trim('"'), NumberStyles.None, CultureInfo.InvariantCulture, out version)
+            ? null
+            : TypedResults.Problem(ApiProblems.Create(
+                StatusCodes.Status412PreconditionFailed, "concurrency.version_mismatch", "If-Match does not match the current version"));
+    }
+
+    private static string ETag(long version) => $"W/\"{version.ToString(CultureInfo.InvariantCulture)}\"";
 
     /// <param name="q">SKU, varyant adı veya ürün adı içinde geçen metin ya da tam barkod (en çok 100 karakter).</param>
     private static async Task<Results<Ok<BalancePageResponse>, ProblemHttpResult>> ListBalances(

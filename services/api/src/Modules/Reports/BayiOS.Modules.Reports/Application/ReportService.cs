@@ -4,8 +4,10 @@ using BayiOS.SharedKernel.Authorization;
 
 namespace BayiOS.Modules.Reports.Application;
 
+/// <param name="Threshold">Explicit threshold (fixed mode); null = each variant's minimum stock (#137).</param>
 /// <param name="AfterSku">Keyset position (decoded cursor); null = first page.</param>
-internal sealed record CriticalStockQuery(decimal? Threshold, Guid? WarehouseId, int Limit, string? AfterSku);
+/// <param name="IncludeOutOfStock">Thresholds mode only: variants without a minimum also count when available ≤ 0.</param>
+internal sealed record CriticalStockQuery(decimal? Threshold, Guid? WarehouseId, int Limit, string? AfterSku, bool IncludeOutOfStock = false);
 
 /// <param name="Statuses">Orders report only; empty = every status.</param>
 /// <param name="Limit">Top products only.</param>
@@ -63,10 +65,15 @@ internal sealed class ReportService(
             return denied;
         }
 
-        var threshold = query.Threshold ?? 0m;
-        if (threshold < 0m || threshold > MaxThreshold || decimal.Round(threshold, 3) != threshold)
+        var threshold = query.Threshold;
+        if (threshold is { } t && (t < 0m || t > MaxThreshold || decimal.Round(t, 3) != t))
         {
             return AppError.Validation("threshold", $"threshold must be between 0 and {MaxThreshold:0} with at most 3 decimals");
+        }
+
+        if (threshold is not null && query.IncludeOutOfStock)
+        {
+            return AppError.Validation("includeOutOfStock", "includeOutOfStock applies only without an explicit threshold");
         }
 
         if (await CheckWarehouseAsync(query.WarehouseId, cancellationToken) is { } missing)
@@ -74,30 +81,59 @@ internal sealed class ReportService(
             return missing;
         }
 
-        // Variants above the threshold are excluded in the catalog query; everything else (including variants with
-        // no balance row at all, i.e. never stocked) is critical.
-        var above = await inventory.VariantsAboveAsync(threshold, query.WarehouseId, cancellationToken);
+        // Candidate selection, evaluated in Inventory (no cross-module join):
+        //  fixed      — every active variant except those above the threshold (never-stocked variants count as 0);
+        //  thresholds — only variants at or below their own minimum; with includeOutOfStock every active variant
+        //               except those above their minimum (or above 0 when they have none).
+        var mode = threshold is null ? CriticalStockModes.Thresholds : CriticalStockModes.Fixed;
+        IReadOnlyList<Guid>? excluded = null;
+        IReadOnlyList<Guid>? included = null;
+        if (threshold is { } fixedThreshold)
+        {
+            excluded = await inventory.VariantsAboveAsync(fixedThreshold, query.WarehouseId, cancellationToken);
+        }
+        else if (query.IncludeOutOfStock)
+        {
+            excluded = await inventory.VariantsAboveMinimumOrZeroAsync(query.WarehouseId, cancellationToken);
+        }
+        else
+        {
+            included = await inventory.VariantsAtOrBelowMinimumAsync(query.WarehouseId, cancellationToken);
+        }
+
+        var configured = await inventory.AnyMinimumAsync(query.WarehouseId, cancellationToken);
         var items = new List<CriticalStockItem>();
         var after = query.AfterSku;
         var pageSize = export ? ExportPageSize : query.Limit;
-        bool hasMore;
+        var hasMore = false;
         do
         {
-            var variants = await catalog.ActiveVariantsAsync(above, after, pageSize + 1, cancellationToken);
+            if (included is { Count: 0 })
+            {
+                break;
+            }
+
+            var variants = included is not null
+                ? await catalog.ActiveVariantsInAsync(included, after, pageSize + 1, cancellationToken)
+                : await catalog.ActiveVariantsAsync(excluded!, after, pageSize + 1, cancellationToken);
             hasMore = variants.Count > pageSize;
             var page = variants.Take(pageSize).ToList();
-            var levels = (await inventory.LevelsAsync([.. page.Select(v => v.VariantId)], query.WarehouseId, cancellationToken))
-                .ToDictionary(l => l.VariantId);
+            var ids = page.Select(v => v.VariantId).ToList();
+            var levels = (await inventory.LevelsAsync(ids, query.WarehouseId, cancellationToken)).ToDictionary(l => l.VariantId);
+            var minimums = await inventory.MinimumsAsync(ids, query.WarehouseId, cancellationToken);
             foreach (var variant in page)
             {
                 var level = levels.GetValueOrDefault(variant.VariantId);
                 var onHand = level?.OnHand ?? 0m;
                 var reserved = level?.Reserved ?? 0m;
+                var available = onHand - reserved;
+                decimal? min = minimums.TryGetValue(variant.VariantId, out var m) ? m : null;
 
-                // Stock may have moved between the two reads (READ COMMITTED); never list a row that is not critical.
-                if (onHand - reserved <= threshold)
+                // Stock or thresholds may have changed between the reads (READ COMMITTED); never list a row that is
+                // not critical under the report's rule.
+                if (IsCritical(available, min, threshold, query.IncludeOutOfStock))
                 {
-                    items.Add(new CriticalStockItem(variant.VariantId, variant.ProductId, variant.Sku, variant.Name, variant.Unit, onHand, reserved, onHand - reserved));
+                    items.Add(new CriticalStockItem(variant.VariantId, variant.ProductId, variant.Sku, variant.Name, variant.Unit, onHand, reserved, available, min));
                 }
             }
 
@@ -110,8 +146,24 @@ internal sealed class ReportService(
         while (export && hasMore);
 
         var cursor = !export && hasMore && after is not null ? ReportCursor.Encode(after) : null;
-        return new CriticalStockReportResponse(threshold, query.WarehouseId, items, new ReportPageInfo(cursor, cursor is not null, export ? items.Count : query.Limit));
+        return new CriticalStockReportResponse(
+            mode,
+            threshold,
+            query.WarehouseId,
+            query.IncludeOutOfStock,
+            configured,
+            items,
+            new ReportPageInfo(cursor, cursor is not null, export ? items.Count : query.Limit));
     }
+
+    /// <summary>
+    /// REP-03 rule for one variant: fixed → available ≤ threshold; thresholds → available ≤ its minimum, or (with
+    /// <paramref name="includeOutOfStock"/>) available ≤ 0 when it has none.
+    /// </summary>
+    internal static bool IsCritical(decimal available, decimal? minimum, decimal? threshold, bool includeOutOfStock) =>
+        threshold is { } t
+            ? available <= t
+            : minimum is { } min ? available <= min : includeOutOfStock && available <= 0m;
 
     // ---- REP-04 orders by status and day ----
 

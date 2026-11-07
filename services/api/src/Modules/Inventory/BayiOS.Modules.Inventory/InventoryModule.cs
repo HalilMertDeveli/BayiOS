@@ -23,6 +23,8 @@ public static class InventoryModule
         services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<InventoryQueries>();
         services.AddScoped<IStockQueries>(sp => sp.GetRequiredService<InventoryQueries>());
+        services.AddScoped<ThresholdService>();
+        services.AddScoped<IStockThresholdQueries>(sp => sp.GetRequiredService<ThresholdService>());
         return services;
     }
 

@@ -69,6 +69,7 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         ["inventory.inventory_balances"] = ArchiveOnly, // derived; never deleted
         ["inventory.inventory_movements"] = AppendOnly, // the ledger
         ["inventory.stock_reservations"] = ArchiveOnly,
+        ["inventory.stock_thresholds"] = Full, // configuration (#137); removal is audited (inventory.threshold_removed)
 
         ["orders.order_lines"] = Full, // DELETE only while the order is a draft (trigger trg_order_lines_delete_draft_only)
         ["orders.order_number_sequences"] = ArchiveOnly,

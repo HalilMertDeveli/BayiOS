@@ -28,6 +28,8 @@ export type MockReports = {
   exposeContentDisposition: boolean;
   /** Answers amountsVisible: false whatever the role (the real API: no unconditional prices.read.sell). */
   hideAmounts: boolean;
+  /** Critical stock (#137): no variant has a minimum stock threshold (thresholdsConfigured: false). */
+  noThresholds?: boolean;
   /** Fails the next read of these reports with 500 (error state). */
   failNext: Set<MockReportId>;
   requests: { method: string; path: string; search: string; headers: Record<string, string>; body: unknown }[];
@@ -44,6 +46,7 @@ export function createMockReports(options: Partial<Omit<MockReports, "requests" 
     exposeContentDisposition: options.exposeContentDisposition ?? false,
     hideAmounts: options.hideAmounts ?? false,
     failNext: options.failNext ?? new Set(),
+    noThresholds: options.noThresholds ?? false,
     requests: [],
   };
 }
@@ -103,6 +106,7 @@ function criticalItems(count: number) {
       onHand,
       reserved,
       available: onHand - reserved,
+      minQuantity: 3, // #137: each variant's own minimum (thresholds mode)
     };
   });
 }
@@ -117,8 +121,13 @@ function build(id: MockReportId, reports: MockReports, input: Record<string, unk
     const start = after ? all.findIndex((x) => x.sku > after) : 0;
     const items = start < 0 ? [] : all.slice(start, start + limit);
     const hasMore = start >= 0 && start + limit < all.length;
+    const fixed = input.threshold !== undefined && input.threshold !== null && input.threshold !== "";
     return {
-      threshold: Number(input.threshold ?? 0),
+      // #137: no threshold = each variant against its own minimum ("thresholds").
+      mode: fixed ? "fixed" : "thresholds",
+      threshold: fixed ? Number(input.threshold) : null,
+      includeOutOfStock: !fixed && (input.includeOutOfStock === true || input.includeOutOfStock === "true"),
+      thresholdsConfigured: !reports.noThresholds,
       warehouseId: input.warehouseId ?? null,
       items,
       page: { nextCursor: hasMore ? Buffer.from(items[items.length - 1].sku).toString("base64url") : null, hasMore, limit },
@@ -236,7 +245,7 @@ const STEMS: Record<MockReportId, string> = {
 };
 
 const FILTERS: Record<MockReportId, string[]> = {
-  "critical-stock": ["threshold", "warehouseId"],
+  "critical-stock": ["threshold", "warehouseId", "includeOutOfStock"],
   orders: ["from", "to", "statuses"],
   "top-products": ["from", "to", "limit"],
   "stock-movements": ["from", "to", "warehouseId"],

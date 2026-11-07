@@ -33,14 +33,25 @@ async function get<T>(api: ApiClient, path: string, signal?: AbortSignal): Promi
   return (await api.request<T>(`${BASE}/${path}`, { tenant: true, signal })).data;
 }
 
-export type CriticalStockFilter = { threshold: string; warehouseId: string };
+/**
+ * Critical stock (#137). `threshold` null/"" = each variant against its own minimum stock (the API default);
+ * a value = the fixed threshold for every active variant. `includeOutOfStock` (minimum mode only) also lists
+ * variants without a minimum whose available stock is ≤ 0.
+ */
+export type CriticalStockFilter = { threshold: string | null; warehouseId: string; includeOutOfStock?: boolean };
 
-export function getCriticalStock(api: ApiClient, filter: CriticalStockFilter, cursor: string | null, signal?: AbortSignal) {
-  return get<CriticalStockReport>(
-    api,
-    `critical-stock${query({ threshold: filter.threshold, warehouseId: filter.warehouseId, limit: CRITICAL_PAGE_SIZE, cursor })}`,
-    signal,
-  );
+export function criticalStockQuery(filter: CriticalStockFilter, cursor: string | null, limit: number = CRITICAL_PAGE_SIZE): string {
+  return query({
+    threshold: filter.threshold,
+    warehouseId: filter.warehouseId,
+    includeOutOfStock: filter.includeOutOfStock && !filter.threshold ? "true" : null,
+    limit,
+    cursor,
+  });
+}
+
+export function getCriticalStock(api: ApiClient, filter: CriticalStockFilter, cursor: string | null, signal?: AbortSignal, limit?: number) {
+  return get<CriticalStockReport>(api, `critical-stock${criticalStockQuery(filter, cursor, limit)}`, signal);
 }
 
 export function getOrdersReport(api: ApiClient, range: DateRange, statuses: readonly string[], signal?: AbortSignal) {

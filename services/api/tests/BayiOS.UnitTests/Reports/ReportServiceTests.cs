@@ -115,6 +115,82 @@ public class ReportServiceTests
         Assert.Empty(next.Items);
         Assert.False(next.Page.HasMore);
         Assert.Equal(422, (await service.CriticalStockAsync(new CriticalStockQuery(-1m, null, 2, null), false, Ct)).Error!.Status);
+        Assert.Equal(CriticalStockModes.Fixed, report.Mode);
+        Assert.Equal(1m, report.Threshold);
+    }
+
+    [Fact]
+    public async Task Critical_stock_defaults_to_each_variants_minimum_and_rechecks_rows()
+    {
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        var c = Guid.NewGuid();
+        var catalog = new FakeCatalog([new(a, Guid.NewGuid(), "A", "Ürün A", "adet"), new(b, Guid.NewGuid(), "B", "Ürün B", "adet"), new(c, Guid.NewGuid(), "C", "Ürün C", "adet")]);
+
+        // a: min 5, never stocked → critical (0 ≤ 5). b: min 3, available 1 → critical. c: no minimum → never listed,
+        // even though the stale selection named it.
+        var inventory = new FakeInventory
+        {
+            Levels = [new(b, 4m, 3m), new(c, 0m, 0m)],
+            Minimums = new() { [a] = 5m, [b] = 3m },
+            AtOrBelow = [a, b, c],
+        };
+        var service = Service(new FakeAuthorization { [Permissions.ReportsRead] = PermissionScope.All }, catalog: catalog, inventory: inventory);
+
+        var report = (await service.CriticalStockAsync(new CriticalStockQuery(null, null, 10, null), export: false, Ct)).Value!;
+        Assert.Equal(CriticalStockModes.Thresholds, report.Mode);
+        Assert.Null(report.Threshold);
+        Assert.True(report.ThresholdsConfigured);
+        Assert.Equal(["A", "B"], report.Items.Select(i => i.Sku));
+        Assert.Equal([5m, 3m], report.Items.Select(i => i.MinQuantity!.Value));
+        Assert.Equal(1m, report.Items[1].Available);
+
+        // includeOutOfStock: variants without a minimum count when available ≤ 0; nothing excluded here.
+        var withOut = (await service.CriticalStockAsync(new CriticalStockQuery(null, null, 10, null, IncludeOutOfStock: true), export: false, Ct)).Value!;
+        Assert.Equal(["A", "B", "C"], withOut.Items.Select(i => i.Sku));
+        Assert.Null(withOut.Items[2].MinQuantity);
+
+        // threshold + includeOutOfStock is contradictory.
+        Assert.Equal(422, (await service.CriticalStockAsync(new CriticalStockQuery(1m, null, 10, null, IncludeOutOfStock: true), false, Ct)).Error!.Status);
+    }
+
+    [Fact]
+    public async Task Critical_stock_without_any_minimum_is_empty_and_says_nothing_is_configured()
+    {
+        var a = Guid.NewGuid();
+        var service = Service(
+            new FakeAuthorization { [Permissions.ReportsRead] = PermissionScope.All },
+            catalog: new FakeCatalog([new(a, Guid.NewGuid(), "A", "Ürün A", "adet")]),
+            inventory: new FakeInventory());
+
+        var report = (await service.CriticalStockAsync(new CriticalStockQuery(null, null, 10, null), export: false, Ct)).Value!;
+        Assert.Empty(report.Items);
+        Assert.False(report.ThresholdsConfigured);
+        Assert.False(report.Page.HasMore);
+    }
+
+    [Theory]
+    [InlineData(0, null, null, false, false)] // no minimum, not counted
+    [InlineData(0, null, null, true, true)] // out of stock counts with includeOutOfStock
+    [InlineData(1, null, null, true, false)]
+    [InlineData(5, 5, null, false, true)] // equal to the minimum is critical
+    [InlineData(6, 5, null, false, false)]
+    [InlineData(-2, 0, null, false, true)]
+    [InlineData(3, 10, 2, false, false)] // an explicit threshold wins over the minimum
+    [InlineData(2, null, 2, false, true)]
+    public void Critical_rule(int available, int? minimum, int? threshold, bool includeOutOfStock, bool critical) =>
+        Assert.Equal(critical, ReportService.IsCritical(available, minimum, threshold, includeOutOfStock));
+
+    [Fact]
+    public void Export_threshold_column_is_the_explicit_threshold_or_the_variants_minimum()
+    {
+        var item = new CriticalStockItem(Guid.NewGuid(), Guid.NewGuid(), "A", "Ürün A", "adet", 1m, 0m, 1m, 4m);
+        var none = item with { Sku = "B", MinQuantity = null };
+        var page = new ReportPageInfo(null, false, 2);
+        var byMinimum = ReportTables.CriticalStock(new CriticalStockReportResponse(CriticalStockModes.Thresholds, null, null, true, true, [item, none], page), "2026-11-07");
+        Assert.Equal([4m, null], byMinimum.Rows.Select(r => r[^1]));
+        var fixedThreshold = ReportTables.CriticalStock(new CriticalStockReportResponse(CriticalStockModes.Fixed, 2m, null, false, true, [item], page), "2026-11-07");
+        Assert.Equal(2m, fixedThreshold.Rows.Single()[^1]);
     }
 
     private static ReportService Service(
@@ -185,11 +261,33 @@ public class ReportServiceTests
                 .Where(v => !excluded.Contains(v.VariantId) && (afterSku is null || string.CompareOrdinal(v.Sku, afterSku) > 0))
                 .OrderBy(v => v.Sku, StringComparer.Ordinal)
                 .Take(limit)]);
+
+        public Task<IReadOnlyList<ReportVariant>> ActiveVariantsInAsync(IReadOnlyCollection<Guid> included, string? afterSku, int limit, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ReportVariant>>([.. variants
+                .Where(v => included.Contains(v.VariantId) && (afterSku is null || string.CompareOrdinal(v.Sku, afterSku) > 0))
+                .OrderBy(v => v.Sku, StringComparer.Ordinal)
+                .Take(limit)]);
     }
 
     private sealed class FakeInventory : IReportInventorySource
     {
         public IReadOnlyList<ReportStockLevel> Levels { get; init; } = [];
+
+        public Dictionary<Guid, decimal> Minimums { get; init; } = [];
+
+        /// <summary>What the "critical by minimum" selection returned when it was read (may be stale by the re-check).</summary>
+        public IReadOnlyList<Guid> AtOrBelow { get; init; } = [];
+
+        public IReadOnlyList<Guid> AboveOrInStock { get; init; } = [];
+
+        public Task<IReadOnlyDictionary<Guid, decimal>> MinimumsAsync(IReadOnlyCollection<Guid> variantIds, Guid? warehouseId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, decimal>>(Minimums.Where(m => variantIds.Contains(m.Key)).ToDictionary());
+
+        public Task<IReadOnlyList<Guid>> VariantsAtOrBelowMinimumAsync(Guid? warehouseId, CancellationToken cancellationToken) => Task.FromResult(AtOrBelow);
+
+        public Task<IReadOnlyList<Guid>> VariantsAboveMinimumOrZeroAsync(Guid? warehouseId, CancellationToken cancellationToken) => Task.FromResult(AboveOrInStock);
+
+        public Task<bool> AnyMinimumAsync(Guid? warehouseId, CancellationToken cancellationToken) => Task.FromResult(Minimums.Count > 0);
 
         // Reads "before" the stock change: nothing above the threshold yet.
         public Task<IReadOnlyList<Guid>> VariantsAboveAsync(decimal threshold, Guid? warehouseId, CancellationToken cancellationToken) =>

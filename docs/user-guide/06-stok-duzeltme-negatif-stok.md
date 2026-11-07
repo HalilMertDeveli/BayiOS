@@ -33,6 +33,22 @@ Sipariş onayında ve stok çıkışında satılabilir stok eksiye düşecekse u
 **Ayrılmış (rezerve) stok düzeltmeyle düşülemez.** Onaylı siparişlere ayrılan miktar, hangi politika seçilirse seçilsin
 düzeltme çıkışıyla azaltılamaz.
 
+### Minimum stok (kritik stok eşiği)
+Bir ürünün **satılabilir** miktarı (eldeki − ayrılmış) minimum stoğa **eşit veya altına** inince ürün "kritik" sayılır:
+**Stok** listesinde **Kritik** rozeti çıkar, panodaki **Kritik stok** kutusunda sayılır ve **Kritik stok** raporunda
+listelenir. Minimum stok girmek stoğu değiştirmez (hareket oluşmaz). Yalnızca işletme sahibi, yönetici ve operasyon müdürü
+girebilir; diğer roller değerleri görür.
+1. **Genel minimum:** **Ürünler** → ürünü açın → **Minimum stok** bölümünde her varyant için değer girin ve
+   **Minimum stoku kaydet**e basın. Boş bırakılan varyant takip edilmez; değeri silip kaydederseniz eşik kaldırılır.
+   "Adet" gibi kesirsiz birimlerde tam sayı girin.
+2. **Depoya özel eşik:** **Stok** → ürünün SKU'suna tıklayın → **Minimum stok** bölümünde depo satırına değer girin.
+   O depoda genel eşiğin yerine geçer; boş bırakılırsa o depoda genel eşik geçerlidir.
+3. **Hangi eşik geçerli?** Tek bir depo seçiliyken: depo eşiği, yoksa genel eşik. **Tüm depolar** görünümünde (pano ve
+   depo seçilmemiş rapor): genel eşik, yoksa depo eşiklerinin toplamı; satılabilir miktar da tüm depoların toplamıdır.
+4. Kritik stok raporu varsayılan olarak bu eşikleri kullanır. **Eşiği olmayan, stoğu tükenmiş ürünleri de göster** ile
+   eşik girilmemiş ama satılabilir miktarı 0 veya altında olan ürünler de eklenir. **Kritik eşik** kutusuna bir sayı
+   yazarsanız tüm aktif ürünler bu sabit eşiğe göre listelenir (eski davranış).
+
 ## Sık hatalar ve mesajlar
 | Mesaj | Ne yapmalı |
 |---|---|
@@ -43,6 +59,8 @@ düzeltme çıkışıyla azaltılamaz.
 | Düzeltme kaydedilmedi: eksi stok onaylanmadı. | "Stok eksiye düşecek" penceresinde Vazgeç dediniz. |
 | Bu depoda/rafta henüz stok kaydı yok. | Bilgi mesajıdır; giriş türünde düzeltme yapabilirsiniz. |
 | Stok kayıtları meşgul, otomatik olarak yeniden deneniyor… | Bekleyin. |
+| Bu birim kesirli olamaz; 0 veya daha büyük bir tam sayı girin. | Minimum stoğu tam sayı girin (ör. Adet). |
+| Henüz minimum stok tanımlanmadı | Pano/rapor bilgisi: ürünlere minimum stok girin. |
 
 ## İpuçları
 - Sayım farklarını düzenli düzeltin ve sebebi açık yazın; raporlarda "Düzeltme (giriş/çıkış)" ve "Hasar / fire" ayrı görünür.

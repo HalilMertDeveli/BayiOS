@@ -666,6 +666,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inventory/thresholds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Minimum stok eşikleri: variantId / variantIds (virgülle, en çok 100) / warehouseId filtresi; warehouseId boş satır = varyantın genel eşiği */
+        get: operations["Inventory_ListThresholds"];
+        put?: never;
+        /** Varyant (+ depo) için minimum stok eşiğini oluşturur veya değiştirir (upsert, son yazan kazanır); depo boş = genel eşik, depo = o depoda geçerli istisna */
+        post: operations["Inventory_SetThreshold"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory/thresholds/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tek minimum stok eşiği (ETag döner) */
+        get: operations["Inventory_GetThreshold"];
+        /** Eşiğin minimum miktarını değiştirir (If-Match zorunlu) */
+        put: operations["Inventory_UpdateThreshold"];
+        post?: never;
+        /** Eşiği kaldırır (If-Match zorunlu) */
+        delete: operations["Inventory_DeleteThreshold"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory/thresholds/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Toplu eşik yazımı (en çok 500 satır, hepsi ya da hiçbiri): minQuantity ile ayarla, remove: true ile kaldır */
+        post: operations["Inventory_BulkThresholds"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/warehouses": {
         parameters: {
             query?: never;
@@ -1712,7 +1766,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Kritik stok: kullanılabilir (eldeki − rezerve) ≤ eşik olan aktif varyantlar, SKU sırasıyla keyset sayfalama */
+        /** Kritik stok (REP-03): varsayılan olarak her aktif varyant kendi minimum stok eşiğine göre (kullanılabilir = eldeki − rezerve ≤ eşik; eşiği olmayanlar hariç, includeOutOfStock=true ile kullanılabilir ≤ 0 olanlar dahil); threshold verilirse tüm aktif varyantlar bu sabit eşiğe göre. SKU sırasıyla keyset sayfalama */
         get: operations["Reports_CriticalStock"];
         put?: never;
         post?: never;
@@ -2240,6 +2294,9 @@ export interface components {
             version: number | string;
             /** Format: date-time */
             updatedAt: null | string;
+            /** Format: double */
+            minQuantity: null | number | string;
+            belowMinimum: boolean;
         };
         BillingCatalogResponse: {
             catalogVersion: string;
@@ -2263,6 +2320,29 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: null | string;
+        };
+        BulkStockThresholdItem: {
+            /** Format: uuid */
+            variantId: null | string;
+            /** Format: uuid */
+            warehouseId: null | string;
+            /** Format: double */
+            minQuantity: null | number | string;
+            remove: null | boolean;
+        };
+        BulkStockThresholdRequest: {
+            items: null | components["schemas"]["BulkStockThresholdItem"][];
+        };
+        BulkStockThresholdResponse: {
+            /** Format: int32 */
+            created: number | string;
+            /** Format: int32 */
+            updated: number | string;
+            /** Format: int32 */
+            removed: number | string;
+            /** Format: int32 */
+            unchanged: number | string;
+            items: components["schemas"]["StockThresholdResponse"][];
         };
         CancelShipmentRequest: {
             reason: null | string;
@@ -2524,12 +2604,17 @@ export interface components {
             reserved: number | string;
             /** Format: double */
             available: number | string;
+            /** Format: double */
+            minQuantity: null | number | string;
         };
         CriticalStockReportResponse: {
+            mode: string;
             /** Format: double */
-            threshold: number | string;
+            threshold: null | number | string;
             /** Format: uuid */
             warehouseId: null | string;
+            includeOutOfStock: boolean;
+            thresholdsConfigured: boolean;
             items: components["schemas"]["CriticalStockItem"][];
             page: components["schemas"]["ReportPageInfo"];
         };
@@ -3677,6 +3762,7 @@ export interface components {
             statuses?: null | string[];
             /** Format: int32 */
             limit?: null | number | string;
+            includeOutOfStock?: null | boolean;
         };
         ReportPageInfo: {
             nextCursor: null | string;
@@ -3757,6 +3843,14 @@ export interface components {
             code: string;
             name: string;
             allowsFraction: boolean;
+        };
+        SetStockThresholdRequest: {
+            /** Format: uuid */
+            variantId: null | string;
+            /** Format: uuid */
+            warehouseId: null | string;
+            /** Format: double */
+            minQuantity: null | number | string;
         };
         ShipmentLineResponse: {
             /** Format: uuid */
@@ -3875,6 +3969,26 @@ export interface components {
             locationId?: null | string;
             requested?: number;
             available?: number;
+        };
+        StockThresholdPageResponse: {
+            items: components["schemas"]["StockThresholdResponse"][];
+            page: components["schemas"]["InventoryPageInfo"];
+        };
+        StockThresholdResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            variantId: string;
+            /** Format: uuid */
+            warehouseId: null | string;
+            /** Format: double */
+            minQuantity: number | string;
+            /** Format: int64 */
+            version: number | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: null | string;
         };
         SubmitOrderParseRequest: {
             text: null | string;
@@ -4114,6 +4228,10 @@ export interface components {
             taxRate: null | number | string;
             status: null | string;
             attributes?: null | Record<string, never>;
+        };
+        UpdateStockThresholdRequest: {
+            /** Format: double */
+            minQuantity: null | number | string;
         };
         UpdateTenantRequest: {
             name: null | string;
@@ -8201,6 +8319,495 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Inventory_ListThresholds: {
+        parameters: {
+            query?: {
+                variantId?: string;
+                variantIds?: string;
+                warehouseId?: string;
+                limit?: string;
+                cursor?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockThresholdPageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Inventory_SetThreshold: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetStockThresholdRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockThresholdResponse"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockThresholdResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Inventory_GetThreshold: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockThresholdResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Inventory_UpdateThreshold: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStockThresholdRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockThresholdResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Inventory_DeleteThreshold: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Inventory_BulkThresholds: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkStockThresholdRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkStockThresholdResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
                 };
             };
             /** @description Precondition Required */
@@ -14619,6 +15226,7 @@ export interface operations {
             query?: {
                 threshold?: string;
                 warehouseId?: string;
+                includeOutOfStock?: string;
                 limit?: string;
                 cursor?: string;
             };
