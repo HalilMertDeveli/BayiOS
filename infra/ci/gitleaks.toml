@@ -1,0 +1,17 @@
+# gitleaks configuration for BayiOS (#54). Default rules + a NARROW allowlist of synthetic test fixtures that the
+# generic-api-key rule flags. Each entry is an exact literal (base64url of a self-describing fake string) — never a
+# path or a whole rule, so a real secret in the same file is still reported.
+title = "BayiOS gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic invitation tokens in web tests (decode to 'MockInvitationToken-synthetic-01', 'BogusTokenForTestsOnly-…', 'SyntheticInvitationToken-…', 'old-token-old-token-old')"
+regexTarget = "match"
+regexes = [
+  '''TW9ja0ludml0YXRpb25Ub2tlbi1zeW50aGV0aWMtMDE''',
+  '''Qm9ndXNUb2tlbkZvclRlc3RzT25seS0xMjM0NTY3ODk_''',
+  '''U3ludGhldGljSW52aXRhdGlvblRva2VuLTAxMjM0NTY''',
+  '''b2xkLXRva2VuLW9sZC10b2tlbi1vbGQ''',
+]
