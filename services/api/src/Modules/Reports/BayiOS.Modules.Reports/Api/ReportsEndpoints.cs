@@ -39,7 +39,7 @@ internal static class ReportsEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapGet("/critical-stock", CriticalStock).WithName("Reports_CriticalStock")
-            .WithSummary("Kritik stok: kullanılabilir (eldeki − rezerve) ≤ eşik olan aktif varyantlar, SKU sırasıyla keyset sayfalama")
+            .WithSummary("Kritik stok (REP-03): varsayılan olarak her aktif varyant kendi minimum stok eşiğine göre (kullanılabilir = eldeki − rezerve ≤ eşik; eşiği olmayanlar hariç, includeOutOfStock=true ile kullanılabilir ≤ 0 olanlar dahil); threshold verilirse tüm aktif varyantlar bu sabit eşiğe göre. SKU sırasıyla keyset sayfalama")
             .RequirePermission(Permissions.ReportsRead)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity);
@@ -107,14 +107,28 @@ internal static class ReportsEndpoints
         return TypedResults.File(file.Content, file.ContentType, file.FileName);
     }
 
-    /// <param name="threshold">Kritik eşik (≥ 0, varsayılan 0): kullanılabilir ≤ eşik olanlar listelenir.</param>
+    /// <param name="threshold">Sabit kritik eşik (≥ 0). Verilmezse her varyantın kendi minimum stok eşiği kullanılır (#137).</param>
     /// <param name="warehouseId">Yalnızca bu depo (yoksa tüm depoların toplamı).</param>
+    /// <param name="includeOutOfStock">Eşik modunda eşiği olmayan ama kullanılabilir ≤ 0 olan varyantları da listeler (true/false; threshold ile birlikte verilemez).</param>
     private static async Task<Results<Ok<CriticalStockReportResponse>, ProblemHttpResult>> CriticalStock(
-        HttpContext http, ReportService service, string? threshold, string? warehouseId, string? limit, string? cursor, CancellationToken cancellationToken)
+        HttpContext http,
+        ReportService service,
+        string? threshold,
+        string? warehouseId,
+        string? includeOutOfStock,
+        string? limit,
+        string? cursor,
+        CancellationToken cancellationToken)
     {
-        if (Unknown(http, "threshold", "warehouseId", "limit", "cursor") is { } unknown)
+        if (Unknown(http, "threshold", "warehouseId", "includeOutOfStock", "limit", "cursor") is { } unknown)
         {
             return unknown;
+        }
+
+        var outOfStock = false;
+        if (!string.IsNullOrEmpty(includeOutOfStock) && !bool.TryParse(includeOutOfStock, out outOfStock))
+        {
+            return Malformed("includeOutOfStock must be true or false");
         }
 
         decimal? value = null;
@@ -149,7 +163,7 @@ internal static class ReportsEndpoints
             after = sku;
         }
 
-        return Ok(http, await service.CriticalStockAsync(new CriticalStockQuery(value, warehouse, pageSize, after), export: false, cancellationToken));
+        return Ok(http, await service.CriticalStockAsync(new CriticalStockQuery(value, warehouse, pageSize, after, outOfStock), export: false, cancellationToken));
     }
 
     /// <param name="from">İlk gün (yyyy-MM-dd, Europe/Istanbul; varsayılan: son 30 gün).</param>

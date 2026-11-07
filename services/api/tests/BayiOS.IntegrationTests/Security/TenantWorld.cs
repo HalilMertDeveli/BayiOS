@@ -27,6 +27,7 @@ internal sealed class TenantWorld
         ["products"] = "product",
         ["variants"] = "variant",
         ["movements"] = "movement",
+        ["thresholds"] = "threshold",
         ["warehouses"] = "warehouse",
         ["locations"] = "location",
         ["price-lists"] = "priceList",
@@ -135,6 +136,9 @@ internal sealed class TenantWorld
             lines = new[] { new { variantId = Id("variant"), quantity = 25m, locationId = (Guid?)Id("location") } },
         });
         _ids["movement"] = receipt.GetProperty("movements")[0].GetProperty("id").GetGuid();
+
+        // Minimum stock (#137): a warehouse override; the probes address it by id.
+        await CreateAsync("threshold", "/api/v1/inventory/thresholds", new { variantId = Id("variant"), warehouseId = Id("warehouse"), minQuantity = 5m });
 
         await CreateAsync("priceList", "/api/v1/price-lists", new { name = "Perakende " + Token, isDefault = true });
         var items = await SendOkAsync(HttpMethod.Put, $"/api/v1/price-lists/{Id("priceList")}/items", new

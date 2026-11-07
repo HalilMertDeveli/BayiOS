@@ -18,7 +18,7 @@ import { inventoryPermissions } from "@/lib/inventory/permissions";
 import { formatQuantity } from "@/lib/inventory/quantity";
 import { useSession } from "@/lib/session/session-context";
 import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
-import { AvailableQuantity } from "./quantity-cells";
+import { AvailableQuantity, CriticalBadge, MinimumCell } from "./quantity-cells";
 import { useLocationNames, useVariantDirectory, useWarehouseNames, useWarehouses } from "./use-inventory-data";
 
 type Filter = { q: string | null; warehouseId: string | null };
@@ -152,6 +152,13 @@ export function StockBalances() {
     { key: "onHand", header: "Rafta", numeric: true, width: "7rem", cell: (b) => formatQuantity(b.onHand) },
     { key: "reserved", header: "Ayrılmış", numeric: true, width: "7rem", cell: (b) => formatQuantity(b.reserved) },
     { key: "available", header: "Satılabilir", numeric: true, width: "9rem", cell: (b) => <AvailableQuantity value={b.available} /> },
+    {
+      key: "minimum",
+      header: <abbr title="Minimum stok: depodaki toplam satılabilir bu değere eşit veya altındaysa kritik">Min. stok</abbr>,
+      numeric: true,
+      width: "9rem",
+      cell: (b) => <MinimumCell minQuantity={b.minQuantity} belowMinimum={b.belowMinimum} />,
+    },
     ...(permissions.adjust
       ? [
           {
@@ -370,13 +377,19 @@ export function StockBalances() {
                             </Link>
                             {v?.name ? <span className="text-caption text-fg-secondary">{v.name}</span> : null}
                           </div>
-                          {b.locationId ? (
-                            <Badge tone="neutral" className="font-mono">
-                              {locationLabel(b)}
-                            </Badge>
-                          ) : null}
+                          <div className="flex flex-wrap justify-end gap-1">
+                            {b.belowMinimum ? <CriticalBadge /> : null}
+                            {b.locationId ? (
+                              <Badge tone="neutral" className="font-mono">
+                                {locationLabel(b)}
+                              </Badge>
+                            ) : null}
+                          </div>
                         </div>
-                        <p className="mt-1 text-caption text-fg-muted">{warehouseLabel(b.warehouseId)}</p>
+                        <p className="mt-1 text-caption text-fg-muted">
+                          {warehouseLabel(b.warehouseId)}
+                          {b.minQuantity !== null && b.minQuantity !== undefined ? ` · min. stok ${formatQuantity(b.minQuantity)}` : ""}
+                        </p>
                         <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
                           <div className="rounded-md bg-sunken p-2">
                             <dt className="text-caption text-fg-muted">Rafta</dt>

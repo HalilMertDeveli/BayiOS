@@ -232,11 +232,11 @@ public sealed class ReportsExportTests(ApiFixture fixture)
             product.Id,
             unit.Id);
 
-        await HttpAssert.ProblemAsync(await ReportsKit.ExportAsync(owner, "critical-stock"), HttpStatusCode.UnprocessableEntity, "reports.export_too_large");
+        await HttpAssert.ProblemAsync(await ReportsKit.ExportAsync(owner, "critical-stock", new { threshold = 0m }), HttpStatusCode.UnprocessableEntity, "reports.export_too_large");
         Assert.Empty(await ReportsKit.RowsAsync(fixture, "SELECT id FROM reports.export_requests WHERE tenant_id = $1", owner.TenantId));
 
         // One variant fewer fits exactly at the limit (header + 20,000 rows).
         await ReportsKit.ExecuteAsync(fixture, "UPDATE catalog.product_variants SET status = 'archived', archived_at = now() WHERE tenant_id = $1 AND sku = 'ROW-20000'", owner.TenantId);
-        Assert.Equal(20_001, ReportsKit.ParseCsv(await ReportsKit.ExportOkAsync(owner, "critical-stock")).Count);
+        Assert.Equal(20_001, ReportsKit.ParseCsv(await ReportsKit.ExportOkAsync(owner, "critical-stock", new { threshold = 0m })).Count);
     }
 }

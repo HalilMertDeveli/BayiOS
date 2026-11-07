@@ -82,7 +82,32 @@ export type MockInventory = {
   idempotency: Map<string, { status: number; body: unknown }>;
   /** When true, the next successful write is applied but its response is dropped (network error in the browser). */
   dropNextResponse: boolean;
+  /** Minimum stock thresholds (#137): warehouseId null = the variant's general minimum. */
+  thresholds: MockThreshold[];
 };
+
+export type MockThreshold = {
+  id: string;
+  variantId: string;
+  warehouseId: string | null;
+  minQuantity: number;
+  version: number;
+  createdAt: string;
+  updatedAt: string | null;
+};
+
+/** Effective minimum in one warehouse: the override, else the general minimum (the API's rule). */
+function effectiveMinimum(inv: MockInventory, variantId: string, warehouseId: string): number | null {
+  const own = inv.thresholds.find((t) => t.variantId === variantId && t.warehouseId === warehouseId);
+  return own ? own.minQuantity : (inv.thresholds.find((t) => t.variantId === variantId && t.warehouseId === null)?.minQuantity ?? null);
+}
+
+/** A balance row as GET /inventory/balances returns it: + minQuantity and belowMinimum over the warehouse's bins. */
+function withMinimum(inv: MockInventory, b: MockBalance) {
+  const minQuantity = effectiveMinimum(inv, b.variantId, b.warehouseId);
+  const available = inv.balances.filter((x) => x.variantId === b.variantId && x.warehouseId === b.warehouseId).reduce((s, x) => s + x.available, 0);
+  return { ...b, minQuantity, belowMinimum: minQuantity !== null && available <= minQuantity };
+}
 
 const NOW = "2026-11-01T09:00:00Z";
 const uuid = (prefix: string, n: number) => `00000000-0000-4000-8000-${prefix}${String(n).padStart(12 - prefix.length, "0")}`;
@@ -127,6 +152,7 @@ export function createMockInventory(
     overrides: new Map(),
     idempotency: new Map(),
     dropNextResponse: false,
+    thresholds: [],
   };
 }
 
@@ -350,9 +376,67 @@ export async function handleInventory(route: Route, inv: MockInventory, catalog:
       .filter((b) => !matching || matching.has(b.variantId))
       .filter((b) => (!p.get("variantId") || b.variantId === p.get("variantId")) && (!p.get("warehouseId") || b.warehouseId === p.get("warehouseId")))
       .filter((b) => !p.get("locationId") || b.locationId === p.get("locationId"))
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((b) => withMinimum(inv, b));
+    await json(route, 200, page(items, p));
+    return true;
+  }
+
+  // ---- Minimum stock thresholds (#137) ----
+  if (path === "/api/v1/inventory/thresholds" && method === "GET") {
+    const p = url.searchParams;
+    const ids = new Set([...(p.get("variantIds") ?? "").split(",").filter(Boolean), ...(p.get("variantId") ? [p.get("variantId")!] : [])]);
+    const items = inv.thresholds
+      .filter((t) => ids.size === 0 || ids.has(t.variantId))
+      .filter((t) => !p.get("warehouseId") || t.warehouseId === p.get("warehouseId"))
       .sort((a, b) => a.id.localeCompare(b.id));
     await json(route, 200, page(items, p));
     return true;
+  }
+  if (path === "/api/v1/inventory/thresholds/bulk" && method === "POST") {
+    const rows = (body?.items as Json[] | undefined) ?? [];
+    const errors: Record<string, string[]> = {};
+    rows.forEach((row, i) => {
+      if (!variants.some((v) => v.id === row.variantId)) errors[`items[${i}].variantId`] = ["Variant not found."];
+      if (row.warehouseId && !inv.warehouses.some((w) => w.id === row.warehouseId)) errors[`items[${i}].warehouseId`] = ["Warehouse not found."];
+      const min = Number(row.minQuantity);
+      if (row.remove !== true && (!Number.isFinite(min) || min < 0)) errors[`items[${i}].minQuantity`] = ["Must be between 0 and 1000000000 with at most 3 decimals."];
+    });
+    if (rows.length === 0) errors.items = ["Between 1 and 500 items are required."];
+    if (Object.keys(errors).length > 0) return json(route, 422, problemBody(422, "validation.failed", { errors })).then(() => true);
+    let created = 0;
+    let updated = 0;
+    let removed = 0;
+    let unchanged = 0;
+    const result: MockThreshold[] = [];
+    for (const row of rows) {
+      const warehouseId = (row.warehouseId as string | null | undefined) ?? null;
+      const existing = inv.thresholds.find((t) => t.variantId === row.variantId && t.warehouseId === warehouseId);
+      if (row.remove === true) {
+        if (existing) {
+          inv.thresholds = inv.thresholds.filter((t) => t !== existing);
+          removed++;
+        }
+        continue;
+      }
+      const min = Number(row.minQuantity);
+      if (!existing) {
+        const t: MockThreshold = { id: uuid("9d", inv.thresholds.length + 1 + created), variantId: String(row.variantId), warehouseId, minQuantity: min, version: 1, createdAt: new Date().toISOString(), updatedAt: null };
+        inv.thresholds.push(t);
+        result.push(t);
+        created++;
+      } else if (existing.minQuantity === min) {
+        result.push(existing);
+        unchanged++;
+      } else {
+        existing.minQuantity = min;
+        existing.version += 1;
+        existing.updatedAt = new Date().toISOString();
+        result.push(existing);
+        updated++;
+      }
+    }
+    return succeed(200, { created, updated, removed, unchanged, items: result });
   }
   if (path === "/api/v1/inventory/movements" && method === "GET") {
     const p = url.searchParams;

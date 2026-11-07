@@ -18,8 +18,9 @@ import { formatDateTime, movementTypeLabel, movementTypeLabels, movementTypeTone
 import { inventoryPermissions } from "@/lib/inventory/permissions";
 import { addQuantities, formatQuantity, formatSignedQuantity, toNumber } from "@/lib/inventory/quantity";
 import { useSession } from "@/lib/session/session-context";
-import { AvailableQuantity } from "./quantity-cells";
+import { AvailableQuantity, MinimumCell } from "./quantity-cells";
 import { useLocationNames, useWarehouseNames, useWarehouses } from "./use-inventory-data";
+import { VariantThresholds } from "./variant-thresholds";
 
 type Head = { status: "loading" } | { status: "error"; message: string; notFound: boolean } | { status: "ready"; variant: Variant; balances: Balance[] };
 
@@ -86,6 +87,7 @@ export function VariantStock({ variantId }: { variantId: string }) {
     { key: "onHand", header: "Rafta", numeric: true, cell: (b) => formatQuantity(b.onHand) },
     { key: "reserved", header: "Ayrılmış", numeric: true, cell: (b) => formatQuantity(b.reserved) },
     { key: "available", header: "Satılabilir", numeric: true, cell: (b) => <AvailableQuantity value={b.available} /> },
+    { key: "minimum", header: "Min. stok", numeric: true, cell: (b) => <MinimumCell minQuantity={b.minQuantity} belowMinimum={b.belowMinimum} /> },
   ];
 
   return (
@@ -137,6 +139,15 @@ export function VariantStock({ variantId }: { variantId: string }) {
           empty={<EmptyState headingLevel="h3" title="Stok kaydı yok" description="Bu ürün için henüz stok hareketi olmamış." />}
         />
       </section>
+
+      {variant && warehouses.status === "ready" ? (
+        <VariantThresholds
+          variant={variant}
+          warehouses={warehouses.data}
+          canEdit={permissions.manageThresholds && variant.status !== "archived"}
+          onSaved={() => setAttempt((n) => n + 1)}
+        />
+      ) : null}
 
       {permissions.movements ? (
         <MovementHistory

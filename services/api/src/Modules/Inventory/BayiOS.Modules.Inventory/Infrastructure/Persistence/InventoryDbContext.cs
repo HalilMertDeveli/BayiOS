@@ -16,6 +16,7 @@ internal sealed class InventoryDbContext : DbContext, ITenantScopedDbContext
     public const string BalanceKeyIndex = "ux_inventory_balances_key";
     public const string MovementSourceLineIndex = "ux_inventory_movements_source_line";
     public const string ActiveReservationIndex = "ux_stock_reservations_active_line";
+    public const string ThresholdKeyIndex = "ux_stock_thresholds_key";
 
     private static readonly TenantGuardInterceptor TenantGuard = new();
 
@@ -32,6 +33,8 @@ internal sealed class InventoryDbContext : DbContext, ITenantScopedDbContext
     public DbSet<InventoryBalance> Balances => Set<InventoryBalance>();
 
     public DbSet<StockReservation> Reservations => Set<StockReservation>();
+
+    public DbSet<StockThreshold> Thresholds => Set<StockThreshold>();
 
     public Guid? CurrentTenantId => _requestContext.TenantId;
 
@@ -143,6 +146,25 @@ internal sealed class InventoryDbContext : DbContext, ITenantScopedDbContext
                 .HasFilter("status = 'active'")
                 .HasDatabaseName(ActiveReservationIndex);
             reservation.HasQueryFilter(r => r.TenantId == CurrentTenantId);
+        });
+
+        modelBuilder.Entity<StockThreshold>(threshold =>
+        {
+            threshold.ToTable("stock_thresholds", t =>
+                t.HasCheckConstraint("ck_stock_thresholds_min_quantity", "min_quantity >= 0"));
+            threshold.HasKey(t => t.Id);
+            threshold.Property(t => t.Id).ValueGeneratedNever();
+            threshold.Property(t => t.MinQuantity).HasPrecision(18, 3);
+            threshold.Property(t => t.Version).HasDefaultValue(1L);
+            threshold.Property(t => t.CreatedAt).HasDefaultValueSql("now()");
+
+            // One default (warehouse NULL) and one override per warehouse for each variant (data-model §5.13).
+            threshold.HasIndex(t => new { t.TenantId, t.VariantId, t.WarehouseId })
+                .IsUnique()
+                .AreNullsDistinct(false)
+                .HasDatabaseName(ThresholdKeyIndex);
+            threshold.HasIndex(t => new { t.TenantId, t.WarehouseId });
+            threshold.HasQueryFilter(t => t.TenantId == CurrentTenantId);
         });
     }
 

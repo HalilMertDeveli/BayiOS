@@ -318,6 +318,71 @@ namespace BayiOS.Modules.Inventory.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_stock_reservations_status", "status IN ('active', 'consumed', 'released')");
                         });
                 });
+
+            modelBuilder.Entity("BayiOS.Modules.Inventory.Domain.StockThreshold", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<decimal>("MinQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("min_quantity");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("VariantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("variant_id");
+
+                    b.Property<long>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L)
+                        .HasColumnName("version");
+
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stock_thresholds");
+
+                    b.HasIndex("TenantId", "WarehouseId")
+                        .HasDatabaseName("ix_stock_thresholds_tenant_id_warehouse_id");
+
+                    b.HasIndex("TenantId", "VariantId", "WarehouseId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_stock_thresholds_key");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("TenantId", "VariantId", "WarehouseId"), false);
+
+                    b.ToTable("stock_thresholds", "inventory", t =>
+                        {
+                            t.HasCheckConstraint("ck_stock_thresholds_min_quantity", "min_quantity >= 0");
+                        });
+                });
 #pragma warning restore 612, 618
         }
     }

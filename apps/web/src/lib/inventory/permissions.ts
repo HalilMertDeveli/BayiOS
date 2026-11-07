@@ -14,6 +14,8 @@ export type InventoryPermissions = {
   receive: boolean;
   /** inventory.adjust — manual stock adjustment. */
   adjust: boolean;
+  /** catalog.write — set and remove minimum stock thresholds (#137; read with inventory.read). */
+  manageThresholds: boolean;
   /** warehouses.manage — create/edit warehouses and locations. */
   manageWarehouses: boolean;
 };
@@ -26,6 +28,7 @@ export function inventoryPermissions(access: Access): InventoryPermissions {
     movementsOwnOnly: access.canSome("inventory.movements.read") && !access.can("inventory.movements.read"),
     receive: access.can("inventory.receive"),
     adjust: access.can("inventory.adjust"),
+    manageThresholds: access.can("catalog.write"),
     manageWarehouses: access.can("warehouses.manage"),
   };
 }

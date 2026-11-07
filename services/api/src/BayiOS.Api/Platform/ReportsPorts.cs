@@ -1,5 +1,6 @@
 using BayiOS.Modules.Catalog.Infrastructure.Persistence;
 using BayiOS.Modules.Integrations.Infrastructure.Persistence;
+using BayiOS.Modules.Inventory.Contracts;
 using BayiOS.Modules.Inventory.Infrastructure.Persistence;
 using BayiOS.Modules.Orders.Domain;
 using BayiOS.Modules.Orders.Infrastructure.Persistence;
@@ -58,11 +59,46 @@ internal sealed class CatalogReportSource(CatalogDbContext catalog) : IReportCat
         return [.. rows.Select(r => new ReportVariant(
             r.Id, r.ProductId, r.Sku, string.IsNullOrWhiteSpace(r.VariantName) ? r.Name : $"{r.Name} {r.VariantName}", r.Unit))];
     }
+
+    public async Task<IReadOnlyList<ReportVariant>> ActiveVariantsInAsync(
+        IReadOnlyCollection<Guid> included, string? afterSku, int limit, CancellationToken cancellationToken)
+    {
+        var ids = included.ToList();
+        var rows = await (
+                from variant in catalog.Variants.AsNoTracking()
+                join product in catalog.Products.AsNoTracking() on variant.ProductId equals product.Id
+                join unit in catalog.Units.AsNoTracking() on variant.UnitId equals unit.Id
+                where variant.Status == Active && product.Status == Active
+                      && ids.Contains(variant.Id)
+                      && (afterSku == null || variant.Sku.CompareTo(afterSku) > 0)
+                orderby variant.Sku
+                select new { variant.Id, variant.ProductId, variant.Sku, product.Name, VariantName = variant.Name, Unit = unit.Code })
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+        return [.. rows.Select(r => new ReportVariant(
+            r.Id, r.ProductId, r.Sku, string.IsNullOrWhiteSpace(r.VariantName) ? r.Name : $"{r.Name} {r.VariantName}", r.Unit))];
+    }
 }
 
-/// <summary>Balances (derived from the ledger) and the movement ledger. Never unit costs.</summary>
-internal sealed class InventoryReportSource(InventoryDbContext inventory, UnitOfWork unitOfWork, IRequestContext requestContext) : IReportInventorySource
+/// <summary>
+/// Balances (derived from the ledger) and the movement ledger. Never unit costs. Minimum stock thresholds are read
+/// through Inventory's public contract <see cref="IStockThresholdQueries"/> (the effective-minimum rule is Inventory's).
+/// </summary>
+internal sealed class InventoryReportSource(
+    InventoryDbContext inventory, UnitOfWork unitOfWork, IRequestContext requestContext, IStockThresholdQueries thresholds) : IReportInventorySource
 {
+    public Task<IReadOnlyDictionary<Guid, decimal>> MinimumsAsync(IReadOnlyCollection<Guid> variantIds, Guid? warehouseId, CancellationToken cancellationToken) =>
+        thresholds.EffectiveMinimumsAsync(variantIds, warehouseId, cancellationToken);
+
+    public Task<IReadOnlyList<Guid>> VariantsAtOrBelowMinimumAsync(Guid? warehouseId, CancellationToken cancellationToken) =>
+        thresholds.CriticalVariantsAsync(warehouseId, cancellationToken);
+
+    public Task<IReadOnlyList<Guid>> VariantsAboveMinimumOrZeroAsync(Guid? warehouseId, CancellationToken cancellationToken) =>
+        thresholds.VariantsAboveMinimumOrZeroAsync(warehouseId, cancellationToken);
+
+    public Task<bool> AnyMinimumAsync(Guid? warehouseId, CancellationToken cancellationToken) =>
+        thresholds.AnyThresholdAsync(warehouseId, cancellationToken);
+
     public async Task<IReadOnlyList<Guid>> VariantsAboveAsync(decimal threshold, Guid? warehouseId, CancellationToken cancellationToken) =>
         await inventory.Balances.AsNoTracking()
             .Where(b => warehouseId == null || b.WarehouseId == warehouseId)

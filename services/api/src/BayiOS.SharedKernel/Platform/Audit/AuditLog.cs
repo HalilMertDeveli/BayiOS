@@ -37,6 +37,12 @@ public static class AuditActions
     public const string InventoryReceiptPosted = "inventory.receipt_posted";
     public const string InventoryAdjustmentPosted = "inventory.adjustment_posted";
 
+    /// <summary>A minimum stock threshold was created or changed (#137); the payload carries variant, warehouse, from/to.</summary>
+    public const string InventoryThresholdSet = "inventory.threshold_set";
+
+    /// <summary>A minimum stock threshold was removed (#137).</summary>
+    public const string InventoryThresholdRemoved = "inventory.threshold_removed";
+
     /// <summary>A stock change that went below zero after an explicit confirmation under the <c>warn</c> policy.</summary>
     public const string InventoryNegativeStockConfirmed = "inventory.negative_stock_confirmed";
 
