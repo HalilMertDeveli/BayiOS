@@ -98,7 +98,10 @@ class ApiClient {
   ///   the user action (`IdempotentAction`) for idempotent endpoints and
   ///   `null` otherwise. A mismatch with the endpoint is a programming error
   ///   ([ArgumentError]).
-  /// - [tenantId] is only for [TenantScope.optional] endpoints (`GET /me`).
+  /// - [tenantId] selects the tenant of [TenantScope.optional] endpoints
+  ///   (`GET /me`); for [TenantScope.required] it overrides the active tenant
+  ///   (e.g. removing the push registration of the business being left). A
+  ///   `tenant.*` 403 for an overridden tenant does not touch the session.
   Future<ApiResponse<T>> send<T>(
     ApiEndpoint endpoint, {
     required T Function(Object? json) decode,
@@ -118,6 +121,7 @@ class ApiClient {
       throw ArgumentError('$endpoint does not take an Idempotency-Key');
     }
 
+    var foreignTenant = false;
     final headers = <String, Object>{
       'Accept': 'application/json',
       // Same id on the refresh retry: one user action = one correlation id.
@@ -129,7 +133,11 @@ class ApiClient {
 
     switch (endpoint.tenant) {
       case TenantScope.required:
-        final active = _activeTenantId();
+        final current = _activeTenantId();
+        final active = tenantId != null && tenantId.isNotEmpty
+            ? tenantId
+            : current;
+        foreignTenant = active != current;
         if (active == null || active.isEmpty) {
           _events.onTenantAccessDenied?.call();
           throw ApiException(
@@ -185,7 +193,7 @@ class ApiClient {
         headers: response.headers,
       );
     }
-    throw _failure(response);
+    throw _failure(response, sessionEvents: !foreignTenant);
   }
 
   Future<Response<Object?>> _attempt(
@@ -255,7 +263,10 @@ class ApiClient {
     }
   }
 
-  ApiException _failure(Response<Object?> response) {
+  ApiException _failure(
+    Response<Object?> response, {
+    required bool sessionEvents,
+  }) {
     final status = response.statusCode ?? 0;
     ProblemDetails? problem;
     final json = _tryDecodeJson(response.data);
@@ -268,9 +279,9 @@ class ApiClient {
     switch (error.kind) {
       case ApiErrorKind.unauthorized:
         _events.onUnauthorized?.call();
-      case ApiErrorKind.tenantAccessDenied:
+      case ApiErrorKind.tenantAccessDenied when sessionEvents:
         _events.onTenantAccessDenied?.call();
-      case ApiErrorKind.tenantInactive:
+      case ApiErrorKind.tenantInactive when sessionEvents:
         _events.onTenantInactive?.call();
       // ignore: no_default_cases, other kinds are handled by the caller's UI.
       default:

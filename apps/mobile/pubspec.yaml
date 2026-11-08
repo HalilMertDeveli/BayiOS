@@ -9,7 +9,10 @@ environment:
 
 # Exact versions on purpose (no caret): upgrades are explicit PRs (ADR 0011). pubspec.lock is committed.
 dependencies:
+  connectivity_plus: 7.3.2
   dio: 5.11.1
+  firebase_core: 5.1.0
+  firebase_messaging: 17.0.1
   flutter:
     sdk: flutter
   flutter_localizations:

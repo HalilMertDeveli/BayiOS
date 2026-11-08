@@ -107,6 +107,8 @@ class PickController extends ChangeNotifier {
   IdempotentAction<PickingTask>? _completeAction;
   int? _completeVersion;
   IdempotentAction<PickingTask>? _shortageAction;
+  bool _claimUnconfirmed = false;
+  bool _completeUnconfirmed = false;
   String? _shortageSignature;
   Future<void> _queue = Future.value();
 
@@ -136,6 +138,13 @@ class PickController extends ChangeNotifier {
   bool get retryingBusy => _retryingBusy;
   PickPending? get pending => _pending;
   PickPermissions get permissions => _permissions;
+
+  /// "Üstlen" whose answer never arrived: the button reads "Tekrar gönder"
+  /// and sends the same request (same Idempotency-Key).
+  bool get claimNeedsResend => _claimUnconfirmed;
+
+  /// Same for "Görevi tamamla" (same key and If-Match version).
+  bool get completeNeedsResend => _completeUnconfirmed;
 
   /// A scan whose answer never arrived; [resend] sends it again.
   bool get hasFailedScan => _failedScan != null;
@@ -390,11 +399,13 @@ class PickController extends ChangeNotifier {
     try {
       _task = await _withBusyRetry(action);
       _claimAction = null;
+      _claimUnconfirmed = false;
       _focusId = null;
       _notice = PickFeedback(PickTone.success, _l10n.pickingClaimed);
       onWrite?.call();
     } on Object catch (error) {
       if (!isResendable(error)) _claimAction = null;
+      _claimUnconfirmed = isResendable(error) && _claimAction != null;
       _notice = PickFeedback(
         PickTone.warning,
         _l10n.pickingClaimFailed,
@@ -431,6 +442,7 @@ class PickController extends ChangeNotifier {
       _task = await _withBusyRetry(action);
       _completeAction = null;
       _completeVersion = null;
+      _completeUnconfirmed = false;
       _notice = PickFeedback(
         PickTone.success,
         _l10n.pickingCompleted(_task.task.orderNumber),
@@ -445,6 +457,7 @@ class PickController extends ChangeNotifier {
           _l10n.pickingConflictBody,
         );
         unawaited(reload());
+        _completeUnconfirmed = false;
       } else {
         _notice = PickFeedback(
           PickTone.error,
@@ -453,6 +466,7 @@ class PickController extends ChangeNotifier {
               ? _l10n.pickingErrorBusyFinal
               : pickingErrorMessage(_l10n, error),
         );
+        _completeUnconfirmed = isResendable(error);
         if (_needsReload(error)) unawaited(reload());
       }
     } finally {
@@ -513,6 +527,8 @@ class PickController extends ChangeNotifier {
       final fresh = await _api.get(_task.task.id);
       if (_disposed) return;
       _task = fresh;
+      // Another version: "Tamamla" is a new action again, not a resend.
+      if (fresh.task.version != _completeVersion) _completeUnconfirmed = false;
       _location = keepLocation(_location, current);
       _clampQuantity();
       _notify();

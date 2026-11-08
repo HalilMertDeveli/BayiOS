@@ -46,6 +46,7 @@ internal sealed class TenantWorld
         ["aliases"] = "learnedAlias",
         ["members"] = "member",
         ["invitations"] = "invitation",
+        ["devices"] = "device",
     };
 
     private readonly ApiFixture _fixture;
@@ -201,6 +202,13 @@ internal sealed class TenantWorld
         _ids["member"] = member;
         var invitation = await CreateAsync(null, "/api/v1/members/invitations", new { email = $"davet-{Token.ToLowerInvariant()}@example.test", role = "viewer" });
         Remember("invitation", invitation.GetProperty("invitation"));
+
+        // A push registration of the owner (#44): target of DELETE /devices/{id}. The token is a synthetic FCM-like value.
+        var device = await ReadAsync(
+            await Owner.PostAsync("/api/v1/devices", new { token = $"world-{Guid.NewGuid():N}:{Guid.NewGuid():N}", platform = "android", appVersion = "0.1.0", locale = "tr-TR" }),
+            HttpStatusCode.OK,
+            "/api/v1/devices");
+        Remember("device", device);
 
         // Versions may have moved while children were added (ETag of the current state is used by the probes).
         await RefreshAsync("product", $"/api/v1/products/{Id("product")}");

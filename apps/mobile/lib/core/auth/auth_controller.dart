@@ -26,6 +26,13 @@ final authRepositoryProvider = Provider<AuthRepository>(
   (ref) => throw UnimplementedError('authRepositoryProvider not overridden'),
 );
 
+/// Steps that must run while the session is still valid, right before
+/// sign-out. Registered by other controllers (push) in their build; a plain
+/// list, so [AuthController] does not depend on them (no provider cycle).
+final beforeSignOutProvider = Provider<List<Future<void> Function()>>(
+  (ref) => [],
+);
+
 final authControllerProvider = NotifierProvider<AuthController, AuthState>(
   AuthController.new,
 );
@@ -66,7 +73,17 @@ class AuthController extends Notifier<AuthState> {
     state = SignedIn(user);
   }
 
+  /// Runs the [beforeSignOutProvider] steps first (e.g. removing this
+  /// install's push registration — it needs the session), then signs out,
+  /// also when a step fails. Steps bound their own time.
   Future<void> signOut() async {
+    for (final step in [...ref.read(beforeSignOutProvider)]) {
+      try {
+        await step();
+      } on Object {
+        // Best effort: the API drops stale registrations.
+      }
+    }
     state = const SignedOut();
     await _repository.signOut();
   }

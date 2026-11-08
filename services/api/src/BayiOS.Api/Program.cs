@@ -12,6 +12,7 @@ using BayiOS.Modules.Identity;
 using BayiOS.Modules.Imports;
 using BayiOS.Modules.Integrations;
 using BayiOS.Modules.Inventory;
+using BayiOS.Modules.Notifications;
 using BayiOS.Modules.Orders;
 using BayiOS.Modules.Pricing;
 using BayiOS.Modules.Reports;
@@ -71,6 +72,7 @@ builder.Services.AddReportsModule();
 builder.Services.AddReportsPorts();
 builder.Services.AddBillingModule();
 builder.Services.AddBillingPorts();
+builder.Services.AddNotificationsModule();
 
 var app = builder.Build();
 
@@ -107,6 +109,7 @@ app.MapOrdersModule();
 app.MapIntegrationsModule();
 app.MapReportsModule();
 app.MapBillingModule();
+app.MapNotificationsModule();
 
 app.Run();
 

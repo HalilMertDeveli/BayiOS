@@ -22,6 +22,9 @@ class FakeAuthRepository implements AuthRepository {
 
   int refreshCalls = 0;
   int signOutCalls = 0;
+
+  /// Called inside [signOut] (ordering checks).
+  void Function()? onSignOut;
   final signInCalls = <({String email, String password})>[];
   final _changes = StreamController<AuthChange>.broadcast();
 
@@ -50,6 +53,7 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<void> signOut() async {
     signOutCalls++;
+    onSignOut?.call();
     user = null;
   }
 

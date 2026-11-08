@@ -18,6 +18,11 @@ Thumbs.db
 google-services.json
 GoogleService-Info.plist
 service-account*.json
+# Firebase (#44): service-account keys as downloaded from the console, FlutterFire CLI output
+*firebase-adminsdk*.json
+firebase-service-account*.json
+.firebaserc
+apps/mobile/lib/firebase_options.dart
 
 # .NET
 bin/

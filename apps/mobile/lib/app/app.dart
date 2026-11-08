@@ -1,3 +1,4 @@
+import 'package:bayios_mobile/app/push_coordinator.dart';
 import 'package:bayios_mobile/app/router.dart';
 import 'package:bayios_mobile/core/providers.dart';
 import 'package:bayios_mobile/core/ui/app_theme.dart';
@@ -21,8 +22,9 @@ class BayiOsApp extends ConsumerWidget {
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       routerConfig: ref.watch(routerProvider),
-      builder: (context, child) =>
-          WithOfflineBanner(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => WithOfflineBanner(
+        child: PushCoordinator(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }

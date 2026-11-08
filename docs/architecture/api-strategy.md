@@ -359,8 +359,9 @@ flowchart LR
 
 ### 12.11 Audit & Notifications
 | GET | `/audit-events` (entityType, entityId, actor, from, to) | `audit.read` |
-| POST | `/devices` (İ) | (üyelik) | FCM token kaydı/yenileme |
-| DELETE | `/devices/{id}` | (üyelik) | |
+| GET | `/devices` | `tenant.read` (her rol) | Bu işletmede kendi push kayıtlarım (token dönmez) — #44 |
+| POST | `/devices` (İ) | `tenant.read` (her rol) | FCM token kaydı/yenileme; başka kullanıcıdaki/işletmedeki token çağırana taşınır; 422 `validation.failed` |
+| DELETE | `/devices/{id}` | `tenant.read` (her rol) | Kendi kaydı (çıkış, işletme değişimi); yoksa 404 |
 | GET | `/notifications` · POST `/notifications/{id}/read` | (üyelik) | |
 
 ### 12.12 Platform

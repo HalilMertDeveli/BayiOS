@@ -51,6 +51,7 @@ class ReceivingScreen extends ConsumerWidget {
             forbidden: l10n.receivingForbidden,
           ),
           onRetry: controller.load,
+          error: state.loadError,
         ),
       );
     } else {
@@ -424,6 +425,7 @@ class _LineEditorState extends ConsumerState<_LineEditor> {
         tone: BosColors.danger,
         message: stockErrorMessage(l10n, state.locationsError!),
         onRetry: widget.controller.retryLocations,
+        error: state.locationsError,
       );
     }
     if (state.locations.isEmpty) {
@@ -684,7 +686,7 @@ class _FailureNotice extends StatelessWidget {
                   key: const Key('receiving-retry'),
                   onPressed: onRetry,
                   icon: const Icon(Icons.refresh),
-                  label: Text(l10n.retry),
+                  label: Text(l10n.resend),
                   style: FilledButton.styleFrom(
                     backgroundColor: BosColors.dangerSolid,
                   ),

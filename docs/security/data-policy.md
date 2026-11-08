@@ -66,7 +66,7 @@ ve maskeli gösterilir.
 | Arka plan işleri (`platform.jobs`) | Başarılı: 7 gün, `dead`: 30 gün (`Jobs:SucceededRetention` / `Jobs:DeadRetention`) | İşletim; yük yalnızca kimlik içerir, `last_error` temizlenmiş (ADR 0006) |
 | Outbox mesajları | İşlendikten 7 gün sonra (`Jobs:OutboxRetention`) | İşletim; teslim job'ları ayrı saklanır |
 | Teknik loglar | 30 gün | İşletim |
-| FCM token | Cihaz çıkışı veya 90 gün etkisizlik | Minimizasyon |
+| FCM token | Cihaz çıkışı veya 90 gün etkisizlik — uygulanan (#44): mobil çıkıştan önce `DELETE /devices/{id}` + FCM token iptali; FCM "unregistered" yanıtında silinir; saatlik `notifications.device_cleanup` `Push:StaleAfterDays` (varsayılan 90, taban 30) yenilenmeyen kaydı siler. Token loglanmaz, API yanıtında ve job payload'ında yoktur | Minimizasyon |
 
 ## 5. Tenant talepleri: dışa aktarma ve silme
 - **Dışa aktarma (owner):** Tüm tenant verisi CSV/JSON (zip) olarak, arka plan işiyle; indirme kısa ömürlü signed URL.
@@ -135,7 +135,7 @@ Yeni alt işleyen eklemek = bu tabloyu güncellemek + tenant'lara bildirim (DPA'
 | JWT JWKS URL / issuer | `.env` | API host env | API host env |
 | Audit IP HMAC anahtarı (`Audit__IpHashKey`, ≥ 32 bayt) | Boş bırakılabilir (IP hash yok) | API host env (ayrı anahtar) | API host env (ayrı anahtar) |
 | Anthropic API anahtarı | Geliştiricinin kendi test anahtarı, `.env`; varsayılan mock | API host env (ayrı anahtar, düşük harcama limiti) | API host env (ayrı anahtar, bütçe alarmı) |
-| FCM servis hesabı JSON | `bayios-dev` projesi, `.env` dosya yolu | `bayios-dev` (API host secret) | `bayios-prod` (API host secret) |
+| FCM servis hesabı JSON (`Push__ServiceAccountJson`; yerelde `Push__ServiceAccountFile`, repo dışı yol) | `bayios-dev` projesi | `bayios-dev` (API host secret) | `bayios-prod` (API host secret) |
 | Vercel token | — | GitHub secret (gerekirse; Vercel Git entegrasyonu tercih) | Aynı |
 | API host deploy token | — | GitHub Environment `preview` | GitHub Environment `production` |
 | Mobil imzalama anahtarı (Android keystore / iOS sertifika) | Debug anahtarı | — | CI secret veya Codemagic; yerelde yedek (ürün sahibi kasası) |
@@ -147,6 +147,8 @@ yazılmaz; `.env.example` yalnızca değişken adları içerir.
 - Gerçek anahtar, connection string, müşteri verisi, gerçek fiyat listesi, gerçek firma adı **asla** commit edilmez.
 - Seed ve fixture'lar sentetik (ör. "Demo Motor Yedek Parça Ltd.", `@example.com` e-postaları, `+90 555 000 00 xx`).
 - GitHub secret scanning + push protection açık; gitleaks CI'da; `.gitignore`: `.env*` (`.env.example` hariç), `*.keystore`,
-  `google-services.json` (prod), `GoogleService-Info.plist` (prod), `appsettings.*.local.json`.
+  `google-services.json`, `GoogleService-Info.plist` (hiçbir ortamınki: mobil Firebase'i `--dart-define` ile Dart'tan
+  başlatır, #44), `service-account*.json`, `*firebase-adminsdk*.json`, `apps/mobile/lib/firebase_options.dart`,
+  `appsettings.*.local.json`.
 - Sızıntı olursa: anahtar **önce** iptal/rotasyon, sonra geçmiş temizliği (geçmiş temizliği tek başına yetmez; public repo forklanmış olabilir).
 - Ekran görüntüleri ve test artefaktları sentetik veriyle üretilir.

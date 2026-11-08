@@ -262,6 +262,14 @@ void main() {
       await fill(tester);
       await tapOn(tester, find.byKey(const Key('adjust-submit')));
       expect(find.text(l10n.stockAdjustPendingHint), findsOneWidget);
+      await scrollTo(tester, find.byKey(const Key('adjust-submit')));
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('adjust-submit')),
+          matching: find.text(l10n.resend),
+        ),
+        findsOneWidget,
+      );
       await tapOn(tester, find.byKey(const Key('adjust-submit')));
       final calls = api.callsTo('POST', '/api/v1/inventory/adjustments');
       expect(calls, hasLength(2));

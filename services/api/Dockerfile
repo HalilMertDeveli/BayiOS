@@ -36,6 +36,7 @@ COPY src/Modules/Integrations/BayiOS.Modules.Integrations/BayiOS.Modules.Integra
 COPY src/Modules/Orders/BayiOS.Modules.Orders/BayiOS.Modules.Orders.csproj src/Modules/Orders/BayiOS.Modules.Orders/
 COPY src/Modules/Reports/BayiOS.Modules.Reports/BayiOS.Modules.Reports.csproj src/Modules/Reports/BayiOS.Modules.Reports/
 COPY src/Modules/Billing/BayiOS.Modules.Billing/BayiOS.Modules.Billing.csproj src/Modules/Billing/BayiOS.Modules.Billing/
+COPY src/Modules/Notifications/BayiOS.Modules.Notifications/BayiOS.Modules.Notifications.csproj src/Modules/Notifications/BayiOS.Modules.Notifications/
 RUN dotnet restore src/BayiOS.Api/BayiOS.Api.csproj
 
 COPY src/ src/

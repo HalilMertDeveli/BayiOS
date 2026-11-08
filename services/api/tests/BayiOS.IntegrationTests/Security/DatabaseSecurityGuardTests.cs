@@ -70,6 +70,9 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         ["integrations.ai_settings"] = ArchiveOnly,
         ["integrations.learned_aliases"] = Full,
 
+        // Push registrations (#44): deleted on sign-out, on FCM "unregistered" and by the stale sweep.
+        ["notifications.device_tokens"] = Full,
+
         ["inventory.inventory_balances"] = ArchiveOnly, // derived; never deleted
         ["inventory.inventory_movements"] = AppendOnly, // the ledger
         ["inventory.stock_reservations"] = ArchiveOnly,
@@ -129,6 +132,7 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
     {
         ["identity.memberships"] = "read: tenant_id = app.tenant_id OR user_id = app.user_id (tenant resolution)",
         ["platform.idempotency_keys"] = "tenant_id = app.tenant_id OR (tenant_id IS NULL AND user_id = app.user_id); migrator purge policies",
+        ["notifications.device_tokens"] = "tenant_id = app.tenant_id AND (no app.user_id (a job) OR user_id = app.user_id): a request sees only its own user's registrations",
     };
 
     /// <summary>
@@ -155,6 +159,9 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         // passed, to list their tenant ids; the update itself runs per tenant under the runtime role's RLS.
         ["billing.tenant_subscriptions"] = ["tenant_subscriptions_expiry_select"],
         ["billing.tenant_modules"] = ["tenant_modules_expiry_select"],
+
+        // Stale push registrations (notifications.purge_stale_device_tokens, #44): rows not refreshed for 30 days.
+        ["notifications.device_tokens"] = ["device_tokens_purge_select", "device_tokens_purge_delete"],
     };
 
     /// <summary>
@@ -166,6 +173,16 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
     private static readonly Dictionary<string, (string Policy, string Qual)> MigratorLookupPolicies = new Dictionary<string, (string Policy, string Qual)>
     {
         ["identity.invitations"] = ("invitations_token_lookup", "(status = 'pending'::text)"),
+    };
+
+    /// <summary>
+    /// Owner-only policies of the token hand-over (<c>notifications.release_device_token</c>, #44): when another user or
+    /// tenant registers a device token, the function deletes the old owner's row. They expose only rows whose hash
+    /// equals the transaction-local <c>bayios.device_token_handover</c> the function sets; SELECT/DELETE only.
+    /// </summary>
+    private static readonly Dictionary<string, string[]> MigratorHandoverPolicies = new Dictionary<string, string[]>
+    {
+        ["notifications.device_tokens"] = ["device_tokens_handover_select", "device_tokens_handover_delete"],
     };
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -200,7 +217,7 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
     {
         var schemas = await StringsAsync(DatabaseCatalog.BusinessSchemasSql + " ORDER BY 1");
         Assert.Superset(
-            new HashSet<string> { "audit", "billing", "catalog", "customers", "identity", "imports", "integrations", "inventory", "orders", "platform", "pricing", "reports", "warehouse" },
+            new HashSet<string> { "audit", "billing", "catalog", "customers", "identity", "imports", "integrations", "inventory", "notifications", "orders", "platform", "pricing", "reports", "warehouse" },
             schemas.ToHashSet());
 
         Assert.Empty(await StringsAsync(
@@ -271,6 +288,18 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
             if (roles.Contains("public"))
             {
                 violations.Add($"{table}.{name}: policy applies to PUBLIC");
+            }
+
+            if (!roles.Contains(App)
+                && MigratorHandoverPolicies.TryGetValue(table, out var handover) && handover.Contains(name) && roles.SequenceEqual(["bayios_migrator"]))
+            {
+                if (cmd is not ("SELECT" or "DELETE") || check.Length > 0
+                    || !qual.Contains("token_sha256 = decode(NULLIF(current_setting('bayios.device_token_handover'::text, true), ''::text), 'hex'::text)", StringComparison.Ordinal))
+                {
+                    violations.Add($"{table}.{name}: hand-over policy must be SELECT/DELETE of the one token hash the function names ({cmd}: {qual})");
+                }
+
+                continue;
             }
 
             if (!roles.Contains(App)

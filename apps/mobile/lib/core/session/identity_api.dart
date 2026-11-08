@@ -1,6 +1,7 @@
 import 'package:bayios_mobile/core/api/api_client.dart';
 import 'package:bayios_mobile/core/api/contract.dart';
 import 'package:bayios_mobile/core/api/endpoint.dart';
+import 'package:bayios_mobile/core/push/device_api.dart';
 import 'package:bayios_mobile/core/session/me.dart';
 
 /// Endpoints the core uses (checked against the contract).
@@ -21,7 +22,7 @@ abstract final class CoreEndpoints {
     authenticated: false,
   );
 
-  static const List<ApiEndpoint> all = [me, meta];
+  static const List<ApiEndpoint> all = [me, meta, ...DeviceEndpoints.all];
 
   static const List<ContractSchema> schemas = [
     Me.contract,
@@ -29,6 +30,7 @@ abstract final class CoreEndpoints {
     ActiveTenant.contract,
     PermissionGrant.contract,
     TenantEntitlements.contract,
+    ...DeviceEndpoints.schemas,
   ];
 }
 

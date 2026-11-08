@@ -23,6 +23,7 @@
     <ProjectReference Include="..\Modules\Imports\BayiOS.Modules.Imports\BayiOS.Modules.Imports.csproj" />
     <ProjectReference Include="..\Modules\Integrations\BayiOS.Modules.Integrations\BayiOS.Modules.Integrations.csproj" />
     <ProjectReference Include="..\Modules\Inventory\BayiOS.Modules.Inventory\BayiOS.Modules.Inventory.csproj" />
+    <ProjectReference Include="..\Modules\Notifications\BayiOS.Modules.Notifications\BayiOS.Modules.Notifications.csproj" />
     <ProjectReference Include="..\Modules\Orders\BayiOS.Modules.Orders\BayiOS.Modules.Orders.csproj" />
     <ProjectReference Include="..\Modules\Pricing\BayiOS.Modules.Pricing\BayiOS.Modules.Pricing.csproj" />
     <ProjectReference Include="..\Modules\Reports\BayiOS.Modules.Reports\BayiOS.Modules.Reports.csproj" />

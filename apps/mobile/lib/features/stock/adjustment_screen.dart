@@ -294,7 +294,7 @@ class _AdjustmentScreenState extends ConsumerState<AdjustmentScreen> {
             _sending
                 ? l10n.stockAdjustSaving
                 : _pending
-                ? l10n.retry
+                ? l10n.resend
                 : l10n.stockAdjustSubmit,
           ),
           style: FilledButton.styleFrom(

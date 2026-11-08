@@ -483,7 +483,9 @@ internal sealed class PickingService(
             cancellationToken);
         if (userId is not null)
         {
-            await outbox.PublishAsync(FulfillmentEvents.PickingTaskAssigned, new { taskId = task.Id, orderId = task.OrderId, assignedTo = userId }, cancellationToken);
+            // assignedBy lets the Notifications subscriber skip self-claims (no push to the one who took the task).
+            await outbox.PublishAsync(
+                FulfillmentEvents.PickingTaskAssigned, new { taskId = task.Id, orderId = task.OrderId, assignedTo = userId, assignedBy = access.UserId }, cancellationToken);
         }
     }
 

@@ -240,6 +240,65 @@ void main() {
     expect(find.byKey(const Key('pick-camera')), findsNothing);
   });
 
+  testWidgets('complete: lost answer → "Tekrar gönder" → same key, done once', (
+    tester,
+  ) async {
+    server.lines.first.picked = 2;
+    server.lines.last.picked = 1;
+    await open(tester);
+    server.dropNextAnswer = true;
+    await tester.tap(find.byKey(const Key('pick-complete')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pick-notice')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('pick-complete')),
+        matching: find.text(l10n.pickingResend),
+      ),
+      findsOneWidget,
+    );
+    await expectAccessibleTargets(tester);
+
+    await tester.tap(find.byKey(const Key('pick-complete')));
+    await tester.pumpAndSettle();
+    final writes = server.writes('/complete');
+    expect(writes, hasLength(2));
+    expect(
+      writes[1].headers[ApiClient.idempotencyHeader],
+      writes[0].headers[ApiClient.idempotencyHeader],
+    );
+    expect(writes[1].headers['If-Match'], writes[0].headers['If-Match']);
+    expect(find.byKey(const Key('pick-done')), findsOneWidget);
+  });
+
+  testWidgets('claim: lost answer → "Tekrar gönder" → same key', (
+    tester,
+  ) async {
+    server.assignedTo = null;
+    await open(tester);
+    server.dropNextAnswer = true;
+    await tester.tap(find.byKey(const Key('pick-claim')));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('pick-claim')),
+        matching: find.text(l10n.pickingResend),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('pick-claim')));
+    await tester.pumpAndSettle();
+    final writes = server.writes('/claim');
+    expect(writes, hasLength(2));
+    expect(
+      writes[1].headers[ApiClient.idempotencyHeader],
+      writes[0].headers[ApiClient.idempotencyHeader],
+    );
+    expect(server.assignedTo, userId);
+    expect(find.byKey(const Key('pick-camera')), findsOneWidget);
+  });
+
   testWidgets('412 on complete: conflict shown, task reloaded', (tester) async {
     server.lines.first.picked = 2;
     server.lines.last.picked = 1;

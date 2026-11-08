@@ -52,12 +52,13 @@ internal sealed partial class PlatformWorker(
 {
     /// <summary>
     /// Tenant-less jobs enqueued once per maintenance interval (threat-model §3.6 allowlist): the platform cleanups and
-    /// the AI parse text retention of the Integrations module (data-policy §4) and the trial expiry of Billing (#51).
+    /// the AI parse text retention of the Integrations module (data-policy §4), the trial expiry of Billing (#51) and the
+    /// stale push-registration cleanup of Notifications (#44).
     /// </summary>
     public static readonly IReadOnlyList<string> MaintenanceJobTypes =
     [
         IdempotencyCleanupJob.Type, QueueCleanupJob.Type, AuditRetentionJob.Type, BayiOS.Modules.Integrations.IntegrationsModule.TextRetentionJobType,
-        BayiOS.Modules.Billing.BillingModule.ExpiryJobType,
+        BayiOS.Modules.Billing.BillingModule.ExpiryJobType, BayiOS.Modules.Notifications.NotificationsModule.DeviceCleanupJobType,
     ];
 
     private JobsOptions _options = null!;
