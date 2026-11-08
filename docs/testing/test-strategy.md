@@ -65,7 +65,9 @@ https://packages.nuget.org/packages/FluentAssertions/8.3.0/License (2026-11-04 k
 | 9 | Aynı Excel iki kez → mükerrer yok | API integration (job worker dahil) | AI & Integration Engineer | İkinci import 0 yeni kayıt (upsert by SKU) veya dosya hash'i ile "zaten içe aktarıldı"; idempotent |
 | 10 | Belirsiz WhatsApp satırı → işaretlenir, otomatik seçilmez | API integration (kayıtlı AI yanıtı) + Playwright onay ekranı | AI & Integration Engineer | Satır `ambiguous`, `variant_id = null`, onay ekranında kullanıcı seçimi zorunlu |
 
-Mobil ayağı olan senaryolar (1, 2, 4) Flutter SDK kurulana kadar **API seviyesinde** koşar; mobil ayak BLOCKED olarak izlenir.
+Mobil ayağı olan senaryolardan 2 ve 4 gerçek Android emülatöründe koşar (§4.2, #45). Senaryo 1'in mobil ayağı (ürün
+web'de oluşturulur → mobil stok sorgusunda görünür) aynı akışta kapsanır: ürünler API'den oluşturulur, mobil stok
+sorgusu onları ve web onayının rezervasyonunu gösterir (≤ 5 sn ölçütü ayrıca ölçülmez). iOS ayağı BLOCKED (§4.2).
 
 ### 4.1 Gerçek yığın web E2E (`e2e-real`, issue #40)
 `apps/web/e2e/` Playwright testleri ağ katmanında mock'ludur. Ayrıca **hiçbir şeyin mock'lanmadığı** tek bir iş
@@ -86,6 +88,22 @@ Tam boy demo verisi ayrıca `.github/workflows/demo-seed.yml` (`demo seed (twice
 çalıştırmanın hiçbir şeyi değiştirmemesi zorunludur. Ayrıntı: `docs/operations/demo.md`.
 
 Yeniden deneme yok (`retries: 0`); veriler çalıştırma başına benzersiz ve sentetik. Yerelde çalıştırma: `apps/web/README.md`.
+
+### 4.2 Web ↔ mobil gerçek akış + Android smoke (`e2e-mobile`, issue #45)
+`.github/workflows/e2e-mobile.yml` → iş adı `e2e web-mobile flow (android emulator)` (path filtreli: mobil, API,
+sözleşme, `apps/web/e2e-local`, yığın betikleri; ci-gate otomatik toplar). Aynı `e2e-stack.sh` yığını + KVM'li Android
+emülatörü (`ReactiveCircus/android-emulator-runner`, SHA sabit; API 34 x86_64, AVD + açılış snapshot'ı önbellekli).
+Tek komut, yerelde de aynısı: `apps/mobile/tool/e2e.sh` (`apps/mobile/README.md`). Mock yok; her çalıştırma kendi
+işletmesini, kullanıcılarını ve ürünlerini kurar.
+
+| Faz | Kapsam | Dosya |
+|---|---|---|
+| 1 web | API: işletme + şablon + raflı depo (3 raf) + A/B/C ürünleri (barkodlu) + A/B mal kabul + varsayılan fiyat listesi + müşteri; **warehouse_staff** davet edilir ve kendi Supabase hesabıyla kabul eder. Web: sahip siparişi barkodla oluşturur (A×3, B×2), onaya gönderir, onaylar → /stok'ta ayrılmış; havuzda tek açık görev | `apps/web/e2e-local/web-mobile-1-prepare.spec.ts` |
+| 2 mobil | Personel girişi/çıkışı (smoke). Akış: pano rolü "Depo personeli"; A'nın stokunda web onayının rezervasyonu, **"Düzelt" yok**; mal kabulde bilinmeyen kod reddi → C rafına 4 adet → bakiye; görevler → havuz → "Üstlen ve başla"; A rafı, bilinmeyen kod ("Barkod tanınmadı"), **yanlış ürün** C ("Yanlış ürün", kalan değişmez), A iki okutmada; B için **yanlış raf** ("Yanlış raf"), sonra doğru raf + B; tamamla → taslak sevkiyat | `apps/mobile/integration_test/smoke_test.dart`, `web_flow_test.dart` |
+| 3 web | API: görev `completed`, atanan = personel, satırlar tam toplandı, sevkiyat var; ledger: C'de tek `receipt` (raf C, `createdBy` = personel), A'da toplamadan hareket yok. **Yetki ayrımı** personelin kendi token'ıyla: `POST /inventory/adjustments` → 403 `auth.forbidden` (hareket oluşmaz), sipariş fiyatsız (`totals`/`unitPrice` null). Web: görev "Tamamlandı" + atanan, sipariş "Paketlendi", /stok A/B rafta aynı + ayrılmış, C 4 (raf C). Sahip paket kontrolü + sevk → "Sevk Edildi", rafta azaldı, ayrılmış 0, iki `shipment_out` | `apps/web/e2e-local/web-mobile-2-verify.spec.ts` |
+
+iOS: Windows'ta derlenemez; macOS runner `docs/operations/ci-cd.md` §1 gereği ürün sahibi onayı ister → **BLOCKED**
+(macOS runner onayı; dağıtım için Apple Developer hesabı). Ayrıntı: `apps/mobile/README.md` "iOS".
 
 ## 5. Eşzamanlılık test tasarımı
 - **Ortam:** Testcontainers PostgreSQL 17 (in-memory/SQLite **yasak** — kilit davranışı farklı).
