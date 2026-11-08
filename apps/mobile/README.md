@@ -37,6 +37,7 @@ flutter test                                     # birim, widget, 48 dp/erişile
 flutter build apk --debug
 ```
 CI: `.github/workflows/ci-mobile.yml` (`apps/mobile/**` veya `packages/contracts/**` değişince; `ci gate` bekler).
+Emülatörde gerçek yığına karşı web ↔ mobil akış: `.github/workflows/e2e-mobile.yml` (aşağıda "Web ↔ mobil gerçek akış").
 
 | Test | Kapsam |
 |---|---|
@@ -87,6 +88,58 @@ Gerçek Supabase Auth + API'ye karşı: giriş → işletme → pano → çıkı
      --dart-define-from-file=env/dev.json --dart-define-from-file=env/smoke.json \
      --dart-define=BAYIOS_SMOKE_ORDER=<sipariş no> --dart-define=BAYIOS_SMOKE_WRONG_CODE=<başka ürünün barkodu>
    ```
+
+## Web ↔ mobil gerçek akış — tek komut (#45)
+`tool/e2e.sh` web → mobil → web akışını gerçek yığın ve gerçek emülatörle koşar; hiçbir şey mock'lanmaz ve her
+çalıştırma **kendi** işletmesini, kullanıcılarını (sahip + davetle katılan `warehouse_staff`) ve ürünlerini kurar —
+elle hazırlanmış veri ya da `.demo/credentials.json` gerekmez, mevcut işletmelere dokunulmaz.
+
+1. **web** (`apps/web/e2e-local/web-mobile-1-prepare.spec.ts`): API'den işletme, raflı depo, A/B/C ürünleri, stok,
+   personel daveti + kabul; sahip siparişi **web arayüzünde** oluşturur ve onaylar (rezervasyon).
+2. **telefon** (`integration_test/smoke_test.dart` + `web_flow_test.dart`, personel olarak): giriş/çıkış smoke;
+   stokta web onayının rezervasyonu ve "Düzelt" düğmesinin **olmaması**; mal kabul (bilinmeyen kod reddi, C rafına 4);
+   havuzdaki görevi üstlenme; raf → bilinmeyen kod → **yanlış ürün** → doğru ürün (iki okutma) → **yanlış raf** → doğru
+   raf → tamamla. Kodlar elle giriş alanından yazılır. Ekran görüntüleri: `build/e2e/screenshots/`.
+3. **web** (`web-mobile-2-verify.spec.ts`): görev "Tamamlandı" (atanan personel), sipariş "Paketlendi", stok hâlâ
+   ayrılmış, C'nin bakiyesi rafında; ledger'da personelin `receipt` hareketi; personel token'ıyla stok düzeltme 403 ve
+   fiyatsız sipariş; sahip paket kontrolü + sevk → stok raftan düşer, rezervasyon kapanır.
+
+Yerelde (Git Bash; Docker, .NET SDK, Node 24, Flutter, Android SDK):
+```bash
+export PATH="/d/DevTools/flutter/bin:$PATH" ANDROID_HOME='D:\DevTools\android-sdk'
+emulator -avd BayiOS_Smoke_API36 &            # emulator-5554 (başka port: E2E_DEVICE=emulator-5560)
+npm --prefix apps/web ci && npx --prefix apps/web playwright install chromium   # ilk sefer
+
+# A) Çalışan bir yığına karşı (API :5280, web :3200, Supabase :54321) — örn. sahibin kendi yığını:
+apps/mobile/tool/e2e.sh
+# Farklı portlar: E2E_API_PORT=5380 E2E_WEB_PORT=3300 apps/mobile/tool/e2e.sh
+
+# B) Yığını da başlatarak (Windows'ta 55432 yasak → E2E_PG_PORT):
+E2E_START_STACK=1 E2E_PG_PORT=55632 E2E_API_PORT=5380 E2E_WEB_PORT=3300 apps/mobile/tool/e2e.sh
+```
+- Supabase publishable anahtarı (herkese açık yerel geliştirme anahtarı): `SUPABASE_PUBLISHABLE_KEY`, yoksa
+  `apps/web/.env.local`, yoksa `supabase status` (`SUPABASE_WORKDIR`, varsayılan bu checkout'un `infra/supabase/local`'ı;
+  git worktree'de imza anahtarı dosyası olmadığından ana checkout'un yolunu verin). Anahtar ekrana yazılmaz.
+- **`e2e-stack.sh` Supabase'i (54321) yerel tüm yığınlarla paylaşır.** `E2E_START_STACK=1` onu (zaten çalışıyorsa
+  aynen) başlatır; betik asla `down` çalıştırmaz. Paylaşılan makinede `e2e-stack.sh down` çalıştırmayın.
+- Çalıştırma durumu ve o çalıştırmanın sentetik giriş bilgileri `build/e2e/` (git-ignored) altındadır; yazdırmayın,
+  commit etmeyin. Faz 3 tek başına yeniden koşturulabilir:
+  `cd apps/web && npx playwright test -c playwright.local.config.ts web-mobile-2-verify` (faz 2 başarılıysa).
+- Süre (yerel, sıcak Gradle): faz 1 ≈ 5 sn, smoke ≈ 35 sn, mobil akış ≈ 2 dk, faz 3 ≈ 10 sn.
+
+CI: `.github/workflows/e2e-mobile.yml` (`e2e web-mobile flow (android emulator)`): `e2e-stack.sh up` + KVM'li
+emülatör (`ReactiveCircus/android-emulator-runner`, SHA sabit, API 34 x86_64; AVD/snapshot, Gradle ve pub önbellekli) +
+aynı `tool/e2e.sh`. Path filtreli (`apps/mobile/**`, `apps/web/e2e-local/**`, `packages/contracts/**`,
+`services/api/**`, yığın betikleri); `ci gate` çalıştığında bekler. Ekran görüntüleri her koşuda artefakt olarak yüklenir.
+
+## iOS — BLOCKED
+iOS derlemesi macOS + Xcode ister; geliştirme makinesi Windows'tur. GitHub'ın `macos-latest` runner'ı public repoda
+ücretsiz olsa da `docs/operations/ci-cd.md` §1 ("iOS derlemesi gerekirse macOS runner — ücretli dakika çarpanı, onay
+gerekir") ve `docs/operations/connectors.md` gereği macOS runner **ürün sahibi onayı** ister; bu yüzden
+`flutter build ios --no-codesign` işi eklenmedi. Durum: **BLOCKED — sahip kararı** (macOS runner onayı; TestFlight /
+cihaz dağıtımı için ayrıca Apple Developer hesabı). Onay gelirse önerilen iş: `macos-latest`, Flutter 3.47.9,
+`flutter pub get --enforce-lockfile` → `flutter build ios --debug --no-codesign` (yalnızca `apps/mobile/**` değişince).
+Kod tarafı hazır: `ios/` projesi, `NSCameraUsageDescription`; Dart kodu platformdan bağımsızdır ve aynı testlerden geçer.
 
 ## Stok ve mal kabul (#43)
 - `/stok` (`inventory.read`): barkod/SKU/ad ile arama; depo/raf bazında eldeki, rezerve, satılabilir ve minimum stok.

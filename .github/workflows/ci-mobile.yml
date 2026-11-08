@@ -5,7 +5,7 @@ name: ci-mobile
 # contract, and ci-gate (infra/ci/ci-gate.sh) then skips it; when it runs, ci-gate waits for it and requires success.
 # The contract test (test/contract/contract_test.dart) reads packages/contracts/openapi.json, so contract drift fails here.
 # No secrets: the build has no --dart-define (the app shows its configuration screen); integration_test (emulator smoke
-# against a real stack) is local-only, see apps/mobile/README.md.
+# + web ↔ mobile flow against a real stack) runs in e2e-mobile.yml, see apps/mobile/README.md.
 
 on:
   pull_request:
