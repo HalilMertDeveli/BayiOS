@@ -13,7 +13,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Run with the environment file (git-ignored, see env/dev.example.json):
 /// `flutter run --dart-define-from-file=env/dev.json`
-Future<void> main() async {
+Future<void> main() => run();
+
+/// The real bootstrap. [pushOverride] replaces the push service — only for
+/// the emulator smoke (integration_test/push_smoke_test.dart), which has no
+/// Firebase project to get a real token from.
+Future<void> run({PushService? pushOverride}) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final config = AppEnv.fromDefines();
@@ -39,9 +44,9 @@ Future<void> main() async {
   // Push (#44) only when the build carries a Firebase configuration
   // (BAYIOS_FIREBASE_* defines); otherwise — or if Firebase fails to start —
   // the app runs exactly the same without notifications.
-  PushService push = const NoopPushService();
+  var push = pushOverride ?? const NoopPushService();
   final firebase = FirebaseConfig.fromDefines();
-  if (firebase != null) {
+  if (pushOverride == null && firebase != null) {
     try {
       push = await FirebasePushService.start(firebase);
     } on Object catch (error) {

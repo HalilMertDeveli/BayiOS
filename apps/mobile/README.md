@@ -92,6 +92,17 @@ Gerçek Supabase Auth + API'ye karşı: giriş → işletme → pano → çıkı
      --dart-define=BAYIOS_SMOKE_ORDER=<sipariş no> --dart-define=BAYIOS_SMOKE_WRONG_CODE=<başka ürünün barkodu>
    ```
 
+7. **Push kaydı smoke** (`integration_test/push_smoke_test.dart`, #44, **yazar**: demo işletmede bir cihaz kaydı oluşturur
+   ve çıkışta siler). Firebase projesi olmadığından uygulama sentetik bir token alır (`app.run(pushOverride: …)`); geri
+   kalan her şey gerçektir. API'nin `/api/v1/devices` ucunu içeren bir sürümü gerekir (gerekirse worktree'den ayrı bir
+   portta çalıştırın). Her adımdan sonra `BAYIOS_SMOKE_HOLD_SECONDS` (varsayılan 20) bekler; bu sırada kayıt hosttan
+   `GET /api/v1/devices` ile görülebilir:
+   ```bash
+   flutter test integration_test/push_smoke_test.dart -d emulator-5560 \
+     --dart-define-from-file=env/dev.json --dart-define-from-file=env/smoke.json \
+     --dart-define=BAYIOS_SMOKE_PUSH_TOKEN=smoke-emulator-<32 hex>
+   ```
+
 ## Stok ve mal kabul (#43)
 - `/stok` (`inventory.read`): barkod/SKU/ad ile arama; depo/raf bazında eldeki, rezerve, satılabilir ve minimum stok.
 - `/stok/mal-kabul` (`inventory.receive`): API'de taslak mal kabul yoktur; satırlar cihazda toplanır, tek
