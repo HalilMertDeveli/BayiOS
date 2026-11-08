@@ -1,0 +1,161 @@
+name: e2e-mobile
+
+# Web ↔ mobile real-flow test + Android smoke (issue #45) on a real Android emulator (KVM) against the real stack
+# (infra/ci/e2e-stack.sh: Supabase Auth ES256, Postgres 17 + EF migrations, API as bayios_app, production web build).
+# Nothing is mocked. One command does the whole flow, the same one the owner runs locally: apps/mobile/tool/e2e.sh
+#   1. Playwright: fresh tenant + invited warehouse_staff (API), order created and approved in the web UI
+#   2. emulator: sign-in smoke + staff goods receipt, claim, pick (wrong product / shelf rejected), complete
+#   3. Playwright: owner sees task completed / order packed / stock reserved + received, packs and ships; staff cannot
+#      adjust stock nor see prices (API)
+# Path-filtered like ci-mobile; ci-gate (infra/ci/ci-gate.sh) waits for it when it runs and skips it when it does not.
+# No secrets: passwords are generated per run inside the runner; Supabase keys are the public local-dev keys.
+
+on:
+  pull_request:
+    branches: [preview, main]
+    paths:
+      - "apps/mobile/**"
+      - "apps/web/e2e-local/**"
+      - "packages/contracts/**"
+      - "services/api/**"
+      - "infra/ci/e2e-stack.sh"
+      - "infra/ci/ef-migrations.sh"
+      - ".github/workflows/e2e-mobile.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Emulator image: x86_64 (KVM), AOSP "default" target (no Play services needed).
+  EMULATOR_API_LEVEL: "34"
+  EMULATOR_TARGET: default
+  EMULATOR_ARCH: x86_64
+  EMULATOR_PROFILE: pixel_6
+
+jobs:
+  e2e-mobile:
+    # Keep this name stable; ci-gate aggregates it.
+    name: e2e web-mobile flow (android emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+      SUPABASE_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: services/api/global.json
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+          cache-dependency-path: |
+            apps/mobile/android/*.gradle*
+            apps/mobile/android/gradle/wrapper/gradle-wrapper.properties
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+          pub-cache: true
+
+      - name: Install web dependencies and Playwright Chromium
+        working-directory: apps/web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Mobile dependencies (locked) + localizations
+        working-directory: apps/mobile
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter gen-l10n
+
+      # AVD + boot snapshot cached per image: a warm start boots in well under a minute.
+      - name: Cache the AVD
+        id: avd-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.EMULATOR_API_LEVEL }}-${{ env.EMULATOR_TARGET }}-${{ env.EMULATOR_ARCH }}-${{ env.EMULATOR_PROFILE }}-v1
+
+      - name: Create the AVD and its boot snapshot (cache miss)
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.EMULATOR_API_LEVEL }}
+          target: ${{ env.EMULATOR_TARGET }}
+          arch: ${{ env.EMULATOR_ARCH }}
+          profile: ${{ env.EMULATOR_PROFILE }}
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "AVD and boot snapshot created"
+
+      - name: Start the real stack (Supabase Auth, Postgres 17 + migrations, API, web build)
+        run: bash infra/ci/e2e-stack.sh up
+
+      - name: Web ↔ mobile flow on the emulator (apps/mobile/tool/e2e.sh)
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.EMULATOR_API_LEVEL }}
+          target: ${{ env.EMULATOR_TARGET }}
+          arch: ${{ env.EMULATOR_ARCH }}
+          profile: ${{ env.EMULATOR_PROFILE }}
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          # One line: the action runs every script line in its own shell.
+          script: E2E_DEVICE=emulator-5554 bash apps/mobile/tool/e2e.sh
+
+      - name: Collect stack logs
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/bayios-e2e/logs"
+          cp "$RUNNER_TEMP/bayios-e2e"/*.log "$RUNNER_TEMP/bayios-e2e/logs/" 2>/dev/null || true
+          docker logs supabase_auth_bayios >"$RUNNER_TEMP/bayios-e2e/logs/supabase-auth.log" 2>&1 || true
+          docker logs bayios-e2e-postgres >"$RUNNER_TEMP/bayios-e2e/logs/postgres.log" 2>&1 || true
+
+      # Screenshots of every mobile step (synthetic per-run data; no secrets) + Playwright traces on failure.
+      - name: Upload screenshots, traces and stack logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-mobile-${{ github.run_attempt }}
+          path: |
+            apps/mobile/build/e2e/screenshots
+            apps/web/test-results/real
+            ${{ runner.temp }}/bayios-e2e/logs
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Stop the stack
+        if: always()
+        run: bash infra/ci/e2e-stack.sh down
