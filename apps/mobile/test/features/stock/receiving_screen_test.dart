@@ -197,6 +197,14 @@ void main() {
     expect(find.byKey(const Key('receiving-failure')), findsOneWidget);
     expect(find.text(l10n.errorTimeout), findsOneWidget);
     expect(find.text(l10n.receivingPendingHint), findsOneWidget);
+    // An unknown outcome is never a silent failure: the resend is offered.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('receiving-retry')),
+        matching: find.text(l10n.resend),
+      ),
+      findsOneWidget,
+    );
     // The first line of the screen has key 1.
     final remove = find.byKey(const Key('receiving-remove-1'));
     // Built lazily below the notice: scroll the list down to it.

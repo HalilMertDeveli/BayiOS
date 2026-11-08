@@ -122,28 +122,32 @@ class DashboardScreen extends ConsumerWidget {
     if (summary.hasValue && summary.requireValue != null) {
       body = _SummaryView(summary: summary.requireValue!, session: session);
     } else if (summary.hasError) {
-      body = Card(
-        key: const Key('dashboard-tasks-error'),
-        child: Padding(
-          padding: const EdgeInsets.all(BosSpace.s16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ErrorMessageBox(
-                '${l10n.dashboardTasksFailed} '
-                '${errorMessage(l10n, summary.error!)}',
-              ),
-              const SizedBox(height: BosSpace.s8),
-              OutlinedButton.icon(
-                key: const Key('dashboard-tasks-retry'),
-                onPressed: () => ref.invalidate(dashboardSummaryProvider),
-                icon: const Icon(Icons.refresh),
-                label: Text(l10n.retry),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(BosSize.minTouchTarget),
+      body = RefetchOnReconnect(
+        error: summary.error,
+        onReconnect: () => ref.invalidate(dashboardSummaryProvider),
+        child: Card(
+          key: const Key('dashboard-tasks-error'),
+          child: Padding(
+            padding: const EdgeInsets.all(BosSpace.s16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ErrorMessageBox(
+                  '${l10n.dashboardTasksFailed} '
+                  '${errorMessage(l10n, summary.error!)}',
                 ),
-              ),
-            ],
+                const SizedBox(height: BosSpace.s8),
+                OutlinedButton.icon(
+                  key: const Key('dashboard-tasks-retry'),
+                  onPressed: () => ref.invalidate(dashboardSummaryProvider),
+                  icon: const Icon(Icons.refresh),
+                  label: Text(l10n.retry),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(BosSize.minTouchTarget),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );

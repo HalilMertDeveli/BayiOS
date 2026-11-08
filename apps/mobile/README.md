@@ -25,6 +25,7 @@ flutter run --dart-define-from-file=env/dev.json
 | `BAYIOS_SUPABASE_URL` | Supabase Auth kökü. Emülatör: `http://10.0.2.2:54321` |
 | `BAYIOS_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable (anon) anahtarı — public'tir; service-role anahtarı **asla** |
 | `BAYIOS_CLIENT_VERSION` | Opsiyonel, `X-Client-Version` (varsayılan `0.1.0`) |
+| `BAYIOS_FIREBASE_API_KEY`, `BAYIOS_FIREBASE_PROJECT_ID`, `BAYIOS_FIREBASE_MESSAGING_SENDER_ID`, `BAYIOS_FIREBASE_ANDROID_APP_ID`, `BAYIOS_FIREBASE_IOS_APP_ID`, `BAYIOS_FIREBASE_IOS_BUNDLE_ID` | Opsiyonel, push (#44). Boşsa Firebase hiç başlatılmaz (push yok, izin istenmez). Değerler ve kurulum: [push-notifications.md](../../docs/operations/push-notifications.md) |
 
 Yapılandırma eksikse uygulama çökmez, "Uygulama yapılandırılmamış" ekranını gösterir. Düz HTTP yalnızca **debug**
 derlemede `10.0.2.2` / `localhost` / `127.0.0.1`'e açıktır (`android/app/src/debug/res/xml/network_security_config.xml`).
@@ -50,6 +51,9 @@ Emülatörde gerçek yığına karşı web ↔ mobil akış: `.github/workflows/
 | `test/features/picking/*` | Liste durumları/sekmeler, tara eşleşme/yanlış ürün/yanlış raf, adet doğrulama, aynı anahtarla yeniden gönderim, If-Match/412, izin bazlı görünürlük (sahte API sunucusu, idempotent tekrar oynatma) |
 | `test/contract/contract_test.dart` | Kullanılan uç/başlık/alanlar `packages/contracts/openapi.json` ile birebir |
 | `test/features/stock/*` | Stok sorgulama durumları, mal kabul akışı (okutma eşleşme/eşleşmeme, miktar/raf doğrulama, aynı `Idempotency-Key` ile yeniden deneme, `inventory.busy`), izin bazlı gizleme + 403, düzeltme + negatif stok onayı |
+| `test/core/push/*` | Push kaydı: Firebase yoksa hiçbir şey; izin bir kez; işletmede kayıt; token yenileme; işletme değişimi (eski işletmeden silme); çevrimdışı kayıt aynı anahtarla yeniden; çıkıştan önce silme + FCM token iptali |
+| `test/app/push_coordinator_test.dart` | Bildirime dokunma → `/gorevler/:id` (oturum geri yüklendikten sonra; soğuk başlangıç; başka üyelik işletmesine geçiş; üye olunmayan işletme yok sayılır; ön planda "Aç" bandı) |
+| `test/core/network/connection_errors_test.dart` | Ağ yok → bant; ağ gelince `/meta` yoklaması → bant kalkar, başarısız yükleme kendiliğinden yenilenir; çevrimdışıyken periyodik yoklama; sunucu hatası otomatik yenilenmez |
 
 ## Emülatör smoke (gerçek yerel yığın)
 Gerçek Supabase Auth + API'ye karşı: giriş → işletme → pano → çıkış (`integration_test/smoke_test.dart`).
@@ -87,6 +91,17 @@ Gerçek Supabase Auth + API'ye karşı: giriş → işletme → pano → çıkı
      --driver=test_driver/integration_test.dart --target=integration_test/picking_smoke_test.dart \
      --dart-define-from-file=env/dev.json --dart-define-from-file=env/smoke.json \
      --dart-define=BAYIOS_SMOKE_ORDER=<sipariş no> --dart-define=BAYIOS_SMOKE_WRONG_CODE=<başka ürünün barkodu>
+   ```
+
+7. **Push kaydı smoke** (`integration_test/push_smoke_test.dart`, #44, **yazar**: demo işletmede bir cihaz kaydı oluşturur
+   ve çıkışta siler). Firebase projesi olmadığından uygulama sentetik bir token alır (`app.run(pushOverride: …)`); geri
+   kalan her şey gerçektir. API'nin `/api/v1/devices` ucunu içeren bir sürümü gerekir (gerekirse worktree'den ayrı bir
+   portta çalıştırın). Her adımdan sonra `BAYIOS_SMOKE_HOLD_SECONDS` (varsayılan 20) bekler; bu sırada kayıt hosttan
+   `GET /api/v1/devices` ile görülebilir:
+   ```bash
+   flutter test integration_test/push_smoke_test.dart -d emulator-5560 \
+     --dart-define-from-file=env/dev.json --dart-define-from-file=env/smoke.json \
+     --dart-define=BAYIOS_SMOKE_PUSH_TOKEN=smoke-emulator-<32 hex>
    ```
 
 ## Web ↔ mobil gerçek akış — tek komut (#45)
@@ -168,6 +183,28 @@ Kod tarafı hazır: `ios/` projesi, `NSCameraUsageDescription`; Dart kodu platfo
 - **Kamera:** #43 ile ortak tarayıcı (`lib/features/stock/scanner.dart`, `barcodeScannerProvider`). İzin: Android
   `CAMERA` (zorunlu donanım değil), iOS tek `NSCameraUsageDescription`; reddedilirse, kamera yoksa veya tarayıcı
   kapatılırsa elle giriş alanına odaklanılır.
+
+## Push bildirimleri (#44)
+- Firebase **yalnızca bildirim** için; `BAYIOS_FIREBASE_*` tanımları boşsa `NoopPushService` (izin yok, kayıt yok).
+  `google-services.json` / `GoogleService-Info.plist` kullanılmaz ve commit edilmez: Firebase Dart'tan
+  (`FirebaseOptions`) başlatılır, Android derlemesi bu dosyalar olmadan çalışır (Google Services Gradle eklentisi yok).
+- `lib/core/push/`: `PushService` (arayüz, `NoopPushService`), `firebase_push.dart` (tek Firebase dosyası),
+  `device_api.dart` (`POST/DELETE /api/v1/devices`), `push_registration.dart` (yaşam döngüsü). `lib/app/push_coordinator.dart`:
+  dokunma → `/gorevler/:id` (yalnızca `SessionReady` olunca; görev başka bir üyelik işletmesindeyse önce ona geçilir),
+  ön planda gelen bildirim → "Aç" bandı.
+- İzin (Android 13+ `POST_NOTIFICATIONS`, iOS) giriş + işletme seçiminden sonra bir kez istenir. Kayıt işletme bazlıdır;
+  işletme değişince eskisinden silinir, çıkıştan **önce** silinir (`beforeSignOutProvider`, en çok ~5 sn).
+- iOS'ta APNs anahtarı ve Xcode *Push Notifications* yeteneği ürün sahibi adımıdır (push-notifications.md §3).
+
+## Bağlantı hataları (#44)
+- `OfflineBanner` her ekranın üstünde (`WithOfflineBanner`). Bant: bir istek yanıt alamayınca **veya** işletim sistemi ağ
+  olmadığını bildirince (`connectivity_plus`, `PlatformConnectivitySource`) çıkar; ağ geri gelince ve çevrimdışıyken
+  15 sn'de bir `GET /api/v1/meta` yoklanır; herhangi bir yanıt bandı kaldırır.
+- Başarısız **yüklemeler** (`ErrorView`, `StockMessagePanel(error:)`, pano kartı) bağlantı gelince kendiliğinden yeniden
+  yüklenir (`RefetchOnReconnect`; yalnızca bağlantı hatalarında). **Yazmalar** asla kendiliğinden gönderilmez: sonucu
+  bilinmeyen idempotent yazma "Tekrar gönder" gösterir (okutma, üstlen, görevi tamamla, mal kabul, stok düzeltme) ve aynı
+  `Idempotency-Key` ile gönderir.
+- Testlerde periyodik yoklama kapalıdır (`offlineProbeIntervalProvider` = null), bağlantı kaynağı sahtedir.
 
 ## Yapı ve yeni özellik ekleme
 ```

@@ -173,7 +173,8 @@ class _PickViewState extends ConsumerState<_PickView> {
   Future<void> _complete() async {
     final l10n = AppLocalizations.of(context);
     final totals = controller.totals;
-    if (totals.short > 0) {
+    // A resend repeats the already confirmed request: no second confirmation.
+    if (totals.short > 0 && !controller.completeNeedsResend) {
       final ok = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -361,7 +362,11 @@ class _PickViewState extends ConsumerState<_PickView> {
           onPressed: c.pending == null ? c.claim : null,
           icon: const Icon(Icons.pan_tool_alt_outlined),
           label: Text(
-            c.pending == PickPending.claim ? l10n.loading : l10n.pickingClaim,
+            c.pending == PickPending.claim
+                ? l10n.loading
+                : c.claimNeedsResend
+                ? l10n.pickingResend
+                : l10n.pickingClaim,
           ),
           style: FilledButton.styleFrom(
             minimumSize: const Size.fromHeight(BosSize.primaryAction),
@@ -521,6 +526,8 @@ class _PickViewState extends ConsumerState<_PickView> {
                   label: Text(
                     c.pending == PickPending.complete
                         ? l10n.loading
+                        : c.completeNeedsResend
+                        ? l10n.pickingResend
                         : l10n.pickingComplete,
                   ),
                   style: FilledButton.styleFrom(

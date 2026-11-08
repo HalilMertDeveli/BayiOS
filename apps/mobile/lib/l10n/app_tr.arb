@@ -5,10 +5,13 @@
 
   "loading": "Yükleniyor…",
   "retry": "Tekrar dene",
+  "resend": "Tekrar gönder",
   "sessionLoading": "Oturum bilgileri yükleniyor…",
 
   "offlineBanner": "Sunucuya ulaşılamıyor. Bağlantınızı kontrol edin.",
   "offlineBannerChecking": "Bağlantı kontrol ediliyor…",
+
+  "pushOpen": "Aç",
 
   "signInTitle": "Giriş yap",
   "signInSubtitle": "Depo hesabınızın e-posta adresi ve şifresiyle giriş yapın.",
@@ -403,7 +406,7 @@
   "stockAdjustSaving": "Kaydediliyor…",
   "stockAdjustSaved": "Düzeltme kaydedildi. Yeni bakiye: {balance}",
   "@stockAdjustSaved": {"placeholders":{"balance":{"type":"String"}}},
-  "stockAdjustPendingHint": "Kayıt yapılmış olabilir. \"Tekrar dene\" aynı işlemi gönderir; çift kayıt oluşmaz.",
+  "stockAdjustPendingHint": "Bağlantı koptu; kayıt yapılmış olabilir. \"Tekrar gönder\" aynı işlemi gönderir; çift kayıt oluşmaz.",
   "stockAdjustNegativeTitle": "Stok eksiye düşecek",
   "stockAdjustNegativeBody": "Bu düzeltme satılabilir stoğu sıfırın altına düşürüyor. İşletmenizin kuralı onayla devam etmeye izin veriyor. Yine de kaydedilsin mi?",
   "stockAdjustNegativeCancel": "Vazgeç",
@@ -458,6 +461,6 @@
   "receivingShowStock": "Stokta gör",
   "receivingNew": "Yeni mal kabul",
   "receivingFailedTitle": "Mal kabul kaydedilemedi",
-  "receivingPendingHint": "Bağlantı koptuğu için kaydın yapılıp yapılmadığı bilinmiyor. \"Tekrar dene\" aynı işlemi gönderir; çift kayıt oluşmaz. Satırlar bu sırada kilitli.",
+  "receivingPendingHint": "Bağlantı koptuğu için kaydın yapılıp yapılmadığı bilinmiyor. \"Tekrar gönder\" aynı işlemi gönderir; çift kayıt oluşmaz. Satırlar bu sırada kilitli.",
   "receivingDiscard": "Vazgeç ve düzenle"
 }

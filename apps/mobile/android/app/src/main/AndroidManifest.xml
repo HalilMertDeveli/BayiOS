@@ -5,6 +5,9 @@
          Not required: without a camera (or permission) the code is typed in by hand. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <!-- Task notifications (#44, FCM): Android 13+ asks at runtime, once, after sign-in and business selection.
+         Without a Firebase configuration in the build nothing is asked. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="BayiOS Depo"
         android:allowBackup="false"

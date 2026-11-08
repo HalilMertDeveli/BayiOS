@@ -80,6 +80,7 @@ internal static class SecurityProbes
             "PUT /api/v1/members/{userId}/role" => new { role = "viewer" },
             "POST /api/v1/members/ownership-transfer" => new { userId = victim.Id("member") },
             "POST /api/v1/invitations/accept" => new { token = hack },
+            "POST /api/v1/devices" => new { token = $"{hack}-{Guid.NewGuid():N}", platform = "android" },
             "POST /api/v1/import-jobs" => "multipart",
             "POST /api/v1/ai/order-parses" => new { text = "2 adet fren balatası " + hack, customerId = own.Id("customer") },
             "PUT /api/v1/ai/settings" => new { aiParsingEnabled = true },

@@ -111,7 +111,7 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 |---|---|---|---|---|
 | S | Token'ın cihazdan çalınması | M | `flutter_secure_storage` (Keychain/Keystore), kısa ömürlü access token | Kod review kontrol listesi |
 | T | APK'nın değiştirilip API'ye istek atılması | M | Sunucu istemciye güvenmez; tüm kurallar API'de | API negatif testleri |
-| I | Uygulamaya sır gömülmesi | H | Yalnızca API URL + Supabase public key `--dart-define`; FCM `google-services.json` gizli değildir ama repoya yalnızca dev için | CI: gitleaks |
+| I | Uygulamaya sır gömülmesi | H | Yalnızca API URL + Supabase public key + Firebase istemci kimlikleri `--dart-define` (`env/*.json`, commit edilmez); `google-services.json` / `GoogleService-Info.plist` hiç commit edilmez (Firebase Dart'tan başlatılır, #44); FCM servis hesabı yalnızca API host secret'ı | CI: gitleaks |
 | I | Bildirimde hassas veri | M | Bildirim yükü yalnızca ID/genel metin | Unit test: payload builder |
 | D | Ağ kesintisinde tekrarlı gönderim → çift kayıt | H | `Idempotency-Key` zorunlu | Integration: aynı key ile 2 istek → tek kayıt |
 

@@ -32,9 +32,48 @@ class LoadingView extends StatelessWidget {
   }
 }
 
+/// No HTTP response (offline, DNS, refused, timeout): the request may never
+/// have reached the API, and it is worth retrying once the network is back.
+bool isConnectionError(Object error) =>
+    error is ApiException &&
+    (error.kind == ApiErrorKind.network || error.kind == ApiErrorKind.timeout);
+
+/// Re-runs a failed **load** by itself when the API becomes reachable again
+/// (the offline banner clears: connectivity came back and the probe answered,
+/// or any other call got a response). Only for connection errors and only
+/// while the failure is on screen. Writes are never resent automatically:
+/// they show "Tekrar gönder" and wait for the user.
+class RefetchOnReconnect extends ConsumerWidget {
+  const RefetchOnReconnect({
+    required this.error,
+    required this.onReconnect,
+    required this.child,
+    super.key,
+  });
+
+  final Object? error;
+  final VoidCallback? onReconnect;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen<bool>(networkStatusProvider, (previous, next) {
+      final failure = error;
+      if (previous == false &&
+          next &&
+          failure != null &&
+          isConnectionError(failure)) {
+        onReconnect?.call();
+      }
+    });
+    return child;
+  }
+}
+
 /// The retry pattern: "what happened + what to do" and a big "Tekrar dene"
-/// button. Use it for every failed load; for writes, the retry calls the same
-/// `IdempotentAction.run()` so the Idempotency-Key is reused.
+/// button. Use it for every failed load (re-fetched by itself when the
+/// connection returns, [RefetchOnReconnect]); for writes, the retry calls the
+/// same `IdempotentAction.run()` so the Idempotency-Key is reused.
 class ErrorView extends StatelessWidget {
   const ErrorView({required this.error, super.key, this.onRetry});
 
@@ -43,11 +82,16 @@ class ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return RefetchOnReconnect(
+      error: error,
+      onReconnect: onRetry,
+      child: _content(context),
+    );
+  }
+
+  Widget _content(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final offline =
-        error is ApiException &&
-        ((error as ApiException).kind == ApiErrorKind.network ||
-            (error as ApiException).kind == ApiErrorKind.timeout);
+    final offline = isConnectionError(error);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(BosSpace.s24),

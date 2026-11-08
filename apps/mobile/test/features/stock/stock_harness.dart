@@ -409,6 +409,13 @@ Future<GoRouter> pumpStock(
 
 /// Scrolls [finder] into view, taps it and settles.
 Future<void> tapOn(WidgetTester tester, Finder finder) async {
+  await scrollTo(tester, finder);
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+/// Builds and shows [finder] in the lazy list (scrolling down if needed).
+Future<void> scrollTo(WidgetTester tester, Finder finder) async {
   if (finder.evaluate().isEmpty) {
     // Not built yet by the lazy list: scroll down until it is.
     await tester.scrollUntilVisible(
@@ -423,7 +430,5 @@ Future<void> tapOn(WidgetTester tester, Finder finder) async {
     );
   }
   await tester.ensureVisible(finder);
-  await tester.pumpAndSettle();
-  await tester.tap(finder);
   await tester.pumpAndSettle();
 }

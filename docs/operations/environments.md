@@ -42,10 +42,14 @@ Audit__IpHashKey (sır; opsiyonel), Audit__Retention (opsiyonel, varsayılan 730
 Jobs__Enabled, Jobs__SucceededRetention / Jobs__DeadRetention / Jobs__OutboxRetention (opsiyonel; 7 / 30 / 7 gün),
 Health__QueueLagDegradedAfter / Health__QueueLagUnhealthyAfter (opsiyonel; 5 dk / 30 dk, observability.md §4),
 OTEL_EXPORTER_OTLP_ENDPOINT (boş = OpenTelemetry kapalı, hiçbir şey dışarı gitmez), OTEL_EXPORTER_OTLP_PROTOCOL,
-OTEL_EXPORTER_OTLP_HEADERS (sır), OTEL_SERVICE_NAME, ErrorTracking__Provider (none|otel; varsayılan none)
+OTEL_EXPORTER_OTLP_HEADERS (sır), OTEL_SERVICE_NAME, ErrorTracking__Provider (none|otel; varsayılan none),
+Push__Enabled (varsayılan false), Push__ServiceAccountJson (sır; yalnızca Push__Enabled=true iken), Push__ProjectId,
+Push__StaleAfterDays / Push__MaxDevicesPerUser / Push__TimeoutSeconds (opsiyonel; push-notifications.md §2)
 API (henüz uygulanmadı, ad önerisi): SUPABASE_URL, SUPABASE_SECRET_KEY, STORAGE_BUCKET_IMPORTS, ANTHROPIC_API_KEY,
-AI_MODE (mock|live), AI_DAILY_TENANT_QUOTA, FCM_SERVICE_ACCOUNT_JSON
+AI_MODE (mock|live), AI_DAILY_TENANT_QUOTA
 Web: NEXT_PUBLIC_API_BASE_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+Mobil (--dart-define): BAYIOS_ENV, BAYIOS_API_BASE_URL, BAYIOS_SUPABASE_URL, BAYIOS_SUPABASE_PUBLISHABLE_KEY, BAYIOS_CLIENT_VERSION,
+BAYIOS_FIREBASE_API_KEY / _PROJECT_ID / _MESSAGING_SENDER_ID / _ANDROID_APP_ID / _IOS_APP_ID / _IOS_BUNDLE_ID (boş = push yok)
 ```
 
 ## 3. Veri kuralları
@@ -88,7 +92,7 @@ Not: Free preview projesi 1 hafta etkisizlikte duraklar; CI'da haftalık "keep-a
 |---|---|---|
 | `bayios-dev` | local + preview push | `com.bayios.app.dev`, `com.bayios.app.preview` |
 | `bayios-prod` | production push | `com.bayios.app` |
-FCM ücretsizdir (https://firebase.google.com/pricing, 2026-11-04). Spark planında kalınır; Blaze'e geçiş (kart gerektirir) yalnızca onayla. Proje adları Firebase'de küresel benzersiz ID gerektirir; `bayios-dev` alınmışsa sonek eklenir. **Firebase CLI kurulu değil; projeleri ürün sahibi oluşturur veya CLI kurulduktan sonra onayla oluşturulur.**
+FCM ücretsizdir (https://firebase.google.com/pricing, 2026-11-04). Spark planında kalınır; Blaze'e geçiş (kart gerektirir) yalnızca onayla. Proje adları Firebase'de küresel benzersiz ID gerektirir; `bayios-dev` alınmışsa sonek eklenir. **Firebase CLI kurulu değil; projeleri ürün sahibi oluşturur veya CLI kurulduktan sonra onayla oluşturulur.** Kurulum ve push'u açma adımları: [push-notifications.md](push-notifications.md) §3 (bugünkü Android paket adı `com.bayios.bayios_mobile`; ortam flavor'ları gelince tablodaki id'ler eklenir).
 
 ## 7. Migration terfi akışı
 1. İş şeması migration'ı ilgili modülde EF Core migration'ı olarak yazılır (`services/api/src/Modules/<M>/…/Migrations`, ADR 0005); `infra/supabase/bootstrap/` yalnızca bootstrap içindir (DB rolleri `bayios_app`/`bayios_migrator`, `pg_trgm`, access-token hook; ileride Storage politikaları) ve proje başına bir kez ürün sahibince çalıştırılır. PR'da idempotent SQL script artefaktı + geri dönüş notu.

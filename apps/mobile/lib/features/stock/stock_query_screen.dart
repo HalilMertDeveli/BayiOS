@@ -147,6 +147,7 @@ class _StockQueryScreenState extends ConsumerState<StockQueryScreen> {
             tone: BosColors.danger,
             message: stockErrorMessage(l10n, error),
             onRetry: retryable ? controller.refresh : null,
+            error: error,
           ),
         ];
       case StockQueryEmpty(:final term, :final variant):

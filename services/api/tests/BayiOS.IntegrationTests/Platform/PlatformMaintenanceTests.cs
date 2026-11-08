@@ -160,7 +160,7 @@ public class PlatformMaintenanceTests(ApiFixture fixture)
             new[]
             {
                 IdempotencyCleanupJob.Type, QueueCleanupJob.Type, AuditRetentionJob.Type, BayiOS.Modules.Integrations.IntegrationsModule.TextRetentionJobType,
-                BayiOS.Modules.Billing.BillingModule.ExpiryJobType,
+                BayiOS.Modules.Billing.BillingModule.ExpiryJobType, BayiOS.Modules.Notifications.NotificationsModule.DeviceCleanupJobType,
             },
             PlatformWorker.MaintenanceJobTypes);
         Assert.All(PlatformWorker.MaintenanceJobTypes, type => Assert.True(registry.IsRegistered(type), type));

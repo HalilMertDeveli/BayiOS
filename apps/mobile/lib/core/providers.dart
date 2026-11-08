@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:bayios_mobile/app/env.dart';
 import 'package:bayios_mobile/core/api/api_client.dart';
 import 'package:bayios_mobile/core/auth/auth_controller.dart';
+import 'package:bayios_mobile/core/network/connectivity.dart';
 import 'package:bayios_mobile/core/session/active_tenant_store.dart';
 import 'package:bayios_mobile/core/session/identity_api.dart';
 import 'package:bayios_mobile/core/session/session_controller.dart';
@@ -48,25 +49,57 @@ class ActiveTenantId extends Notifier<String?> {
   set value(String? tenantId) => state = tenantId;
 }
 
-/// False after a request got no response; true again after any response.
+/// False after a request got no response (or the OS reports no network);
+/// true again after any response. While false, the API is probed when
+/// connectivity returns and every [offlineProbeIntervalProvider]; failed
+/// loads on screen re-fetch when it turns true (`RefetchOnReconnect`).
 final networkStatusProvider = NotifierProvider<NetworkStatus, bool>(
   NetworkStatus.new,
 );
 
 class NetworkStatus extends Notifier<bool> {
   bool _probing = false;
+  Timer? _timer;
 
   @override
-  bool build() => true;
+  bool build() {
+    final subscription = ref
+        .watch(connectivitySourceProvider)
+        .changes
+        .listen(_onConnectivity);
+    ref.onDispose(() {
+      unawaited(subscription.cancel());
+      _timer?.cancel();
+    });
+    return true;
+  }
 
   bool get reachable => state;
 
   void markReachable() {
+    _timer?.cancel();
+    _timer = null;
     if (!state) state = true;
   }
 
   void markUnreachable() {
     if (state) state = false;
+    _startProbing();
+  }
+
+  void _onConnectivity(bool online) {
+    if (!online) {
+      markUnreachable();
+    } else if (!state) {
+      // A network is back: does it reach the API? (Success clears the banner.)
+      unawaited(probe());
+    }
+  }
+
+  void _startProbing() {
+    final interval = ref.read(offlineProbeIntervalProvider);
+    if (interval == null || _timer != null) return;
+    _timer = Timer.periodic(interval, (_) => unawaited(probe()));
   }
 
   bool get probing => _probing;

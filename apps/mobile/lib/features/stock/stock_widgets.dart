@@ -1,4 +1,5 @@
 import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/stock/scanner.dart';
 import 'package:bayios_mobile/features/stock/stock_models.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
@@ -152,6 +153,7 @@ class StockMessagePanel extends StatelessWidget {
     this.tone,
     this.onRetry,
     this.retryLabel,
+    this.error,
   });
 
   final String message;
@@ -160,8 +162,20 @@ class StockMessagePanel extends StatelessWidget {
   final VoidCallback? onRetry;
   final String? retryLabel;
 
+  /// The failure shown; a connection error re-runs [onRetry] by itself when
+  /// the API is reachable again ([RefetchOnReconnect]).
+  final Object? error;
+
   @override
   Widget build(BuildContext context) {
+    return RefetchOnReconnect(
+      error: error,
+      onReconnect: onRetry,
+      child: _content(context),
+    );
+  }
+
+  Widget _content(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: BosSpace.s24),
