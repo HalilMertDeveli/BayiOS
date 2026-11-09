@@ -270,9 +270,12 @@ internal sealed class WarehouseDbContext : DbContext, ITenantScopedDbContext
             {
                 t.HasCheckConstraint("ck_picking_tasks_type", $"type IN ({Quoted(PickingTaskTypes.All)})");
                 t.HasCheckConstraint("ck_picking_tasks_status", $"status IN ({Quoted(PickingTaskStatuses.All)})");
+                t.HasCheckConstraint("ck_picking_tasks_priority", $"priority IN ({Quoted(PickingTaskPriorities.All)})");
             });
             MapCommon(task);
             task.Property(t => t.Type).IsRequired();
+            // Default for rows created before the column existed (#98); new rows get the entity default.
+            task.Property(t => t.Priority).IsRequired().HasDefaultValue(PickingTaskPriorities.Normal).ValueGeneratedNever();
             task.Property(t => t.OrderNumber).IsRequired();
             task.Property(t => t.Status).IsRequired();
             task.HasOne<WarehouseModel>().WithMany()
@@ -298,7 +301,7 @@ internal sealed class WarehouseDbContext : DbContext, ITenantScopedDbContext
         {
             line.ToTable("picking_task_lines", t =>
             {
-                t.HasCheckConstraint("ck_picking_task_lines_quantities", "qty_to_pick > 0 AND qty_picked >= 0 AND qty_short >= 0 AND qty_picked + qty_short <= qty_to_pick");
+                t.HasCheckConstraint("ck_picking_task_lines_quantities", "qty_to_pick >= 0 AND qty_picked >= 0 AND qty_short >= 0 AND qty_picked + qty_short <= qty_to_pick");
                 t.HasCheckConstraint("ck_picking_task_lines_shortage_reason", $"shortage_reason IS NULL OR shortage_reason IN ({Quoted(ShortageReasons.All)})");
             });
             line.HasKey(l => l.Id);

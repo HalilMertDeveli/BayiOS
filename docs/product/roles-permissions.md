@@ -73,6 +73,7 @@ Gösterim: **✓** izinli · **–** izin yok · **K** koşullu (dipnot) · **O*
 | inventory.count.perform (say) | ✓ | ✓ | ✓ | – | ✓ | – |
 | inventory.transfer (oluştur/gönder) | ✓ | ✓ | ✓ | – | – | – |
 | inventory.transfer.receive | ✓ | ✓ | ✓ | – | ✓ | – |
+| inventory.relocate (aynı depoda raf/göz arası taşıma) | ✓ | ✓ | ✓ | – | ✓ | – |
 | inventory.returns (iade kaydı) | ✓ | ✓ | ✓ | K⁷ | ✓ | – |
 | warehouses.manage (depo, raf) | ✓ | ✓ | ✓ | – | – | – |
 
@@ -145,6 +146,20 @@ Gösterim: **✓** izinli · **–** izin yok · **K** koşullu (dipnot) · **O*
   askıya alınamaz (`members.last_owner`); kimse kendini askıya alamaz. Askıya alma bir sonraki istekte etkilidir.
 - Davet kabulü izin değildir: davetli henüz üye olmadığından tenant'sız uçtur; davet adresiyle aynı, doğrulanmış e-posta
   ile oturum gerekir (threat-model §4.1).
+
+**Uygulama yorumu (#98, ürün sahibi kararı 2026-11-09):**
+- `inventory.relocate` yeni izindir (matris satırı §3.4): aynı depoda raf/göz arası anlık taşıma (`POST /inventory/relocations`)
+  owner, admin, manager ve **warehouse_staff**'a açıktır; depolar arası transfer (`inventory.transfer`) değişmedi. Rezerveli
+  malı rezervasyonu ve açık toplama satırlarıyla taşımak (`includeReserved`) aynı izinle yapılır; toplanmış/paketlenmiş/eksik
+  bildirilmiş mal hiçbir zaman taşınmaz.
+- Görevlerde **müşteri adı** (`customerName`) görevi okuyabilen herkese gösterilir — warehouse_staff dahil (dipnot 8'in görev
+  istisnası). Görevlerde başka müşteri verisi (adres, telefon, vergi no) ve fiyat yoktur; sipariş yanıtlarında staff için müşteri
+  adı boş kalmaya devam eder (#86 yorumu).
+- Görev önceliğini değiştirmek (`POST /picking-tasks/{id}/priority`) ve yönetici yeniden tahsisi
+  (`POST /picking-tasks/{id}/reallocate`) `tasks.assign` ister. Toplayıcının farklı raftan okutmasıyla oluşan yeniden tahsis
+  `tasks.pick` ile (okutmanın parçası) olur.
+- "Siparişte toplama görevi otomatik oluşsun" (`auto_create_picking_task`, varsayılan açık) bir iş ayarıdır, izin kuralı
+  değildir: `tenant.settings.manage` ile değişir, `tenant.settings_changed` olarak audit'lenir.
 
 ## 4. Ayarlanabilir kurallar (tenant düzeyi)
 

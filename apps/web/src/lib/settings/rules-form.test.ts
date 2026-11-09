@@ -15,6 +15,7 @@ const settings: TenantSettings = {
   pricesIncludeTaxDisplay: false,
   requireOrderApproval: true,
   orderNumberPrefix: "SIP",
+  autoCreatePickingTask: true,
 };
 
 describe("rules form", () => {

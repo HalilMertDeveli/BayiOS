@@ -336,6 +336,51 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
         await insert.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <summary>Active reservations sitting on the given balance keys, unlocked (re-allocation candidates, #98).</summary>
+    public async Task<IReadOnlyList<ReservationRow>> FindActiveReservationsAtAsync(IReadOnlyCollection<BalanceKey> keys, CancellationToken cancellationToken)
+    {
+        var distinct = keys.Distinct().ToList();
+        if (distinct.Count == 0)
+        {
+            return [];
+        }
+
+        await using var select = Command(
+            $"""
+            SELECT r.{ReservationColumns.Replace(", ", ", r.", StringComparison.Ordinal)}
+            FROM inventory.stock_reservations r
+            JOIN unnest(@variants, @warehouses, @locations) AS k(variant_id, warehouse_id, location_id)
+              ON r.variant_id = k.variant_id AND r.warehouse_id = k.warehouse_id
+             AND r.location_id IS NOT DISTINCT FROM k.location_id
+            WHERE r.tenant_id = @tenant AND r.status = 'active'
+            ORDER BY r.order_line_id, r.location_id NULLS FIRST, r.id
+            """);
+        select.Parameters.Add(Uuid("tenant", TenantId));
+        select.Parameters.Add(Uuids("variants", [.. distinct.Select(k => (Guid?)k.VariantId)]));
+        select.Parameters.Add(Uuids("warehouses", [.. distinct.Select(k => (Guid?)k.WarehouseId)]));
+        select.Parameters.Add(Uuids("locations", [.. distinct.Select(k => k.LocationId)]));
+        return await ReadReservationsAsync(select, cancellationToken);
+    }
+
+    /// <summary>Adds to the quantity of a locked active reservation (re-allocation target that already exists).</summary>
+    public async Task GrowReservationAsync(Guid id, decimal quantity, CancellationToken cancellationToken)
+    {
+        await using var update = Command(
+            """
+            UPDATE inventory.stock_reservations
+               SET quantity = quantity + @quantity, updated_at = now(), updated_by = @user
+             WHERE id = @id AND tenant_id = @tenant AND status = 'active'
+            """);
+        update.Parameters.Add(new NpgsqlParameter<decimal>("quantity", quantity));
+        update.Parameters.Add(Uuid("user", UserId));
+        update.Parameters.Add(Uuid("id", id));
+        update.Parameters.Add(Uuid("tenant", TenantId));
+        if (await update.ExecuteNonQueryAsync(cancellationToken) != 1)
+        {
+            throw new InvalidOperationException("Locked reservation is no longer active.");
+        }
+    }
+
     /// <summary>Adds consumed/released quantities; closes the reservation when nothing stays open.</summary>
     public async Task<string> ProgressReservationAsync(
         Guid id, decimal consumed, decimal released, CancellationToken cancellationToken)

@@ -16,7 +16,8 @@ internal sealed record PickingTaskListQuery(
     Guid? OrderId,
     Guid? AssignedTo,
     int Limit,
-    FulfillmentCursor? After);
+    FulfillmentCursor? After,
+    string? Priority = null);
 
 internal sealed record ShipmentListQuery(IReadOnlyList<string> Statuses, Guid? OrderId, int Limit, FulfillmentCursor? After);
 
@@ -33,7 +34,8 @@ internal sealed class FulfillmentQueries(
     IFulfillmentCatalog catalog,
     IAuthorizationContext authorization,
     IOrderOwnership ownership,
-    ITaskAssigneeDirectory assignees)
+    ITaskAssigneeDirectory assignees,
+    ITaskOrderDirectory orders)
 {
     public const int DefaultPageSize = 50;
     public const int MaxPageSize = 200;
@@ -61,6 +63,11 @@ internal sealed class FulfillmentQueries(
             tasks = tasks.Where(t => t.OrderId == orderId);
         }
 
+        if (query.Priority is { } priority)
+        {
+            tasks = tasks.Where(t => t.Priority == priority);
+        }
+
         if (query.AssignedTo is { } assignedTo)
         {
             tasks = assignedTo == Guid.Empty ? tasks.Where(t => t.AssignedTo == null) : tasks.Where(t => t.AssignedTo == assignedTo);
@@ -75,7 +82,7 @@ internal sealed class FulfillmentQueries(
 
         var rows = await Summaries(tasks.OrderBy(t => t.CreatedAt).ThenBy(t => t.Id).Take(query.Limit + 1)).ToListAsync(cancellationToken);
         var hasMore = rows.Count > query.Limit;
-        var items = await WithAssigneeNamesAsync([.. rows.Take(query.Limit)], cancellationToken);
+        var items = await WithNamesAsync([.. rows.Take(query.Limit)], cancellationToken);
         var next = hasMore ? new FulfillmentCursor(items[^1].CreatedAt, items[^1].Id).Encode() : null;
         return new PickingTaskPageResponse(items, new FulfillmentPageInfo(next, hasMore, query.Limit));
     }
@@ -99,11 +106,15 @@ internal sealed class FulfillmentQueries(
 
         var rows = await Summaries(tasks
                 .OrderBy(t => t.AssignedTo == null)
+                .ThenByDescending(t => t.Priority == PickingTaskPriorities.Urgent ? 3
+                    : t.Priority == PickingTaskPriorities.High ? 2
+                    : t.Priority == PickingTaskPriorities.Normal ? 1
+                    : 0)
                 .ThenBy(t => t.CreatedAt)
                 .ThenBy(t => t.Id)
                 .Take(limit))
             .ToListAsync(cancellationToken);
-        return new MyPickingTasksResponse(await WithAssigneeNamesAsync(rows, cancellationToken));
+        return new MyPickingTasksResponse(await WithNamesAsync(rows, cancellationToken));
     }
 
     /// <returns>Null when the task does not exist or the caller may not see it.</returns>
@@ -116,15 +127,27 @@ internal sealed class FulfillmentQueries(
             return null;
         }
 
-        var summary = (await WithAssigneeNamesAsync([row], cancellationToken))[0];
+        var summary = (await WithNamesAsync([row], cancellationToken))[0];
 
         var lines = await (from line in db.PickingTaskLines.AsNoTracking()
-                           where line.PickingTaskId == id
+                           where line.PickingTaskId == id && line.QtyToPick > 0 // lines emptied by a re-allocation (#98) are kept, not shown
                            join location in db.Locations.AsNoTracking() on line.LocationId equals (Guid?)location.Id into located
                            from location in located.DefaultIfEmpty()
-                           orderby line.Sequence
-                           select new { line, LocationCode = location == null ? null : location.Code, LocationBarcode = location == null ? null : location.Barcode })
+                           select new
+                           {
+                               line,
+                               LocationCode = location == null ? null : location.Code,
+                               LocationBarcode = location == null ? null : location.Barcode,
+                               LocationIsActive = location == null ? (bool?)null : location.IsActive,
+                               PickSequence = location == null ? int.MinValue : location.PickSequence,
+                           })
             .ToListAsync(cancellationToken);
+
+        // Walking order on the current shelves (re-allocated lines join their new shelf's place).
+        lines = [.. lines
+            .OrderBy(l => l.PickSequence)
+            .ThenBy(l => l.LocationCode ?? string.Empty, StringComparer.Ordinal)
+            .ThenBy(l => l.line.Sequence)];
         var variants = await catalog.FindVariantsAsync([.. lines.Select(l => l.line.VariantId).Distinct()], cancellationToken);
         var shipmentId = await db.Shipments.AsNoTracking()
             .Where(s => s.PickingTaskId == id && s.Status != ShipmentStatuses.Cancelled)
@@ -149,7 +172,8 @@ internal sealed class FulfillmentQueries(
                 l.line.QtyPicked,
                 l.line.QtyShort,
                 l.line.QtyToPick - l.line.QtyPicked - l.line.QtyShort,
-                l.line.ShortageReason))],
+                l.line.ShortageReason,
+                l.LocationIsActive))],
             shipmentId);
     }
 
@@ -285,17 +309,30 @@ internal sealed class FulfillmentQueries(
 
     private sealed record ReadVisibility(bool All, Guid UserId, List<Guid> OwnOrders, bool OwnTasks);
 
-    /// <summary>Fills <see cref="PickingTaskSummaryResponse.AssigneeName"/> with one batch lookup for the whole list.</summary>
-    private async Task<List<PickingTaskSummaryResponse>> WithAssigneeNamesAsync(IReadOnlyList<PickingTaskSummaryResponse> rows, CancellationToken cancellationToken)
+    /// <summary>
+    /// Fills assignee name, customer name and requested delivery date with one batch lookup each for the whole list
+    /// (WHT-03, #98). The customer name is the only customer field on a task and is shown to every task reader.
+    /// </summary>
+    private async Task<List<PickingTaskSummaryResponse>> WithNamesAsync(List<PickingTaskSummaryResponse> rows, CancellationToken cancellationToken)
     {
-        var ids = rows.Select(r => r.AssignedTo).OfType<Guid>().Distinct().ToList();
-        if (ids.Count == 0)
+        if (rows.Count == 0)
         {
-            return [.. rows];
+            return [];
         }
 
-        var names = await assignees.DisplayNamesAsync(ids, cancellationToken);
-        return [.. rows.Select(r => r.AssignedTo is { } assignee ? r with { AssigneeName = names.GetValueOrDefault(assignee) } : r)];
+        var ids = rows.Select(r => r.AssignedTo).OfType<Guid>().Distinct().ToList();
+        var names = ids.Count == 0 ? new Dictionary<Guid, string>() : await assignees.DisplayNamesAsync(ids, cancellationToken);
+        var info = await orders.DescribeAsync([.. rows.Select(r => r.OrderId).Distinct()], cancellationToken);
+        return [.. rows.Select(r =>
+        {
+            var order = info.GetValueOrDefault(r.OrderId);
+            return r with
+            {
+                AssigneeName = r.AssignedTo is { } assignee ? names.GetValueOrDefault(assignee) : null,
+                CustomerName = order?.CustomerName,
+                RequestedDeliveryDate = order?.RequestedDeliveryDate,
+            };
+        })];
     }
 
     private static IQueryable<PickingTaskSummaryResponse> Summaries(IQueryable<PickingTask> tasks) =>
@@ -308,12 +345,13 @@ internal sealed class FulfillmentQueries(
             t.WarehouseId,
             t.AssignedTo,
             null,
-            t.Lines.Count,
+            t.Lines.Count(l => l.QtyToPick > 0),
             t.Lines.Sum(l => l.QtyToPick),
             t.Lines.Sum(l => l.QtyPicked),
             t.Lines.Sum(l => l.QtyShort),
             t.CreatedAt,
             t.StartedAt,
             t.CompletedAt,
-            t.RowVersion));
+            t.RowVersion,
+            t.Priority));
 }

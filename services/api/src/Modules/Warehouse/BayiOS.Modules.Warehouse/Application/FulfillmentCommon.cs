@@ -95,6 +95,33 @@ internal sealed class FulfillmentLocks(WarehouseDbContext db, UnitOfWork unitOfW
             cancellationToken);
     }
 
+    /// <summary>
+    /// The active tasks, then the unconfirmed shipments of several orders, each in id order (re-allocation, #98:
+    /// lock hierarchy step 2 before Inventory locks balance rows).
+    /// </summary>
+    public async Task LockActiveDocumentsAsync(IReadOnlyCollection<Guid> orderIds, CancellationToken cancellationToken)
+    {
+        if (orderIds.Count == 0)
+        {
+            return;
+        }
+
+        await db.JoinTransactionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SET LOCAL lock_timeout = '5s';
+            SELECT count(*) FROM (SELECT 1 FROM warehouse.picking_tasks
+              WHERE tenant_id = @tenant AND order_id = ANY(@ids) AND status IN ('open', 'in_progress') ORDER BY id FOR UPDATE) t;
+            SELECT count(*) FROM (SELECT 1 FROM warehouse.shipments
+              WHERE tenant_id = @tenant AND order_id = ANY(@ids) AND status IN ('draft', 'packed') ORDER BY id FOR UPDATE) s;
+            """,
+            unitOfWork.Connection,
+            unitOfWork.Transaction);
+        command.Parameters.Add(new NpgsqlParameter("tenant", NpgsqlDbType.Uuid) { Value = requestContext.TenantId ?? throw new InvalidOperationException("No tenant resolved.") });
+        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = orderIds.ToArray() });
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private async Task<bool> LockAsync(string sql, Guid id, CancellationToken cancellationToken)
     {
         await db.JoinTransactionAsync(cancellationToken);

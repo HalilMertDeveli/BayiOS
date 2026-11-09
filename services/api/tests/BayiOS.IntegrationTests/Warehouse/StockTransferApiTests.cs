@@ -281,8 +281,12 @@ public sealed class StockTransferApiTests(ApiFixture fixture)
         Assert.Equal([MovementTypes.TransferOut, MovementTypes.TransferIn], moved.Movements.Select(m => m.Type));
         Assert.Equal((2m, 2m), await kit.BalanceAsync(variant, warehouse.Id, from.Id));
         Assert.Equal((3m, 0m), await kit.BalanceAsync(variant, warehouse.Id, to.Id));
+        // inventory.relocate (#98): warehouse_staff may move shelves too — here the rest of A-01 is reserved, so the
+        // request is authorised but refused for stock; sales may not relocate at all.
         var staff = await kit.Owner.AddMemberAsync(fixture, Roles.WarehouseStaff);
-        await HttpAssert.ProblemAsync(await staff.PostAsync("/api/v1/inventory/relocations", Body(1m)), HttpStatusCode.Forbidden, "auth.forbidden");
+        await HttpAssert.ProblemAsync(await staff.PostAsync("/api/v1/inventory/relocations", Body(1m)), HttpStatusCode.Conflict, "inventory.insufficient_available");
+        var sales = await kit.Owner.AddMemberAsync(fixture, Roles.Sales);
+        await HttpAssert.ProblemAsync(await sales.PostAsync("/api/v1/inventory/relocations", Body(1m)), HttpStatusCode.Forbidden, "auth.forbidden");
         await kit.AssertInvariantsAsync();
         await StockDocuments.AssertTransferPairsBalancedAsync(kit);
     }

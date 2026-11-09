@@ -52,6 +52,9 @@ public static class AuditActions
     /// <summary>Transfer legs were posted (dispatch, receipt, return, write-off or a shelf move); payload: counts and quantities.</summary>
     public const string InventoryTransferPosted = "inventory.transfer_posted";
 
+    /// <summary>Reservations moved shelves inside a warehouse (#98); payload: reason, moves (order line, from, to, quantity).</summary>
+    public const string InventoryReservationReallocated = "inventory.reservation_reallocated";
+
     /// <summary>A stock count was applied: count_correction movements for its differences.</summary>
     public const string InventoryCountPosted = "inventory.count_posted";
 
@@ -90,6 +93,12 @@ public static class AuditActions
     public const string PickingTaskCreated = "picking.task_created";
     public const string PickingTaskAssigned = "picking.task_assigned";
     public const string PickingTaskCancelled = "picking.task_cancelled";
+
+    /// <summary>Open task lines were re-pointed to other shelves after their reservations moved (#98).</summary>
+    public const string PickingTaskReallocated = "picking.task_reallocated";
+
+    /// <summary>A supervisor changed a task's priority (#98, WHT-03).</summary>
+    public const string PickingTaskPriorityChanged = "picking.task_priority_changed";
 
     /// <summary>A picking or packing shortage (WHT-06); the order is flagged.</summary>
     public const string PickingShortageReported = "picking.shortage_reported";

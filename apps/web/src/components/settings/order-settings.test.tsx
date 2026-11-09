@@ -24,6 +24,7 @@ const SETTINGS: TenantSettings = {
   pricesIncludeTaxDisplay: false,
   requireOrderApproval: true,
   orderNumberPrefix: "SIP",
+  autoCreatePickingTask: true,
 };
 
 type Call = { path: string; options: RequestOptions };

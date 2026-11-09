@@ -682,8 +682,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Raf/göz arası anlık taşıma (aynı depo): her satır için tek işlemde transfer_out + transfer_in; yalnızca satılabilir miktar taşınır
-         * @description Depolar arası transfer iki aşamalıdır: POST /api/v1/stock-transfers (OD-01). 409 `inventory.insufficient_available` (`shortages`) when a source shelf has less available stock than requested; stock never goes negative.
+         * Raf/göz arası anlık taşıma (aynı depo): her satır için tek işlemde transfer_out + transfer_in; varsayılan yalnızca satılabilir miktar, includeReserved ile raftaki rezerve mal rezervasyonu ve açık toplama satırlarıyla birlikte taşınır
+         * @description Depolar arası transfer iki aşamalıdır: POST /api/v1/stock-transfers (OD-01). 409 `inventory.insufficient_available` (`shortages`) when a source shelf has less available stock than requested (with `includeReserved`: available plus reserved stock still on the shelf — picked, packed or reported-missing goods never move); stock never goes negative. Carried reservations are returned in `reservationMoves`. Permission `inventory.relocate` (warehouse_staff included, #98).
          */
         post: operations["Inventory_CreateRelocation"];
         delete?: never;
@@ -830,7 +830,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Toplama görevleri (tümü): eskiden yeniye keyset; durum, tip, depo, sipariş, atanan (uuid | none) filtresi */
+        /** Toplama görevleri (tümü): eskiden yeniye keyset; durum, tip, öncelik, depo, sipariş, atanan (uuid | none) filtresi; müşteri adı ve teslim tarihi döner */
         get: operations["Picking_List"];
         put?: never;
         /** Siparişin açık rezervasyonlarından toplama görevi (onayda otomatik oluşur; kalan için yeniden) */
@@ -848,7 +848,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Mobil iş listesi: bana atanan aktif görevler, sonra havuz (scope = all | assigned | pool) */
+        /** Mobil iş listesi: bana atanan aktif görevler, sonra havuz (scope = all | assigned | pool); her grupta öncelik (urgent → low), sonra eskiden yeniye */
         get: operations["Picking_Mine"];
         put?: never;
         post?: never;
@@ -903,6 +903,40 @@ export interface paths {
         put?: never;
         /** Görevi havuza geri bırakır */
         post: operations["Picking_Unassign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/picking-tasks/{id}/priority": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Aktif görevin önceliğini değiştirir (low, normal, high, urgent); mobil iş listesi önceliğe göre sıralanır */
+        post: operations["Picking_SetPriority"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/picking-tasks/{id}/reallocate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pasif raflardaki (veya fromLocationId rafındaki) açık miktarı boş stoğu olan aktif raflara yeniden tahsis eder; rezervasyon aynı işlemde taşınır */
+        post: operations["Picking_Reallocate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2923,6 +2957,7 @@ export interface components {
         CreatePickingTaskRequest: {
             /** Format: uuid */
             orderId: null | string;
+            priority?: null | string;
         };
         CreatePriceListRequest: {
             name: null | string;
@@ -3990,6 +4025,7 @@ export interface components {
             /** Format: double */
             quantityRemaining: number | string;
             shortageReason: null | string;
+            locationIsActive?: null | boolean;
         };
         PickingTaskPageResponse: {
             items: components["schemas"]["PickingTaskSummaryResponse"][];
@@ -4040,6 +4076,10 @@ export interface components {
             completedAt: null | string;
             /** Format: int64 */
             version: number | string;
+            priority: string;
+            customerName?: null | string;
+            /** Format: date */
+            requestedDeliveryDate?: null | string;
         };
         PickingTaskTotals: {
             /** Format: int64 */
@@ -4217,6 +4257,17 @@ export interface components {
             /** Format: uuid */
             updatedBy: null | string;
         };
+        ReallocatePickingTaskRequest: {
+            /** Format: uuid */
+            fromLocationId: null | string;
+        };
+        ReallocatePickingTaskResponse: {
+            task: components["schemas"]["PickingTaskResponse"];
+            /** Format: double */
+            movedQuantity: number | string;
+            /** Format: double */
+            unmovedQuantity: number | string;
+        };
         ReceiptLineRequest: {
             /** Format: uuid */
             variantId: null | string;
@@ -4267,6 +4318,7 @@ export interface components {
             toLocationId: null | string;
             /** Format: double */
             quantity: null | number | string;
+            includeReserved?: null | boolean;
         };
         ReportExportRequest: {
             /** @enum {null|string} */
@@ -4294,6 +4346,26 @@ export interface components {
             /** Format: double */
             quantity: null | number | string;
             reason: null | string;
+        };
+        ReservationMoved: {
+            /** Format: uuid */
+            orderId: string;
+            /** Format: uuid */
+            orderLineId: string;
+            /** Format: uuid */
+            variantId: string;
+            /** Format: uuid */
+            warehouseId: string;
+            /** Format: uuid */
+            fromLocationId: string;
+            /** Format: uuid */
+            toLocationId: string;
+            /** Format: double */
+            quantity: number | string;
+            /** Format: uuid */
+            fromReservationId: string;
+            /** Format: uuid */
+            toReservationId: string;
         };
         ResolvedPrice: {
             /** Format: uuid */
@@ -4363,6 +4435,9 @@ export interface components {
             code: string;
             name: string;
             allowsFraction: boolean;
+        };
+        SetPickingTaskPriorityRequest: {
+            priority: null | string;
         };
         SetStockThresholdRequest: {
             /** Format: uuid */
@@ -4789,6 +4864,7 @@ export interface components {
             pricesIncludeTaxDisplay: boolean;
             requireOrderApproval: boolean;
             orderNumberPrefix: string;
+            autoCreatePickingTask: boolean;
         };
         TopProductItem: {
             /** Format: int32 */
@@ -4822,6 +4898,7 @@ export interface components {
             /** Format: uuid */
             transferId: string;
             movements: components["schemas"]["MovementResult"][];
+            reservationMoves?: null | components["schemas"]["ReservationMoved"][];
         };
         UnitResponse: {
             /** Format: uuid */
@@ -4977,6 +5054,7 @@ export interface components {
             pricesIncludeTaxDisplay?: null | boolean;
             requireOrderApproval?: null | boolean;
             orderNumberPrefix?: null | string;
+            autoCreatePickingTask?: null | boolean;
         };
         UpdateUnitRequest: {
             name: null | string;
@@ -10190,6 +10268,7 @@ export interface operations {
             query?: {
                 status?: string;
                 type?: string;
+                priority?: string;
                 warehouseId?: string;
                 orderId?: string;
                 assignedTo?: string;
@@ -10656,6 +10735,218 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Picking_SetPriority: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPickingTaskPriorityRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickingTaskResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    Picking_Reallocate: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["ReallocatePickingTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReallocatePickingTaskResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
                 };
             };
             /** @description Precondition Required */

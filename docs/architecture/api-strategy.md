@@ -327,6 +327,9 @@ flowchart LR
 | POST | `/picking-tasks/{id}/start` (İ) | `fulfillment.pick` | |
 | POST | `/picking-tasks/{id}/scans` (İ) | `fulfillment.pick` | barkod, lokasyon, miktar (§4.5) |
 | POST | `/picking-tasks/{id}/complete` (İ) | `fulfillment.pick` | |
+| POST | `/picking-tasks/{id}/priority` (İ) | `tasks.assign` | Uygulandı (#98): `low\|normal\|high\|urgent`; `GET /picking-tasks?priority=`, `/mine` önceliğe göre sıralı; özetlerde `customerName`, `requestedDeliveryDate` |
+| POST | `/picking-tasks/{id}/reallocate` (İ) | `tasks.assign` | Uygulandı (#98): pasif (veya `fromLocationId`) raftaki açık miktarı boş stoklu aktif raflara yeniden tahsis; yanıt `{task, movedQuantity, unmovedQuantity}` |
+| POST | `/inventory/relocations` (İ) | `inventory.relocate` | Uygulandı (#168, #98): aynı depoda raf taşıma; `includeReserved` ile rafta duran rezerve mal rezervasyonu ve açık görev satırıyla taşınır (inventory-and-orders §8) |
 | POST | `/shipments` (İ) | `fulfillment.ship` | Siparişten taslak sevkiyat (varsayılan: toplanan miktarlar) |
 | GET | `/shipments/{id}` · `/shipments?orderId=` | `orders.read` | |
 | PATCH | `/shipments/{id}` (M) | `fulfillment.ship` | Taşıyıcı, takip no, satırlar (draft) |

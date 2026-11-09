@@ -25,6 +25,7 @@ internal sealed class InventoryService(
     StockStore store,
     IWarehouseDirectory warehouses,
     IVariantDirectory variants,
+    IReservationHolders holders,
     IAuditLog audit) : IInventoryService
 {
     public const int MaxLines = 500;
@@ -56,8 +57,375 @@ internal sealed class InventoryService(
     public Task<InventoryResult<CountResult>> ApplyCountAsync(ApplyCount command, CancellationToken cancellationToken) =>
         RunAsync(() => ApplyCountCoreAsync(command, cancellationToken), cancellationToken);
 
+    public Task<InventoryResult<ReallocationResult>> ReallocateAsync(ReallocateReservations command, CancellationToken cancellationToken) =>
+        RunAsync(() => ReallocateCoreAsync(command, cancellationToken), cancellationToken);
+
+    public Task<InventoryResult<TransferResult>> RelocateAsync(RelocateStock command, CancellationToken cancellationToken) =>
+        RunAsync(() => RelocateCoreAsync(command, cancellationToken), cancellationToken);
+
     /// <summary>A stock count may cover more rows than a document (data-model §5.6 stock_count_lines).</summary>
     public const int MaxCountLines = 5000;
+
+    // ---- §4.5 Re-allocation of reservations between shelves (#98) ----
+
+    private async Task<InventoryResult<ReallocationResult>> ReallocateCoreAsync(ReallocateReservations command, CancellationToken cancellationToken)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var shifts = command.Shifts ?? [];
+        ValidateLineCount(errors, shifts.Count);
+        if (!ReallocationReasons.All.Contains(command.Reason))
+        {
+            errors["reason"] = [$"Must be one of: {string.Join(", ", ReallocationReasons.All)}."];
+        }
+
+        for (var i = 0; i < shifts.Count; i++)
+        {
+            ValidateQuantity(errors, $"shifts[{i}].quantity", shifts[i].Quantity);
+            if (shifts[i].FromLocationId == shifts[i].ToLocationId)
+            {
+                errors[$"shifts[{i}].toLocationId"] = ["Source and target must differ."];
+            }
+        }
+
+        // A shelf is either a source or a target of one order line within one command (keeps the arithmetic simple).
+        if (shifts.Any(s => shifts.Any(t => t.OrderLineId == s.OrderLineId && t.ToLocationId == s.FromLocationId)))
+        {
+            errors["shifts"] = ["A location cannot be both a source and a target of the same order line."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return InventoryError.Validation(errors);
+        }
+
+        var warehouse = await warehouses.FindWarehouseAsync(command.WarehouseId, cancellationToken);
+        if (ValidateWarehouse(warehouse) is { } warehouseError)
+        {
+            return warehouseError;
+        }
+
+        if (!warehouse!.UsesLocations)
+        {
+            return InventoryError.Validation(new Dictionary<string, string[]> { ["warehouseId"] = ["This warehouse does not use locations."] });
+        }
+
+        await ValidateShiftLocationsAsync(errors, warehouse, shifts, cancellationToken);
+        await ValidateVariantsAsync(errors, [.. shifts.Select((s, i) => ($"shifts[{i}]", s.VariantId, s.Quantity))], requireActive: false, cancellationToken);
+        if (errors.Count > 0)
+        {
+            return InventoryError.Validation(errors);
+        }
+
+        var lineIds = shifts.Select(s => s.OrderLineId).Distinct().ToList();
+        var candidates = await store.FindActiveReservationsAsync(null, lineIds, cancellationToken);
+        if (candidates.Count == 0)
+        {
+            return NotReserved();
+        }
+
+        // Lock hierarchy: Warehouse documents (step 2) → balances (3) → reservations (4).
+        var held = await holders.LockHeldAsync([.. candidates.Select(r => r.OrderId).Distinct()], cancellationToken);
+        var keys = shifts.SelectMany(s => new[] { new BalanceKey(s.VariantId, warehouse.Id, s.FromLocationId), new BalanceKey(s.VariantId, warehouse.Id, s.ToLocationId) }).ToList();
+        var rows = Index(await store.LockBalancesAsync(keys, createMissing: true, cancellationToken));
+        var reservations = await store.LockActiveReservationsAsync(null, lineIds, cancellationToken);
+
+        var plan = new List<(ReservationRow From, Guid ToLocationId, decimal Quantity)>(shifts.Count);
+        var moved = new Dictionary<Guid, decimal>();
+        var taken = new Dictionary<BalanceKey, decimal>();
+        var shortages = new List<StockShortage>();
+        foreach (var shift in shifts)
+        {
+            var reservation = reservations.FirstOrDefault(r =>
+                r.OrderLineId == shift.OrderLineId && r.VariantId == shift.VariantId && r.WarehouseId == warehouse.Id && r.LocationId == shift.FromLocationId);
+            if (reservation is null)
+            {
+                return NotReserved();
+            }
+
+            var movable = reservation.Open - held.GetValueOrDefault((shift.OrderLineId, shift.FromLocationId)) - moved.GetValueOrDefault(reservation.Id);
+            if (movable < shift.Quantity)
+            {
+                return NotMovable(movable);
+            }
+
+            var target = new BalanceKey(shift.VariantId, warehouse.Id, shift.ToLocationId);
+            var free = rows[target].Available - taken.GetValueOrDefault(target);
+            if (free < shift.Quantity)
+            {
+                shortages.Add(new StockShortage(shift.VariantId, null, warehouse.Id, shift.ToLocationId, shift.Quantity, Math.Max(free, 0m)));
+            }
+
+            moved[reservation.Id] = moved.GetValueOrDefault(reservation.Id) + shift.Quantity;
+            taken[target] = taken.GetValueOrDefault(target) + shift.Quantity;
+            plan.Add((reservation, shift.ToLocationId, shift.Quantity));
+        }
+
+        if (shortages.Count > 0)
+        {
+            return new InventoryError(409, "inventory.insufficient_available", "The target shelf has less available stock than the re-allocated quantity", Shortages: shortages);
+        }
+
+        foreach (var (key, delta) in plan
+            .SelectMany(p => new[] { (p.From.Key, -p.Quantity), (p.From.Key with { LocationId = p.ToLocationId }, p.Quantity) })
+            .GroupBy(x => x.Item1)
+            .Select(g => (g.Key, g.Sum(x => x.Item2)))
+            .OrderBy(x => x.Key.VariantId).ThenBy(x => x.Key.LocationId))
+        {
+            var row = rows[key];
+            await store.UpdateBalanceAsync(row, 0m, delta, NextAllowNegative(row, row.OnHand, row.Reserved + delta, worsening: delta > 0), cancellationToken);
+        }
+
+        var moves = await ShiftReservationsAsync(plan, reservations, command.CorrelationId, cancellationToken);
+        await AuditReallocationAsync(command.Reason, moves, cancellationToken);
+        await holders.OnReallocatedAsync(moves, command.Reason, cancellationToken);
+        return new ReallocationResult(moves);
+    }
+
+    // ---- §4.7 Shelf-to-shelf relocation, optionally carrying reservations (#98) ----
+
+    private async Task<InventoryResult<TransferResult>> RelocateCoreAsync(RelocateStock command, CancellationToken cancellationToken)
+    {
+        var moves = command.Moves ?? [];
+        if (!moves.Any(m => m.IncludeReserved))
+        {
+            return await TransferCoreAsync(
+                new TransferStock(
+                    command.RelocationId,
+                    [.. moves.Select(m => new TransferMove(
+                        m.MoveId, m.VariantId, StockPoint.At(command.WarehouseId, m.FromLocationId), StockPoint.At(command.WarehouseId, m.ToLocationId), m.Quantity))],
+                    command.Reference,
+                    command.CorrelationId),
+                cancellationToken);
+        }
+
+        var errors = new Dictionary<string, string[]>();
+        ValidateLineCount(errors, moves.Count);
+        var reason = Clean(command.Reference);
+        if (reason is { Length: > MaxReasonLength })
+        {
+            errors["reason"] = [$"Must be at most {MaxReasonLength} characters."];
+        }
+
+        for (var i = 0; i < moves.Count; i++)
+        {
+            ValidateQuantity(errors, $"lines[{i}].quantity", moves[i].Quantity);
+            if (moves[i].FromLocationId == moves[i].ToLocationId)
+            {
+                errors[$"lines[{i}].to"] = ["Source and target must differ."];
+            }
+        }
+
+        if (moves.Select(m => m.MoveId).Distinct().Count() != moves.Count)
+        {
+            errors["lines"] = ["Each move id may appear only once."];
+        }
+
+        // Carried reservations must not hop back and forth inside one request.
+        if (moves.Any(m => moves.Any(n => n.VariantId == m.VariantId && n.ToLocationId == m.FromLocationId)))
+        {
+            errors["lines"] = ["A shelf cannot be both a source and a target of the same item in one relocation."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return InventoryError.Validation(errors);
+        }
+
+        var warehouse = await warehouses.FindWarehouseAsync(command.WarehouseId, cancellationToken);
+        if (ValidateWarehouse(warehouse) is { } warehouseError)
+        {
+            return warehouseError;
+        }
+
+        await ValidateLocationsAsync(
+            errors,
+            warehouse!,
+            [.. moves.SelectMany((m, i) => new[] { ($"lines[{i}].from.locationId", m.FromLocationId), ($"lines[{i}].to.locationId", m.ToLocationId) })],
+            cancellationToken);
+        var found = await ValidateVariantsAsync(
+            errors, [.. moves.Select((m, i) => ($"lines[{i}]", m.VariantId, m.Quantity))], requireActive: false, cancellationToken);
+        if (errors.Count > 0)
+        {
+            return InventoryError.Validation(errors);
+        }
+
+        BalanceKey From(RelocationMove m) => new(m.VariantId, warehouse!.Id, m.FromLocationId);
+        BalanceKey To(RelocationMove m) => new(m.VariantId, warehouse!.Id, m.ToLocationId);
+
+        // Lock hierarchy: Warehouse documents of the orders reserving on the source shelves (step 2) → balances (3) →
+        // reservations (4). A reservation that appears after the scan simply is not carried this time.
+        var candidates = await store.FindActiveReservationsAtAsync([.. moves.Where(m => m.IncludeReserved).Select(From)], cancellationToken);
+        var held = candidates.Count == 0
+            ? new Dictionary<(Guid, Guid?), decimal>()
+            : await holders.LockHeldAsync([.. candidates.Select(r => r.OrderId).Distinct()], cancellationToken);
+        var rows = Index(await store.LockBalancesAsync([.. moves.SelectMany(m => new[] { From(m), To(m) })], createMissing: true, cancellationToken));
+        var candidateIds = candidates.Select(r => r.Id).ToHashSet();
+        var reservations = candidates.Count == 0
+            ? []
+            : (await store.LockActiveReservationsAsync(null, [.. candidates.Select(r => r.OrderLineId).Distinct()], cancellationToken))
+                .Where(r => candidateIds.Contains(r.Id))
+                .ToList();
+
+        var free = moves.Select(From).Distinct().ToDictionary(k => k, k => Math.Max(rows[k].Available, 0m));
+        var carried = new Dictionary<Guid, decimal>();
+        var legs = new List<(RelocationMove Move, decimal Reserved)>(moves.Count);
+        var plan = new List<(ReservationRow From, Guid ToLocationId, decimal Quantity)>();
+        var shortages = new List<StockShortage>();
+        foreach (var move in moves)
+        {
+            var from = From(move);
+            var fromAvailable = Math.Min(move.Quantity, free[from]);
+            free[from] -= fromAvailable;
+            var needReserved = move.Quantity - fromAvailable;
+            var takeReserved = 0m;
+            var onShelf = reservations.Where(r => r.Key == from)
+                .Select(r => (Reservation: r, Movable: Math.Max(r.Open - held.GetValueOrDefault((r.OrderLineId, r.LocationId)) - carried.GetValueOrDefault(r.Id), 0m)))
+                .ToList();
+            if (needReserved > 0 && move.IncludeReserved)
+            {
+                foreach (var (reservation, movable) in onShelf.Where(x => x.Movable > 0))
+                {
+                    var take = Math.Min(movable, needReserved - takeReserved);
+                    plan.Add((reservation, move.ToLocationId!.Value, take));
+                    carried[reservation.Id] = carried.GetValueOrDefault(reservation.Id) + take;
+                    takeReserved += take;
+                    if (takeReserved == needReserved)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (takeReserved < needReserved)
+            {
+                var offered = fromAvailable + (move.IncludeReserved ? onShelf.Sum(x => x.Movable) : 0m);
+                shortages.Add(new StockShortage(move.VariantId, found[move.VariantId].Sku, warehouse!.Id, move.FromLocationId, move.Quantity, offered));
+            }
+
+            legs.Add((move, takeReserved));
+        }
+
+        if (shortages.Count > 0)
+        {
+            return new InventoryError(409, "inventory.insufficient_available", "Stock on the source shelf is insufficient for this relocation", Shortages: shortages);
+        }
+
+        var movements = new List<MovementResult>(moves.Count * 2);
+        foreach (var (move, reserved) in legs)
+        {
+            var group = Guid.CreateVersion7();
+            var from = rows[From(move)];
+            var fromAfter = await store.UpdateBalanceAsync(
+                from, -move.Quantity, -reserved, NextAllowNegative(from, from.OnHand - move.Quantity, from.Reserved - reserved, worsening: true), cancellationToken);
+            movements.Add(await store.InsertMovementAsync(
+                new NewMovement(from.Key, MovementTypes.TransferOut, -move.Quantity, null, MovementSourceTypes.Transfer, command.RelocationId, move.MoveId, reason, command.CorrelationId, group),
+                fromAfter,
+                cancellationToken));
+            var to = rows[To(move)];
+            var toAfter = await store.UpdateBalanceAsync(
+                to, move.Quantity, reserved, NextAllowNegative(to, to.OnHand + move.Quantity, to.Reserved + reserved, worsening: false), cancellationToken);
+            movements.Add(await store.InsertMovementAsync(
+                new NewMovement(to.Key, MovementTypes.TransferIn, move.Quantity, null, MovementSourceTypes.Transfer, command.RelocationId, move.MoveId, reason, command.CorrelationId, group),
+                toAfter,
+                cancellationToken));
+        }
+
+        var shifted = plan.Count == 0 ? [] : await ShiftReservationsAsync(plan, reservations, command.CorrelationId, cancellationToken);
+        await audit.RecordAsync(
+            new AuditEvent(AuditActions.InventoryTransferPosted, "inventory_transfer", command.RelocationId, new AuditChanges()
+                .Value("lineCount", moves.Count)
+                .Value("movedQuantity", moves.Sum(m => m.Quantity))
+                .Value("carriedReservedQuantity", shifted.Sum(m => m.Quantity))
+                .ToDictionary()),
+            cancellationToken);
+        if (shifted.Count > 0)
+        {
+            await AuditReallocationAsync(ReallocationReasons.Relocated, shifted, cancellationToken);
+            await holders.OnReallocatedAsync(shifted, ReallocationReasons.Relocated, cancellationToken);
+        }
+
+        return new TransferResult(command.RelocationId, movements, shifted);
+    }
+
+    /// <summary>
+    /// Writes the reservation side of a re-allocation (balances are the caller's): the source reservation releases the
+    /// quantity, the target (order line, location) reservation grows or is created. Locked rows only.
+    /// </summary>
+    private async Task<List<ReservationMoved>> ShiftReservationsAsync(
+        List<(ReservationRow From, Guid ToLocationId, decimal Quantity)> plan,
+        IReadOnlyList<ReservationRow> locked,
+        string? correlationId,
+        CancellationToken cancellationToken)
+    {
+        var targets = locked.Where(r => r.LocationId is not null).ToDictionary(r => (r.OrderLineId, r.LocationId!.Value), r => r.Id);
+        var moves = new List<ReservationMoved>(plan.Count);
+        foreach (var (from, toLocation, quantity) in plan)
+        {
+            await store.ProgressReservationAsync(from.Id, 0m, quantity, cancellationToken);
+            if (targets.TryGetValue((from.OrderLineId, toLocation), out var targetId))
+            {
+                await store.GrowReservationAsync(targetId, quantity, cancellationToken);
+            }
+            else
+            {
+                targetId = Guid.CreateVersion7();
+                await store.InsertReservationAsync(
+                    targetId, from.OrderId, from.OrderLineId, from.Key with { LocationId = toLocation }, quantity, correlationId, cancellationToken);
+                targets[(from.OrderLineId, toLocation)] = targetId;
+            }
+
+            moves.Add(new ReservationMoved(
+                from.OrderId, from.OrderLineId, from.VariantId, from.WarehouseId, from.LocationId!.Value, toLocation, quantity, from.Id, targetId));
+        }
+
+        return moves;
+    }
+
+    private Task AuditReallocationAsync(string reason, List<ReservationMoved> moves, CancellationToken cancellationToken) =>
+        audit.RecordAsync(
+            new AuditEvent(AuditActions.InventoryReservationReallocated, "order", moves[0].OrderId, new AuditChanges()
+                .Value("reason", reason)
+                .Value("moves", moves.Select(m => new
+                {
+                    orderId = m.OrderId,
+                    orderLineId = m.OrderLineId,
+                    variantId = m.VariantId,
+                    fromLocationId = m.FromLocationId,
+                    toLocationId = m.ToLocationId,
+                    quantity = m.Quantity,
+                }).ToList())
+                .ToDictionary()),
+            cancellationToken);
+
+    /// <summary>Sources belong to the warehouse (an inactive shelf may be emptied); targets must be active shelves of it.</summary>
+    private async Task ValidateShiftLocationsAsync(
+        Dictionary<string, string[]> errors, WarehouseInfo warehouse, IReadOnlyList<ReservationShift> shifts, CancellationToken cancellationToken)
+    {
+        var ids = shifts.SelectMany(s => new[] { s.FromLocationId, s.ToLocationId }).Distinct().ToList();
+        var found = await warehouses.FindLocationsAsync(ids, cancellationToken);
+        for (var i = 0; i < shifts.Count; i++)
+        {
+            if (!found.TryGetValue(shifts[i].FromLocationId, out var from) || from.WarehouseId != warehouse.Id)
+            {
+                errors[$"shifts[{i}].fromLocationId"] = ["Location not found in this warehouse."];
+            }
+
+            if (!found.TryGetValue(shifts[i].ToLocationId, out var to) || to.WarehouseId != warehouse.Id)
+            {
+                errors[$"shifts[{i}].toLocationId"] = ["Location not found in this warehouse."];
+            }
+            else if (!to.IsActive)
+            {
+                errors[$"shifts[{i}].toLocationId"] = ["Location is inactive."];
+            }
+        }
+    }
+
+    private static InventoryError NotReserved() =>
+        new(409, "inventory.not_reserved", "The order line has no active reservation on the source shelf");
+
+    private static InventoryError NotMovable(decimal movable) =>
+        new(409, "inventory.reservation_not_movable", $"Only {Math.Max(movable, 0m)} of the reservation is still on the shelf; picked or missing goods do not move");
 
     // ---- §4.7 Transfer legs (two-stage warehouse transfer, OD-01; shelf-to-shelf moves) ----
 

@@ -69,6 +69,7 @@ public static class RolePermissions
         (Permissions.InventoryCountPerform, "YYY-Y-"),
         (Permissions.InventoryTransfer, "YYY---"),
         (Permissions.InventoryTransferReceive, "YYY-Y-"),
+        (Permissions.InventoryRelocate, "YYY-Y-"),
         (Permissions.InventoryReturns, "YYYKY-"),
         (Permissions.WarehousesManage, "YYY---"),
 

@@ -306,7 +306,7 @@ Her olay: `id, tenant_id, actor_user_id, actor_role, action, entity_type, entity
 | Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.negative_stock_confirmed` (eski `warn` politikası; OD-09 ile stok eksiye düşmediğinden artık yazılmaz, eski kayıtlar okunur), `inventory.threshold_set`, `inventory.threshold_removed` (minimum stok eşiği), `inventory.transfer_posted` (transfer bacağı veya raf taşıma), `inventory.count_posted` (sayım düzeltmesi) |
 | Transfer/sayım (#168) | `stock_transfer.created`, `stock_transfer.dispatched`, `stock_transfer.received`, `stock_transfer.closed` (kayıp / kaynağa iade + sebep), `stock_transfer.cancelled`; `stock_count.created`, `stock_count.submitted`, `stock_count.recount_requested`, `stock_count.applied`, `stock_count.cancelled` |
 | Sipariş | `order.created`, `order.approved` (rezervasyon), `order.cancelled` (release), `order.pick_progress`, `order.shipped`, `order.remaining_closed` (short-close, kalan rezervasyonlar bırakılır), `order.price_overridden` (liste fiyatı dışı fiyat/iskonto) |
-| Depo hazırlama/sevkiyat | `picking.task_created`, `picking.task_assigned`, `picking.task_cancelled`, `picking.shortage_reported`, `shipment.packed`, `shipment.confirmed` (stok çıkışı), `shipment.cancelled` (onaylanmamış sevkiyat iptali; stok hareketi yok, toplananlar putaway'e) |
+| Depo hazırlama/sevkiyat | `picking.task_created`, `picking.task_assigned`, `picking.task_cancelled`, `picking.shortage_reported`, `picking.task_reallocated` / `inventory.reservation_reallocated` (raf değişiminde yeniden tahsis, #98), `picking.task_priority_changed`, `shipment.packed`, `shipment.confirmed` (stok çıkışı), `shipment.cancelled` (onaylanmamış sevkiyat iptali; stok hareketi yok, toplananlar putaway'e) |
 | Import/Export | `import.started/completed/failed/cancelled`, `export.requested/downloaded` |
 | AI | `ai.parse_requested`, `ai.draft_created`, `ai.line_flagged_ambiguous`, `ai.draft_approved/rejected` |
 | Veri hakları | `data_export.tenant_requested`, `data_deletion.tenant_requested/completed` |
@@ -318,7 +318,9 @@ profili; vergi no/telefon yalnızca `changed`), `inventory.receipt_posted`, `inv
 `inventory.negative_stock_confirmed`, `inventory.threshold_set` / `inventory.threshold_removed` (#137/#151; entity
 `stock_threshold`; yalnızca `variantId`, `warehouseId` ve `minQuantity` from/to — stok hareketi oluşmaz), `order.created`, `order.approved`, `order.cancelled`, `order.shipped`,
 `order.remaining_closed`, `order.price_overridden`, `order.pick_progress`, `picking.task_created`, `picking.task_assigned`,
-`picking.task_cancelled`, `picking.shortage_reported`, `shipment.packed`, `shipment.confirmed`, `shipment.cancelled`,
+`picking.task_cancelled`, `picking.shortage_reported`, `picking.task_reallocated`, `picking.task_priority_changed`,
+`inventory.reservation_reallocated` (#98: rezervasyon raf değiştirdi; sebep + sipariş satırı/raf/miktar, stok hareketi yok),
+`shipment.packed`, `shipment.confirmed`, `shipment.cancelled`,
 `import.started`, `import.completed`, `import.failed`, `import.cancelled`, `import.rollback_requested`, `import.rolled_back`,
 `import.rollback_failed`, `customer.anonymized` (yalnızca sayılar: silinen adres, maskelenen sipariş; kişisel veri yok),
 `ai.parse_requested` (ayrıştırıcı, model, prompt sürümü, geri dönüş nedeni, satır/eşleşme sayıları, uyarı kodları,

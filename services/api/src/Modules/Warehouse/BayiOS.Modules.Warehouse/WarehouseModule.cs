@@ -20,8 +20,9 @@ public static class WarehouseModule
         services.AddScoped<WarehouseService>();
         services.AddScoped<IWarehouseDirectory, WarehouseDirectory>();
 
-        // Fulfilment (JOB 10). The host provides IFulfillmentCatalog and ITaskAssigneeDirectory (Catalog/Identity
-        // adapters); Orders provides IOrderFulfillment and receives this module's IOrderFulfillmentListener.
+        // Fulfilment (JOB 10). The host provides IFulfillmentCatalog, ITaskAssigneeDirectory, ITaskOrderDirectory and
+        // IFulfillmentSettings (Catalog/Identity/Orders adapters); Orders provides IOrderFulfillment and receives this
+        // module's IOrderFulfillmentListener.
         services.AddScoped<FulfillmentAccess>();
         services.AddScoped<FulfillmentLocks>();
         services.AddScoped<FulfillmentQueries>();
@@ -29,6 +30,10 @@ public static class WarehouseModule
         services.AddScoped<PickingService>();
         services.AddScoped<ShipmentService>();
         services.AddScoped<IOrderFulfillmentListener, FulfillmentListener>();
+
+        // Re-allocation (#98): Inventory moves reservations, this module keeps the pick task lines in step.
+        services.AddScoped<IReservationHolders, ReservationHolders>();
+        services.AddScoped<PickingReallocator>();
         services.AddScoped<TaskVisibility>();
         services.AddScoped<IOrderTaskVisibility>(sp => sp.GetRequiredService<TaskVisibility>());
         services.AddScoped<ITaskContextVariants>(sp => sp.GetRequiredService<TaskVisibility>());
