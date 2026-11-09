@@ -62,7 +62,7 @@ export async function signUpAndOnboard(page: Page, account: Account) {
   await page.getByLabel("Para birimi").selectOption("TRY");
   await page.getByLabel("Varsayılan KDV oranı").selectOption("20");
   await page.getByLabel("Fiyat gösterimi").selectOption("excluded");
-  await page.getByLabel("Negatif stok").selectOption("block");
+  await expect(page.getByText("Stok eksiye düşmez")).toBeVisible(); // OD-09: fixed rule, no choice
   await page.getByRole("button", { name: "Devam" }).click();
   await expect(page.getByText(account.slug)).toBeVisible();
 
