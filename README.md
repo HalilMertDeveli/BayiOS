@@ -809,6 +809,7 @@ Strategy: [`docs/testing/test-strategy.md`](docs/testing/test-strategy.md).
 | `e2e-real` | Real-stack end-to-end tests |
 | `load-short` | k6 load and reservation soak |
 | `ci-container` | API Docker image + Trivy scan |
+| `ci-k8s` | API + web images → 3-node kind cluster → Helm chart (`infra/k8s`) → health/readiness/401/web smoke test |
 | `codeql`, `secret-scan`, `dependency-review` | Static analysis, gitleaks, vulnerable dependencies |
 | `deploy-preview`, `deploy-production` | Migrations → API to Fly.io → smoke tests; production needs owner approval |
 

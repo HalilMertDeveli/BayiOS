@@ -1,0 +1,17 @@
+apiVersion: v2
+name: bayios
+description: >-
+  BayiOS — multi-tenant B2B stock, warehouse and order management. Deploys the ASP.NET Core API and the Next.js web
+  panel, plus an optional single-instance PostgreSQL and an EF Core migration Job for local/CI clusters.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.29.0-0"
+home: https://github.com/HalilMertDeveli/BayiOS
+sources:
+  - https://github.com/HalilMertDeveli/BayiOS
+keywords:
+  - aspnetcore
+  - nextjs
+  - postgresql
+  - multi-tenant

@@ -1,0 +1,84 @@
+{{- if .Values.migrations.enabled }}
+{{- /*
+  Applies the idempotent EF Core scripts (infra/ci/ef-migrations.sh) AS bayios_migrator, in manifest.txt order —
+  the same contract as infra/deploy/apply-migrations.sh. A plain Job (not a Helm hook) on purpose: the in-cluster
+  PostgreSQL is part of the same release, and the API simply stays not-ready (/health/ready 503) until the schema
+  exists. `helm upgrade --install --wait --wait-for-jobs` therefore waits for both.
+  The Job name carries the release revision so every upgrade re-runs it (the scripts are idempotent).
+*/}}
+{{- if not .Values.migrations.scriptsConfigMap }}
+{{- fail "migrations.scriptsConfigMap is required when migrations.enabled=true" }}
+{{- end }}
+{{- $ctx := dict "ctx" $ "component" "migrations" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "bayios.fullname" . }}-migrations-{{ .Release.Revision }}
+  labels:
+    {{- include "bayios.labels" $ctx | nindent 4 }}
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.migrations.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "bayios.labels" $ctx | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "bayios.podSecurityContext" (dict "ctx" $ "component" (dict "runAsUser" 70 "runAsGroup" 70)) | nindent 8 }}
+      containers:
+        - name: migrate
+          image: "{{ .Values.migrations.image.repository }}:{{ .Values.migrations.image.tag }}"
+          imagePullPolicy: {{ .Values.migrations.image.pullPolicy }}
+          env:
+            - name: PGHOST
+              value: {{ include "bayios.postgres.fullname" . }}
+            - name: PGDATABASE
+              value: {{ .Values.postgres.database | quote }}
+            - name: PGUSER
+              value: bayios_migrator
+            - name: PGAPPNAME
+              value: bayios-k8s-migrations
+            - name: PGCONNECT_TIMEOUT
+              value: "5"
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "bayios.postgres.secretName" . }}, key: migrator-password } }
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              echo "waiting for ${PGHOST}..."
+              i=0
+              until pg_isready -q; do
+                i=$((i + 1)); [ "$i" -lt 90 ] || { echo "database not reachable"; exit 1; }
+                sleep 2
+              done
+              who="$(psql -XtAc 'select current_user')"
+              [ "$who" = bayios_migrator ] || { echo "connected as '$who', expected bayios_migrator"; exit 1; }
+              [ -s /scripts/manifest.txt ] || { echo "manifest.txt missing in the scripts ConfigMap"; exit 1; }
+              tr -d '\r' < /scripts/manifest.txt | sed '/^[[:space:]]*$/d' | while read -r script; do
+                echo "==> ${script}"
+                psql -X -q -v ON_ERROR_STOP=1 -f "/scripts/${script}" >/dev/null
+              done
+              echo "==> schemas owned by bayios_migrator"
+              psql -X -c "select n.nspname as schema, count(c.oid) as tables
+                          from pg_namespace n join pg_class c on c.relnamespace = n.oid and c.relkind = 'r'
+                          where pg_get_userbyid(n.nspowner) = 'bayios_migrator' group by 1 order by 1;"
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ .Values.migrations.scriptsConfigMap }}
+        - name: tmp
+          emptyDir: {}
+{{- end }}

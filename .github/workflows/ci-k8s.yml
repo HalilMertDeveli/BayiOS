@@ -1,0 +1,126 @@
+name: ci-k8s
+
+# Kubernetes proof (issue #193): builds the API and web images, generates the idempotent EF Core scripts, creates a
+# throwaway 3-node kind cluster, installs infra/k8s/helm/bayios (API + web + local PostgreSQL + migration Job) and
+# smoke-tests the API health endpoints, an auth-protected endpoint (must be 401) and the web home page.
+# Logic lives in infra/k8s/kind/kind.sh so it runs identically on a laptop. No registry, no push, no secrets:
+# the in-cluster passwords are random per run and never printed.
+
+on:
+  pull_request:
+    paths:
+      - "infra/k8s/**"
+      - "apps/web/Dockerfile"
+      - "apps/web/.dockerignore"
+      - "apps/web/next.config.ts"
+      - "apps/web/package-lock.json"
+      - "services/api/Dockerfile"
+      - "infra/docker/initdb/**"
+      - ".github/workflows/ci-k8s.yml"
+  push:
+    branches: [main, preview]
+    paths:
+      - "infra/k8s/**"
+      - "apps/web/Dockerfile"
+      - "apps/web/.dockerignore"
+      - "apps/web/next.config.ts"
+      - "apps/web/package-lock.json"
+      - "services/api/Dockerfile"
+      - "infra/docker/initdb/**"
+      - ".github/workflows/ci-k8s.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  KIND_VERSION: v0.30.0
+  KIND_SHA256: 517ab7fc89ddeed5fa65abf71530d90648d9638ef0c4cde22c2c11f8097b8889
+  HELM_VERSION: v3.19.0
+  HELM_SHA256: a7f81ce08007091b86d8bd696eb4d86b8d0f2e1b9f6c714be62f82f96a594496
+  KUBECTL_VERSION: v1.34.1
+  KUBECTL_SHA256: 7721f265e18709862655affba5343e85e1980639395d5754473dafaadcaa69e3
+
+jobs:
+  chart:
+    name: helm lint & render
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install helm (checksum-verified)
+        run: |
+          curl -fsSLo helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  helm.tgz" | sha256sum -c -
+          tar -xzf helm.tgz linux-amd64/helm && sudo install -m 0755 linux-amd64/helm /usr/local/bin/helm
+          helm version --short
+
+      - name: Chart initdb copy matches infra/docker/initdb
+        run: diff -r infra/docker/initdb infra/k8s/helm/bayios/files/initdb
+
+      - name: helm lint (defaults and kind values)
+        run: |
+          helm lint infra/k8s/helm/bayios
+          helm lint infra/k8s/helm/bayios -f infra/k8s/kind/values-kind.yaml \
+            --set postgres.auth.postgresPassword=lint,postgres.auth.appPassword=lint,postgres.auth.migratorPassword=lint
+
+      - name: Render must fail closed without required values
+        run: |
+          if helm template t infra/k8s/helm/bayios -f infra/k8s/kind/values-kind.yaml >/dev/null 2>&1; then
+            echo "::error::chart rendered with postgres enabled but no passwords"; exit 1
+          fi
+          echo "OK: missing PostgreSQL passwords are rejected"
+
+  kind:
+    name: kind deploy & smoke (API + web)
+    needs: chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: services/api/global.json
+
+      - name: Install kind, kubectl, helm (checksum-verified)
+        run: |
+          curl -fsSLo kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          echo "${KIND_SHA256}  kind" | sha256sum -c -
+          curl -fsSLo kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          echo "${KUBECTL_SHA256}  kubectl" | sha256sum -c -
+          curl -fsSLo helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  helm.tgz" | sha256sum -c -
+          tar -xzf helm.tgz linux-amd64/helm
+          sudo install -m 0755 kind kubectl linux-amd64/helm /usr/local/bin/
+          kind version && kubectl version --client && helm version --short
+
+      - name: Build images, generate migrations, create cluster, helm install
+        run: bash infra/k8s/kind/kind.sh up
+
+      - name: Smoke test
+        run: bash infra/k8s/kind/kind.sh smoke
+
+      - name: Rolling restart (probes gate the rollout), then smoke again
+        run: |
+          kubectl -n bayios rollout restart deployment/bayios-api deployment/bayios-web
+          kubectl -n bayios rollout status deployment/bayios-api --timeout=5m
+          kubectl -n bayios rollout status deployment/bayios-web --timeout=5m
+          bash infra/k8s/kind/kind.sh smoke
+
+      - name: Diagnostics
+        if: failure()
+        run: bash infra/k8s/kind/kind.sh diagnostics
+
+      - name: Delete cluster
+        if: always()
+        run: kind delete cluster --name bayios || true

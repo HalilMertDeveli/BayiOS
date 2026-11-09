@@ -1,0 +1,20 @@
+BayiOS {{ .Chart.AppVersion }} is deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Check the rollout:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+{{- if .Values.api.enabled }}
+
+API (liveness /health, readiness /health/ready):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "bayios.fullname" . }}-api 8080:{{ .Values.api.service.port }}
+  curl http://127.0.0.1:8080/health/ready
+{{- end }}
+{{- if .Values.web.enabled }}
+
+Web panel:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "bayios.fullname" . }}-web 3000:{{ .Values.web.service.port }}
+  open http://127.0.0.1:3000
+{{- end }}
+{{- if .Values.postgres.enabled }}
+
+WARNING: the in-cluster PostgreSQL is for local/CI clusters only (single instance, no backups).
+{{- end }}
