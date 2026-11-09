@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="t d">
+  <title id="t">BayiOS architecture</title>
+  <desc id="d">Next.js web and Flutter mobile clients call a single ASP.NET Core modular monolith API, which stores data in Supabase PostgreSQL with row-level security and talks to Supabase Auth, Supabase Storage, Firebase Cloud Messaging and the Claude API.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#5b7a93"/>
+    </marker>
+    <style>
+      text{font-family:Segoe UI,Inter,-apple-system,Helvetica,Arial,sans-serif;fill:#10263a}
+      .h{font-size:20px;font-weight:700}
+      .s{font-size:14px;fill:#4a6378}
+      .m{font-size:14px;font-weight:600;fill:#0d3a5c}
+      .lbl{font-size:12px;fill:#4a6378}
+      .ln{stroke:#5b7a93;stroke-width:2;fill:none;marker-end:url(#a)}
+      .dash{stroke-dasharray:6 5}
+    </style>
+  </defs>
+  <rect width="1280" height="760" rx="16" fill="#f4f7fa"/>
+
+  <!-- Clients -->
+  <rect x="40" y="40" width="300" height="130" rx="12" fill="#ffffff" stroke="#c9d6e2"/>
+  <text x="64" y="80" class="h">Web panel</text>
+  <text x="64" y="106" class="s">apps/web · Next.js 16 · React 19</text>
+  <text x="64" y="128" class="s">TypeScript · Tailwind CSS 4</text>
+  <text x="64" y="150" class="s">Owners, managers, sales</text>
+
+  <rect x="40" y="200" width="300" height="130" rx="12" fill="#ffffff" stroke="#c9d6e2"/>
+  <text x="64" y="240" class="h">Mobile app</text>
+  <text x="64" y="266" class="s">apps/mobile · Flutter (Android / iOS)</text>
+  <text x="64" y="288" class="s">Riverpod · dio · go_router</text>
+  <text x="64" y="310" class="s">Warehouse staff · barcode scanning</text>
+
+  <!-- API -->
+  <rect x="420" y="40" width="460" height="520" rx="14" fill="#0d3a5c"/>
+  <text x="444" y="80" class="h" style="fill:#fff">BayiOS.Api</text>
+  <text x="444" y="104" class="s" style="fill:#cfe3f2">ASP.NET Core · .NET 10 LTS · modular monolith</text>
+  <text x="444" y="126" class="s" style="fill:#cfe3f2">REST /api/v1 · OpenAPI contract · JWT (JWKS)</text>
+
+  <g>
+    <rect x="444" y="146" width="132" height="40" rx="8" fill="#e6eff7"/><text x="510" y="171" text-anchor="middle" class="m">Identity</text>
+    <rect x="584" y="146" width="132" height="40" rx="8" fill="#e6eff7"/><text x="650" y="171" text-anchor="middle" class="m">Catalog</text>
+    <rect x="724" y="146" width="132" height="40" rx="8" fill="#e6eff7"/><text x="790" y="171" text-anchor="middle" class="m">Pricing</text>
+    <rect x="444" y="194" width="132" height="40" rx="8" fill="#e6eff7"/><text x="510" y="219" text-anchor="middle" class="m">Customers</text>
+    <rect x="584" y="194" width="132" height="40" rx="8" fill="#e6eff7"/><text x="650" y="219" text-anchor="middle" class="m">Orders</text>
+    <rect x="724" y="194" width="132" height="40" rx="8" fill="#e6eff7"/><text x="790" y="219" text-anchor="middle" class="m">Inventory</text>
+    <rect x="444" y="242" width="132" height="40" rx="8" fill="#e6eff7"/><text x="510" y="267" text-anchor="middle" class="m">Warehouse</text>
+    <rect x="584" y="242" width="132" height="40" rx="8" fill="#e6eff7"/><text x="650" y="267" text-anchor="middle" class="m">Imports</text>
+    <rect x="724" y="242" width="132" height="40" rx="8" fill="#e6eff7"/><text x="790" y="267" text-anchor="middle" class="m">Integrations</text>
+    <rect x="444" y="290" width="132" height="40" rx="8" fill="#e6eff7"/><text x="510" y="315" text-anchor="middle" class="m">Billing</text>
+    <rect x="584" y="290" width="132" height="40" rx="8" fill="#e6eff7"/><text x="650" y="315" text-anchor="middle" class="m">Reports</text>
+    <rect x="724" y="290" width="132" height="40" rx="8" fill="#e6eff7"/><text x="790" y="315" text-anchor="middle" class="m">Notifications</text>
+  </g>
+
+  <rect x="444" y="346" width="412" height="64" rx="8" fill="#1d5f8a"/>
+  <text x="650" y="372" text-anchor="middle" class="m" style="fill:#fff">Platform: UnitOfWork · tenant context · audit</text>
+  <text x="650" y="394" text-anchor="middle" class="lbl" style="fill:#cfe3f2">idempotency keys · rate limiting · OpenTelemetry</text>
+
+  <rect x="444" y="422" width="412" height="64" rx="8" fill="#1d5f8a"/>
+  <text x="650" y="448" text-anchor="middle" class="m" style="fill:#fff">Background workers</text>
+  <text x="650" y="470" text-anchor="middle" class="lbl" style="fill:#cfe3f2">JobWorker (FOR UPDATE SKIP LOCKED) · OutboxDispatcher</text>
+
+  <text x="650" y="516" text-anchor="middle" class="lbl" style="fill:#9cc3e0">DB role: bayios_app (NOBYPASSRLS, not table owner)</text>
+  <text x="650" y="536" text-anchor="middle" class="lbl" style="fill:#9cc3e0">set_config('app.tenant_id', …) in every transaction</text>
+
+  <!-- Supabase -->
+  <rect x="960" y="40" width="280" height="290" rx="14" fill="#ffffff" stroke="#3ecf8e" stroke-width="2"/>
+  <text x="984" y="78" class="h">Supabase</text>
+  <rect x="984" y="96" width="232" height="96" rx="10" fill="#e9f9f1"/>
+  <text x="1000" y="124" class="m">PostgreSQL 17</text>
+  <text x="1000" y="146" class="lbl">13 schemas · one per module</text>
+  <text x="1000" y="166" class="lbl">tenant_id on every row + RLS</text>
+  <text x="1000" y="184" class="lbl">EF Core migrations</text>
+  <rect x="984" y="204" width="232" height="50" rx="10" fill="#e9f9f1"/>
+  <text x="1000" y="234" class="m">Auth · JWT issuer</text>
+  <rect x="984" y="264" width="232" height="50" rx="10" fill="#e9f9f1"/>
+  <text x="1000" y="294" class="m">Storage · private buckets</text>
+
+  <!-- External -->
+  <rect x="960" y="370" width="280" height="80" rx="12" fill="#ffffff" stroke="#c9d6e2"/>
+  <text x="984" y="404" class="h">Claude API</text>
+  <text x="984" y="428" class="s">WhatsApp order parsing (opt-in)</text>
+  <rect x="960" y="470" width="280" height="80" rx="12" fill="#ffffff" stroke="#c9d6e2"/>
+  <text x="984" y="504" class="h">Firebase FCM</text>
+  <text x="984" y="528" class="s">Push: task assignment</text>
+
+  <!-- Arrows -->
+  <path class="ln" d="M340 105H418"/>
+  <text x="352" y="96" class="lbl">HTTPS · JWT</text>
+  <path class="ln" d="M340 265H380V140H418"/>
+  <path class="ln" d="M880 140H958"/>
+  <text x="890" y="132" class="lbl">SQL</text>
+  <path class="ln" d="M880 229H958"/>
+  <text x="890" y="221" class="lbl">JWKS</text>
+  <path class="ln" d="M880 289H958"/>
+  <path class="ln" d="M880 410H958"/>
+  <path class="ln" d="M880 510H958"/>
+  <path class="ln dash" d="M190 40V24H1100V38"/>
+  <text x="430" y="16" class="lbl">sign-in / session only (Supabase Auth SDK) — clients never write to the database directly</text>
+  <path class="ln dash" d="M1100 550V600H190V332"/>
+  <text x="420" y="592" class="lbl">push notification to device</text>
+
+  <!-- CI strip -->
+  <rect x="40" y="630" width="1200" height="90" rx="12" fill="#ffffff" stroke="#c9d6e2"/>
+  <text x="64" y="664" class="h">Delivery</text>
+  <text x="64" y="696" class="s">GitHub Actions: API · web · mobile (Android + iOS) · migrations drift · real-stack E2E · k6 load · CodeQL · gitleaks · Trivy → Docker image → Fly.io (API) · Vercel (web)</text>
+</svg>
