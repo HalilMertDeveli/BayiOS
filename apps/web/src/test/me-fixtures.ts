@@ -74,6 +74,7 @@ const MATRIX: readonly (readonly [string, string])[] = [
   ["inventory.count.perform", "YYY-Y-"],
   ["inventory.transfer", "YYY---"],
   ["inventory.transfer.receive", "YYY-Y-"],
+  ["inventory.relocate", "YYY-Y-"],
   ["inventory.returns", "YYYKY-"],
   ["warehouses.manage", "YYY---"],
   ["orders.read", "YYYYKY"],

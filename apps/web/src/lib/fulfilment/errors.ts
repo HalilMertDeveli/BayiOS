@@ -21,7 +21,9 @@ export const FULFILMENT_MESSAGES: Record<string, string> = {
   "picking.incomplete": "Tüm satırlar toplanmadan veya eksik bildirilmeden görev tamamlanamaz.",
   "picking.nothing_to_pick": "Bu siparişte toplanacak açık ürün yok.",
   "picking.fulfillment_in_progress": "Siparişin zaten aktif bir toplama görevi veya onaylanmamış sevkiyatı var.",
-  "shipment.invalid_transition": "Bu işlem sevkiyatın şu anki durumunda yapılamaz. Güncel hâli yüklendi.",
+  "inventory.reservation_not_movable":
+    "Ayrılmış ürünün bir kısmı artık rafta değil (toplanmış, paketlenmiş veya eksik bildirilmiş); bu miktar taşınamaz. Görevi yenileyip tekrar deneyin.",
+  "inventory.not_reserved": "Bu sipariş satırının kaynak rafta ayrılmış stoğu kalmadı. Görevi yenileyip tekrar deneyin.",  "shipment.invalid_transition": "Bu işlem sevkiyatın şu anki durumunda yapılamaz. Güncel hâli yüklendi.",
   "shipment.already_confirmed": "Bu sevkiyat zaten onaylanmış; stok yalnızca bir kez düşüldü.",
   "shipment.empty": "Bu sevkiyatta gönderilecek ürün kalmadı.",
   "packing.unknown_code": "Bu barkod/SKU hiçbir ürünle eşleşmiyor.",
@@ -33,6 +35,8 @@ export const FULFILMENT_MESSAGES: Record<string, string> = {
 const KNOWN: [RegExp, string][] = [
   [/^Line not found in this task\.$/, "Bu satır görevde artık yok. Sayfayı yenileyin."],
   [/^The item's unit does not allow fractions\.$/, "Bu ürünün birimi küsurat kabul etmiyor; tam sayı girin."],
+  [/^Must be one of: low, normal, high, urgent\.$/, "Öncelik olarak Düşük, Normal, Yüksek veya Acil seçin."],
+  [/^Location not found in this task's warehouse\.$/, "Seçilen raf bu görevin deposunda yok. Listeden bir raf seçin."],
   [/^Required\.$/, "Bu alan zorunlu."],
 ];
 

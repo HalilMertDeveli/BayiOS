@@ -40,7 +40,8 @@ Aşağıdaki konular karar bekliyor; karar verildiğinde ilgili kılavuz sayfala
 - Paket sınırları (depo, kullanıcı, AI ayrıştırma sayıları şu an geçicidir) ve deneme süresi.
 - Temel pakette barkodlu toplama doğrulamasının olup olmayacağı.
 - Toplu aktarma limitleri.
-- Mal kabul notu, sipariş onayında fiyatın yeniden hesaplanması, toplama sırasında raf değişimi kuralları (GitHub #98).
+- Mal kabul notu, sipariş onayında fiyatın yeniden hesaplanması (GitHub #98). Toplama sırasında raf değişimi kuralları
+  2026-11-09'da karara bağlandı (bkz. [Toplama, paketleme ve sevkiyat](10-toplama-paketleme-sevkiyat.md)).
 - Seri numarası takibinin kapsamı (GitHub #57, #147).
 - Marka rengi ve repo lisansı.
 

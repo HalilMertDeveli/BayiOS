@@ -10,9 +10,13 @@ import { toNumber } from "@/lib/inventory/quantity";
 export const remaining = (line: Pick<TaskLine, "quantityRemaining">) => toNumber(line.quantityRemaining);
 export const isOpenLine = (line: Pick<TaskLine, "quantityRemaining">) => remaining(line) > 0;
 
-/** Lines in shelf pick order (the API already sorts by location pick_sequence; `sequence` keeps it stable). */
+/**
+ * Lines in walking order exactly as the API sends them: by the current shelf's pick sequence and code, then `sequence`.
+ * Not re-sorted here — after a re-allocation (#98) a line keeps its `sequence` but joins its new shelf's place, so
+ * sorting by `sequence` would send the picker back and forth.
+ */
 export function sortLines(lines: readonly TaskLine[]): TaskLine[] {
-  return [...lines].sort((a, b) => toNumber(a.sequence) - toNumber(b.sequence));
+  return [...lines];
 }
 
 /** The line to work on: the preferred one while it is still open, else the first open line in pick order. */
@@ -105,7 +109,7 @@ export function applyScan(detail: TaskDetail, response: PickScanResponse): TaskD
   const lines = detail.lines.map((line) => {
     const p = byId.get(line.id);
     return p
-      ? { ...line, quantityPicked: p.quantityPicked, quantityShort: p.quantityShort, quantityRemaining: p.quantityRemaining }
+      ? { ...line, quantityToPick: p.quantityToPick, quantityPicked: p.quantityPicked, quantityShort: p.quantityShort, quantityRemaining: p.quantityRemaining }
       : line;
   });
   const sum = (key: "quantityPicked" | "quantityShort") => lines.reduce((acc, l) => Math.round((acc + picked(l[key])) * 1000) / 1000, 0);
@@ -114,6 +118,24 @@ export function applyScan(detail: TaskDetail, response: PickScanResponse): TaskD
     task: { ...detail.task, status: response.status, version: response.version, quantityPicked: sum("quantityPicked"), quantityShort: sum("quantityShort") },
     lines,
   };
+}
+
+/**
+ * A scan on another shelf can re-allocate the reservation (#98): the answer then names a line the screen does not know
+ * yet (the new shelf's line) or changes a line's quantity to pick. The screen reloads the task to get the new lines in
+ * the API's walking order.
+ */
+export function scanNeedsReload(detail: TaskDetail, response: PickScanResponse): boolean {
+  const byId = new Map(detail.lines.map((l) => [l.id, l]));
+  return response.lines.some((p) => {
+    const known = byId.get(p.id);
+    return !known || toNumber(known.quantityToPick) !== toNumber(p.quantityToPick) || known.locationId !== p.locationId;
+  });
+}
+
+/** Open lines on a deactivated shelf (`locationIsActive === false`): they need a re-allocation before they can be picked. */
+export function inactiveShelfLines(lines: readonly TaskLine[]): TaskLine[] {
+  return lines.filter((l) => l.locationIsActive === false && isOpenLine(l));
 }
 
 export const MIN_STEP = 1;

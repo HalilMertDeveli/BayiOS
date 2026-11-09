@@ -30,6 +30,7 @@ import {
 } from "@/lib/orders/errors";
 import { orderSourceLabels } from "@/lib/orders/labels";
 import { orderPermissions, type OrderPermissions } from "@/lib/orders/permissions";
+import { fulfilmentPermissions } from "@/lib/fulfilment/permissions";
 import { useSession } from "@/lib/session/session-context";
 import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 import { FulfillmentBadge, OrderStatus } from "./order-badges";
@@ -37,6 +38,7 @@ import { ReasonDialog, remainingLines } from "./order-actions";
 import { OrderAddresses } from "./order-addresses";
 import { OrderDraftEditor } from "./order-draft-editor";
 import { FulfilmentSection, OrderLinesTable, OrderTotalsPanel, ShortagesPanel, pricesHidden } from "./order-lines";
+import { OrderPickingTask } from "./order-picking-task";
 import { OrderTimeline } from "./order-timeline";
 import { useWarehouses, warehouseLabel } from "./use-order-reference";
 
@@ -173,6 +175,8 @@ function OrderView({
   const warehouses = useWarehouses();
   const hidePrices = pricesHidden(loaded.detail);
   const currentUserId = state.status === "ready" ? state.user.id : null;
+  // #98: supervisors create the pick task when approval did not (POST /picking-tasks is tasks.assign).
+  const canCreateTask = fulfilmentPermissions(access).assign;
 
   const [keys] = useState(() => new IdempotencyKeys());
   const [pending, setPending] = useState<OrderTransition | null>(null);
@@ -228,7 +232,7 @@ function OrderView({
       toast({
         tone: "success",
         title: `${next.detail.order.number}: ${autoApproved ? AUTO_APPROVED : SUCCESS[action]}`,
-        description: autoApproved ? "İşletmenizde sipariş onayı zorunlu değil; stok ayrıldı ve toplama görevi oluşturuldu." : undefined,
+        description: autoApproved ? "İşletmenizde sipariş onayı zorunlu değil; stok ayrıldı." : undefined,
       });
       onLoaded(next);
     } catch (error) {
@@ -431,6 +435,8 @@ function OrderView({
       )}
 
       {order.totals ? <OrderTotalsPanel totals={order.totals} currency={order.currency} /> : null}
+
+      {order.status === "approved" && canCreateTask ? <OrderPickingTask orderId={order.id} orderNumber={order.number} /> : null}
 
       {fulfilment ? <FulfilmentSection detail={loaded.detail} /> : null}
 

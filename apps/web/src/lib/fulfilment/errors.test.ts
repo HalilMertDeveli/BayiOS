@@ -23,6 +23,17 @@ describe("fulfilment errors", () => {
     expect(fulfilmentErrorMessage(err(422, "picking.over_pick"))).toMatch(/Fazla toplama/);
   });
 
+  it("translates the #98 codes and validation texts (priority, re-allocation)", () => {
+    expect(fulfilmentErrorMessage(err(409, "inventory.reservation_not_movable"))).toMatch(/toplanmış, paketlenmiş veya eksik/);
+    expect(fulfilmentErrorMessage(err(409, "picking.fulfillment_in_progress"))).toMatch(/zaten aktif bir toplama görevi/);
+    expect(fulfilmentErrorMessage(err(422, "validation.failed", { errors: { priority: ["Must be one of: low, normal, high, urgent."] } }))).toBe(
+      "Öncelik olarak Düşük, Normal, Yüksek veya Acil seçin.",
+    );
+    expect(fulfilmentErrorMessage(err(422, "validation.failed", { errors: { fromLocationId: ["Location not found in this task's warehouse."] } }))).toMatch(
+      /bu görevin deposunda yok/,
+    );
+  });
+
   it("classifies busy, stale, version and scan rejections", () => {
     expect(isFulfilmentBusy(err(409, "order.busy"))).toBe(true);
     expect(isFulfilmentBusy(err(409, "inventory.busy"))).toBe(true);

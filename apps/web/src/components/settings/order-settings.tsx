@@ -30,7 +30,7 @@ import { NegativeStockRule } from "./negative-stock-rule";
 type Loaded = { settings: TenantSettings; etag: string };
 type LoadState = { status: "loading" } | { status: "error"; message: string } | ({ status: "ready" } & Loaded);
 
-const FIELD_KEYS = ["requireOrderApproval", "orderNumberPrefix", "defaultTaxRate", "pricesIncludeTaxDisplay"];
+const FIELD_KEYS = ["requireOrderApproval", "orderNumberPrefix", "defaultTaxRate", "pricesIncludeTaxDisplay", "autoCreatePickingTask"];
 
 /**
  * Ayarlar → Sipariş ayarları (#92): approval requirement, order number prefix, the fixed negative-stock rule (OD-09), default VAT rate
@@ -69,7 +69,9 @@ export function OrderSettings() {
         <h2 id={`${uid}-order-settings`} className="text-h3 text-fg">
           Sipariş ayarları
         </h2>
-        <p className="text-caption text-fg-muted">Sipariş onayı, sipariş numaraları, stoğun eksiye düşmemesi (sabit kural) ve KDV varsayılanları.</p>
+        <p className="text-caption text-fg-muted">
+          Sipariş onayı, sipariş numaraları, onayda toplama görevi, stoğun eksiye düşmemesi (sabit kural) ve KDV varsayılanları.
+        </p>
       </div>
       {!canManage ? (
         <EmptyState
@@ -206,6 +208,20 @@ export function OrderSettingsForm({ loaded, onSaved, onReload }: { loaded: Loade
           error={errors.orderNumberPrefix}
           hint={`1–10 karakter: A–Z ve 0–9, harfle başlar. Yeni siparişler ${orderNumberExample(values.orderNumberPrefix, year)} biçiminde numaralanır; mevcut numaralar değişmez.`}
           onChange={(e) => set({ orderNumberPrefix: e.target.value.toLocaleUpperCase("en-US") })}
+        />
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-3">
+        <legend className="mb-1 text-body font-semibold text-fg">Depo</legend>
+        <CheckboxField
+          label="Sipariş onaylanınca toplama görevi otomatik oluşturulsun"
+          checked={values.autoCreatePickingTask}
+          onChange={(v) => set({ autoCreatePickingTask: v })}
+          hint={
+            values.autoCreatePickingTask
+              ? "Onaylanan her sipariş için toplama görevi hemen oluşur ve depo havuzuna düşer."
+              : "Onayda stok yine ayrılır ama görev oluşmaz; yönetici siparişin sayfasından önceliğini seçerek “Toplama görevi oluştur” ile başlatır."
+          }
         />
       </fieldset>
 

@@ -26,6 +26,7 @@ describe("stock document errors", () => {
       "count.busy",
       "inventory.insufficient_available",
       "inventory.insufficient_stock",
+      "inventory.reservation_not_movable",
       "inventory.busy",
     ];
     for (const code of codes) {

@@ -112,8 +112,19 @@ export const cancelTransfer = (api: ApiClient, id: string, reason: string, optio
 
 // ---- Shelf-to-shelf move ----
 
+/**
+ * POST /inventory/relocations (inventory.relocate). With `includeReserved` on a line, reserved goods still on the shelf
+ * move too; the carried reservations come back in `reservationMoves` (#98).
+ */
 export async function createRelocation(api: ApiClient, body: CreateRelocationRequest, idempotencyKey: string): Promise<TransferResult> {
   return (await api.request<TransferResult>("/api/v1/inventory/relocations", { method: "POST", tenant: true, body, idempotencyKey })).data;
+}
+
+/** Total reserved quantity a relocation carried (`reservationMoves`) and how many orders it belongs to. */
+export function summariseReservationMoves(moves: readonly { orderId: string; quantity: number | string }[] | null | undefined): { quantity: number; orders: number } {
+  const list = moves ?? [];
+  const quantity = Math.round(list.reduce((sum, m) => sum + Number(m.quantity), 0) * 1000) / 1000;
+  return { quantity, orders: new Set(list.map((m) => m.orderId)).size };
 }
 
 // ---- Stock counts ----

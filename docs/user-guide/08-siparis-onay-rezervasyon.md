@@ -30,7 +30,8 @@ Sipariş sayfasında **Onaya gönder**. Göndermek için en az bir satır gereki
 ### 3. Onay ve stok ayırma
 Onay yetkisi olan kişi sipariş sayfasında:
 - **Onayla ve stok ayır** — tüm satırlar için stok **tek seferde** ayrılır (ya hepsi ya hiçbiri). Onayla birlikte depo için
-  **toplama görevi** otomatik oluşur.
+  **toplama görevi** otomatik oluşur. İşletme bu ayarı kapattıysa ([Ayarlar](13-ayarlar.md)) yönetici sipariş sayfasındaki
+  **Toplama görevi** bölümünden öncelik seçip **Toplama görevi oluştur** der.
 - **Reddet** — ret sebebi yazılır; sipariş taslağa döner, satış ekibi düzeltip yeniden gönderir.
 - Gönderen kişi **Onaydan geri çek** ile siparişi taslağa alabilir.
 

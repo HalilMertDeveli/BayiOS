@@ -3,10 +3,12 @@ import {
   applyScan,
   clampStep,
   currentLine,
+  inactiveShelfLines,
   keepLocation,
   locationAfterRejection,
   pickStep,
   readScan,
+  scanNeedsReload,
   sortLines,
   taskTotals,
   usesLocations,
@@ -14,10 +16,33 @@ import {
 import { taskLine, twoShelfTask } from "./test-fixtures";
 
 describe("pick session", () => {
-  it("orders lines by shelf pick sequence and starts at the first open line", () => {
+  it("keeps the API's walking order and starts at the first open line", () => {
     const { lines } = twoShelfTask();
     expect(sortLines(lines).map((l) => l.sku)).toEqual(["MOCK-001", "MOCK-002"]);
     expect(currentLine(lines)?.sku).toBe("MOCK-001");
+    // A re-allocated line (#98) keeps its old sequence but the API lists it at its new shelf: no re-sort by sequence.
+    const moved = [taskLine({ id: "l2", sequence: 2, locationCode: "A-00" }), taskLine({ id: "l1", sequence: 1, locationCode: "B-02" })];
+    expect(sortLines(moved).map((l) => l.id)).toEqual(["l2", "l1"]);
+    expect(currentLine(moved)?.id).toBe("l2");
+  });
+
+  it("reloads after a scan that re-allocated (unknown line or changed quantity to pick)", () => {
+    const detail = twoShelfTask();
+    const progress = { id: "l1", variantId: "v1", sku: "MOCK-001", locationId: "loc-a", quantityToPick: 3, quantityPicked: 1, quantityShort: 0, quantityRemaining: 2 };
+    const scan = (lines: (typeof progress)[]) => ({ taskId: "t1", status: "in_progress", version: 2, openLineCount: 2, lines });
+    expect(scanNeedsReload(detail, scan([progress]))).toBe(false);
+    expect(scanNeedsReload(detail, scan([{ ...progress, quantityToPick: 1 }]))).toBe(true);
+    expect(scanNeedsReload(detail, scan([{ ...progress, id: "l9", locationId: "loc-z" }]))).toBe(true);
+  });
+
+  it("lists open lines on deactivated shelves", () => {
+    const lines = [
+      taskLine({ id: "a", locationIsActive: false }),
+      taskLine({ id: "b", locationIsActive: false, quantityRemaining: 0, quantityPicked: 3 }),
+      taskLine({ id: "c", locationIsActive: true }),
+      taskLine({ id: "d", locationIsActive: null }),
+    ];
+    expect(inactiveShelfLines(lines).map((l) => l.id)).toEqual(["a"]);
   });
 
   it("keeps a chosen line while it is open and skips closed lines", () => {
@@ -86,7 +111,7 @@ describe("pick session", () => {
     expect(next.task.version).toBe(2);
     expect(next.task.quantityPicked).toBe(1);
     expect(next.lines.find((l) => l.id === "l1")?.quantityRemaining).toBe(2);
-    expect(next.lines.find((l) => l.id === "l2")).toBe(detail.lines[0]);
+    expect(next.lines.find((l) => l.id === "l2")).toBe(detail.lines[1]);
     expect(taskTotals(next.lines)).toMatchObject({ toPick: 5, picked: 1, open: 4, openLines: 2, shortLines: 0 });
   });
 

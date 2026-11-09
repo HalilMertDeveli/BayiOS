@@ -191,7 +191,16 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
   const reports = options.reports === undefined ? createMockReports() : options.reports;
   const imports = options.imports === undefined ? createMockImports() : options.imports;
   const stockDocuments = options.stockDocuments === undefined ? createMockStockDocuments() : options.stockDocuments;
-  if (inventory) billing.activeWarehouses = () => inventory.warehouses.filter((w) => w.status === "active").length;
+  // #98: POST /picking-tasks reads the order (number, status, customer) the supervisor creates the task for.
+  if (fulfilment && orders && !fulfilment.orderOf) {
+    fulfilment.orderOf = (id) => {
+      const order = orders.orders.find((o) => o.id === id);
+      if (!order) return null;
+      const customerName = commerce?.customers.find((c) => c.id === order.customerId)?.name ?? null;
+      return { number: order.number, status: order.status, customerName, requestedDeliveryDate: order.requestedDeliveryDate };
+    };
+  }
+  if (inventory) billing.activeWarehouses =() => inventory.warehouses.filter((w) => w.status === "active").length;
   const state = {
     memberships: options.memberships ?? [TENANT_A],
     rules: { ...MOCK_RULES, ...options.rules },
@@ -383,6 +392,7 @@ export const defaultSettings = {
   pricesIncludeTaxDisplay: false,
   requireOrderApproval: true,
   orderNumberPrefix: "SIP",
+  autoCreatePickingTask: true,
 };
 
 /** Signed-in user with the given memberships; the first one is selected when there is only one. */

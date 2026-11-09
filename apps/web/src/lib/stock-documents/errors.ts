@@ -24,7 +24,9 @@ export const STOCK_DOCUMENT_MESSAGES: Record<string, string> = {
   "count.busy": "Sayım şu an başka bir işlem tarafından kullanılıyor. Birkaç saniye sonra tekrar deneyin.",
   "inventory.insufficient_available":
     "Kaynakta satılabilir stok yetersiz. Siparişler için ayrılmış (rezerve) stok taşınamaz; miktarı azaltın.",
-  "inventory.insufficient_stock": "Kaynakta yeterli stok yok; stok asla eksiye düşürülmez. Miktarı azaltın.",
+  "inventory.reservation_not_movable":
+    "Ayrılmış ürünün bir kısmı artık rafta değil (toplanmış, paketlenmiş veya eksik bildirilmiş); toplanan veya eksik bildirilen mal taşınmaz. Miktarı azaltın.",
+  "inventory.insufficient_stock":"Kaynakta yeterli stok yok; stok asla eksiye düşürülmez. Miktarı azaltın.",
 };
 
 /** Service validation messages (English developer text) → Turkish; anything else falls back to the inventory table. */

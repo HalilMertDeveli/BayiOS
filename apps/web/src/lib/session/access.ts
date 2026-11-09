@@ -37,6 +37,7 @@ export type Permission =
   | "inventory.adjust"
   | "inventory.transfer"
   | "inventory.transfer.receive"
+  | "inventory.relocate"
   | "inventory.count.manage"
   | "inventory.count.perform"
   | "warehouses.manage"

@@ -15,6 +15,12 @@ diğer roller "Ayarları değiştirme yetkiniz yok" mesajını görür.
 - **Sipariş numarası öneki** — 1–10 karakter, A–Z ve 0–9, harfle başlar (ör. SIP). Yeni siparişler
   `SIP-2026-000123` biçiminde numaralanır; mevcut numaralar değişmez.
 
+### Depo
+- **Sipariş onaylanınca toplama görevi otomatik oluşturulsun** (varsayılan açık)
+  - Açık: onaylanan her sipariş için toplama görevi hemen oluşur ve depo havuzuna düşer.
+  - Kapalı: onay stoğu yine ayırır ama görev oluşmaz; yönetici siparişin sayfasında öncelik seçip **Toplama görevi oluştur**
+    ile başlatır. Bkz. [Toplama, paketleme ve sevkiyat](10-toplama-paketleme-sevkiyat.md).
+
 ### Stok ve KDV
 - **Stok eksiye düşmez** — sabit kural, değiştirilemez. Onay, stok çıkışı ve sevkiyat satılabilir stoğun altına inemez. Ayrıntı: [Stok düzeltme ve negatif stok](06-stok-duzeltme-negatif-stok.md).
 - **Varsayılan KDV oranı** — yeni ürünlerde önerilir; ürün kartından değiştirilebilir.

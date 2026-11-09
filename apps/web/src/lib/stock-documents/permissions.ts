@@ -7,7 +7,10 @@ export type TransferPermissions = {
   manage: boolean;
   /** inventory.transfer.receive — receive at the destination (warehouse staff included). */
   receive: boolean;
-  /** inventory.transfer — instant shelf-to-shelf move inside one warehouse (POST /inventory/relocations). */
+  /**
+   * inventory.relocate (#98) — instant shelf-to-shelf move inside one warehouse (POST /inventory/relocations); warehouse
+   * staff included, unlike inter-warehouse transfers.
+   */
   relocate: boolean;
 };
 
@@ -28,7 +31,7 @@ export function transferPermissions(access: Access): TransferPermissions {
     read: access.canSome("inventory.transfer") || access.canSome("inventory.transfer.receive"),
     manage,
     receive,
-    relocate: manage,
+    relocate: access.can("inventory.relocate"),
   };
 }
 

@@ -20,6 +20,7 @@ import { addQuantities, formatQuantity, formatSignedQuantity, toNumber } from "@
 import { useSession } from "@/lib/session/session-context";
 import { AvailableQuantity, MinimumCell } from "./quantity-cells";
 import { MovementPlace } from "@/components/stock-documents/movement-place";
+import { movementReference } from "@/lib/stock-documents/transit";
 import { useLocationNames, useWarehouseNames, useWarehouses } from "./use-inventory-data";
 import { VariantThresholds } from "./variant-thresholds";
 
@@ -247,7 +248,7 @@ function MovementHistory({
     { key: "location", header: "Raf/göz", cell: (m) => <span className="font-mono text-caption">{m.locationId ? (locationNames.get(m.locationId) ?? "…") : "—"}</span> },
     { key: "quantity", header: "Miktar", numeric: true, cell: (m) => <span className="font-semibold">{formatSignedQuantity(m.quantity)}</span> },
     { key: "after", header: "Sonraki bakiye", numeric: true, cell: (m) => formatQuantity(m.balanceAfter) },
-    { key: "reason", header: "Açıklama / referans", cell: (m) => m.reason ?? <span className="text-fg-muted">—</span> },
+    { key: "reason", header: "Açıklama / referans", cell: (m) => movementReference(m) ?? <span className="text-fg-muted">—</span> },
   ];
 
   return (
@@ -327,7 +328,7 @@ function MovementHistory({
                       {formatDateTime(m.occurredAt)} · <MovementPlace movement={m} warehouseLabel={warehouseLabel} />
                       {m.locationId ? ` · ${locationNames.get(m.locationId) ?? "…"}` : ""} · bakiye {formatQuantity(m.balanceAfter)}
                     </p>
-                    {m.reason ? <p className="mt-1 text-body text-fg-secondary">{m.reason}</p> : null}
+                    {movementReference(m) ? <p className="mt-1 text-body text-fg-secondary">{movementReference(m)}</p> : null}
                   </li>
                 ))}
               </ul>

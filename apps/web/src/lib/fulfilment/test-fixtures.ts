@@ -44,10 +44,10 @@ export function twoShelfTask(): TaskDetail {
       version: 1,
       priority: "normal",
     },
-    // Deliberately out of order: the screen sorts by sequence.
+    // Walking order as the API sends it; the screen keeps it (no client-side sort, #98).
     lines: [
-      taskLine({ id: "l2", sequence: 2, variantId: "v2", sku: "MOCK-002", name: "Mock ürün 2", barcode: "8690000000028", locationId: "loc-b", locationCode: "B-02", locationBarcode: "LOC-B02", quantityToPick: 2, quantityRemaining: 2 }),
       taskLine(),
+      taskLine({ id: "l2", sequence: 2, variantId: "v2", sku: "MOCK-002", name: "Mock ürün 2", barcode: "8690000000028", locationId: "loc-b", locationCode: "B-02", locationBarcode: "LOC-B02", quantityToPick: 2, quantityRemaining: 2 }),
     ],
     shipmentId: null,
   };
