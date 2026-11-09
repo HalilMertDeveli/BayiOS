@@ -69,7 +69,7 @@ export function OrderSettings() {
         <h2 id={`${uid}-order-settings`} className="text-h3 text-fg">
           Sipariş ayarları
         </h2>
-        <p className="text-caption text-fg-muted">Sipariş onayı, sipariş numaraları, stok yetmediğinde ne olacağı ve KDV varsayılanları.</p>
+        <p className="text-caption text-fg-muted">Sipariş onayı, sipariş numaraları, stoğun eksiye düşmemesi (sabit kural) ve KDV varsayılanları.</p>
       </div>
       {!canManage ? (
         <EmptyState

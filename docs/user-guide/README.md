@@ -29,12 +29,13 @@ BayiOS internet tarayıcısında çalışır (bilgisayar, tablet veya telefon). 
 | 12 | [Paket, deneme süresi ve modüller](12-paket-deneme-moduller.md) | İşletme sahibi |
 | 13 | [Ayarlar: sipariş onayı, numara öneki, KDV](13-ayarlar.md) | Sahip, yönetici |
 | 14 | [KVKK: müşteri anonimleştirme](14-kvkk-musteri-anonimlestirme.md) | Sahip, yönetici |
+| 15 | [Depolar arası transfer, raf taşıma ve stok sayımı](15-transfer-sayim-raf-tasima.md) | Depo ekibi, operasyon müdürü |
 | – | [Bilinen sınırlamalar](bilinen-sinirlamalar.md) | Herkes |
 
 ## Menü
 Sol menüde (telefonda ☰ düğmesiyle açılan menüde) yalnızca rolünüzün açabildiği bölümler görünür:
 
-- **Operasyon:** Pano, Siparişler, Ürünler, Stok, Depo, Görevler, Sevkiyatlar, Müşteriler
+- **Operasyon:** Pano, Siparişler, Ürünler, Stok, Depo, Görevler, Sevkiyatlar, Transferler, Sayımlar, Müşteriler
 - **Yönetim:** Fiyat listeleri, Raporlar, İçe aktarma, Ayarlar
 
 Sağ üstte **Aktif işletme** adı, birden çok işletmeniz varsa **İşletme seç** ve **Çıkış yap** bulunur.

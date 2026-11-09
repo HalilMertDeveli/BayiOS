@@ -28,7 +28,7 @@ ya da **Değişiklikleri geri al** ile vazgeçin. Başarılıysa "Sipariş ayarl
 - **Paket ve modüller** (sahip ve yönetici) — bkz. [Paket, deneme süresi ve modüller](12-paket-deneme-moduller.md).
 - **Ekip** — çalışan daveti, rol değiştirme, askıya alma, sahiplik devri; bkz. [Roller ve izinler](02-roller-ve-izinler.md).
 - **İş kuralları** (sahip ve yönetici) — satış personeli onayı ve iskonto sınırı, alış fiyatı görünürlüğü, depo personeli
-  barkod atama / mal kabul onayı, stok yetmediğinde davranış. İki adımlı doğrulama seçeneği "Yakında" olarak görünür ve
+  barkod atama / mal kabul onayı; "Stok eksiye düşmez" sabit kural olarak gösterilir (değiştirilemez, OD-09). İki adımlı doğrulama seçeneği "Yakında" olarak görünür ve
   henüz uygulanmaz.
 - **Marka, kategori ve birimler** — bkz. [Ürünler ve özel alanlar](03-urunler-ve-ozel-alanlar.md).
 - İşletme profili (logo, vergi no, adres, telefon) ayarları **henüz geliştiriliyor**.

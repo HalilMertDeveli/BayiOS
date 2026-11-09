@@ -58,4 +58,4 @@ girebilir; diğer roller değerleri görür.
 
 ## İpuçları
 - Sayım farklarını düzenli düzeltin ve sebebi açık yazın; raporlarda "Düzeltme (giriş/çıkış)" ve "Hasar / fire" ayrı görünür.
-- Ayrı bir "sayım" ekranı henüz yoktur; sayım farkını bu ekrandan düzeltin.
+- Depo veya raf sayımı için **Sayımlar** ekranını kullanın; farklar onayla "Sayım düzeltmesi" olarak işlenir. Bkz. [Transfer, raf taşıma ve sayım](15-transfer-sayim-raf-tasima.md).

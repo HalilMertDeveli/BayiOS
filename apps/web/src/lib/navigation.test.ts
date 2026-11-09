@@ -8,7 +8,7 @@ const labelsFor = (role: FixtureRole) => navFor(accessFor(role)).flatMap((s) => 
 
 describe("navigation — menu from GET /me effective permissions", () => {
   it("shows the full menu to owner and admin", () => {
-    const all = ["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Görevler", "Sevkiyatlar", "Müşteriler", "Fiyat listeleri", "Raporlar", "İçe aktarma", "Ayarlar"];
+    const all = ["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Görevler", "Sevkiyatlar", "Transferler", "Sayımlar", "Müşteriler", "Fiyat listeleri", "Raporlar", "İçe aktarma", "Ayarlar"];
     expect(labelsFor("owner")).toEqual(all);
     expect(labelsFor("admin")).toEqual(all);
   });
@@ -18,8 +18,10 @@ describe("navigation — menu from GET /me effective permissions", () => {
     expect(labelsFor("sales")).toEqual(["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Görevler", "Sevkiyatlar", "Müşteriler", "Fiyat listeleri", "Raporlar"]);
     // viewer: read-only; tasks.read.all also opens shipments (x-permission-any-of)
     expect(labelsFor("viewer")).toEqual(["Pano", "Siparişler", "Ürünler", "Stok", "Depo", "Görevler", "Sevkiyatlar", "Müşteriler", "Fiyat listeleri", "Raporlar"]);
-    // warehouse_staff: task-linked orders (K⁸) keep Siparişler; no dashboard, customers, prices, reports, imports, settings
-    expect(labelsFor("warehouse_staff")).toEqual(["Siparişler", "Ürünler", "Stok", "Depo", "Görevler", "Sevkiyatlar"]);
+    // warehouse_staff: task-linked orders (K⁸) keep Siparişler; receives transfers and counts (no create); no dashboard, customers, prices, reports, imports, settings
+    expect(labelsFor("warehouse_staff")).toEqual(["Siparişler", "Ürünler", "Stok", "Depo", "Görevler", "Sevkiyatlar", "Transferler", "Sayımlar"]);
+    // sales and viewer hold no transfer or count permission.
+    expect(labelsFor("viewer")).not.toContain("Transferler");
     expect(labelsFor("manager")).toEqual(expect.arrayContaining(["İçe aktarma", "Ayarlar", "Fiyat listeleri"]));
   });
 

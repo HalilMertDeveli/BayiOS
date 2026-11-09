@@ -285,9 +285,20 @@ COMMIT;
 
 `on_hand` ve `reserved` aynı miktarda düştüğü için `available` değişmez — sevkiyat, başka siparişlerin kullanabileceği stoğu etkilemez.
 
-### 4.7 Transfer (depolar veya lokasyonlar arası)
+### 4.7 Transfer (depolar arası iki aşamalı; raflar arası anlık) — uygulandı (#168, OD-01)
 
-MVP: anlık transfer (yolda/in-transit durumu yok). Yalnızca **available** miktar taşınabilir.
+**Depolar arası** transfer bir belgedir (`warehouse.stock_transfers` + `stock_transfer_lines`, data-model §5.6) ve iki aşamalıdır. Durumlar: `draft` → `in_transit` ("Yolda") → `partially_received` → `received` veya `closed`; `cancelled` yalnızca `draft`'tan. Tek karar noktası `StockTransferStateMachine`; izin verilmeyen geçiş `409 transfer.invalid_transition`.
+
+| Adım | Hareketler (hepsi `source_type='transfer'`, `source_id` = transfer id) |
+|---|---|
+| Gönder (`dispatch`) | kaynak (depo, raf) `transfer_out −q` → transferin **yolda noktası** `transfer_in +q`. Yalnızca satılabilir (on_hand − reserved) taşınır, asla eksi stok; yetmezse `409 inventory.insufficient_available` + `shortages`. |
+| Teslim al (`receive`, kısmi olabilir) | yolda `transfer_out −q` → hedef (depo, raf) `transfer_in +q`. Satır id'si veya okutulan ürün kodu + hedef raf (id/kod); yoldakinden fazlası `422 transfer.over_receipt` (fazla gelen mal kabul olarak kaydedilir); `transfer.unknown_code`, `transfer.wrong_item`, `transfer.unknown_location`. |
+| Farkı kapat (`close`, sebep zorunlu) | kalan yolda miktar: `lost` → yolda `adjustment_out`; `return_to_source` → yolda `transfer_out` + kaynak raf `transfer_in`. Satır başına gönderilen = teslim alınan + yolda + iade + kayıp (fark raporu). |
+| İptal (`cancel`) | yalnızca taslak; hareket yok. |
+
+**Yolda noktası:** transfer başına bakiye satırı, `inventory.inventory_balances.is_transit = true`, `warehouse_id` = **transfer id**, lokasyon yok. Hiçbir depoda satılabilir sayılmaz; `GET /inventory/balances` ve sayım anlık görüntüsü bu satırları göstermez. Ledger'da yolda bacaklarının `warehouse_id` alanı transfer id'sidir (`= source_id`); web bunları "Yolda (Transfer TRF-…)" olarak gösterir. `is_overdue`: 7 günden uzun yolda (AF-07). Belge satırı önce (§2.2 adım 2), bakiyeler sonra kilitlenir; aynı stok için yarışan iki gönderimden yalnızca satılabilir olan geçer. Her komut Idempotency-Key ister, If-Match gönderilirse uygular. Audit: `stock_transfer.created/dispatched/received/closed/cancelled` ve hareketler için `inventory.transfer_posted`.
+
+**Raflar arası taşıma** (aynı depo) belge değildir: `POST /inventory/relocations` (`inventory.transfer`) her satır için tek transaction'da `transfer_out` + `transfer_in` (aynı `transfer_group_id`), yalnızca satılabilir miktar. Bacak başına SQL:
 
 ```sql
 BEGIN;
@@ -301,7 +312,7 @@ INSERT movements (type='transfer_in',  quantity=+:q, transfer_group_id=group, ba
 COMMIT;
 ```
 
-Depolar arası "yolda" takibi gerekirse: sanal "in-transit" lokasyonu + iki aşamalı onay (ADR).
+İki aşamalı transferin her bacağı aynı kalıptır; yolda noktası `(v, transfer_id, NULL, is_transit)` anahtarıdır.
 
 ### 4.8 Sayım düzeltmesi (count correction)
 
@@ -383,7 +394,7 @@ Ayrıca property-based test: rastgele işlem dizileri (receipt/adjust/approve/ca
 Kod: `services/api/src/Modules/Inventory`, `services/api/src/Modules/Warehouse`. Bu bölüm yalnızca uygulanmış davranışı kaydeder.
 
 - **Komutlar** (`IInventoryService`, Inventory.Contracts): `ReceiveAsync` (§4.1), `AdjustAsync` (§4.2), `ReserveAsync` (§4.3 stok kısmı), `ReleaseAsync` (§4.4 stok kısmı), `IssueAsync` (§4.6 stok kısmı). Sipariş/sevkiyat başlığı kilitleri ve durum geçişleri Orders/Warehouse işleriyle gelecek; komutlar çağıranın UnitOfWork transaction'ında çalışır.
-- **HTTP:** `POST /inventory/receipts`, `POST /inventory/adjustments` (İ), `GET /inventory/balances`, `GET /inventory/movements`, `GET /inventory/movements/{id}`; depo/lokasyon CRUD (`/warehouses`, `/warehouses/{id}/locations`, `/locations/{id}`). Rezervasyon/iade/çıkış için HTTP ucu yoktur. Transfer (§4.7), sayım (§4.8), mutabakat job'ı (§4.9) ve `/inventory/availability` henüz yok.
+- **HTTP:** `POST /inventory/receipts`, `POST /inventory/adjustments` (İ), `GET /inventory/balances`, `GET /inventory/movements`, `GET /inventory/movements/{id}`; depo/lokasyon CRUD (`/warehouses`, `/warehouses/{id}/locations`, `/locations/{id}`). Rezervasyon/iade/çıkış için HTTP ucu yoktur. İki aşamalı transfer (§4.7, `/stock-transfers`), raf taşıma (`/inventory/relocations`) ve sayım (§4.8, `/stock-counts`) #168 ile uygulandı; mutabakat job'ı (§4.9) ve `/inventory/availability` henüz yok.
 - **Bakiye metin araması (#86):** `GET /inventory/balances?q=` — SKU, varyant adı veya ürün adı içinde geçen (büyük/küçük harf duyarsız, LIKE jokerleri düz metin) ya da tam barkod; diğer filtreler ve `id` keyset sayfalaması aynen. Terim Catalog portu `IVariantDirectory.SearchVariantIdsAsync` ile varyant kimliklerine çözülür (şemalar arası join yok, ADR 0005; pg_trgm GIN indeksleri) ve bakiyeler tek dizi parametresiyle süzülür. 10.000'den fazla varyant eşleşirse kesilmez, `422 inventory.search_too_broad` döner; `q` ≤ 100 karakter. 10k sentetik katalogda (tek bakiye/aktif varyant) p95 ≈ 18–20 ms (`CatalogPerformanceTests`).
 - **Savepoint:** her komut bir savepoint altında çalışır; hata dönerse savepoint'e geri alınır, çağıran transaction'ı commit etse bile komuttan iz kalmaz (I6). Komut başında `SET LOCAL lock_timeout = '5s'`.
 - **Kilit sırası:** `LOCK_BALANCES` §2.5'teki gibi tek ifadede `ORDER BY variant_id, warehouse_id, location_id NULLS FIRST … FOR UPDATE`; sıralama PostgreSQL'de yapılır (uygulamadaki GUID sıralaması kullanılmaz). Rezervasyon: lokasyonsuz depoda `(v, wh, NULL)` satırı yoksa oluşturulur, ardından varyantın o depodaki tüm satırları kilitlenir; rezervasyon satırları bakiyelerden sonra kilitlenir (§2.2 adım 3 → 4).

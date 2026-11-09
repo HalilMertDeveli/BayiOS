@@ -303,7 +303,8 @@ Her olay: `id, tenant_id, actor_user_id, actor_role, action, entity_type, entity
 | Kimlik/üyelik | `member.invited`, `member.invite_resent`, `member.invite_revoked`, `member.joined`, `member.role_changed`, `member.disabled`, `member.enabled`, `member.ownership_transferred`, `member.removed`, `tenant.created`, `tenant.settings_changed`, `tenant.rules_changed` |
 | Erişim | `auth.membership_denied` (başka/askıdaki tenant denemesi; eski taslak adı `auth.forbidden_tenant_access`), `auth.access_denied` (izin/K-O reddi; eski taslak adı `auth.rbac_denied`), `auth.entitlement_denied` (plan/limit reddi), `rate_limit.exceeded` |
 | Katalog/fiyat | `product.created/updated/archived`, `price_list.updated`, `price_list.imported` |
-| Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.negative_stock_confirmed` (eski `warn` politikası; OD-09 ile stok eksiye düşmediğinden artık yazılmaz, eski kayıtlar okunur), `inventory.threshold_set`, `inventory.threshold_removed` (minimum stok eşiği), `inventory.transfer_posted`, `inventory.count_posted` |
+| Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.negative_stock_confirmed` (eski `warn` politikası; OD-09 ile stok eksiye düşmediğinden artık yazılmaz, eski kayıtlar okunur), `inventory.threshold_set`, `inventory.threshold_removed` (minimum stok eşiği), `inventory.transfer_posted` (transfer bacağı veya raf taşıma), `inventory.count_posted` (sayım düzeltmesi) |
+| Transfer/sayım (#168) | `stock_transfer.created`, `stock_transfer.dispatched`, `stock_transfer.received`, `stock_transfer.closed` (kayıp / kaynağa iade + sebep), `stock_transfer.cancelled`; `stock_count.created`, `stock_count.submitted`, `stock_count.recount_requested`, `stock_count.applied`, `stock_count.cancelled` |
 | Sipariş | `order.created`, `order.approved` (rezervasyon), `order.cancelled` (release), `order.pick_progress`, `order.shipped`, `order.remaining_closed` (short-close, kalan rezervasyonlar bırakılır), `order.price_overridden` (liste fiyatı dışı fiyat/iskonto) |
 | Depo hazırlama/sevkiyat | `picking.task_created`, `picking.task_assigned`, `picking.task_cancelled`, `picking.shortage_reported`, `shipment.packed`, `shipment.confirmed` (stok çıkışı), `shipment.cancelled` (onaylanmamış sevkiyat iptali; stok hareketi yok, toplananlar putaway'e) |
 | Import/Export | `import.started/completed/failed/cancelled`, `export.requested/downloaded` |
@@ -387,7 +388,7 @@ Tablodaki şu kodlar **henüz uygulanmadı** (2026-11-07 itibarıyla kodda yok):
 alınır); `rate_limit.exceeded` (429, sınırlayıcı veritabanına dokunmadan önce verir — audit'e yazmak taşkını
 veritabanına taşırdı; yalnızca Problem Details kodu ve log); `product.created/updated/archived`, `price_list.updated`,
 `price_list.imported` (katalog/fiyat değişiklikleri şu an audit'e yazılmaz; içe aktarma yalnızca `import.*` ile izlenir);
-`inventory.transfer_posted`, `inventory.count_posted` (transfer/sayım özelliği yok, #29); `export.requested` (dışa aktarma
+`export.requested` (dışa aktarma
 eşzamanlı; yalnızca `export.downloaded`); `data_export.tenant_requested`, `data_deletion.tenant_requested/completed`
 (tenant veri hakları akışı yok); `api_key.*`, `integration.webhook_changed` (özellik yok).
 

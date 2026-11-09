@@ -286,11 +286,22 @@ flowchart LR
 | GET | `/inventory/movements` (variantId, warehouseId, type, from, to) | `inventory.read` | Stok kartı, keyset |
 | POST | `/inventory/receipts` (İ) | `inventory.receive` | §4.1 |
 | POST | `/inventory/adjustments` (İ) | `inventory.adjust` | §4.2 |
-| POST | `/inventory/transfers` (İ) | `inventory.transfer` | §4.7 |
-| GET/POST | `/stock-counts` (İ) | `inventory.count` | |
-| GET | `/stock-counts/{id}` | `inventory.count` | |
-| PUT | `/stock-counts/{id}/lines` (M) | `inventory.count` | Sayılan miktarlar (toplu) |
-| POST | `/stock-counts/{id}/submit` · `/apply` · `/cancel` (İ) | `inventory.count` / apply: `inventory.adjust` | §4.8 |
+| POST | `/inventory/relocations` (İ) | `inventory.transfer` | Uygulandı (#168): aynı depoda raftan rafa anlık taşıma (`transfer_out` + `transfer_in`, tek transaction); yalnızca satılabilir; 409 `inventory.insufficient_available` + `shortages` |
+| GET | `/stock-transfers` (status, warehouseId = kaynak veya hedef, limit, cursor) | `inventory.transfer` \| `inventory.transfer.receive` | Uygulandı (#168, OD-01): yeniden eskiye keyset; `isOverdue` (7 günden uzun yolda), `hasDiscrepancy` |
+| GET | `/stock-transfers/{id}` | `inventory.transfer` \| `inventory.transfer.receive` | Satırlar: gönderilen / teslim alınan / yolda / iade / kayıp / fark; ETag |
+| POST | `/stock-transfers` (İ) | `inventory.transfer` | Taslak: kaynak ≠ hedef depo, 1–500 satır (variant, miktar, kaynak raf, planlanan hedef raf) |
+| POST | `/stock-transfers/{id}/dispatch` (İ, M) | `inventory.transfer` | Kaynaktan yolda noktasına (inventory-and-orders §4.7); 409 `inventory.insufficient_available` |
+| POST | `/stock-transfers/{id}/receive` (İ, M) | `inventory.transfer.receive` | Kısmi olabilir: `lineId` veya `variantId`/okutulan `code` + hedef raf (`locationId`/`locationCode`); 422 `transfer.over_receipt` / `unknown_code` / `wrong_item` / `unknown_location` |
+| POST | `/stock-transfers/{id}/close` (İ, M) | `inventory.transfer` | `{resolution: lost \| return_to_source, reason}` — yolda kalan kayıp veya kaynağa iade |
+| POST | `/stock-transfers/{id}/cancel` (İ, M) | `inventory.transfer` | Yalnızca taslak, `{reason}`; stok hareketi yok |
+| GET | `/stock-counts` (status, warehouseId, limit, cursor) | `inventory.count.manage` \| `inventory.count.perform` | Uygulandı (#168): yeniden eskiye keyset |
+| GET | `/stock-counts/{id}` | `inventory.count.manage` \| `inventory.count.perform` | Satırlar + fark; kör sayımda sistem miktarı yalnızca `inventory.count.manage` ile (`quantitiesHidden`); ETag |
+| POST | `/stock-counts` (İ) | `inventory.count.manage` | `{warehouseId, scope: full \| locations \| variants, locationIds?, variantIds?, blind, note}`; anlık görüntü; depo başına tek açık sayım (409 `count.already_active`) |
+| POST | `/stock-counts/{id}/entries` (İ) | `inventory.count.perform` | 1–500 giriş: `lineId` veya ürün (`variantId`/`code`) + raf (`locationId`/`locationCode`), `mode: set \| add`; If-Match isteğe bağlı |
+| POST | `/stock-counts/{id}/submit` (İ, M) | `inventory.count.perform` | open → submitted; 409 `count.nothing_counted` |
+| POST | `/stock-counts/{id}/recount` (İ, M) | `inventory.count.manage` | `{lineIds}` sayılanı siler, open'a döner |
+| POST | `/stock-counts/{id}/apply` (İ, M) | `inventory.count.manage` | `count_correction` hareketleri (sayım anındaki bakiyeye göre); 409 `count.lines_moved` → `acceptMovedLines: true` ile tekrar; 409 `count.below_reserved` + `shortages` |
+| POST | `/stock-counts/{id}/cancel` (İ, M) | `inventory.count.manage` | `{reason}`; stok hareketi yok |
 
 ### 12.7 Orders
 | Metot | Yol | İzin | Not |

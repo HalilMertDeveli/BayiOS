@@ -334,6 +334,14 @@ Gösterim: **PK**, FK (modül içi, bileşik tenant FK), UQ = unique, IX = index
 | counts: id · warehouse_id · scope · is_blind bool NOT NULL DEFAULT false (INV-06) · status (open, submitted, applied, cancelled) · snapshot_at timestamptz · applied_at · applied_by · row_version |
 | lines: id · stock_count_id FK · variant_id · location_id NULL · expected_qty numeric(18,3) · counted_qty numeric(18,3) NULL · line_status (pending, counted, needs_review, applied) · applied_delta numeric(18,3) NULL · UQ NULLS NOT DISTINCT (tenant_id, stock_count_id, variant_id, location_id) |
 
+> Uygulandı (#168, migration `StockTransfersAndCounts`): **stock_counts** — `number` (`SAY-…`, UQ (tenant_id, number)) · `warehouse_id` (bileşik tenant FK) · `scope` (full, locations, variants) + `scope_location_ids uuid[]` / `scope_variant_ids uuid[]` · `is_blind` · `status` (open, submitted, applied, cancelled) · `note` · `snapshot_at` · `submitted_at/by` · `applied_at/by` · `cancelled_at/by` · `cancel_reason` · std kolonlar; depo başına tek açık sayım: kısmi UQ `ux_stock_counts_tenant_id_warehouse_id_active` (`status IN ('open','submitted')`). **stock_count_lines** — taslaktan farklar: kolon adları `expected_quantity` / `counted_quantity`, ek `sku` (snapshot), satır başına `snapshot_at` (sayım sırasında bulunan satırın kendi anlık görüntüsü), `counted_at/counted_by`; `line_status` (pending, counted, applied, uncounted) — `needs_review` durumu yok, "sonradan hareket gördü" bilgisi okumada hesaplanır (`movedSinceSnapshot`) ve uygulamada `acceptMovedLines` ister. Kör sayımda `expected_quantity` yalnızca `inventory.count.manage` ile döner. Davranış: [inventory-and-orders §4.8](inventory-and-orders.md).
+
+**warehouse.stock_transfers** / **warehouse.stock_transfer_lines** — RLS: std (#168, OD-01; §5.13'te planlanmıştı)
+| transfers: id · number (`TRF-…`, UQ (tenant_id, number)) · source_warehouse_id / destination_warehouse_id (bileşik tenant FK) · status (draft, in_transit, partially_received, received, closed, cancelled) · note · dispatched_at/by · last_received_at · completed_at · close_resolution (lost, return_to_source) · close_reason · closed_by · cancelled_at/by · cancel_reason · std kolonlar · IX (tenant_id, source_warehouse_id, status), (tenant_id, destination_warehouse_id, status), (tenant_id, status, created_at), (tenant_id, created_at, id) |
+| lines: id · transfer_id FK (tenant_id, transfer_id) · line_no · variant_id · sku (snapshot) · source_location_id NULL / destination_location_id NULL (planlanan; bileşik tenant FK) · quantity (gönderilen) · received_quantity · returned_quantity · lost_quantity — yolda = quantity − received − returned − lost · (variant, kaynak raf) belge başına bir kez |
+
+> Her iki çiftte ENABLE + FORCE RLS, EF global query filter; `bayios_app`: SELECT/INSERT/UPDATE (DELETE yok — iptal edilir). Yolda stok `inventory.inventory_balances.is_transit` satırlarındadır (§5.7). Davranış: [inventory-and-orders §4.7](inventory-and-orders.md).
+
 **warehouse.picking_tasks** — RLS: std · UQ (tenant_id, id)
 | id · type (pick, putaway) — putaway: iptal edilen siparişte toplananları rafa geri koyma (ORD-07) · order_id uuid (→ orders) · warehouse_id FK · status (open, in_progress, completed, completed_with_shortage, cancelled) — WHT-06 · assigned_to uuid NULL · started_at · completed_at · row_version |
 | IX (tenant_id, warehouse_id, status) · IX (tenant_id, order_id) |
@@ -395,6 +403,8 @@ Not: hacim büyüdüğünde `occurred_at` üzerinden aylık partitioning değerl
 | IX | (tenant_id, warehouse_id, variant_id) | |
 
 `available` saklanmaz; sorgularda `on_hand - reserved`. Stok eksiye düşmez (OD-09); politika değişikliği ve toplu `allow_negative` güncelleme job'ı yoktur.
+
+> **Yolda stok (#168, migration `TransitStock`):** `is_transit bool NOT NULL DEFAULT false`. İki aşamalı transferin yolda noktası bir bakiye satırıdır: `warehouse_id` = **transfer id** (gerçek depo değil), `location_id NULL`; CHECK `ck_inventory_balances_transit`: `NOT is_transit OR (on_hand >= 0 AND reserved = 0 AND location_id IS NULL AND NOT allow_negative)`. Bu satırlar hiçbir depoda satılabilir sayılmaz; `GET /inventory/balances` ve sayım anlık görüntüsü `is_transit` satırlarını dışlar. Yolda bacaklarının hareketlerinde de `warehouse_id = source_id = transfer id`.
 
 **inventory.stock_reservations** — RLS: std
 | Kolon | Tip | Not |
@@ -631,7 +641,7 @@ Aşağıdaki P0 gereksinimlerinin tablosu ilk taslakta yoktu. Sahip modül ve as
 | `inventory.stock_thresholds` | CAT-12, US-REP-002 | variant_id · warehouse_id · min_qty · UQ (tenant_id, variant_id, warehouse_id) — **uygulandı (#137), §5.7** | W6 Gün 26 |
 | `warehouse.variant_default_locations` | INV-04 | variant_id · warehouse_id · location_id · UQ (tenant_id, variant_id, warehouse_id) | W6 Gün 28 |
 | `warehouse.goods_receipts` / `goods_receipt_lines` | INV-05, US-INV-004 | supplier_id · document_no · warehouse_id · status (draft, approved, cancelled) · mükerrer uyarısı için IX (tenant_id, supplier_id, document_no) · satır: variant_id · unit_id · quantity · factor · location_id · unit_cost | W6 Gün 28 |
-| `warehouse.stock_transfers` / `stock_transfer_lines` | INV-08, US-INV-007 | from/to warehouse(+location) · status · gönderilen/teslim alınan miktar — "yolda" modeli ürün sahibi kararına bağlı (phase0-gate OD-01) | W6 Gün 29 |
+| `warehouse.stock_transfers` / `stock_transfer_lines` | INV-08, US-INV-007 | **Uygulandı (#168)** — iki aşamalı "yolda" modeli (OD-01); bkz. §5.6 ve `inventory_balances.is_transit` (§5.7) | W6 Gün 29 |
 | `warehouse.customer_returns` / `customer_return_lines` | INV-09, US-INV-009 | order_id NULL · status (draft, approved) · satır: order_line_id NULL · variant_id · quantity · condition (sellable, damaged) · hedef depo/lokasyon. Hasarlı stoğun satılabilirden ayrılması için lokasyon düzeyinde `is_sellable` bayrağı (available hesabı satılamaz lokasyonları dışlar) tasarlanır | W6 Gün 29 |
 | `identity.consents` | SEC-04, US-SEC-004 | user_id · document (ör. kvkk_aydinlatma) · version · accepted_at · ip_hash — tenant'sız; RLS: `user_id = app.user_id` | W3 Gün 13 |
 
