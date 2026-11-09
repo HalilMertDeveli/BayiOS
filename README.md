@@ -724,7 +724,8 @@ BayiOS/
 ### Option A — full local stack in one command (recommended)
 
 Starts a local Supabase Auth, PostgreSQL 17, applies all EF Core migrations, runs the API on `:5280` and the web app
-on `:3200`, then seeds two fully **synthetic** demo businesses (motorcycle parts and LED electronics):
+on `:3200`; the seeder then creates the default, fully **synthetic** demo business "Demo Toptan Ticaret" (a generic wholesaler with a
+team, transfers and an open stock count; `-- --demo all` adds the motorcycle-parts and LED examples):
 
 ```bash
 bash infra/ci/e2e-stack.sh up
