@@ -19,6 +19,7 @@ import { createMockCommerce, handleCommerce, type MockCommerce } from "./mock-co
 import { createMockFulfilment, handleFulfilment, type MockFulfilment } from "./mock-fulfilment";
 import { createMockInventory, handleInventory, type MockInventory } from "./mock-inventory";
 import { createMockOrders, handleOrders, type MockOrders } from "./mock-orders";
+import { createMockStockDocuments, handleStockDocuments, type MockStockDocuments } from "./mock-stock-documents";
 import { grantsForRoleName, type FixtureRules } from "../../src/test/me-fixtures";
 
 /** Must match the build-time env used for the e2e build (ci-web.yml / README). */
@@ -162,6 +163,8 @@ export type ApiMockOptions = {
   reports?: MockReports | null;
   /** Imports API (mock-imports.ts): history, wizard, rollback. Defaults to an empty history; null disables it. */
   imports?: MockImports | null;
+  /** Transfers, stock counts and shelf moves (mock-stock-documents.ts) on top of `inventory`. Defaults to none; null disables it. */
+  stockDocuments?: MockStockDocuments | null;
 };
 
 /** JSON request body for the request log; null for none or a non-JSON body (e.g. a multipart import upload). */
@@ -187,6 +190,7 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
   const billing = options.billing ?? createMockBilling();
   const reports = options.reports === undefined ? createMockReports() : options.reports;
   const imports = options.imports === undefined ? createMockImports() : options.imports;
+  const stockDocuments = options.stockDocuments === undefined ? createMockStockDocuments() : options.stockDocuments;
   if (inventory) billing.activeWarehouses = () => inventory.warehouses.filter((w) => w.status === "active").length;
   const state = {
     memberships: options.memberships ?? [TENANT_A],
@@ -203,6 +207,7 @@ export async function mockApi(page: Page, options: ApiMockOptions = {}) {
     billing,
     reports,
     imports,
+    stockDocuments,
     requests: [] as { method: string; path: string; search: string; headers: Record<string, string>; body: unknown }[],
   };
 
@@ -329,6 +334,10 @@ if (path === "/api/v1/tenant/settings" && (method === "GET" || method === "PATCH
     if (fulfilment) {
       const role = state.memberships.find((m) => m.tenantId === request.headers()["x-tenant-id"])?.role ?? "viewer";
       if (await handleFulfilment(route, fulfilment, role)) return;
+    }
+    if (inventory && stockDocuments) {
+      const role = state.memberships.find((m) => m.tenantId === tenantHeader)?.role ?? "viewer";
+      if (await handleStockDocuments(route, stockDocuments, inventory, catalog, role, state.rules)) return;
     }
     if (inventory && (await handleInventory(route, inventory, catalog))) return;
     if (commerce) {
