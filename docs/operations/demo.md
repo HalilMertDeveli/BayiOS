@@ -190,11 +190,14 @@ sayım, kritik stok, sipariş durumları) sayım özetinden doğrulanır. Veri m
    uyarısı; sevkiyat satırında seri kaydı + müşteri/garanti başlangıcı; iade/değişimde seri ile arama
    (§2.4 "SN: … arızalı"); seri bazlı stok hareketi raporu. Bunlar gelince E2E'ye "25 kart = 25 farklı seri" adımı
    eklenir.
-2. ~~Personel daveti yok~~ — #129 ile davet API'si var; **genel demo** müdür, satışçı ve depo görevlisini davet eder
+2. **Üye görünen adı yok:** kayıt `profiles.full_name`'i boş bırakır ve API'de profil adı güncelleme ucu yoktur;
+   görev listesinde atanan kişi e-postanın `@` öncesiyle görünür (genel demoda "Atanan: depo"). Oturum menüsündeki ad
+   Supabase kullanıcı verisinden gelir. Profil adı ucu gelince seeder ekip adlarını da yazmalı.
+3. ~~Personel daveti yok~~ — #129 ile davet API'si var; **genel demo** müdür, satışçı ve depo görevlisini davet eder
    (her biri kaydolup kabul eder) ve görevleri depo görevlisine atar. Motor/LED örnekleri bilinçli olarak tek sahip
    kullanıcıyla kalır (sahip süpervizör yetkisiyle görevi kendine atar).
-3. ~~İçe aktarma ekranı yok~~ — #94 ile `/ice-aktarma` sihirbazı ve geçmişi var (gerçek yığın:
+4. ~~İçe aktarma ekranı yok~~ — #94 ile `/ice-aktarma` sihirbazı ve geçmişi var (gerçek yığın:
    `real-stack-imports.spec.ts`). Seeder ve LED demo senaryosu kataloğu yine Imports API ile yükler (aynı yardımcı,
    `demo seed (twice)` ile ortak).
-4. ~~Kalanı kapatma için web eylemi yok~~ — #129 ile sipariş detayında "Kalanı kapat" var; LED senaryosu bu adımı
+5. ~~Kalanı kapatma için web eylemi yok~~ — #129 ile sipariş detayında "Kalanı kapat" var; LED senaryosu bu adımı
    arayüzden yapar. Açık kalan: kapatılan kalan sonrası `fulfillmentStatus` değeri (yukarıda, #133).

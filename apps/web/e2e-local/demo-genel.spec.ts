@@ -62,7 +62,9 @@ test("genel demo: ekip, öncelikli görevler, yoldaki ve farklı transfer, açı
   const urgentTask = all.getByRole("listitem").filter({ hasText: `Sipariş ${urgent.number}` });
   await expect(urgentTask).toHaveCount(1);
   await expect(urgentTask).toContainText("Öncelik: Acil");
-  await expect(urgentTask).toContainText(staff.fullName);
+  // The API has no profile name for members yet (sign-up leaves profiles.full_name empty, IUserDirectory): the
+  // assignee is shown by the e-mail local part.
+  await expect(urgentTask).toContainText(`Atanan: ${staff.email.split("@")[0]}`);
   await expect(urgentTask).toContainText("İstenen teslim");
   await expect(all.getByRole("listitem").filter({ hasText: `Sipariş ${picking.number}` })).toContainText("Öncelik: Yüksek");
 
