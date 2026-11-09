@@ -73,6 +73,13 @@ public sealed class StockTransferApiTests(ApiFixture fixture)
             }.Order().ToList(),
             movements.Select(m => (m.Type, m.WarehouseId, m.Quantity)).Order().ToList());
         Assert.All(movements, m => Assert.Equal(MovementSourceTypes.Transfer, m.SourceType));
+
+        // Server-provided label and in-transit flag: clients never derive them from ids.
+        Assert.All(movements, m => Assert.Equal(draft.Transfer.Number, m.TransferNumber));
+        Assert.All(movements, m => Assert.Equal(m.WarehouseId == transferId, m.IsTransit));
+        Assert.Equal(3, movements.Count(m => m.IsTransit));
+        var single = await kit.Owner.OkAsync<MovementResult>(await kit.Owner.GetAsync($"/api/v1/inventory/movements/{movements.First(m => m.IsTransit).Id}"));
+        Assert.Equal((true, draft.Transfer.Number), (single.IsTransit, single.TransferNumber));
         await kit.AssertInvariantsAsync();
         await StockDocuments.AssertTransferPairsBalancedAsync(kit);
         Assert.Equal(4L, await kit.CountAsync(
@@ -279,6 +286,8 @@ public sealed class StockTransferApiTests(ApiFixture fixture)
         var moved = await StockDocuments.ReadAsync<TransferResult>(await kit.Owner.PostAsync("/api/v1/inventory/relocations", Body(3m)), HttpStatusCode.Created);
 
         Assert.Equal([MovementTypes.TransferOut, MovementTypes.TransferIn], moved.Movements.Select(m => m.Type));
+        var legs = await StockDocuments.MovementsAsync(kit.Owner, moved.TransferId);
+        Assert.All(legs, m => Assert.Equal((false, (string?)null), (m.IsTransit, m.TransferNumber))); // a shelf move has no document
         Assert.Equal((2m, 2m), await kit.BalanceAsync(variant, warehouse.Id, from.Id));
         Assert.Equal((3m, 0m), await kit.BalanceAsync(variant, warehouse.Id, to.Id));
         // inventory.relocate (#98): warehouse_staff may move shelves too — here the rest of A-01 is reserved, so the

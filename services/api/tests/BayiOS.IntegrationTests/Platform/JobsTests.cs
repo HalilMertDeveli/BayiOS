@@ -73,16 +73,20 @@ public class JobsTests(ApiFixture fixture)
     [Fact]
     public async Task Failing_job_is_retried_with_exponential_backoff_then_dead_lettered()
     {
+        // Every processor also claims the reserved outbox-delivery type, and other tests in this serial group run a real
+        // dispatcher over the shared outbox, so delivery jobs of other tests may be queued. The job gets the top priority
+        // and the processor a batch of one, so each run touches exactly this job; "not claimable" is probed for this
+        // type only, so no foreign job is claimed or run by this test.
         var type = NewType();
-        var id = (await fixture.Services.GetRequiredService<JobStore>().InsertAsync(
-            new NewJob(null, type, "{}", null, 0, 3, null, null), Ct))!.Value;
+        var store = fixture.Services.GetRequiredService<JobStore>();
+        var id = (await store.InsertAsync(new NewJob(null, type, "{}", null, short.MaxValue, 3, null, null), Ct))!.Value;
         var calls = 0;
         var registry = Registry(type, _ => new DelegateJobHandler((_, _) =>
         {
             Interlocked.Increment(ref calls);
             throw new InvalidOperationException("synthetic failure");
         }));
-        var processor = Processor(registry, new JobsOptions { BackoffBase = TimeSpan.FromMinutes(1), BackoffMax = TimeSpan.FromHours(1) });
+        var processor = Processor(registry, new JobsOptions { BackoffBase = TimeSpan.FromMinutes(1), BackoffMax = TimeSpan.FromHours(1), BatchSize = 1 });
 
         Assert.Equal(1, await processor.RunOnceAsync(Ct));
         var first = await JobAsync(id);
@@ -90,7 +94,7 @@ public class JobsTests(ApiFixture fixture)
         Assert.Contains("synthetic failure", first.LastError, StringComparison.Ordinal);
         Assert.InRange(first.RunAfterSeconds, 50, 70); // 1 min × 2^0
 
-        Assert.Equal(0, await processor.RunOnceAsync(Ct)); // not due yet
+        Assert.Empty(await store.ClaimAsync("probe", [type], 10, TimeSpan.FromMinutes(1), Ct)); // not due yet
         await MakeDueAsync(id);
         Assert.Equal(1, await processor.RunOnceAsync(Ct));
         var second = await JobAsync(id);
@@ -104,7 +108,7 @@ public class JobsTests(ApiFixture fixture)
         Assert.Equal(3, calls);
 
         await MakeDueAsync(id);
-        Assert.Equal(0, await processor.RunOnceAsync(Ct)); // dead jobs are never claimed again
+        Assert.Empty(await store.ClaimAsync("probe", [type], 10, TimeSpan.FromMinutes(1), Ct)); // dead jobs are never claimed again
     }
 
     [Fact]

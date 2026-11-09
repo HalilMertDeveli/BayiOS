@@ -3559,6 +3559,9 @@ export interface components {
             occurredAt: string;
             /** Format: uuid */
             createdBy: null | string;
+            /** @default false */
+            isTransit: boolean;
+            transferNumber?: null | string;
         };
         MovementTypeTotal: {
             type: string;

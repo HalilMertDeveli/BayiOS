@@ -298,6 +298,8 @@ COMMIT;
 
 **Yolda noktası:** transfer başına bakiye satırı, `inventory.inventory_balances.is_transit = true`, `warehouse_id` = **transfer id**, lokasyon yok. Hiçbir depoda satılabilir sayılmaz; `GET /inventory/balances` ve sayım anlık görüntüsü bu satırları göstermez. Ledger'da yolda bacaklarının `warehouse_id` alanı transfer id'sidir (`= source_id`); web bunları "Yolda (Transfer TRF-…)" olarak gösterir. `is_overdue`: 7 günden uzun yolda (AF-07). Belge satırı önce (§2.2 adım 2), bakiyeler sonra kilitlenir; aynı stok için yarışan iki gönderimden yalnızca satılabilir olan geçer. Her komut Idempotency-Key ister, If-Match gönderilirse uygular. Audit: `stock_transfer.created/dispatched/received/closed/cancelled` ve hareketler için `inventory.transfer_posted`.
 
+**Hareket yanıtı (#98 ek):** `GET /inventory/movements` ve `/{id}` her harekette `isTransit` (yolda noktasındaki bacak: `source_type = transfer` ve depo alanı = transfer id) ve `transferNumber` (iki aşamalı transfer belgesinin numarası; raf taşımada ve diğer kaynaklarda `null`, Warehouse'tan toplu okunur) döner. İstemciler etiketi id'den türetmemelidir.
+
 **Raflar arası taşıma** (aynı depo) belge değildir: `POST /inventory/relocations` (`inventory.relocate`, warehouse_staff dahil — #98) her satır için tek transaction'da `transfer_out` + `transfer_in` (aynı `transfer_group_id`), varsayılan yalnızca satılabilir miktar; `includeReserved` ile rafta hâlâ duran rezerve mal, rezervasyonu ve açık toplama satırıyla birlikte taşınır (§8 "Raf taşıma ve rezervasyon"). Bacak başına SQL:
 
 ```sql

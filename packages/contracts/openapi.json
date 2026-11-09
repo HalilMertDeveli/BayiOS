@@ -26295,6 +26295,16 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "isTransit": {
+            "type": "boolean",
+            "default": false
+          },
+          "transferNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

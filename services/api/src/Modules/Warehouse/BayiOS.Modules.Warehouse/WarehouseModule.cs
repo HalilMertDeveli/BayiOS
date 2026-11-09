@@ -41,6 +41,7 @@ public static class WarehouseModule
 
         // Two-stage warehouse transfers and stock counts (#168); stock moves only through IInventoryService.
         services.AddScoped<StockTransferQueries>();
+        services.AddScoped<ITransferNumbers, TransferNumbers>();
         services.AddScoped<StockTransferService>();
         services.AddScoped<StockCountQueries>();
         services.AddScoped<StockCountService>();

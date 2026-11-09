@@ -329,6 +329,16 @@ public sealed record InventoryError(
 /// <summary>One line that cannot be served from available stock.</summary>
 public sealed record StockShortage(Guid VariantId, string? Sku, Guid WarehouseId, Guid? LocationId, decimal Requested, decimal Available);
 
+/// <param name="WarehouseId">The warehouse — or, for an in-transit leg (<paramref name="IsTransit"/>), the transfer id.</param>
+/// <param name="IsTransit">
+/// True for a leg on a transfer's in-transit point ("Yolda"): <c>source_type = transfer</c> and the movement's warehouse
+/// slot holds the transfer id. Clients should use this instead of comparing ids.
+/// </param>
+/// <param name="TransferNumber">
+/// The two-stage transfer document number (e.g. <c>TRF-…</c>) for movements whose source is a warehouse transfer; null
+/// for shelf-to-shelf relocations (no document) and other sources. Filled on movement reads
+/// (<c>GET /inventory/movements</c>, <c>/{id}</c>); clients must not derive it from the id.
+/// </param>
 public sealed record MovementResult(
     Guid Id,
     Guid VariantId,
@@ -344,7 +354,20 @@ public sealed record MovementResult(
     decimal BalanceAfter,
     string? CorrelationId,
     DateTimeOffset OccurredAt,
-    Guid? CreatedBy);
+    Guid? CreatedBy,
+    bool IsTransit = false,
+    string? TransferNumber = null)
+{
+    /// <summary>The in-transit rule (OD-01): a transfer leg whose warehouse slot is the transfer itself.</summary>
+    public static bool IsTransitLeg(string sourceType, Guid? sourceId, Guid warehouseId) =>
+        sourceType == MovementSourceTypes.Transfer && sourceId == warehouseId;
+}
+
+/// <summary>Implemented by the Warehouse module: document numbers of two-stage transfers, by transfer id (one batch query).</summary>
+public interface ITransferNumbers
+{
+    Task<IReadOnlyDictionary<Guid, string>> NumbersAsync(IReadOnlyCollection<Guid> transferIds, CancellationToken cancellationToken);
+}
 
 public sealed record ReceiptResult(Guid ReceiptId, Guid WarehouseId, IReadOnlyList<MovementResult> Movements);
 

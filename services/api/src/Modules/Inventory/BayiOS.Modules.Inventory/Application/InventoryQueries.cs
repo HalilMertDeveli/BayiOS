@@ -24,7 +24,8 @@ internal sealed class InventoryQueries(
     IAuthorizationContext authorization,
     IRequestContext requestContext,
     ITaskContextVariants taskVariants,
-    IVariantDirectory variants) : IStockQueries
+    IVariantDirectory variants,
+    ITransferNumbers transferNumbers) : IStockQueries
 {
     public const string BalanceSort = "id";
     public const string MovementSort = "-occurredAt";
@@ -197,7 +198,7 @@ internal sealed class InventoryQueries(
             .Take(query.Limit + 1)
             .ToListAsync(cancellationToken);
         var hasMore = rows.Count > query.Limit;
-        var items = rows.Take(query.Limit).Select(ToResponse).ToList();
+        var items = await WithTransferNumbersAsync([.. rows.Take(query.Limit).Select(ToResponse)], cancellationToken);
         var next = hasMore
             ? new InventoryCursor(MovementSort, InventoryCursor.FormatTimestamp(items[^1].OccurredAt), items[^1].Id).Encode()
             : null;
@@ -206,7 +207,27 @@ internal sealed class InventoryQueries(
 
     /// <returns>Null when missing or outside the caller's movement visibility (404, no existence hint).</returns>
     public async Task<MovementResult?> GetMovementAsync(Guid id, CancellationToken cancellationToken) =>
-        await (await VisibleMovementsAsync(cancellationToken)).Where(m => m.Id == id).Select(m => ToResponse(m)).SingleOrDefaultAsync(cancellationToken);
+        await (await VisibleMovementsAsync(cancellationToken)).Where(m => m.Id == id).SingleOrDefaultAsync(cancellationToken) is { } row
+            ? (await WithTransferNumbersAsync([ToResponse(row)], cancellationToken))[0]
+            : null;
+
+    /// <summary>Fills <see cref="MovementResult.TransferNumber"/> for transfer movements (one batch lookup through Warehouse).</summary>
+    private async Task<List<MovementResult>> WithTransferNumbersAsync(List<MovementResult> items, CancellationToken cancellationToken)
+    {
+        var ids = items.Where(m => m.SourceType == MovementSourceTypes.Transfer && m.SourceId is not null)
+            .Select(m => m.SourceId!.Value)
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+        {
+            return items;
+        }
+
+        var numbers = await transferNumbers.NumbersAsync(ids, cancellationToken);
+        return [.. items.Select(m => m.SourceType == MovementSourceTypes.Transfer && m.SourceId is { } source && numbers.TryGetValue(source, out var number)
+            ? m with { TransferNumber = number }
+            : m)];
+    }
 
     /// <summary>
     /// <c>inventory.movements.read</c> is "own records" for warehouse_staff (footnote 5): movements they created plus
@@ -300,7 +321,8 @@ internal sealed class InventoryQueries(
 
     private static MovementResult ToResponse(InventoryMovement m) =>
         new(m.Id, m.VariantId, m.WarehouseId, m.LocationId, m.Type, m.Quantity, m.UnitCost, m.SourceType, m.SourceId,
-            m.SourceLineId, m.Reason, m.BalanceAfter, m.CorrelationId, m.OccurredAt, m.CreatedBy);
+            m.SourceLineId, m.Reason, m.BalanceAfter, m.CorrelationId, m.OccurredAt, m.CreatedBy,
+            MovementResult.IsTransitLeg(m.SourceType, m.SourceId, m.WarehouseId));
 }
 
 /// <summary>Opaque keyset cursor: base64url JSON of the sort name, the last row's sort key and id.</summary>

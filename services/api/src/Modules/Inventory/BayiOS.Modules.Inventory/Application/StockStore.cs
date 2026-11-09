@@ -251,7 +251,8 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
             balanceAfter,
             movement.CorrelationId,
             new DateTimeOffset(DateTime.SpecifyKind(occurredAt, DateTimeKind.Utc)),
-            UserId);
+            UserId,
+            MovementResult.IsTransitLeg(movement.SourceType, movement.SourceId, movement.Key.WarehouseId));
     }
 
     /// <summary>
