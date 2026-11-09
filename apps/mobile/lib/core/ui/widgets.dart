@@ -1,6 +1,7 @@
 import 'package:bayios_mobile/core/api/api_exception.dart';
 import 'package:bayios_mobile/core/api/problem_messages.dart';
 import 'package:bayios_mobile/core/providers.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -22,9 +23,17 @@ class LoadingView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
+            const SizedBox.square(
+              dimension: 40,
+              child: CircularProgressIndicator(strokeWidth: 4),
+            ),
             const SizedBox(height: BosSpace.s16),
-            ExcludeSemantics(child: Text(text)),
+            ExcludeSemantics(
+              child: Text(
+                text,
+                style: BosType.body.copyWith(color: BosColors.textSecondary),
+              ),
+            ),
           ],
         ),
       ),
@@ -93,28 +102,13 @@ class ErrorView extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final offline = isConnectionError(error);
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(BosSpace.s24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              offline ? Icons.cloud_off_outlined : Icons.error_outline,
-              size: 48,
-              color: BosColors.danger.fg,
-            ),
-            const SizedBox(height: BosSpace.s16),
-            Semantics(
-              liveRegion: true,
-              child: Text(
-                errorMessage(l10n, error),
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-            ),
-            if (onRetry != null) ...[
-              const SizedBox(height: BosSpace.s24),
-              FilledButton.icon(
+      child: EmptyState(
+        icon: offline ? Icons.cloud_off_outlined : Icons.error_outline,
+        tone: offline ? BosColors.warning : BosColors.danger,
+        title: errorMessage(l10n, error),
+        action: onRetry == null
+            ? null
+            : FilledButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
                 label: Text(l10n.retry),
@@ -122,9 +116,6 @@ class ErrorView extends StatelessWidget {
                   minimumSize: const Size(200, BosSize.primaryAction),
                 ),
               ),
-            ],
-          ],
-        ),
       ),
     );
   }

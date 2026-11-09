@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:bayios_mobile/core/api/api_exception.dart';
 import 'package:bayios_mobile/core/session/session_controller.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/dashboard/dashboard_data.dart';
@@ -571,6 +572,7 @@ class _CurrentLine extends StatelessWidget {
       _ when line.locationId != null => l10n.pickingStepItem(line.sku),
       _ => l10n.pickingStepItemNoLocation(line.sku),
     };
+    final shelfStep = c.step == PickStep.location;
     return DecoratedBox(
       key: const Key('pick-current'),
       decoration: BoxDecoration(
@@ -583,6 +585,59 @@ class _CurrentLine extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            ScanStepIndicator(
+              key: const Key('pick-steps'),
+              current: shelfStep ? 0 : 1,
+              steps: [
+                ScanStep(
+                  l10n.scanStepShelf,
+                  detail: line.locationCode,
+                  skipped: line.locationId == null,
+                ),
+                ScanStep(l10n.scanStepProduct, detail: line.sku),
+                ScanStep(
+                  l10n.scanStepQuantity,
+                  detail:
+                      '${formatQuantity(line.quantityRemaining)} ${line.unit}',
+                ),
+              ],
+            ),
+            const SizedBox(height: BosSpace.s12),
+            // What to do now, in words (the indicator is the overview).
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: BosColors.brandPrimarySubtle,
+                border: Border.all(color: BosColors.brand.border),
+                borderRadius: BorderRadius.circular(BosRadius.lg),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: BosSpace.s12,
+                  vertical: BosSpace.s12,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      shelfStep ? Icons.shelves : Icons.qr_code_scanner,
+                      color: BosColors.brandPrimary,
+                      size: 28,
+                    ),
+                    const SizedBox(width: BosSpace.s12),
+                    Expanded(
+                      child: Text(
+                        stepText,
+                        key: const Key('pick-step'),
+                        style: BosType.h3.copyWith(
+                          color: BosColors.brandPrimaryHover,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: BosSpace.s12),
             if (line.locationCode != null)
               Row(
                 children: [
@@ -628,24 +683,6 @@ class _CurrentLine extends StatelessWidget {
                 line.unit,
               ),
               style: BosType.body.copyWith(color: BosColors.textSecondary),
-            ),
-            const SizedBox(height: BosSpace.s8),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: BosColors.surfaceSunken,
-                borderRadius: BorderRadius.circular(BosRadius.lg),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: BosSpace.s12,
-                  vertical: BosSpace.s8,
-                ),
-                child: Text(
-                  stepText,
-                  key: const Key('pick-step'),
-                  style: BosType.body.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
             ),
             if (location != null) ...[
               const SizedBox(height: BosSpace.s8),
@@ -723,54 +760,16 @@ class _Banner extends StatelessWidget {
   final PickFeedback feedback;
 
   @override
-  Widget build(BuildContext context) {
-    final (tone, icon) = switch (feedback.tone) {
-      PickTone.success => (BosColors.success, Icons.check_circle_outline),
-      PickTone.info => (BosColors.info, Icons.info_outline),
-      PickTone.warning => (BosColors.warning, Icons.warning_amber_outlined),
-      PickTone.error => (BosColors.danger, Icons.cancel_outlined),
-    };
-    return Semantics(
-      liveRegion: true,
-      container: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: tone.bg,
-          border: Border.all(
-            color: tone.border,
-            width: feedback.tone == PickTone.error ? 2 : 1,
-          ),
-          borderRadius: BorderRadius.circular(BosRadius.lg),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(BosSpace.s12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: tone.fg, size: 28),
-              const SizedBox(width: BosSpace.s8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      feedback.title,
-                      style: BosType.bodyLg.copyWith(
-                        color: tone.fg,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (feedback.text case final text?)
-                      Text(text, style: BosType.body.copyWith(color: tone.fg)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => FeedbackBanner(
+    tone: switch (feedback.tone) {
+      PickTone.success => FeedbackTone.success,
+      PickTone.info => FeedbackTone.info,
+      PickTone.warning => FeedbackTone.warning,
+      PickTone.error => FeedbackTone.error,
+    },
+    title: feedback.title,
+    text: feedback.text,
+  );
 }
 
 class _LineTile extends StatelessWidget {

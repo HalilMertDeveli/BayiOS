@@ -1,3 +1,4 @@
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/features/picking/pick_session.dart';
 import 'package:bayios_mobile/features/picking/picking_models.dart';
@@ -28,10 +29,13 @@ String taskPath(String id) => '/gorevler/${Uri.encodeComponent(id)}';
 
 /// Small coloured label (status, "Tamam", "2 eksik").
 class ToneBadge extends StatelessWidget {
-  const ToneBadge(this.text, this.tone, {super.key});
+  const ToneBadge(this.text, this.tone, {super.key, this.icon});
 
   final String text;
   final BosTone tone;
+
+  /// Optional leading glyph (status is never colour-only).
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -39,19 +43,32 @@ class ToneBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: tone.bg,
         border: Border.all(color: tone.border),
-        borderRadius: BorderRadius.circular(BosRadius.md),
+        borderRadius: BorderRadius.circular(BosRadius.xl * 2),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: BosSpace.s8,
-          vertical: BosSpace.s2,
+        padding: EdgeInsets.fromLTRB(
+          icon == null ? BosSpace.s12 : BosSpace.s8,
+          BosSpace.s4,
+          BosSpace.s12,
+          BosSpace.s4,
         ),
-        child: Text(
-          text,
-          style: BosType.caption.copyWith(
-            color: tone.fg,
-            fontWeight: FontWeight.w600,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 16, color: tone.fg),
+              const SizedBox(width: BosSpace.s4),
+            ],
+            Flexible(
+              child: Text(
+                text,
+                style: BosType.caption.copyWith(
+                  color: tone.fg,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -77,7 +94,16 @@ class TaskPriorityBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final meta = taskPriorityMeta(AppLocalizations.of(context), priority);
     if (meta == null) return const SizedBox.shrink();
-    return ToneBadge(meta.$1, meta.$2, key: Key('task-priority-$priority'));
+    return ToneBadge(
+      meta.$1,
+      meta.$2,
+      key: Key('task-priority-$priority'),
+      icon: switch (priority) {
+        TaskPriority.urgent => Icons.bolt,
+        TaskPriority.high => Icons.arrow_upward,
+        _ => Icons.arrow_downward,
+      },
+    );
   }
 }
 
@@ -114,12 +140,13 @@ class PickProgressBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return ExcludeSemantics(
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(BosRadius.sm),
+        borderRadius: BorderRadius.circular(BosRadius.xl),
         child: LinearProgressIndicator(
           value: value,
-          minHeight: 8,
+          minHeight: 10,
           backgroundColor: BosColors.surfaceSunken,
-          color: BosColors.brandPrimary,
+          // Finished work turns green: done at a glance.
+          color: value >= 1 ? BosColors.success.fg : BosColors.brandPrimary,
         ),
       ),
     );
@@ -149,86 +176,164 @@ class TaskCard extends StatelessWidget {
         : task.assignedTo == userId
         ? l10n.tasksAssignedToMe
         : l10n.tasksAssignee(task.assigneeName ?? '—');
+    final priority = taskPriorityMeta(l10n, task.priority);
+    // Urgent / high work is marked on the card edge as well as by the badge
+    // (colour is a second cue, never the only one).
+    final stripe = switch (task.priority) {
+      TaskPriority.urgent => BosColors.danger.fg,
+      TaskPriority.high => BosColors.warning.border,
+      _ => null,
+    };
+    final customer = taskCustomerLine(l10n, task);
+    final percent = (task.progress.clamp(0, 1) * 100).round();
     return Card(
       key: Key('task-${task.id}'),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: BosSize.primaryAction),
-          child: Padding(
-            padding: const EdgeInsets.all(BosSpace.s16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        l10n.tasksOrder(task.orderNumber),
-                        style: theme.textTheme.titleMedium,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: stripe == null
+                ? null
+                : Border(left: BorderSide(color: stripe, width: 6)),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: BosSize.primaryAction),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                BosSpace.s16,
+                BosSpace.s16,
+                BosSpace.s8,
+                BosSpace.s16,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          l10n.tasksOrder(task.orderNumber),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                    ),
-                    TaskStatusBadge(task.status),
-                  ],
-                ),
-                if (taskPriorityMeta(l10n, task.priority) != null ||
-                    taskCustomerLine(l10n, task) != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: BosSpace.s4),
-                    child: Wrap(
+                      const SizedBox(width: BosSpace.s8),
+                      TaskStatusBadge(task.status),
+                    ],
+                  ),
+                  if (priority != null || task.type == 'putaway') ...[
+                    const SizedBox(height: BosSpace.s8),
+                    Wrap(
                       spacing: BosSpace.s8,
                       runSpacing: BosSpace.s4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         TaskPriorityBadge(task.priority),
-                        if (taskCustomerLine(l10n, task)
-                            case final String customer)
-                          Text(
-                            customer,
-                            key: Key('task-customer-${task.id}'),
-                            style: theme.textTheme.bodyLarge,
+                        if (task.type == 'putaway')
+                          ToneBadge(
+                            l10n.tasksTypePutaway,
+                            BosColors.purple,
+                            icon: Icons.move_down,
                           ),
                       ],
                     ),
-                  ),
-                const SizedBox(height: BosSpace.s4),
-                Text(
-                  [
-                    if (task.type == 'putaway') l10n.tasksTypePutaway,
-                    l10n.tasksLines(task.lineCount),
-                    who,
-                  ].join(' · '),
-                  style: BosType.body.copyWith(color: BosColors.textSecondary),
-                ),
-                const SizedBox(height: BosSpace.s8),
-                PickProgressBar(value: task.progress),
-                const SizedBox(height: BosSpace.s4),
-                Row(
-                  children: [
-                    Expanded(
+                  ],
+                  if (customer != null)
+                    _IconLine(
+                      icon: Icons.storefront_outlined,
                       child: Text(
-                        l10n.tasksProgress(
-                          formatQuantity(task.quantityPicked),
-                          formatQuantity(task.quantityToPick),
-                        ),
-                        style: BosType.caption.copyWith(
-                          color: BosColors.textMuted,
+                        customer,
+                        key: Key('task-customer-${task.id}'),
+                        style: BosType.bodyLg.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                    if (task.quantityShort > 0)
-                      ToneBadge(
-                        l10n.tasksShort(formatQuantity(task.quantityShort)),
-                        BosColors.danger,
+                  _IconLine(
+                    icon: task.assignedTo == null
+                        ? Icons.inbox_outlined
+                        : Icons.person_outline,
+                    child: Text(
+                      [l10n.tasksLines(task.lineCount), who].join(' · '),
+                      style: BosType.body.copyWith(
+                        color: BosColors.textSecondary,
                       ),
-                    const Icon(Icons.chevron_right, color: BosColors.textMuted),
-                  ],
-                ),
-              ],
+                    ),
+                  ),
+                  const SizedBox(height: BosSpace.s12),
+                  Row(
+                    children: [
+                      Expanded(child: PickProgressBar(value: task.progress)),
+                      const SizedBox(width: BosSpace.s12),
+                      Text(
+                        l10n.tasksPercent(percent),
+                        style: BosType.body.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(width: BosSpace.s4),
+                    ],
+                  ),
+                  const SizedBox(height: BosSpace.s4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          l10n.tasksProgress(
+                            formatQuantity(task.quantityPicked),
+                            formatQuantity(task.quantityToPick),
+                          ),
+                          style: BosType.caption.copyWith(
+                            color: BosColors.textMuted,
+                          ),
+                        ),
+                      ),
+                      if (task.quantityShort > 0)
+                        ToneBadge(
+                          l10n.tasksShort(formatQuantity(task.quantityShort)),
+                          BosColors.danger,
+                          icon: Icons.report_outlined,
+                        ),
+                      const Icon(
+                        Icons.chevron_right,
+                        color: BosColors.textMuted,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A small leading icon and its text (customer, assignee).
+class _IconLine extends StatelessWidget {
+  const _IconLine({required this.icon, required this.child});
+
+  final IconData icon;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: BosSpace.s8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(icon, size: 20, color: BosColors.textMuted),
+          ),
+          const SizedBox(width: BosSpace.s8),
+          Expanded(child: child),
+        ],
       ),
     );
   }
@@ -248,32 +353,6 @@ class TasksMessage extends StatelessWidget {
   final String? body;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: BosSpace.s24,
-        vertical: BosSpace.s48,
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 48, color: BosColors.textMuted),
-          const SizedBox(height: BosSpace.s16),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.titleMedium,
-          ),
-          if (body != null) ...[
-            const SizedBox(height: BosSpace.s8),
-            Text(
-              body!,
-              textAlign: TextAlign.center,
-              style: BosType.body.copyWith(color: BosColors.textSecondary),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      EmptyState(icon: icon, title: title, body: body);
 }

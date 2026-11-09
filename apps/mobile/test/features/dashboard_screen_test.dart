@@ -121,6 +121,55 @@ void main() {
     expect(server.requests, isEmpty);
   });
 
+  testWidgets('quick actions follow the permissions (stock and warehouse)', (
+    tester,
+  ) async {
+    await pumpPickingApp(
+      tester,
+      server: server,
+      permissions: [
+        ...staffPermissions,
+        'inventory.read',
+        'inventory.receive',
+        'inventory.count.perform',
+      ],
+    );
+    for (final key in [
+      'dashboard-link-mine',
+      'dashboard-link-pool',
+      'dashboard-link-receiving',
+      'dashboard-link-stock',
+      'dashboard-link-counts',
+    ]) {
+      await tester.scrollUntilVisible(find.byKey(Key(key)), 200);
+      expect(find.byKey(Key(key)), findsOneWidget, reason: key);
+    }
+    expect(find.byKey(const Key('dashboard-link-transfers')), findsNothing);
+    expect(find.byKey(const Key('dashboard-link-relocation')), findsNothing);
+    expect(find.byKey(const Key('dashboard-link-all')), findsNothing);
+    await expectAccessibleTargets(tester);
+  });
+
+  testWidgets('header shows business and role on the brand colour', (
+    tester,
+  ) async {
+    await pumpPickingApp(tester, server: server);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('dashboard-tenant')),
+        matching: find.text('Demo Depo'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('dashboard-role')),
+        matching: find.text(l10n.roleWarehouseStaff),
+      ),
+      findsOneWidget,
+    );
+  });
+
   group('greeting when /me has no fullName', () {
     testWidgets('uses the Supabase metadata name', (tester) async {
       await pumpPickingApp(

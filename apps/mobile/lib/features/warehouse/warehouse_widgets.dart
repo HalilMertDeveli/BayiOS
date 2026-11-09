@@ -1,3 +1,4 @@
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/features/stock/quantity.dart';
 import 'package:bayios_mobile/features/stock/stock_errors.dart';
@@ -231,38 +232,27 @@ class EntryFeedbackView extends StatelessWidget {
     String message(Object error) =>
         documentErrorMessage(l10n, error, forbidden: forbidden);
     switch (feedback) {
+      // Accepted / refused scans are solid colour blocks (FeedbackBanner):
+      // readable at arm's length, together with the haptic + sound alert.
       case EntryAccepted(:final changes, :final replayed):
-        return StockNotice(
+        return FeedbackBanner(
           key: Key('$keyPrefix-accepted'),
-          tone: BosColors.success,
-          icon: Icons.check_circle_outline,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                replayed ? l10n.docEntryReplayed : l10n.docEntryAccepted,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              for (final line in changes) Text(acceptedLine(line)),
-            ],
-          ),
+          tone: FeedbackTone.success,
+          title: replayed ? l10n.docEntryReplayed : l10n.docEntryAccepted,
+          text: changes.isEmpty
+              ? null
+              : [for (final line in changes) acceptedLine(line)].join('\n'),
         );
       case EntryRejected(:final error, :final code):
-        return StockNotice(
+        return KeyedSubtree(
           key: Key('$keyPrefix-rejected'),
-          tone: BosColors.danger,
-          icon: Icons.block,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                code == null
-                    ? l10n.docEntryRejected
-                    : l10n.docEntryRejectedCode(code),
-                style: BosType.h3.copyWith(color: BosColors.danger.fg),
-              ),
-              Text(message(error), key: Key('$keyPrefix-rejected-message')),
-            ],
+          child: FeedbackBanner(
+            key: Key('$keyPrefix-rejected-message'),
+            tone: FeedbackTone.error,
+            title: code == null
+                ? l10n.docEntryRejected
+                : l10n.docEntryRejectedCode(code),
+            text: message(error),
           ),
         );
       case EntryStale(:final error):
@@ -315,6 +305,53 @@ class EntryFeedbackView extends StatelessWidget {
           ),
         );
     }
+  }
+}
+
+/// "1 Raf okut → 2 Adet → 3 Ürün okut" of the document scan screens
+/// (transfer receipt, count), in the order of the form below it: the shelf
+/// is sticky, the quantity defaults to 1 and the product scan writes.
+class DocumentScanSteps extends StatelessWidget {
+  const DocumentScanSteps({
+    required this.shelf,
+    required this.shelfRequired,
+    required this.quantityText,
+    super.key,
+  });
+
+  final String? shelf;
+
+  /// The warehouse tracks shelves (or is not known yet).
+  final bool shelfRequired;
+  final String quantityText;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final needsShelf = shelfRequired && shelf == null;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: BosSpace.s8,
+          vertical: BosSpace.s12,
+        ),
+        child: ScanStepIndicator(
+          current: needsShelf ? 0 : 2,
+          steps: [
+            ScanStep(
+              l10n.scanStepShelf,
+              detail: shelf,
+              skipped: !shelfRequired && shelf == null,
+            ),
+            ScanStep(
+              l10n.scanStepQuantity,
+              detail: quantityText.isEmpty ? null : '×$quantityText',
+            ),
+            ScanStep(l10n.scanStepProduct),
+          ],
+        ),
+      ),
+    );
   }
 }
 

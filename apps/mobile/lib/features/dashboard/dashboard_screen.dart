@@ -1,20 +1,25 @@
 import 'package:bayios_mobile/core/api/problem_messages.dart';
 import 'package:bayios_mobile/core/auth/auth_controller.dart';
+import 'package:bayios_mobile/core/session/access.dart';
 import 'package:bayios_mobile/core/session/display_name.dart';
 import 'package:bayios_mobile/core/session/session_controller.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/dashboard/dashboard_data.dart';
 import 'package:bayios_mobile/features/picking/task_list_screen.dart';
 import 'package:bayios_mobile/features/picking/tasks_providers.dart';
 import 'package:bayios_mobile/features/picking/tasks_widgets.dart';
+import 'package:bayios_mobile/features/stock/stock_errors.dart';
+import 'package:bayios_mobile/features/warehouse/warehouse_errors.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-/// Pano (M01): greeting, my open tasks with counts, quick links, tenant and
-/// role. Task data only when the permissions allow it.
+/// Pano (M01): who and where (greeting, business, role), my task counts and
+/// next tasks, and big quick actions for the work the permissions allow.
+/// Task data only when the permissions allow it.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -24,7 +29,6 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
     final session = ref.watch(sessionControllerProvider);
     if (session is! SessionReady) return const LoadingView();
 
@@ -34,6 +38,7 @@ class DashboardScreen extends ConsumerWidget {
       auth is SignedIn ? auth.user : null,
     );
     final summary = ref.watch(dashboardSummaryProvider);
+    final actions = _quickActions(context, l10n, session.access);
     return Scaffold(
       appBar: AppBar(title: Text(l10n.dashboardTitle)),
       body: RefreshIndicator(
@@ -50,32 +55,95 @@ class DashboardScreen extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(BosSpace.s16),
           children: [
-            Text(
-              name == null
+            _Header(
+              greeting: name == null
                   ? l10n.dashboardWelcomeAnonymous
                   : l10n.dashboardWelcome(name),
-              key: const Key('dashboard-welcome'),
-              style: theme.textTheme.headlineSmall,
+              tenantName: session.tenantName,
+              role: roleLabel(l10n, session.role),
             ),
             const SizedBox(height: BosSpace.s16),
             ..._tasks(context, ref, l10n, session, summary),
-            _InfoCard(
-              key: const Key('dashboard-tenant'),
-              icon: Icons.storefront_outlined,
-              label: l10n.dashboardTenantLabel,
-              value: session.tenantName,
-            ),
-            const SizedBox(height: BosSpace.s12),
-            _InfoCard(
-              key: const Key('dashboard-role'),
-              icon: Icons.badge_outlined,
-              label: l10n.dashboardRoleLabel,
-              value: roleLabel(l10n, session.role),
-            ),
+            if (actions.isNotEmpty) ...[
+              SectionHeader(l10n.dashboardQuickLinks),
+              _ActionGrid(actions: actions),
+            ],
+            const SizedBox(height: BosSpace.s24),
           ],
         ),
       ),
     );
+  }
+
+  List<_QuickAction> _quickActions(
+    BuildContext context,
+    AppLocalizations l10n,
+    Access access,
+  ) {
+    final readOwn = access.canSome('tasks.read.own');
+    final readAll = access.canSome('tasks.read.all');
+    return [
+      if (readOwn) ...[
+        _QuickAction(
+          key: const Key('dashboard-link-mine'),
+          icon: Icons.assignment_ind_outlined,
+          label: l10n.dashboardLinkMyTasks,
+          onTap: () => context.go('/gorevler'),
+        ),
+        _QuickAction(
+          key: const Key('dashboard-link-pool'),
+          icon: Icons.inbox_outlined,
+          label: l10n.dashboardLinkPool,
+          onTap: () => context.go(
+            '/gorevler?$tabQueryKey=${tabQueryValue(TaskTab.pool)}',
+          ),
+        ),
+      ],
+      if (readAll)
+        _QuickAction(
+          key: const Key('dashboard-link-all'),
+          icon: Icons.list_alt_outlined,
+          label: l10n.dashboardLinkAllTasks,
+          onTap: () => context.go(
+            '/gorevler?$tabQueryKey=${tabQueryValue(TaskTab.all)}',
+          ),
+        ),
+      if (access.canSome(StockPermissions.receive))
+        _QuickAction(
+          key: const Key('dashboard-link-receiving'),
+          icon: Icons.move_to_inbox_outlined,
+          label: l10n.receivingTitle,
+          onTap: () => context.go('/stok/mal-kabul'),
+        ),
+      if (access.canSome(StockPermissions.read))
+        _QuickAction(
+          key: const Key('dashboard-link-stock'),
+          icon: Icons.qr_code_scanner,
+          label: l10n.stockTitle,
+          onTap: () => context.go('/stok'),
+        ),
+      if (access.canSome(WarehousePermissions.receiveTransfer))
+        _QuickAction(
+          key: const Key('dashboard-link-transfers'),
+          icon: Icons.local_shipping_outlined,
+          label: l10n.transferListTitle,
+          onTap: () => context.go('/depo/transferler'),
+        ),
+      if (access.canSome(WarehousePermissions.performCount))
+        _QuickAction(
+          key: const Key('dashboard-link-counts'),
+          icon: Icons.fact_check_outlined,
+          label: l10n.countListTitle,
+          onTap: () => context.go('/depo/sayimlar'),
+        ),
+      if (access.canSome(WarehousePermissions.relocate))
+        _QuickAction(
+          key: const Key('dashboard-link-relocation'),
+          icon: Icons.swap_vert,
+          label: l10n.relocationTitle,
+          onTap: () => context.go('/depo/raf-tasima'),
+        ),
+    ];
   }
 
   List<Widget> _tasks(
@@ -89,34 +157,6 @@ class DashboardScreen extends ConsumerWidget {
     final readOwn = access.canSome('tasks.read.own');
     final readAll = access.canSome('tasks.read.all');
     if (!readOwn && !readAll) return const [];
-
-    final links = <Widget>[
-      if (readOwn) ...[
-        _QuickLink(
-          key: const Key('dashboard-link-mine'),
-          icon: Icons.assignment_ind_outlined,
-          label: l10n.dashboardLinkMyTasks,
-          onTap: () => context.go('/gorevler'),
-        ),
-        _QuickLink(
-          key: const Key('dashboard-link-pool'),
-          icon: Icons.inventory_2_outlined,
-          label: l10n.dashboardLinkPool,
-          onTap: () => context.go(
-            '/gorevler?$tabQueryKey=${tabQueryValue(TaskTab.pool)}',
-          ),
-        ),
-      ],
-      if (readAll)
-        _QuickLink(
-          key: const Key('dashboard-link-all'),
-          icon: Icons.list_alt_outlined,
-          label: l10n.dashboardLinkAllTasks,
-          onTap: () => context.go(
-            '/gorevler?$tabQueryKey=${tabQueryValue(TaskTab.all)}',
-          ),
-        ),
-    ];
 
     final Widget body;
     if (summary.hasValue && summary.requireValue != null) {
@@ -158,27 +198,121 @@ class DashboardScreen extends ConsumerWidget {
       );
     }
 
-    return [
-      body,
-      const SizedBox(height: BosSpace.s16),
-      Text(
-        l10n.dashboardQuickLinks,
-        style: Theme.of(context).textTheme.titleMedium,
+    return [body, const SizedBox(height: BosSpace.s16)];
+  }
+}
+
+/// Greeting, business and role on the brand colour.
+class _Header extends StatelessWidget {
+  const _Header({
+    required this.greeting,
+    required this.tenantName,
+    required this.role,
+  });
+
+  final String greeting;
+  final String tenantName;
+  final String role;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [BosColors.brandPrimary, BosPetrol.p900],
+        ),
+        borderRadius: BorderRadius.circular(BosRadius.xl * 1.5),
       ),
-      const SizedBox(height: BosSpace.s8),
-      Card(
-        clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(BosSpace.s20),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (var i = 0; i < links.length; i++) ...[
-              if (i > 0) const Divider(height: 1),
-              links[i],
-            ],
+            Text(
+              greeting,
+              key: const Key('dashboard-welcome'),
+              style: BosType.h2.copyWith(
+                color: BosColors.brandOnPrimary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: BosSpace.s12),
+            Semantics(
+              container: true,
+              label: l10n.dashboardTenantLabel,
+              child: Row(
+                key: const Key('dashboard-tenant'),
+                children: [
+                  const Icon(
+                    Icons.storefront_outlined,
+                    color: BosPetrol.p100,
+                    size: 22,
+                  ),
+                  const SizedBox(width: BosSpace.s8),
+                  Expanded(
+                    child: Text(
+                      tenantName,
+                      style: BosType.bodyLg.copyWith(
+                        color: BosColors.brandOnPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: BosSpace.s8),
+            Semantics(
+              container: true,
+              label: l10n.dashboardRoleLabel,
+              child: DecoratedBox(
+                key: const Key('dashboard-role'),
+                decoration: BoxDecoration(
+                  color: BosPetrol.p950,
+                  borderRadius: BorderRadius.circular(BosRadius.xl * 2),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: BosSpace.s12,
+                    vertical: BosSpace.s4,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.badge_outlined,
+                        color: BosPetrol.p100,
+                        size: 18,
+                      ),
+                      const SizedBox(width: BosSpace.s4),
+                      Text(
+                        role,
+                        style: BosType.caption.copyWith(
+                          color: BosPetrol.p100,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: BosSpace.s16),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: BosColors.brandAccent,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
           ],
         ),
       ),
-      const SizedBox(height: BosSpace.s24),
-    ];
+    );
   }
 }
 
@@ -191,13 +325,14 @@ class _SummaryView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
     if (!summary.readOwn) {
       final count = summary.activeAll ?? 0;
       return Row(
         children: [
           _Count(
             key: const Key('dashboard-count-active'),
+            icon: Icons.list_alt_outlined,
+            tone: BosColors.brand,
             label: l10n.dashboardCountActive,
             value: summary.activeAllHasMore ? '$count+' : '$count',
           ),
@@ -210,45 +345,48 @@ class _SummaryView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(l10n.dashboardTasksTitle, style: theme.textTheme.titleMedium),
-        const SizedBox(height: BosSpace.s8),
+        SectionHeader(l10n.dashboardTasksTitle),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _Count(
               key: const Key('dashboard-count-assigned'),
+              icon: Icons.assignment_ind_outlined,
+              tone: BosColors.brand,
               label: l10n.dashboardCountAssigned,
               value: '${summary.assigned.length}',
             ),
             const SizedBox(width: BosSpace.s8),
             _Count(
               key: const Key('dashboard-count-in-progress'),
+              icon: Icons.timelapse,
+              tone: BosColors.warning,
               label: l10n.dashboardCountInProgress,
               value: '${summary.inProgress}',
             ),
             const SizedBox(width: BosSpace.s8),
             _Count(
               key: const Key('dashboard-count-pool'),
+              icon: Icons.inbox_outlined,
+              tone: BosColors.info,
               label: l10n.dashboardCountPool,
               value: '${summary.pool.length}',
             ),
           ],
         ),
         const SizedBox(height: BosSpace.s16),
-        Text(l10n.dashboardOpenTasks, style: theme.textTheme.titleMedium),
-        const SizedBox(height: BosSpace.s8),
+        SectionHeader(l10n.dashboardOpenTasks),
         if (preview.isEmpty)
           Card(
             key: const Key('dashboard-no-tasks'),
-            child: Padding(
-              padding: const EdgeInsets.all(BosSpace.s16),
-              child: Text(
-                [
-                  l10n.dashboardNoTasks,
-                  if (summary.pool.isNotEmpty)
-                    l10n.dashboardNoTasksPoolHint(summary.pool.length),
-                ].join(' '),
-                style: BosType.body,
-              ),
+            child: EmptyState(
+              compact: true,
+              icon: Icons.task_alt,
+              tone: BosColors.success,
+              title: l10n.dashboardNoTasks,
+              body: summary.pool.isNotEmpty
+                  ? l10n.dashboardNoTasksPoolHint(summary.pool.length)
+                  : null,
             ),
           )
         else
@@ -266,10 +404,18 @@ class _SummaryView extends StatelessWidget {
 }
 
 class _Count extends StatelessWidget {
-  const _Count({required this.label, required this.value, super.key});
+  const _Count({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.tone,
+    super.key,
+  });
 
   final String label;
   final String value;
+  final IconData icon;
+  final BosTone tone;
 
   @override
   Widget build(BuildContext context) {
@@ -282,11 +428,21 @@ class _Count extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(value, style: BosType.quantity),
+                // The number first: it is what the eye looks for.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: Text(value, style: BosType.quantity)),
+                    ExcludeSemantics(
+                      child: IconBadge(icon: icon, tone: tone, size: 32),
+                    ),
+                  ],
+                ),
                 Text(
                   label,
                   style: BosType.caption.copyWith(
                     color: BosColors.textSecondary,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -298,8 +454,9 @@ class _Count extends StatelessWidget {
   }
 }
 
-class _QuickLink extends StatelessWidget {
-  const _QuickLink({
+/// A big quick-action tile (two per row, glove-friendly).
+class _QuickAction extends StatelessWidget {
+  const _QuickAction({
     required this.icon,
     required this.label,
     required this.onTap,
@@ -312,56 +469,57 @@ class _QuickLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      minTileHeight: BosSize.primaryAction,
-      leading: Icon(icon, color: BosColors.brandPrimary),
-      title: Text(label),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap,
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 104),
+          child: Padding(
+            padding: const EdgeInsets.all(BosSpace.s12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconBadge(icon: icon),
+                const SizedBox(height: BosSpace.s12),
+                Text(
+                  label,
+                  maxLines: 2,
+                  style: BosType.body.copyWith(
+                    color: BosColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  const _InfoCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-    super.key,
-  });
+class _ActionGrid extends StatelessWidget {
+  const _ActionGrid({required this.actions});
 
-  final IconData icon;
-  final String label;
-  final String value;
+  final List<_QuickAction> actions;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(BosSpace.s16),
-        child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = BosSpace.s8;
+        final columns = constraints.maxWidth >= 560 ? 3 : 2;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
           children: [
-            Icon(icon, color: BosColors.brandPrimary, size: 32),
-            const SizedBox(width: BosSpace.s16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: BosColors.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: BosSpace.s4),
-                  Text(value, style: theme.textTheme.titleMedium),
-                ],
-              ),
-            ),
+            for (final action in actions) SizedBox(width: width, child: action),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 }

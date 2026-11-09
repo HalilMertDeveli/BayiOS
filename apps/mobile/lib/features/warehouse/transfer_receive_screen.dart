@@ -183,6 +183,13 @@ class _ReceiveBody extends StatelessWidget {
             ),
           )
         else ...[
+          DocumentScanSteps(
+            key: const Key('transfer-steps'),
+            shelf: c.shelf,
+            shelfRequired: showShelf,
+            quantityText: c.quantityText,
+          ),
+          const SizedBox(height: BosSpace.s16),
           if (showShelf) ...[
             ShelfScanField(
               keyPrefix: 'transfer',

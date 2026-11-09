@@ -1,4 +1,5 @@
 import 'package:bayios_mobile/app/feature.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/features/stock/stock_errors.dart';
 import 'package:bayios_mobile/features/warehouse/count_list_screen.dart';
@@ -109,7 +110,7 @@ class WarehouseHubScreen extends ConsumerWidget {
                     padding: const EdgeInsets.all(BosSpace.s16),
                     child: Row(
                       children: [
-                        Icon(icon, size: 36, color: BosColors.brandPrimary),
+                        IconBadge(icon: icon, size: 56),
                         const SizedBox(width: BosSpace.s16),
                         Expanded(
                           child: Column(
@@ -117,12 +118,14 @@ class WarehouseHubScreen extends ConsumerWidget {
                             children: [
                               Text(
                                 title,
-                                style: Theme.of(context).textTheme.titleMedium,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
                               ),
+                              const SizedBox(height: BosSpace.s2),
                               Text(
                                 hint,
-                                style: const TextStyle(
-                                  color: BosColors.textMuted,
+                                style: BosType.body.copyWith(
+                                  color: BosColors.textSecondary,
                                 ),
                               ),
                             ],

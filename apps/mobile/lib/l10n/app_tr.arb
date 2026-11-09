@@ -2,6 +2,20 @@
   "@@locale": "tr",
 
   "appTitle": "BayiOS Depo",
+  "appTagline": "Toplama, mal kabul ve sayım tek uygulamada",
+
+  "scanStepShelf": "Raf okut",
+  "scanStepProduct": "Ürün okut",
+  "scanStepQuantity": "Adet",
+  "scanStepAllDone": "Tüm adımlar tamamlandı",
+  "scanStepSemantics": "Adım {current} / {total}: {label}",
+  "@scanStepSemantics": {
+    "placeholders": {
+      "current": {"type": "int"},
+      "total": {"type": "int"},
+      "label": {"type": "String"}
+    }
+  },
 
   "loading": "Yükleniyor…",
   "retry": "Tekrar dene",
@@ -117,6 +131,10 @@
   "tasksLines": "{count} satır",
   "@tasksLines": {
     "placeholders": { "count": { "type": "int" } }
+  },
+  "tasksPercent": "%{value}",
+  "@tasksPercent": {
+    "placeholders": { "value": { "type": "int" } }
   },
   "tasksProgress": "{picked} / {total} toplandı",
   "@tasksProgress": {
@@ -440,6 +458,7 @@
   "receivingAddLine": "Satıra ekle",
   "receivingCancelLine": "Vazgeç",
   "receivingNoLines": "Henüz ürün eklenmedi.",
+  "receivingNoLinesHint": "Eklemek istediğiniz ürünü okutun veya arayın.",
   "receivingLinesTitle": "Satırlar ({count})",
   "@receivingLinesTitle": {"placeholders":{"count":{"type":"int"}}},
   "receivingLineQuantity": "{quantity} birim",

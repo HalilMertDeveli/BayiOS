@@ -245,6 +245,13 @@ class _CountBody extends StatelessWidget {
             ),
           ),
           const SizedBox(height: BosSpace.s16),
+          DocumentScanSteps(
+            key: const Key('count-steps'),
+            shelf: c.shelf,
+            shelfRequired: showShelf,
+            quantityText: c.quantityText,
+          ),
+          const SizedBox(height: BosSpace.s16),
           if (showShelf) ...[
             ShelfScanField(
               keyPrefix: 'count',
