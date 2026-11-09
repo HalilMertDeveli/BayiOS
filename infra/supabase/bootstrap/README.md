@@ -1,8 +1,9 @@
 # Supabase bootstrap (barındırılan projeler: `bayios-preview`, `bayios-prod`)
 
-> **Durum: hiçbir Supabase projesine UYGULANMADI.** Proje henüz yok (#138). Bu klasör, proje açıldığında ürün sahibinin
-> bir kez çalıştıracağı hazır script'leri içerir. CI bunları her PR'da geçici container'larda prova eder
-> (`.github/workflows/ci-db-bootstrap.yml`).
+> **Durum (2026-11-09):** `bayios-preview` projesi açıldı (Free plan, `eu-central-1` Frankfurt — OD-07). `01-roles.sql`,
+> `02-extensions.sql`, `03-access-token-hook.sql` uygulandı (rol özellikleri ve `pg_trgm@extensions` doğrulandı).
+> **Bekleyen (ürün sahibi):** rol parolaları (§1 adım 2–3, `--set-passwords`), GitHub Environment `preview` secret'ları (§2),
+> Auth ayarları (§3) ve hook'un açılması. Migration'ları deploy pipeline uygular. `bayios-prod` yok (Free plan proje sınırı).
 
 Şemanın tek kaynağı EF Core migration'larıdır (ADR 0005). Burada yalnızca migration'ların **ön koşulları** vardır:
 DB rolleri, uzantılar, Auth hook'u. İş tablosu, RLS politikası veya GRANT burada **yazılmaz** (onlar migration'larda).
