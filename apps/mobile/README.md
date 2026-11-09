@@ -48,7 +48,7 @@ Emülatörde gerçek yığına karşı web ↔ mobil akış: `.github/workflows/
 | `test/core/session/session_controller_test.dart` | `/me`, tenant çözümleme, askıya alınmış işletme, `tenant.access_denied`/`inactive` |
 | `test/app/*` | Yönlendirme korumaları, izin bazlı gezinme, uçtan uca uygulama akışı (sahte Auth/API) |
 | `test/features/*` | Giriş formu doğrulama/hata, işletme seçici, pano, dokunma hedefleri ≥ 48 dp (`androidTapTargetGuideline`) |
-| `test/features/picking/*` | Liste durumları/sekmeler, tara eşleşme/yanlış ürün/yanlış raf, adet doğrulama, aynı anahtarla yeniden gönderim, If-Match/412, izin bazlı görünürlük (sahte API sunucusu, idempotent tekrar oynatma) |
+| `test/features/picking/*` | Liste durumları/sekmeler, tara eşleşme/yanlış ürün/yanlış raf, adet doğrulama, aynı anahtarla yeniden gönderim, If-Match/412, izin bazlı görünürlük (sahte API sunucusu, idempotent tekrar oynatma); #98: öncelik rozeti + müşteri, sunucu sırası, pasif raf uyarısı, yeniden ayıran okutma → görev yeniden okunur |
 | `test/contract/contract_test.dart` | Kullanılan uç/başlık/alanlar `packages/contracts/openapi.json` ile birebir; gönderilen istek gövdesi alanları (ör. `ReceiveStockTransferLineRequest.code`); ekranların izin kapısı uçların `x-permission(s)` değerinde var mı |
 | `test/features/stock/*` | Stok sorgulama durumları, mal kabul akışı (okutma eşleşme/eşleşmeme, miktar/raf doğrulama, aynı `Idempotency-Key` ile yeniden deneme, `inventory.busy`), izin bazlı gizleme + 403, düzeltme + negatif stok onayı |
 | `test/core/push/*` | Push kaydı: Firebase yoksa hiçbir şey; izin bir kez; işletmede kayıt; token yenileme; işletme değişimi (eski işletmeden silme); çevrimdışı kayıt aynı anahtarla yeniden; çıkıştan önce silme + FCM token iptali |
@@ -185,7 +185,13 @@ push için APNs anahtarı (`docs/operations/push-notifications.md` §3). iOS sim
   Yalnızca `tasks.read.all` (ör. viewer) → aktif görev sayısı (`GET /picking-tasks`). Selamlama adı: `/me fullName`
   → Supabase `user_metadata.full_name` → e-postanın `@` öncesi (web ile aynı).
 - **Görev listesi** (`/gorevler`): `tasks.read.own` → "Bana atanan" + "Havuz"; `tasks.read.all` → "Tümü" (keyset
-  sayfalama). Aşağı çekerek yenileme, boş/hata durumları.
+  sayfalama). Aşağı çekerek yenileme, boş/hata durumları. Kartlarda ve toplama ekranında öncelik rozeti (`urgent` Acil,
+  `high`, `low`; `normal` rozetsiz), müşteri adı ve istenen teslim tarihi (#98; müşteri için yalnızca ad). Sıra
+  **sunucunun** sırasıdır (`/mine` önceliğe göre sıralı gelir); uygulama yeniden sıralamaz.
+- **Raf yeniden ayırma (#98):** `locationIsActive: false` olan satırda "raf pasif" uyarısı. Boş stoğu olan başka bir rafta
+  okutma API'de rezervasyonu o rafa taşır ve kabul edilir; okutma yanıtında satır başka rafta / başka miktarla ya da
+  bilinmeyen bir satır olarak dönerse görev yeniden okunur (yeni raf ve satırlar) ve "Rezervasyon okuttuğunuz rafa
+  taşındı" gösterilir. Boşalan satırlar (`quantityToPick = 0`) "Başka rafa taşındı" rozetiyle kalır.
 - **Toplama ekranı** (`/gorevler/:id`): raf sırasıyla satırlar, raf kodu/barkod/miktarlar, sipariş bilgisi (fiyatsız,
   `orders.read`). Raf okut → ürün okut (kamera `mobile_scanner` veya elle giriş/klavye-kama okuyucu), okutma başına adet
   (0'dan büyük, en çok 3 ondalık, satırda kalandan fazla değil), eksik bildirimi, tamamla (eksik varsa onay).
@@ -211,7 +217,7 @@ başlatma/yeniden saydırma/onaylama (uygulama) **web'de** kalır.
 | Teslim al | `/depo/transferler/:id` | `inventory.transfer.receive` | `GET /stock-transfers/{id}`, okutma başına `POST …/receive` `{lines:[{code, quantity, locationCode}]}` |
 | Sayımlar | `/depo/sayimlar` | `inventory.count.perform` | `GET /stock-counts?status=open` |
 | Sayım girişi | `/depo/sayimlar/:id` | `inventory.count.perform` | `GET /stock-counts/{id}`, okutma başına `POST …/entries` `{entries:[{code, locationCode, quantity, mode}]}`, `POST …/submit` (`If-Match`) |
-| Raf taşıma | `/depo/raf-tasima` | `inventory.transfer` (şimdilik) | `GET /warehouses`, `/warehouses/{id}/locations`, `/variants/lookup` → `/variants?sku=`, `/inventory/balances` (kaynak raftaki satılabilir), `POST /inventory/relocations` |
+| Raf taşıma | `/depo/raf-tasima` | `inventory.relocate` | `GET /warehouses`, `/warehouses/{id}/locations`, `/variants/lookup` → `/variants?sku=`, `/inventory/balances` (kaynak raftaki satılabilir), `POST /inventory/relocations` |
 
 - **Okutma akışı (teslim alma ve sayım):** raf okut (sabit kalır) → adet (varsayılan 1, ± düğmeleri) → ürün okut = hemen
   gönderilir. Raf kodu ve ürün kodu API'de çözülür; cihaz yalnızca depo raf takibi yapıyorsa raf okutulmadan göndermez.
@@ -231,11 +237,12 @@ başlatma/yeniden saydırma/onaylama (uygulama) **web'de** kalır.
   sayısıyla onay istenir.
 - **Raf taşıma:** yalnızca raf takibi yapan aktif depolar. Kaynak raf (kod veya etiket barkodu, cihazda eşleşir) → ürün
   (barkod, sonra SKU) → adet (kaynak raftaki satılabilir gösterilir, "Tümünü taşı"; fazlası cihazda reddedilir) → hedef raf
-  (kaynakla aynı olamaz) → "Taşı". Başarıdan sonra kaynak raf korunur. **İzin notu:** API bugün
-  `POST /inventory/relocations` için `inventory.transfer` istiyor (owner/admin/manager); warehouse_staff için ayrı izin
-  #98'de ekleniyor. Değişince `WarehousePermissions.relocate` sabitini (ve test fikstürünü) güncelleyin;
-  `contract_test.dart` → `permissions` grubu, sözleşme bu ucu artık `inventory.transfer` ile açmazsa kırmızıya döner
-  (yeni izin `x-permission-any-of`a yalnızca eklenirse yeşil kalır; o durumda sabiti bilinçli olarak değiştirin).
+  (kaynakla aynı olamaz) → "Taşı". Başarıdan sonra kaynak raf korunur. İzin `inventory.relocate` (owner, admin,
+  manager, warehouse_staff; #98). Rafta rezerve stok varsa "Ayrılmış stok da taşınsın" anahtarı `includeReserved: true`
+  gönderir: üst sınır satılabilir yerine eldeki olur; sipariş rezervasyonları ve açık toplama satırları hedef rafa geçer
+  (yanıttaki `reservationMoves` sayısı gösterilir). 409 `inventory.insufficient_available` → `shortages[0].available`
+  ("en çok X taşınabilir") gösterilir. `contract_test.dart` → `permissions` grubu ekranın izin kapısını, ayrı bir test de
+  409'un `StockProblemDetails` (`shortages: StockShortage[]`) olduğunu doğrular.
 
 ## Push bildirimleri (#44)
 - Firebase **yalnızca bildirim** için; `BAYIOS_FIREBASE_*` tanımları boşsa `NoopPushService` (izin yok, kayıt yok).

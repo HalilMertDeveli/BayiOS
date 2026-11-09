@@ -444,7 +444,11 @@ enum CountMode {
 /// one `transfer_in` movement per line).
 @immutable
 class RelocationResult {
-  const RelocationResult({required this.transferId, required this.movements});
+  const RelocationResult({
+    required this.transferId,
+    required this.movements,
+    this.reservationMoves = 0,
+  });
 
   factory RelocationResult.fromJson(Map<String, Object?> json) =>
       RelocationResult(
@@ -453,15 +457,20 @@ class RelocationResult {
             .objectList('movements')
             .map(StockMovement.fromJson)
             .toList(),
+        reservationMoves: json.objectList('reservationMoves').length,
       );
 
   static const contract = ContractSchema('TransferResult', {
     'transferId': 'string',
     'movements': 'array',
+    'reservationMoves': 'array?',
   });
 
   final String transferId;
   final List<StockMovement> movements;
+
+  /// Order reservations carried to the target shelf (`includeReserved`).
+  final int reservationMoves;
 }
 
 /// Request bodies the app sends, field by field (contract-checked: a renamed
@@ -495,9 +504,17 @@ abstract final class WarehouseRequests {
     'fromLocationId': 'string?',
     'toLocationId': 'string?',
     'quantity': 'number?',
+    'includeReserved': 'boolean?',
+  });
+
+  /// One `shortages` entry of a 409 `inventory.insufficient_available`
+  /// (read by `shortageAvailable`).
+  static const shortage = ContractSchema('StockShortage', {
+    'available': 'number?',
   });
 
   static const List<ContractSchema> all = [
+    shortage,
     receive,
     receiveLine,
     countEntries,

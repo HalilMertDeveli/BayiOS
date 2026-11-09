@@ -596,5 +596,22 @@
   "relocationDone": "Taşındı",
   "relocationDoneLine": "{sku}: {quantity} birim {from} → {to}",
   "@relocationDoneLine": {"placeholders":{"sku":{"type":"String"},"quantity":{"type":"String"},"from":{"type":"String"},"to":{"type":"String"}}},
-  "relocationFailed": "Taşınamadı"
+  "relocationFailed": "Taşınamadı",
+  "relocationReservationsMoved": "{count} sipariş rezervasyonu da hedef rafa taşındı.",
+  "@relocationReservationsMoved": {"placeholders":{"count":{"type":"int"}}},
+  "relocationOverOnHand": "Kaynak rafta en çok {available} birim var; toplanmış veya paketlenmiş mal taşınamaz.",
+  "@relocationOverOnHand": {"placeholders":{"available":{"type":"String"}}},
+  "relocationIncludeReserved": "Ayrılmış stok da taşınsın ({reserved})",
+  "@relocationIncludeReserved": {"placeholders":{"reserved":{"type":"String"}}},
+  "relocationIncludeReservedHint": "Siparişlerin rezervasyonu ve açık toplama satırları hedef rafa geçer.",
+  "relocationShortage": "Bu raftan en çok {available} birim taşınabilir. Miktarı azaltın.",
+  "@relocationShortage": {"placeholders":{"available":{"type":"String"}}},
+  "tasksPriorityUrgent": "Acil",
+  "tasksPriorityHigh": "Yüksek öncelik",
+  "tasksPriorityLow": "Düşük öncelik",
+  "tasksDeliveryDate": "Teslim {date}",
+  "@tasksDeliveryDate": {"placeholders":{"date":{"type":"String"}}},
+  "pickingScanReallocated": "Rezervasyon okuttuğunuz rafa taşındı.",
+  "pickingShelfInactive": "Bu raf pasif; kalan miktar henüz başka rafa taşınamadı. Sorumlunuza haber verin.",
+  "pickingLineMoved": "Başka rafa taşındı"
 }

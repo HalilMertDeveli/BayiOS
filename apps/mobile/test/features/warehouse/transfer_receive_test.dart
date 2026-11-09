@@ -78,8 +78,8 @@ void main() {
     await pump(tester, location: '/depo');
     expect(find.byKey(const Key('warehouse-transfers')), findsOneWidget);
     expect(find.byKey(const Key('warehouse-counts')), findsOneWidget);
-    // Relocation needs inventory.transfer today (not warehouse_staff).
-    expect(find.byKey(const Key('warehouse-relocation')), findsNothing);
+    // warehouse_staff may move between shelves (inventory.relocate, #98).
+    expect(find.byKey(const Key('warehouse-relocation')), findsOneWidget);
     await expectAccessibleTargets(tester);
 
     await tapOn(tester, find.byKey(const Key('warehouse-transfers')));

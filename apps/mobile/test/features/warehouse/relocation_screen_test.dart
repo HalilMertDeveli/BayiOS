@@ -214,20 +214,116 @@ void main() {
   });
 
   testWidgets(
-    'gated on ${WarehousePermissions.relocate} (contract); staff → hidden',
+    'gated on ${WarehousePermissions.relocate}: without it → hidden',
     (tester) async {
-      await pump(tester, permissions: staffWarehousePermissions);
+      final noRelocate = [
+        for (final p in managerWarehousePermissions)
+          if (p != WarehousePermissions.relocate) p,
+      ];
+      await pump(tester, permissions: noRelocate);
       expect(find.text(l10n.relocationForbidden), findsOneWidget);
       expect(api.calls, isEmpty);
 
-      await pump(
-        tester,
-        permissions: staffWarehousePermissions,
-        location: '/depo',
-      );
+      await pump(tester, permissions: noRelocate, location: '/depo');
       expect(find.byKey(const Key('warehouse-relocation')), findsNothing);
+      expect(find.byKey(const Key('warehouse-transfers')), findsOneWidget);
     },
   );
+
+  testWidgets('warehouse_staff may move (inventory.relocate, #98)', (
+    tester,
+  ) async {
+    await pump(tester, permissions: staffWarehousePermissions);
+    expect(find.byKey(const Key('relocation-form')), findsOneWidget);
+  });
+
+  testWidgets('includeReserved: on-hand bound, flag sent, reservations moved', (
+    tester,
+  ) async {
+    api.on(
+      'POST',
+      movePath,
+      (_) => FakeReply(
+        201,
+        json: {
+          'transferId': 'rl-2',
+          'movements': [movementJson(type: 'transfer_out', quantity: -12)],
+          'reservationMoves': [
+            {
+              'orderId': 'o-1',
+              'orderLineId': 'ol-1',
+              'variantId': variantId,
+              'warehouseId': warehouseId,
+              'fromLocationId': binA,
+              'toLocationId': binB,
+              'quantity': 2,
+            },
+          ],
+        },
+      ),
+    );
+    await pump(tester);
+    await scanUpToTarget(tester);
+    // balanceJson(): onHand 12, reserved 2, available 10.
+    await scrollTo(
+      tester,
+      find.byKey(const Key('relocation-include-reserved')),
+    );
+    expect(find.text(l10n.relocationIncludeReserved('2')), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('relocation-quantity')), '12');
+    await typeInto(tester, 'relocation-target-field', 'B-02-03');
+    await tapOn(tester, find.byKey(const Key('relocation-submit')));
+    // Without the flag 12 > 10 available: refused on the device.
+    expect(find.text(l10n.relocationOverAvailable('10')), findsOneWidget);
+    expect(api.callsTo('POST', movePath), isEmpty);
+    await expectAccessibleTargets(tester);
+
+    await tapOn(tester, find.byKey(const Key('relocation-include-reserved')));
+    await tapOn(tester, find.byKey(const Key('relocation-submit')));
+    final line =
+        ((api.callsTo('POST', movePath).single.body! as Map)['lines'] as List)
+            .single;
+    expect(line, containsPair('includeReserved', true));
+    expect(line, containsPair('quantity', 12));
+    expect(
+      find.byKey(const Key('relocation-reservations-moved')),
+      findsOneWidget,
+    );
+    expect(find.text(l10n.relocationReservationsMoved(1)), findsOneWidget);
+  });
+
+  testWidgets('409 shortages: how much can still move is shown', (
+    tester,
+  ) async {
+    api.once(
+      'POST',
+      movePath,
+      (_) => FakeReply(
+        409,
+        json: problem(
+          409,
+          'inventory.insufficient_available',
+          extra: {
+            'shortages': [
+              {
+                'variantId': variantId,
+                'sku': 'FLT-001',
+                'warehouseId': warehouseId,
+                'locationId': binA,
+                'requested': 3,
+                'available': 1,
+              },
+            ],
+          },
+        ),
+      ),
+    );
+    await pump(tester);
+    await scanUpToTarget(tester);
+    await typeInto(tester, 'relocation-target-field', 'B-02-03');
+    await tapOn(tester, find.byKey(const Key('relocation-submit')));
+    expect(find.text(l10n.relocationShortage('1')), findsOneWidget);
+  });
 
   testWidgets('warehouse without shelves → explained', (tester) async {
     api.on(

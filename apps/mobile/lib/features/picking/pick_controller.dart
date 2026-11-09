@@ -310,7 +310,9 @@ class PickController extends ChangeNotifier {
       final result = await _withBusyRetry(action);
       _failedScan = null;
       _failedRequest = null;
+      final reallocated = _task.reallocatedBy(result);
       _task = _task.applyScan(result);
+      if (reallocated) await _reloadAfterReallocation();
       PickingTaskLine? changed;
       for (final l in _task.lines) {
         if (result.lines.any((p) => p.id == l.id)) {
@@ -340,6 +342,7 @@ class PickController extends ChangeNotifier {
                   formatQuantity(changed.quantityToPick),
                   changed.unit,
                 ),
+                if (reallocated) _l10n.pickingScanReallocated,
                 if (!changed.isOpen) _l10n.pickingScanLineDone,
                 if (result.openLineCount == 0) _l10n.pickingAllLinesDone,
               ].join(' '),
@@ -540,6 +543,25 @@ class PickController extends ChangeNotifier {
         pickingErrorMessage(_l10n, error),
       );
       _notify();
+    }
+  }
+
+  /// After a scan that re-allocated the line to the scanned shelf (#98) the
+  /// scan response only has progress: shelves and any new line come from a
+  /// fresh read. The scan itself already counted; a failed read keeps the
+  /// merged progress (pull-to-refresh later).
+  Future<void> _reloadAfterReallocation() async {
+    try {
+      final fresh = await _api.get(_task.task.id);
+      if (_disposed) return;
+      _task = fresh;
+      final scanned = _location;
+      if (scanned != null && !scanned.isKnown) {
+        // The scanned shelf is on the task now.
+        _location = matchLocation(scanned.code, fresh.lines) ?? scanned;
+      }
+    } on Object {
+      // Best effort, see above.
     }
   }
 

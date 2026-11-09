@@ -241,10 +241,23 @@ class _PickViewState extends ConsumerState<_PickView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TaskStatusBadge(task.status),
+                  Wrap(
+                    spacing: BosSpace.s8,
+                    runSpacing: BosSpace.s4,
+                    children: [
+                      TaskStatusBadge(task.status),
+                      TaskPriorityBadge(task.priority),
+                    ],
                   ),
+                  if (taskCustomerLine(l10n, task) case final String customer)
+                    Padding(
+                      padding: const EdgeInsets.only(top: BosSpace.s4),
+                      child: Text(
+                        customer,
+                        key: const Key('pick-customer'),
+                        style: BosType.bodyLg,
+                      ),
+                    ),
                   const SizedBox(height: BosSpace.s8),
                   PickProgressBar(value: totals.progress),
                   const SizedBox(height: BosSpace.s4),
@@ -588,6 +601,7 @@ class _CurrentLine extends StatelessWidget {
                   ),
                 ],
               ),
+            if (!line.locationIsActive) _InactiveShelfWarning(line: line),
             Text(line.sku, style: BosType.h3.copyWith(fontFamily: 'monospace')),
             Text(
               line.name,
@@ -830,6 +844,8 @@ class _LineTile extends StatelessWidget {
                 ),
               ],
             ),
+            if (!line.locationIsActive && line.isOpen)
+              _InactiveShelfWarning(line: line),
             if (line.quantityShort > 0 || !line.isOpen || onFocus != null)
               Padding(
                 padding: const EdgeInsets.only(top: BosSpace.s4),
@@ -849,6 +865,10 @@ class _LineTile extends StatelessWidget {
                           BosColors.danger,
                         ),
                       )
+                    else if (line.quantityToPick == 0 &&
+                        line.quantityPicked == 0)
+                      // Emptied by a re-allocation (#98): kept, not deleted.
+                      ToneBadge(l10n.pickingLineMoved, BosColors.neutral)
                     else if (!line.isOpen)
                       ToneBadge(l10n.pickingLineDone, BosColors.success),
                     const Spacer(),
@@ -937,5 +957,38 @@ class _OrderInfo extends ConsumerWidget {
   static String _date(String iso) {
     final parts = iso.split('-');
     return parts.length == 3 ? '${parts[2]}.${parts[1]}.${parts[0]}' : iso;
+  }
+}
+
+/// The line's shelf was deactivated and its open quantity could not move to
+/// another shelf yet (#98, `locationIsActive: false`).
+class _InactiveShelfWarning extends StatelessWidget {
+  const _InactiveShelfWarning({required this.line});
+
+  final PickingTaskLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: BosSpace.s4),
+      child: Row(
+        key: Key('pick-line-inactive-${line.sku}'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber, size: 20, color: BosColors.warning.fg),
+          const SizedBox(width: BosSpace.s4),
+          Expanded(
+            child: Text(
+              l10n.pickingShelfInactive,
+              style: BosType.caption.copyWith(
+                color: BosColors.warning.fg,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

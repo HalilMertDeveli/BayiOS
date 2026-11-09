@@ -22,8 +22,8 @@ const sourceWarehouseId = 'w-north';
 const lineA = 'tl-a';
 const lineB = 'tl-b';
 
-/// warehouse_staff: receive transfers and count, no relocation (today's
-/// contract gates relocations on `inventory.transfer`).
+/// warehouse_staff: receive transfers, count and move between shelves
+/// (`inventory.relocate`, #98).
 const staffWarehousePermissions = [
   'tenant.read',
   'catalog.read',
@@ -31,9 +31,10 @@ const staffWarehousePermissions = [
   'inventory.receive',
   'inventory.transfer.receive',
   'inventory.count.perform',
+  'inventory.relocate',
 ];
 
-/// manager: everything above plus relocation and count management.
+/// manager: everything above plus transfer and count management.
 const List<String> managerWarehousePermissions = [
   ...staffWarehousePermissions,
   'inventory.transfer',

@@ -126,6 +126,7 @@ class RelocationController extends ChangeNotifier {
   String _quantityText = '1';
   QuantityError? _quantityError;
   bool _overAvailable = false;
+  bool _includeReserved = false;
   MoveSubmission _submission = const MoveIdle();
   IdempotentAction<RelocationResult>? _action;
 
@@ -153,9 +154,28 @@ class RelocationController extends ChangeNotifier {
   String get quantityText => _quantityText;
   QuantityError? get quantityError => _quantityError;
 
-  /// The quantity is more than the shelf's available stock.
+  /// The quantity is more than the shelf's movable stock ([movable]).
   bool get overAvailable => _overAvailable;
   MoveSubmission get submission => _submission;
+
+  /// `includeReserved` (#98): reserved stock still on the shelf moves too,
+  /// together with its order reservations and open pick lines.
+  bool get includeReserved => _includeReserved;
+
+  /// The shelf has reserved stock: moving it is a choice.
+  bool get hasReserved => (_balance?.reserved ?? 0) > 0;
+
+  /// Upper bound on the device: available, or on hand with reserved stock
+  /// included (the API excludes picked / packed goods and says so in
+  /// `shortages`). Null when the balance is unknown.
+  num? get movable => _includeReserved ? _balance?.onHand : _balance?.available;
+
+  void setIncludeReserved({required bool value}) {
+    if (locked || value == _includeReserved) return;
+    _includeReserved = value;
+    _overAvailable = false;
+    _notify();
+  }
 
   /// Scans and edits are locked while sending or after an unknown outcome
   /// (a resend must carry exactly the same request).
@@ -284,6 +304,7 @@ class RelocationController extends ChangeNotifier {
     _quantityText = '1';
     _quantityError = null;
     _overAvailable = false;
+    _includeReserved = false;
     _notify();
     await _loadBalance();
   }
@@ -327,7 +348,7 @@ class RelocationController extends ChangeNotifier {
 
   /// "Tümünü taşı": the shelf's available quantity.
   void takeAll() {
-    final available = _balance?.available;
+    final available = movable;
     if (available == null || available <= 0) return;
     setQuantityText(_inputText(available));
   }
@@ -388,7 +409,7 @@ class RelocationController extends ChangeNotifier {
         _notify();
         return;
       }
-      final available = _balance?.available;
+      final available = movable;
       if (available != null && parsed.value! > available) {
         _overAvailable = true;
         _alerts.rejected();
@@ -404,6 +425,7 @@ class RelocationController extends ChangeNotifier {
             'fromLocationId': _source!.id,
             'toLocationId': _target!.id,
             'quantity': parsed.value,
+            if (_includeReserved) 'includeReserved': true,
           },
         ],
       };
@@ -476,6 +498,7 @@ class RelocationController extends ChangeNotifier {
     _quantityText = '1';
     _quantityError = null;
     _overAvailable = false;
+    _includeReserved = false;
   }
 
   void _clearDone() {

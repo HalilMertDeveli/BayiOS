@@ -132,6 +132,13 @@ class _RelocationForm extends StatelessWidget {
                     submission.to,
                   ),
                 ),
+                if (submission.result.reservationMoves > 0)
+                  Text(
+                    l10n.relocationReservationsMoved(
+                      submission.result.reservationMoves,
+                    ),
+                    key: const Key('relocation-reservations-moved'),
+                  ),
               ],
             ),
           ),
@@ -228,9 +235,13 @@ class _RelocationForm extends StatelessWidget {
                     text: c.quantityText,
                     label: l10n.docQuantityLabel,
                     error: c.overAvailable
-                        ? l10n.relocationOverAvailable(
-                            formatQuantity(c.balance?.available ?? 0),
-                          )
+                        ? (c.includeReserved
+                              ? l10n.relocationOverOnHand(
+                                  formatQuantity(c.movable ?? 0),
+                                )
+                              : l10n.relocationOverAvailable(
+                                  formatQuantity(c.movable ?? 0),
+                                ))
                         : quantityErrorText(l10n, c.quantityError),
                     enabled: !c.locked,
                     onChanged: c.setQuantityText,
@@ -238,6 +249,21 @@ class _RelocationForm extends StatelessWidget {
                   ),
                   const SizedBox(height: BosSpace.s8),
                   _AvailableLine(controller: c),
+                  if (c.hasReserved)
+                    SwitchListTile(
+                      key: const Key('relocation-include-reserved'),
+                      contentPadding: EdgeInsets.zero,
+                      value: c.includeReserved,
+                      onChanged: c.locked
+                          ? null
+                          : (value) => c.setIncludeReserved(value: value),
+                      title: Text(
+                        l10n.relocationIncludeReserved(
+                          formatQuantity(c.balance!.reserved),
+                        ),
+                      ),
+                      subtitle: Text(l10n.relocationIncludeReservedHint),
+                    ),
                 ],
               ),
             ),
@@ -401,7 +427,7 @@ class _AvailableLine extends StatelessWidget {
             ),
           ),
         ),
-        if (available != null && available > 0)
+        if ((c.movable ?? 0) > 0)
           TextButton(
             key: const Key('relocation-take-all'),
             onPressed: c.locked ? null : c.takeAll,
@@ -440,6 +466,11 @@ class _FailureNotice extends StatelessWidget {
             ),
             key: const Key('relocation-failure-message'),
           ),
+          if (shortageAvailable(failure.error) case final num movable)
+            Text(
+              l10n.relocationShortage(formatQuantity(movable)),
+              key: const Key('relocation-shortage'),
+            ),
           if (failure.pending) ...[
             Text(l10n.docEntryPendingHint),
             const SizedBox(height: BosSpace.s8),

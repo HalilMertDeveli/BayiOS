@@ -3,6 +3,7 @@ import 'package:bayios_mobile/features/picking/pick_session.dart';
 import 'package:bayios_mobile/features/picking/picking_models.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 /// Route of a task's pick screen.
 String taskPath(String id) => '/gorevler/${Uri.encodeComponent(id)}';
@@ -55,6 +56,41 @@ class ToneBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Label and tone of a task priority; null for `normal` (no badge: most
+/// tasks are normal, a badge on every card would be noise).
+(String, BosTone)? taskPriorityMeta(AppLocalizations l10n, String priority) =>
+    switch (priority) {
+      TaskPriority.urgent => (l10n.tasksPriorityUrgent, BosColors.danger),
+      TaskPriority.high => (l10n.tasksPriorityHigh, BosColors.warning),
+      TaskPriority.low => (l10n.tasksPriorityLow, BosColors.neutral),
+      _ => null,
+    };
+
+class TaskPriorityBadge extends StatelessWidget {
+  const TaskPriorityBadge(this.priority, {super.key});
+
+  final String priority;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = taskPriorityMeta(AppLocalizations.of(context), priority);
+    if (meta == null) return const SizedBox.shrink();
+    return ToneBadge(meta.$1, meta.$2, key: Key('task-priority-$priority'));
+  }
+}
+
+final _deliveryDate = DateFormat('d MMM', 'tr');
+
+/// "Müşteri · Teslim 12 Kas" (whatever is known), or null.
+String? taskCustomerLine(AppLocalizations l10n, PickingTaskSummary task) {
+  final parts = [
+    if (task.customerName case final String name when name.isNotEmpty) name,
+    if (task.requestedDeliveryDate case final DateTime date)
+      l10n.tasksDeliveryDate(_deliveryDate.format(date)),
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
 }
 
 class TaskStatusBadge extends StatelessWidget {
@@ -136,6 +172,26 @@ class TaskCard extends StatelessWidget {
                     TaskStatusBadge(task.status),
                   ],
                 ),
+                if (taskPriorityMeta(l10n, task.priority) != null ||
+                    taskCustomerLine(l10n, task) != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: BosSpace.s4),
+                    child: Wrap(
+                      spacing: BosSpace.s8,
+                      runSpacing: BosSpace.s4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        TaskPriorityBadge(task.priority),
+                        if (taskCustomerLine(l10n, task)
+                            case final String customer)
+                          Text(
+                            customer,
+                            key: Key('task-customer-${task.id}'),
+                            style: theme.textTheme.bodyLarge,
+                          ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: BosSpace.s4),
                 Text(
                   [

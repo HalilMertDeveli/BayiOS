@@ -1,4 +1,5 @@
 import 'package:bayios_mobile/core/api/api_exception.dart';
+import 'package:bayios_mobile/features/stock/quantity.dart';
 import 'package:bayios_mobile/features/stock/stock_errors.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 
@@ -12,12 +13,9 @@ abstract final class WarehousePermissions {
   /// Enter counts and submit (warehouse_staff included).
   static const performCount = 'inventory.count.perform';
 
-  /// Shelf-to-shelf move. `POST /inventory/relocations` currently declares
-  /// `inventory.transfer` (x-permission in packages/contracts/openapi.json;
-  /// owner / admin / manager). A warehouse_staff permission for relocations
-  /// is planned (#98): switch this constant (and the test fixture) to it
-  /// when the contract changes.
-  static const relocate = 'inventory.transfer';
+  /// Shelf-to-shelf move: `POST /inventory/relocations` declares
+  /// `inventory.relocate` (owner / admin / manager / warehouse_staff, #98).
+  static const relocate = 'inventory.relocate';
 
   static const List<String> all = [receiveTransfer, performCount, relocate];
 }
@@ -136,6 +134,17 @@ String documentErrorMessage(
     if (error.kind == ApiErrorKind.notFound) return l10n.docErrorNotFound;
   }
   return stockErrorMessage(l10n, error, forbidden: forbidden);
+}
+
+/// Largest quantity the first `shortages` entry of a 409
+/// `inventory.insufficient_available` says can move (null when absent).
+num? shortageAvailable(Object error) {
+  if (error is! ApiException) return null;
+  final shortages = error.problem?.extensions['shortages'];
+  if (shortages is! List<Object?> || shortages.isEmpty) return null;
+  final first = shortages.first;
+  if (first is! Map<String, Object?>) return null;
+  return readOptionalQuantity(first['available']);
 }
 
 /// API validation messages (English developer text) → Turkish.

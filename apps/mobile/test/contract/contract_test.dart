@@ -88,6 +88,38 @@ void main() {
     }
   });
 
+  // #98: a refused shelf move (409) carries `shortages` (StockShortage[]);
+  // the relocation screen shows how much can still move.
+  test('POST /inventory/relocations 409 is a StockProblemDetails', () {
+    final op =
+        (paths['/api/v1/inventory/relocations']!
+                as Map<String, Object?>)['post']!
+            as Map<String, Object?>;
+    final conflict =
+        (op['responses']! as Map<String, Object?>)['409']!
+            as Map<String, Object?>;
+    final ref =
+        (((conflict['content']!
+                        as Map<String, Object?>)['application/problem+json']!
+                    as Map<String, Object?>)['schema']!
+                as Map<String, Object?>)[r'$ref']!
+            as String;
+    expect(ref.split('/').last, 'StockProblemDetails');
+    final parts =
+        (schemas['StockProblemDetails']! as Map<String, Object?>)['allOf']!
+            as List<Object?>;
+    final shortages = [
+      for (final part in parts.cast<Map<String, Object?>>())
+        if ((part['properties'] as Map<String, Object?>?)?['shortages']
+            case final Map<String, Object?> s)
+          s,
+    ].single;
+    expect(
+      (shortages['items']! as Map<String, Object?>)[r'$ref'],
+      '#/components/schemas/StockShortage',
+    );
+  });
+
   group('schemas', () {
     for (final model in models) {
       test(model.name, () {

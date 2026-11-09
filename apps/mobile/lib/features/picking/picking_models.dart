@@ -44,6 +44,14 @@ abstract final class PickingTaskStatus {
   static bool isActive(String status) => active.contains(status);
 }
 
+/// Task priorities (WHT-03).
+abstract final class TaskPriority {
+  static const low = 'low';
+  static const normal = 'normal';
+  static const high = 'high';
+  static const urgent = 'urgent';
+}
+
 /// Reasons accepted by `POST …/lines/{lineId}/shortage`.
 abstract final class ShortageReason {
   static const notFound = 'not_found';
@@ -68,10 +76,13 @@ class PickingTaskSummary {
     required this.quantityShort,
     required this.createdAt,
     required this.version,
+    this.priority = TaskPriority.normal,
     this.assignedTo,
     this.assigneeName,
     this.startedAt,
     this.completedAt,
+    this.customerName,
+    this.requestedDeliveryDate,
   });
 
   factory PickingTaskSummary.fromJson(Map<String, Object?> json) =>
@@ -92,6 +103,9 @@ class PickingTaskSummary {
         startedAt: _optDate(json, 'startedAt'),
         completedAt: _optDate(json, 'completedAt'),
         version: _int(json, 'version'),
+        priority: json.optString('priority') ?? TaskPriority.normal,
+        customerName: json.optString('customerName'),
+        requestedDeliveryDate: _optDate(json, 'requestedDeliveryDate'),
       );
 
   static const contract = ContractSchema('PickingTaskSummaryResponse', {
@@ -111,6 +125,9 @@ class PickingTaskSummary {
     'startedAt': 'string?',
     'completedAt': 'string?',
     'version': 'integer',
+    'priority': 'string',
+    'customerName': 'string?',
+    'requestedDeliveryDate': 'string?',
   });
 
   final String id;
@@ -133,6 +150,16 @@ class PickingTaskSummary {
 
   /// Row version; `W/"<version>"` is the ETag / If-Match value.
   final int version;
+
+  /// `low`, `normal`, `high` or `urgent` ([TaskPriority]); `/mine` comes
+  /// sorted by it on the server — the app keeps that order.
+  final String priority;
+
+  /// The order's customer (name only: no address, phone or price).
+  final String? customerName;
+
+  /// The order's requested delivery date (a calendar date).
+  final DateTime? requestedDeliveryDate;
 
   bool get isActive => PickingTaskStatus.isActive(status);
   bool get isPool => assignedTo == null;
@@ -164,6 +191,9 @@ class PickingTaskSummary {
     startedAt: startedAt,
     completedAt: completedAt,
     version: version ?? this.version,
+    priority: priority,
+    customerName: customerName,
+    requestedDeliveryDate: requestedDeliveryDate,
   );
 }
 
@@ -186,6 +216,7 @@ class PickingTaskLine {
     this.locationCode,
     this.locationBarcode,
     this.shortageReason,
+    this.locationIsActive = true,
   });
 
   factory PickingTaskLine.fromJson(Map<String, Object?> json) =>
@@ -206,6 +237,7 @@ class PickingTaskLine {
         quantityShort: _num(json, 'quantityShort'),
         quantityRemaining: _num(json, 'quantityRemaining'),
         shortageReason: json.optString('shortageReason'),
+        locationIsActive: json['locationIsActive'] != false,
       );
 
   static const contract = ContractSchema('PickingTaskLineResponse', {
@@ -225,6 +257,7 @@ class PickingTaskLine {
     'quantityShort': 'number',
     'quantityRemaining': 'number',
     'shortageReason': 'string?',
+    'locationIsActive': 'boolean?',
   });
 
   final String id;
@@ -246,6 +279,10 @@ class PickingTaskLine {
   final double quantityRemaining;
   final String? shortageReason;
 
+  /// False when the line's shelf was deactivated and its open quantity
+  /// could not move to another shelf yet (#98): the screen warns.
+  final bool locationIsActive;
+
   bool get isOpen => quantityRemaining > 0;
 
   PickingTaskLine withProgress(PickLineProgress p) => PickingTaskLine(
@@ -265,6 +302,7 @@ class PickingTaskLine {
     quantityShort: p.quantityShort,
     quantityRemaining: p.quantityRemaining,
     shortageReason: shortageReason,
+    locationIsActive: locationIsActive,
   );
 }
 
@@ -293,6 +331,23 @@ class PickingTask {
 
   /// `If-Match` for the current version.
   String get etag => etagFor(task.version);
+
+  /// The scan moved the line's reservation to another shelf (#98: a scan on
+  /// a shelf with free stock re-allocates): a line came back that is not on
+  /// this task, on another shelf, or with another quantity to pick. The
+  /// screen then reloads the task (line shelves / new lines).
+  bool reallocatedBy(PickScanResult scan) {
+    final byId = {for (final l in lines) l.id: l};
+    for (final p in scan.lines) {
+      final line = byId[p.id];
+      if (line == null ||
+          line.locationId != p.locationId ||
+          line.quantityToPick != p.quantityToPick) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   /// Merges a scan's per-line progress (only changed lines come back).
   PickingTask applyScan(PickScanResult scan) {
