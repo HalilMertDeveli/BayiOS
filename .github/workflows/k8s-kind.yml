@@ -1,0 +1,175 @@
+name: k8s-kind
+
+# Kubernetes rehearsal (docs/operations/kubernetes.md): builds the API, web and db-migrate images, creates a
+# throwaway kind cluster, installs infra/helm/bayios with values-kind.yaml (in-cluster PostgreSQL + bootstrap/EF
+# migration Job + ingress-nginx) and smoke-tests it. No registry, no push, no secrets, no real environment.
+
+on:
+  pull_request:
+    paths:
+      - "infra/helm/**"
+      - "infra/k8s/**"
+      - "infra/supabase/bootstrap/**"
+      - "infra/deploy/apply-migrations.sh"
+      - "infra/deploy/smoke.sh"
+      - "infra/ci/ef-migrations.sh"
+      - "services/api/**"
+      - "apps/web/**"
+      - ".github/workflows/k8s-kind.yml"
+  push:
+    branches: [main, preview]
+    paths:
+      - "infra/helm/**"
+      - "infra/k8s/**"
+      - "infra/supabase/bootstrap/**"
+      - "infra/deploy/apply-migrations.sh"
+      - "infra/deploy/smoke.sh"
+      - "infra/ci/ef-migrations.sh"
+      - "services/api/**"
+      - "apps/web/**"
+      - ".github/workflows/k8s-kind.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TAG: ci-${{ github.sha }}
+  CLUSTER: bayios-kind
+  NAMESPACE: bayios
+  HELM_VERSION: v4.3.1
+  KIND_VERSION: v0.33.0
+  INGRESS_NGINX_VERSION: controller-v1.15.1
+  # The URL the browser uses: the ingress published by infra/k8s/kind-config.yaml. Baked into the web image.
+  WEB_URL: http://localhost:8088
+
+jobs:
+  kind:
+    name: helm chart on kind (build, deploy, smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Helm lint (default values and kind values)
+        run: |
+          helm lint infra/helm/bayios --strict
+          helm lint infra/helm/bayios --strict -f infra/helm/bayios/values-kind.yaml
+          helm template bayios infra/helm/bayios -f infra/helm/bayios/values-kind.yaml > "${RUNNER_TEMP}/rendered.yaml"
+          echo "Rendered $(grep -c '^kind:' "${RUNNER_TEMP}/rendered.yaml") objects"
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: services/api/global.json
+
+      # Same generator + rehearsal as ci-migrations / deploy-preview: idempotent EF scripts + manifest.txt.
+      - name: Generate EF Core migration scripts
+        run: bash infra/ci/ef-migrations.sh
+        env:
+          OUT_DIR: ${{ runner.temp }}/migrations
+
+      - name: Build images
+        run: |
+          docker build --pull -t "bayios-api:${TAG}" services/api
+          docker build --pull -t "bayios-web:${TAG}" apps/web \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="${WEB_URL}" \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL=http://supabase.kind.invalid \
+            --build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ci-placeholder-not-a-key
+          docker build --pull -t "bayios-db-migrate:${TAG}" -f infra/k8s/db-migrate/Dockerfile \
+            --build-context migrations="${RUNNER_TEMP}/migrations" infra
+          docker image ls --filter "reference=bayios-*"
+
+      - name: Create kind cluster
+        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          version: ${{ env.KIND_VERSION }}
+          cluster_name: ${{ env.CLUSTER }}
+          config: infra/k8s/kind-config.yaml
+          wait: 120s
+
+      - name: Load images into kind
+        run: kind load docker-image --name "$CLUSTER" "bayios-api:${TAG}" "bayios-web:${TAG}" "bayios-db-migrate:${TAG}"
+
+      - name: Install ingress-nginx (kind provider manifest)
+        run: |
+          kubectl apply -f "https://raw.githubusercontent.com/kubernetes/ingress-nginx/${INGRESS_NGINX_VERSION}/deploy/static/provider/kind/deploy.yaml"
+          kubectl -n ingress-nginx wait --for=condition=complete job --all --timeout=180s
+          # The admission webhook only answers once the controller pod is Ready.
+          kubectl -n ingress-nginx wait --for=condition=ready pod -l app.kubernetes.io/component=controller --timeout=180s
+
+      - name: Helm upgrade --install
+        run: |
+          helm upgrade --install bayios infra/helm/bayios \
+            --namespace "$NAMESPACE" --create-namespace \
+            -f infra/helm/bayios/values-kind.yaml \
+            --set api.image.tag="$TAG" --set web.image.tag="$TAG" --set dbMigrate.image.tag="$TAG" \
+            --wait --wait-for-jobs --timeout 10m
+
+      - name: Rollout status
+        run: |
+          kubectl -n "$NAMESPACE" rollout status statefulset/bayios-postgres --timeout=120s
+          kubectl -n "$NAMESPACE" rollout status deployment/bayios-api --timeout=180s
+          kubectl -n "$NAMESPACE" rollout status deployment/bayios-web --timeout=180s
+          kubectl -n "$NAMESPACE" get pods,svc,ingress,jobs -o wide
+
+      - name: Smoke test via port-forward (API health/ready/meta, web 200)
+        run: |
+          kubectl -n "$NAMESPACE" port-forward svc/bayios-api 18080:8080 > "${RUNNER_TEMP}/pf-api.log" 2>&1 &
+          kubectl -n "$NAMESPACE" port-forward svc/bayios-web 13000:3000 > "${RUNNER_TEMP}/pf-web.log" 2>&1 &
+          API_URL=http://127.0.0.1:18080 EXPECT_ENVIRONMENT=Kind SMOKE_TIMEOUT=120 bash infra/deploy/smoke.sh
+          code="$(curl -s -o /dev/null -w '%{http_code}' --retry 10 --retry-all-errors --retry-delay 2 http://127.0.0.1:13000/)"
+          echo "web GET / -> ${code}"
+          [ "$code" = 200 ] || { echo "::error::web returned ${code}, expected 200"; exit 1; }
+
+      - name: Smoke test via ingress (same origin as the browser)
+        run: |
+          API_URL="$WEB_URL" EXPECT_ENVIRONMENT=Kind SMOKE_TIMEOUT=60 bash infra/deploy/smoke.sh
+          code="$(curl -s -o /dev/null -w '%{http_code}' "${WEB_URL}/")"
+          echo "ingress GET / -> ${code}"
+          [ "$code" = 200 ] || { echo "::error::ingress / returned ${code}, expected 200"; exit 1; }
+          # Fail closed: no Supabase Auth in kind, so an authenticated endpoint must refuse an anonymous call.
+          code="$(curl -s -o /dev/null -w '%{http_code}' "${WEB_URL}/api/v1/me")"
+          echo "ingress GET /api/v1/me (no token) -> ${code}"
+          [ "$code" = 401 ] || { echo "::error::expected 401 without a token, got ${code}"; exit 1; }
+
+      - name: API connects as bayios_app (NOBYPASSRLS), never postgres
+        run: |
+          roles="$(kubectl -n "$NAMESPACE" exec statefulset/bayios-postgres -- psql -U postgres -d bayios -tAc \
+            "select string_agg(distinct usename, ',') from pg_stat_activity
+              where datname = 'bayios' and backend_type = 'client backend' and pid <> pg_backend_pid()")"
+          echo "API session roles: ${roles}"
+          [ "$roles" = bayios_app ] || { echo "::error::expected only bayios_app sessions, got '${roles}'"; exit 1; }
+          kubectl -n "$NAMESPACE" exec statefulset/bayios-postgres -- psql -U postgres -d bayios -tAc \
+            "select rolname, rolsuper, rolbypassrls from pg_roles where rolname = 'bayios_app'"
+
+      - name: Upgrade is repeatable (new migration Job, idempotent scripts)
+        run: |
+          helm upgrade bayios infra/helm/bayios --namespace "$NAMESPACE" \
+            -f infra/helm/bayios/values-kind.yaml \
+            --set api.image.tag="$TAG" --set web.image.tag="$TAG" --set dbMigrate.image.tag="$TAG" \
+            --wait --wait-for-jobs --timeout 5m
+          kubectl -n "$NAMESPACE" get jobs
+          kubectl -n "$NAMESPACE" logs job/bayios-db-migrate-2 | tail -5
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide || true
+          kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp || true
+          kubectl -n "$NAMESPACE" describe pods || true
+          for app in api web postgres db-migrate; do
+            echo "::group::logs ${app}"
+            kubectl -n "$NAMESPACE" logs -l app.kubernetes.io/component="$app" --all-containers --tail=200 --prefix || true
+            echo "::endgroup::"
+          done
+          cat "${RUNNER_TEMP}"/pf-*.log 2>/dev/null || true
