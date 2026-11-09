@@ -83,7 +83,7 @@ Hikâye formatı: "Bir <rol> olarak <ihtiyaç> istiyorum, böylece <fayda>." P0 
 | US-TEN-003 | Bir işletme sahibi olarak logo, para birimi, KDV ve fiyat gösterimini ayarlamak istiyorum, böylece belgeler işletmeme uygun olur. | P0 | TEN-04, TEN-05 |
 | US-TEN-004 | Bir admin olarak birimleri ve dönüşüm katsayılarını tanımlamak istiyorum, böylece kutu/adet/metre ile satış yapabilirim. | P0 | TEN-06 |
 | US-TEN-005 | Bir admin olarak personeli rol ile davet etmek ve rolünü değiştirmek istiyorum, böylece herkes yalnızca gerekeni görür. | P0 | TEN-07, TEN-08 |
-| US-TEN-006 | Bir işletme sahibi olarak negatif stok politikasını seçmek istiyorum, böylece stoğum olmadan satış yapılıp yapılmayacağını belirlerim. | P0 | TEN-12 |
+| US-TEN-006 | Bir işletme sahibi olarak stoğun hiçbir zaman eksiye düşmeyeceğinden emin olmak istiyorum, böylece stoğum olmadan satış yapılmaz (OD-09: sabit kural, seçim yok). | P0 | TEN-12 |
 | US-TEN-007 | Bir işletme sahibi olarak demo veriyle denemek ve sonra tek tıkla temizlemek istiyorum, böylece gerçek veriye geçmeden sistemi öğrenirim. | P1 | TEN-09 |
 | US-TEN-008 | Bir işletme sahibi olarak kurulum kontrol listesi görmek istiyorum, böylece eksik adımları bilirim. | P1 | TEN-10 |
 | US-TEN-009 | Bir kullanıcı olarak birden çok işletmeye üye olup aralarında geçiş yapmak istiyorum, böylece tek hesapla çalışırım. | P1 | TEN-11 |
@@ -107,8 +107,9 @@ Hikâye formatı: "Bir <rol> olarak <ihtiyaç> istiyorum, böylece <fayda>." P0 
   - Given tenant'ta tek owner, When owner'ın kaldırılması veya rolünün düşürülmesi istenirse, Then işlem reddedilir.
   - Given admin, When başka bir admin'i askıya almaya çalışırsa, Then 403 döner.
 - **US-TEN-006**
-  - Given politika "izin verme" ve satılabilir 3, When 5 adetlik sipariş onaylanmaya çalışılırsa, Then onay reddedilir ve eksik satır gösterilir.
-  - Given politika "uyar", When aynı durum oluşursa, Then kullanıcıdan ek teyit istenir ve teyitte onay gerçekleşir, audit'e "negatif stok teyidi" yazılır.
+  - Given satılabilir 3, When 5 adetlik sipariş onaylanmaya çalışılırsa, Then onay reddedilir, eksik satır gösterilir ve hiçbir satıra stok ayrılmaz.
+  - Given satılabilir 3, When 5 adetlik stok düşüm düzeltmesi kaydedilmeye çalışılırsa (eski `confirmNegativeStock: true` ile bile), Then reddedilir; teyit penceresi yoktur.
+  - Given ayarlar ekranı, When açılırsa, Then "Stok eksiye düşmez" sabit kural olarak görünür ve değiştirilemez; API `negativeStockPolicy` için yalnızca `block` kabul eder (`warn`/`allow` → 422).
 
 ---
 
@@ -172,7 +173,8 @@ Hikâye formatı: "Bir <rol> olarak <ihtiyaç> istiyorum, böylece <fayda>." P0 
 - **US-IMP-001**
   - Given Windows-1254 kodlu, `;` ayırıcılı CSV, When yüklenir, Then Türkçe karakterler bozulmadan okunur ve ayırıcı otomatik tespit edilir.
   - Given zorunlu hedef alan (SKU, ad) eşlenmemiş, When "Devam" denirse, Then ilerlenemez ve eksik eşleme vurgulanır.
-  - Given 20 MB üzeri veya 50.000 satır üzeri dosya, When yüklenirse, Then reddedilir ve bölme önerisi gösterilir.
+  - Given 20 MB üzeri (OD-04) veya 10.000 satır üzeri (uygulanan MVP sınırı) dosya, When yüklenirse, Then reddedilir ve bölme önerisi gösterilir.
+  - Given `.xls` veya `.xlsm` dosya, When yüklenirse, Then reddedilir ve `.xlsx` olarak kaydetme önerisi gösterilir (OD-04: yalnızca `.xlsx/.csv`).
 - **US-IMP-002**
   - Given 1.000 satırın 37'si hatalı, When doğrulama biter, Then özet "963 geçerli / 37 hatalı" gösterir ve hatalı satırlar satır no + kolon + hata ile listelenir.
   - Given hatalı satırlar, When "Hatalı satırları indir" tıklanırsa, Then orijinal kolonlar + "Hata" kolonu içeren Excel iner.
@@ -444,7 +446,7 @@ Hikâye formatı: "Bir <rol> olarak <ihtiyaç> istiyorum, böylece <fayda>." P0 
   - Given yeni tenant, When oluşturulur, Then deneme bitiş tarihi (+30 gün) atanır ve tüm modüller açıktır; panoda kalan gün görünür.
   - Given deneme süresi bitti ve paket atanmadı, When gün dolar, Then tenant Temel'e düşer, veri korunur ve owner bilgilendirilir.
 - **US-SUB-004**
-  - Given Profesyonel'den Temel'e düşen ve 3 deposu olan tenant, When depolar açılırsa, Then depolar ve stoklar görüntülenir; yeni transfer başlatılamaz; mevcut stok raporları ve dışa aktarma çalışır.
+  - Given Profesyonel'den Temel'e düşen ve aktif depo sayısı limitin üstünde kalan tenant, When depolar açılırsa, Then depolar ve stoklar görüntülenir; yeni aktif depo eklenemez; **depoyu boşaltmak için transfer ve stok düzeltme yapılabilir** (ürün sahibi kararı OD-03, 2026-11-09); boşalan depo pasifleştirilebilir; mevcut stok raporları ve dışa aktarma çalışır.
   - Given herhangi bir paket durumu, When ledger, rezervasyon, audit, 2FA, dışa aktarma kullanılırsa, Then hiçbiri entitlement kontrolüne takılmaz.
 
 ---

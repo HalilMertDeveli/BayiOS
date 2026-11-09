@@ -1,0 +1,50 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BayiOS.Api/BayiOS.Api.csproj" />
+    <Project Path="src/BayiOS.SharedKernel/BayiOS.SharedKernel.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Billing/">
+    <Project Path="src/Modules/Billing/BayiOS.Modules.Billing/BayiOS.Modules.Billing.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Catalog/">
+    <Project Path="src/Modules/Catalog/BayiOS.Modules.Catalog/BayiOS.Modules.Catalog.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Customers/">
+    <Project Path="src/Modules/Customers/BayiOS.Modules.Customers/BayiOS.Modules.Customers.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Identity/">
+    <Project Path="src/Modules/Identity/BayiOS.Modules.Identity/BayiOS.Modules.Identity.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Imports/">
+    <Project Path="src/Modules/Imports/BayiOS.Modules.Imports/BayiOS.Modules.Imports.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Integrations/">
+    <Project Path="src/Modules/Integrations/BayiOS.Modules.Integrations/BayiOS.Modules.Integrations.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Inventory/">
+    <Project Path="src/Modules/Inventory/BayiOS.Modules.Inventory/BayiOS.Modules.Inventory.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Notifications/">
+    <Project Path="src/Modules/Notifications/BayiOS.Modules.Notifications/BayiOS.Modules.Notifications.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Orders/">
+    <Project Path="src/Modules/Orders/BayiOS.Modules.Orders/BayiOS.Modules.Orders.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Platform/">
+    <Project Path="src/Modules/Platform/BayiOS.Modules.Platform/BayiOS.Modules.Platform.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Pricing/">
+    <Project Path="src/Modules/Pricing/BayiOS.Modules.Pricing/BayiOS.Modules.Pricing.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Reports/">
+    <Project Path="src/Modules/Reports/BayiOS.Modules.Reports/BayiOS.Modules.Reports.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Warehouse/">
+    <Project Path="src/Modules/Warehouse/BayiOS.Modules.Warehouse/BayiOS.Modules.Warehouse.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BayiOS.IntegrationTests/BayiOS.IntegrationTests.csproj" />
+    <Project Path="tests/BayiOS.UnitTests/BayiOS.UnitTests.csproj" />
+  </Folder>
+</Solution>

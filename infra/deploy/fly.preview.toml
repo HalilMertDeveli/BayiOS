@@ -1,0 +1,56 @@
+# BayiOS API — Fly.io PREVIEW configuration TEMPLATE.
+#
+# STATUS: NOT DEPLOYED. No Fly.io account, app or machine exists for BayiOS.
+# Hosting provider is not approved yet (docs/operations/hosting-options.md). Do not run
+# `fly launch` / `fly deploy` until the product owner approves the provider and its cost.
+# See infra/deploy/README.md and docs/operations/deploy-and-rollback.md.
+#
+# Deploy model (after approval): CI builds services/api/Dockerfile, pushes an immutable
+# tag (git SHA) to the Fly registry, then:
+#   fly deploy --config infra/deploy/fly.preview.toml --image registry.fly.io/<app>:<git-sha>
+# Rollback = deploy a previous immutable image tag (see deploy-and-rollback.md §3).
+#
+# Secrets are NEVER written here. They are set on the Fly app (`fly secrets set NAME=...`)
+# by the owner or by a GitHub Environment "preview" deploy job. Required secret NAMES:
+#   ConnectionStrings__Default -> bayios_app role (NOBYPASSRLS, not table owner); never postgres/service-role
+#   Auth__Authority, Auth__Audience, optional Auth__JwksUrl (Supabase Auth JWKS)
+#   Cors__AllowedOrigins__0..n -> preview web origin(s) only (array binding, one variable per origin)
+# NOT on the API app: ConnectionStrings__Migrator (bayios_migrator) — used only by the CI migration step.
+
+app = "bayios-api-preview"          # placeholder; final name chosen at app creation (globally unique)
+primary_region = "fra"              # Frankfurt — same city as Supabase eu-central-1
+
+# No [build] section: images are built and scanned in CI (ci-container.yml), never on Fly builders.
+# No release_command: database migrations are NOT run from the API image or at API startup.
+
+[env]
+  ASPNETCORE_ENVIRONMENT = "Preview"
+  # Port is fixed by the image (ASPNETCORE_HTTP_PORTS=8080). TLS terminates at the Fly proxy.
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Preview only: scale to zero when idle to keep cost near zero.
+  # Production must use min_machines_running >= 1 (background worker + SignalR need always-on).
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+
+[deploy]
+  strategy = "rolling"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

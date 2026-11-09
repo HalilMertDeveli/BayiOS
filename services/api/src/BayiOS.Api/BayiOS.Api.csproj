@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>BayiOS.Api</RootNamespace>
+    <InformationalVersion>0.1.0</InformationalVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BayiOS.SharedKernel\BayiOS.SharedKernel.csproj" />
+    <ProjectReference Include="..\Modules\Billing\BayiOS.Modules.Billing\BayiOS.Modules.Billing.csproj" />
+    <ProjectReference Include="..\Modules\Catalog\BayiOS.Modules.Catalog\BayiOS.Modules.Catalog.csproj" />
+    <ProjectReference Include="..\Modules\Customers\BayiOS.Modules.Customers\BayiOS.Modules.Customers.csproj" />
+    <ProjectReference Include="..\Modules\Identity\BayiOS.Modules.Identity\BayiOS.Modules.Identity.csproj" />
+    <ProjectReference Include="..\Modules\Imports\BayiOS.Modules.Imports\BayiOS.Modules.Imports.csproj" />
+    <ProjectReference Include="..\Modules\Integrations\BayiOS.Modules.Integrations\BayiOS.Modules.Integrations.csproj" />
+    <ProjectReference Include="..\Modules\Inventory\BayiOS.Modules.Inventory\BayiOS.Modules.Inventory.csproj" />
+    <ProjectReference Include="..\Modules\Notifications\BayiOS.Modules.Notifications\BayiOS.Modules.Notifications.csproj" />
+    <ProjectReference Include="..\Modules\Orders\BayiOS.Modules.Orders\BayiOS.Modules.Orders.csproj" />
+    <ProjectReference Include="..\Modules\Pricing\BayiOS.Modules.Pricing\BayiOS.Modules.Pricing.csproj" />
+    <ProjectReference Include="..\Modules\Reports\BayiOS.Modules.Reports\BayiOS.Modules.Reports.csproj" />
+    <ProjectReference Include="..\Modules\Warehouse\BayiOS.Modules.Warehouse\BayiOS.Modules.Warehouse.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BayiOS.UnitTests" />
+    <InternalsVisibleTo Include="BayiOS.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

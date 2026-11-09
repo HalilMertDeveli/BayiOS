@@ -1,0 +1,84 @@
+name: ci-mobile
+
+# Flutter app (apps/mobile, issue #7): format, strict analyze, unit + widget + contract tests, debug APK build.
+# Path-filtered like ci-container / ci-migrations: it does not start on PRs that touch neither the app nor the
+# contract, and ci-gate (infra/ci/ci-gate.sh) then skips it; when it runs, ci-gate waits for it and requires success.
+# The contract test (test/contract/contract_test.dart) reads packages/contracts/openapi.json, so contract drift fails here.
+# No secrets: the build has no --dart-define (the app shows its configuration screen); integration_test (emulator smoke
+# + web ↔ mobile flow against a real stack) runs in e2e-mobile.yml, see apps/mobile/README.md.
+
+on:
+  pull_request:
+    paths:
+      - "apps/mobile/**"
+      - "packages/contracts/**"
+      - ".github/workflows/ci-mobile.yml"
+  push:
+    branches: [main, preview]
+    paths:
+      - "apps/mobile/**"
+      - "packages/contracts/**"
+      - ".github/workflows/ci-mobile.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/mobile
+
+jobs:
+  mobile:
+    # Keep this name stable.
+    name: mobile analyze, test & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+          cache-dependency-path: |
+            apps/mobile/android/*.gradle*
+            apps/mobile/android/gradle/wrapper/gradle-wrapper.properties
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+          pub-cache: true
+
+      - name: Dependencies (locked)
+        run: flutter pub get --enforce-lockfile
+
+      - name: Localizations (gen-l10n)
+        run: flutter gen-l10n
+
+      - name: Format
+        run: dart format --output=none --set-exit-if-changed lib test integration_test
+
+      - name: Analyze (very_good_analysis, strict modes; infos fail too)
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: Unit, widget, accessibility and contract tests
+        run: flutter test --reporter expanded
+
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bayios-depo-debug-apk
+          path: apps/mobile/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 7

@@ -26,7 +26,7 @@ Genel kurallar:
 ## 1. Identity & Tenancy
 
 ### Aggregate: `Tenant`
-- Alanlar: `Id`, `Name`, `Slug`, `Status (active|suspended|closed)`, `DefaultCurrency`, `Locale`, `TimeZone`, `Settings` (VO: `NegativeStockPolicy (block|warn|allow)`, `RequireOrderApproval`, `OrderNumberPrefix` ve roles-permissions.md §4'teki ayarlanabilir kurallar).
+- Alanlar: `Id`, `Name`, `Slug`, `Status (active|suspended|closed)`, `DefaultCurrency`, `Locale`, `TimeZone`, `Settings` (VO: `NegativeStockPolicy` — yalnızca `block`, OD-09: stok eksiye düşmez; `RequireOrderApproval`, `OrderNumberPrefix` ve roles-permissions.md §4'teki ayarlanabilir kurallar).
 - Invariant'lar: `Slug` global benzersiz; `suspended` tenant'ta yazma komutları reddedilir (okuma serbest); en az bir aktif `owner` üyeliği bulunur.
 - Event'ler: `TenantCreated`, `TenantSuspended`, `TenantSettingsChanged`.
 
@@ -47,7 +47,7 @@ Genel kurallar:
 ## 2. Billing & Entitlements
 
 ### Aggregate: `SubscriptionPlan` (platform, tenant'sız)
-- `Code`, `Name`, `Features` (ör. `ai_order_parsing`, `multi_warehouse`, `mobile_scanning`), `Limits` (ör. `max_users`, `max_skus`, `max_warehouses`, `ai_parses_per_month`).
+- `Code`, `Name`, `Features` (ör. `ai_order_parsing`, `multi_warehouse`, `mobile_scanning`), `Limits` (`max_users`, `max_products`, `max_warehouses`, `ai_parses_per_month`; Temel 999 kullanıcı, 999 depo, ürün sınırsız — OD-02; AI 300/ay — OD-08).
 
 ### Aggregate: `TenantSubscription`
 - `PlanCode`, `Status (trialing|active|past_due|cancelled)`, `CurrentPeriodStart/End`.
@@ -100,6 +100,8 @@ Genel kurallar:
 ### Domain servisi: `PriceResolver`
 Çözümleme sırası: müşteriye atanmış liste → bayi grubunun listesi → tenant varsayılan listesi. Geçerlilik tarihi ve kademe (en büyük `MinQuantity ≤ miktar`) uygulanır. Bulunamazsa `pricing.price_not_found` (sipariş satırı manuel fiyat izni gerektirir: `orders.override_price`).
 
+> **Uygulanan durum (#78):** `IPriceResolver.QuoteAsync(PriceQuoteRequest(customerId?, date, lines[variantId, quantity], currency?))` — çağıranın UnitOfWork'ünde yalnızca okur. Her listede kalem yoksa taban liste − yüzde kuralı denenir (`BasePriceListId`, `DiscountPercent`; tek seviye). Fiyat bulunamaması hata değil, satır sonucudur: `status = no_price`, `unitPrice = null`; bilinmeyen müşteri/varyant 422 `validation.failed`. Sonuç satırı kaynak (`customer_price_list | dealer_group_price_list | default_price_list`), kural (`item | base_discount`), liste/kalem kimlikleri, kademe, `pricesIncludeTax` ve ürünün KDV oranını taşır; bayi grubunun `DefaultDiscountPercent` değeri bilgi amaçlı döner, fiyata uygulanmaz. Event'ler henüz yayınlanmıyor (outbox #79 sonrası).
+
 ---
 
 ## 5. Customers
@@ -136,7 +138,7 @@ Genel kurallar:
 
 ### Aggregate: `InventoryBalance` (türetilmiş, ledger ile aynı transaction'da)
 - Anahtar: (TenantId, VariantId, WarehouseId, LocationId?). Alanlar: `OnHand`, `Reserved`, `Version`. `Available = OnHand − Reserved`.
-- Invariant'lar: `Reserved ≥ 0`; negatif stok kapalıysa `OnHand ≥ 0` ve `Reserved ≤ OnHand`; `OnHand = Σ ledger.Quantity` (mutabakat job'ı ile doğrulanır).
+- Invariant'lar: `Reserved ≥ 0`; `OnHand ≥ 0` ve `Reserved ≤ OnHand` (OD-09: stok eksiye düşmez; tek istisna OD-09 öncesinden kalmış, yalnızca iyileşebilen negatif satır); `OnHand = Σ ledger.Quantity` (mutabakat job'ı ile doğrulanır).
 
 ### Aggregate: `StockReservation`
 - `OrderId`, `OrderLineId`, `VariantId`, `WarehouseId`, `LocationId?`, `Quantity`, `Status (active|consumed|released)`, `ConsumedQuantity`.
@@ -171,6 +173,8 @@ Genel kurallar:
 - Invariant'lar: satır miktarı ≤ ilgili sipariş satırının kalan sevk edilebilir miktarı; onaylanan sevkiyat değişmez (iade ayrı akış).
 - Event'ler: `ShipmentConfirmed` (aynı tx'te Orders tarafından işlenir), outbox: `ShipmentConfirmedNotification`.
 
+> **Uygulanan durum (JOB 10, #36–#39):** domain event'leri yerine modül sözleşmeleri, aynı transaction'da: Orders → Warehouse `IOrderFulfillmentListener` (onayda görev oluştur; iptal/short-close'da açık görev ve onaylanmamış sevkiyatı iptal et, toplananlar için `putaway` görevi), Warehouse → Orders `IOrderFulfillment` (start_picking, pack, report_shortage, ship). `PickingTask` satırı rezervasyon (sipariş satırı + lokasyon) başınadır; `AssignedTo` null = havuz. `Shipment` durumları `draft → packed (isteğe bağlı paket kontrolü) → confirmed`, ayrıca `cancelled`; satır `PickedQuantity`, `Quantity` (sevk edilecek), `PackedQuantity`, `ShortQuantity` taşır; koliler `ShipmentPackage`. Görev ve sevkiyat geçişlerinin tek yeri `FulfillmentStateMachine`. Outbox: `warehouse.picking_task_created.v1`, `warehouse.picking_task_assigned.v1`, `warehouse.picking_completed.v1`, `warehouse.shortage_reported.v1`, `warehouse.shipment_confirmed.v1`, `warehouse.shipment_cancelled.v1` (#86), `warehouse.putaway_created.v1`. Ayrıntı: [inventory-and-orders §8](inventory-and-orders.md#8-uygulama-durumu--depo-hazırlama-ve-sevkiyat-job-10--36-37-38-39).
+
 ---
 
 ## 8. Orders
@@ -190,6 +194,8 @@ Genel kurallar:
 
 ### Entity: `OrderStatusHistory`
 - Her geçiş: `FromStatus`, `ToStatus`, `ChangedBy`, `ChangedAt`, `Reason?`. Append-only.
+
+> **Uygulanan durum (#32/#33/#35):** satırlar yalnızca `Draft`'ta değişir (`PendingApproval`'da önce `withdraw`). Fiyat snapshot'ı onayda değil taslağın her düzenlemesinde alınır; onay snapshot'ı yeniden çözmeden dondurur. Domain event'leri yerine outbox mesajları: `orders.approved.v1`, `orders.cancelled.v1`, `orders.shipped.v1`. `OrderStatusHistory` her eylemi (`create` dahil) `Action` ile kaydeder. `OrderShipment` = onaylanan Warehouse `Shipment`'ının sipariş tarafı kaydı (aynı kimlik, JOB 10). Depo eksik bildirimi siparişi `HasShortage` + `report_shortage` zaman çizelgesi satırıyla işaretler (durum değişmez). Ayrıntı: [inventory-and-orders §7](inventory-and-orders.md#7-uygulama-durumu--siparişler-job-11--32-33-35).
 
 ---
 

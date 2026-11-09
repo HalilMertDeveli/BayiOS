@@ -4,11 +4,12 @@
 |---|---|
 | Sahip | Security Engineer (`.claude/agents/security-engineer.md`) |
 | Durum | Taslak v0.1 — kod yazılmadan önce hazırlandı; her modül tamamlandığında güncellenir |
-| Son güncelleme | 2026-11-04 |
+| Son güncelleme | 2026-11-07 (#160 güvenlik denetimi düzeltmeleri) |
 | İlgili | `docs/security/data-policy.md`, `docs/testing/test-strategy.md`, `docs/operations/ci-cd.md`, `SECURITY.md` |
 
-> Bu belge tasarım varsayımlarına dayanır. "Doğrulama testi" sütunundaki testler henüz yazılmamıştır; her biri bir issue'ya
-> dönüştürülür ve test yazılana kadar ilgili risk **açık** sayılır.
+> Bu belge tasarım varsayımlarına dayanır. Satırların koda karşı kanıt eşlemesi (test adı / komut / kod satırı):
+> `docs/security/audit-2026-11.md` §2; o denetimin bulguları ve düzeltme PR'ları aynı belgenin §1'indedir. Kanıtı olmayan
+> satır **açık** sayılır.
 
 ## 1. Kapsam ve varlıklar
 
@@ -97,8 +98,9 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 ### 3.1 Web (Next.js 16, Vercel)
 | STRIDE | Tehdit | Ciddiyet | Önlem | Doğrulama testi |
 |---|---|---|---|---|
-| S | Oturum token'ının XSS ile çalınması | H | CSP (nonce tabanlı), `dangerouslySetInnerHTML` yasak (lint kuralı), Supabase oturumu için httpOnly cookie tercih | Playwright: CSP başlığı var; ESLint kuralı CI'da |
-| T | `NEXT_PUBLIC_` ile sırların istemciye sızması | H | Yalnızca Supabase URL + publishable/anon key public; diğerleri sunucu env | CI: build çıktısında sır deseni taraması (gitleaks `--no-git` dist üzerinde) |
+| S | Oturum token'ının XSS ile çalınması | H | CSP (#160: `script-src 'self' 'unsafe-inline'` — Cache Components/PPR ile nonce mümkün değil, gerekçe `apps/web/next.config.ts`; `connect-src`/`img-src` yalnız uygulama + API + Supabase, `object-src`/`base-uri`/`frame-ancestors 'none'`), `dangerouslySetInnerHTML`/`innerHTML`/`eval` yasak (ESLint `react/no-danger`, `no-restricted-properties`, `no-eval`). Supabase oturum çerezi JS'den okunur (`@supabase/ssr` tarayıcı istemcisi gereği; httpOnly bu mimaride mümkün değil — kalan risk: audit-2026-11 M-2) | `e2e/security-headers.spec.ts` (başlıklar, ana rotalarda CSP ihlali 0, yabancı fetch/beacon/script engelli, çerçeveleme engelli); `src/lib/security/headers.test.ts`; ESLint CI'da |
+| T | `NEXT_PUBLIC_` ile sırların istemciye sızması | H | Yalnızca Supabase URL + publishable/anon key public; diğerleri sunucu env | CI: `ci-web` → `gitleaks dir .next/static` (#160) |
+| T | Clickjacking (tek tıklık onay/sevk/yetki eylemleri) | M | `frame-ancestors 'none'` + `X-Frame-Options: DENY` (#160) | `security-headers.spec.ts` (yabancı origin çerçeveleyemez, kontrol çerçevesi çalışır) |
 | R | Kullanıcı işlemlerinin izlenememesi | M | Tüm yazmalar API'de audit'lenir (web'de yazma yok) | API audit testleri |
 | I | Preview deploy'larının public erişimi | M | Vercel Deployment Protection (Vercel Authentication) preview'da açık; preview yalnızca sentetik veri | Manuel kontrol listesi (release readiness) |
 | D | — (Vercel CDN) | L | Vercel DDoS koruması | — |
@@ -109,7 +111,7 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 |---|---|---|---|---|
 | S | Token'ın cihazdan çalınması | M | `flutter_secure_storage` (Keychain/Keystore), kısa ömürlü access token | Kod review kontrol listesi |
 | T | APK'nın değiştirilip API'ye istek atılması | M | Sunucu istemciye güvenmez; tüm kurallar API'de | API negatif testleri |
-| I | Uygulamaya sır gömülmesi | H | Yalnızca API URL + Supabase public key `--dart-define`; FCM `google-services.json` gizli değildir ama repoya yalnızca dev için | CI: gitleaks |
+| I | Uygulamaya sır gömülmesi | H | Yalnızca API URL + Supabase public key + Firebase istemci kimlikleri `--dart-define` (`env/*.json`, commit edilmez); `google-services.json` / `GoogleService-Info.plist` hiç commit edilmez (Firebase Dart'tan başlatılır, #44); FCM servis hesabı yalnızca API host secret'ı | CI: gitleaks |
 | I | Bildirimde hassas veri | M | Bildirim yükü yalnızca ID/genel metin | Unit test: payload builder |
 | D | Ağ kesintisinde tekrarlı gönderim → çift kayıt | H | `Idempotency-Key` zorunlu | Integration: aynı key ile 2 istek → tek kayıt |
 
@@ -123,7 +125,8 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 | R | Kritik işlemlerin inkârı | M | Audit olayları (bölüm 7), değiştirilemez tablo | Audit integration testleri |
 | I | Hata mesajında stack trace / SQL | M | ProblemDetails, production'da detay yok | Integration: 500 yanıtında stack yok |
 | I | IDOR (`/orders/{id}`) | C | Her sorgu tenant filtresi + RLS; başka tenant'ın ID'si → 404 | `TenantIsolationMatrixTests` |
-| D | Kaba kuvvet / yoğun istek | H | ASP.NET Core rate limiter (bölüm 6) | Integration: limit aşımında 429 |
+| D | Kaba kuvvet / yoğun istek | H | ASP.NET Core rate limiter (bölüm 6.5; #160) | `Security/AuditFixesTests` (429 + `Retry-After`, kova ayrımı, sahte tenant başlığı yeni kova değil), `UnitTests/Platform/RateLimitingTests` |
+| S | Anonim Supabase oturumu (`is_anonymous`) | L | Kimlik doğrulamada her uçta 401 (#160, audit L-2); ayar da kapalı | `AuditFixesTests.Anonymous_sessions_are_rejected_everywhere` |
 | E | Rol yükseltme (sales → admin işlemi) | H | Policy tabanlı yetki, endpoint başına izin matrisi | `RbacMatrixTests` (rol × endpoint) |
 
 ### 3.4 Veritabanı (Supabase PostgreSQL 17)
@@ -142,7 +145,7 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 | I | Public bucket ile dosya sızıntısı | H | Tüm bucket'lar private | Ortam kontrol scripti: `public=false` |
 | I | Signed URL'nin loglarda/Referer'da sızması | M | Kısa TTL (≤ 5 dk indirme, ≤ 15 dk yükleme), URL loglanmaz, `Referrer-Policy: no-referrer` | Log redaction testi |
 | T | Yol manipülasyonu ile başka tenant klasörüne yazma | H | Yol sunucuda üretilir: `{tenant_id}/{uuid}`; istemci dosya adı yalnızca metadata | Unit: path builder; integration: `../` içeren ad |
-| D | Büyük dosya ile depolama/egress tüketimi | M | Boyut limiti (import: 10 MB), tenant kotası | Integration: limit üstü → 413 |
+| D | Büyük dosya ile depolama/egress tüketimi | M | Boyut limiti (import: 20 MB, OD-04), tenant kotası | Integration: limit üstü → 413 |
 
 ### 3.6 Job worker (Postgres kuyruk + outbox)
 | STRIDE | Tehdit | Ciddiyet | Önlem | Doğrulama testi |
@@ -151,6 +154,9 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 | T | Aynı işin iki kez işlenmesi | H | `FOR UPDATE SKIP LOCKED`, idempotent handler, outbox `processed_at` | Concurrency: 2 worker, 1 iş → 1 etki |
 | D | Zehirli iş (sürekli hata) | M | Maks deneme + dead-letter durumu | Unit: `max_attempts` sonrası `dead` (ADR 0006) |
 | R | İş sonuçlarının izlenmemesi | L | İş başlangıç/bitiş audit + metrik | — |
+| I | `last_error` alanına kişisel veri / SQL değeri / sır sızması (operatörler tüm tenant'ları görür) | M | Yalnızca `JobErrorSanitizer` çıktısı: tip + temizlenmiş mesaj, PostgreSQL'de SQLSTATE + kısıt adı; `Detail`/parametre yok (#89) | `JobErrorSanitizerTests`, `PlatformMaintenanceTests.Failed_job_stores_a_sanitized_error_without_values` |
+| T/D | Hiçbir worker'ın almayacağı (kayıtsız) tipte iş kuyruğa yazılır, iş değişikliği "başarılı" görünür | L | `EnqueueAsync` kayıtsız tipi transaction içinde reddeder (`UnknownJobTypeException`) | `PlatformMaintenanceTests.Enqueue_of_an_unregistered_job_type_fails_inside_the_transaction`, `Every_job_handler_shipped_in_the_product_is_registered_under_its_type` |
+| D | Biten job/outbox satırlarının sınırsız büyümesi | L | `platform.queue_cleanup` (7/30/7 gün, partili) | `PlatformMaintenanceTests.Queue_cleanup_…` |
 
 ### 3.7 AI entegrasyonu (WhatsApp ayrıştırma, Claude API)
 | STRIDE | Tehdit | Ciddiyet | Önlem | Doğrulama testi |
@@ -161,6 +167,24 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 | I | PII'nin üçüncü tarafa gönderilmesi | M | Telefon numaraları/isimler maskelenerek gönderilir (mümkünse); veri işleme sözleşmesi | Unit: redaction |
 | D | Maliyet saldırısı (çok uzun metin, çok istek) | M | Girdi uzunluk limiti, tenant başına günlük kota, bütçe alarmı | Integration: kota aşımı → 429 |
 | E | Modelin onaysız sipariş kesinleştirmesi | C | AI yalnızca `draft` üretir; onay ayrı endpoint, ayrı yetki | E2E #10 + RBAC testi |
+
+**Uygulanan önlemler (#46–#50, JOB 12):**
+- *Injection:* sabit, sürümlü sistem talimatı (`order-parse.system-prompt.md`); mesaj kullanıcı turunda
+  `<untrusted_message>` bloğunda, `<`/`>` nötrlenmiş (kapanış etiketi taklit edilemez); model aracı yok, yalnızca
+  structured output. Çıktı sunucuda yeniden doğrulanır (`ParsedOrderValidator`: tam alan kümesi, şema dışı alan —
+  ör. `price`, `stock`, `approve` — tüm çıktıyı reddeder; sınırlar). Grounding: mesajda geçmeyen satır atılır,
+  mesajda geçmeyen ürün kodu silinir. Kural ayrıştırıcı da talimat/fiyat/JSON/markup içeren parçaları satır yapmaz.
+  Testler: `AnthropicOrderParserTests` (kayıtlı-biçimli kötü niyetli çıktılar: fiyat alanı, uydurma satır/kod,
+  "ONAYLANDI fiyat 0" notu, sınır ihlalleri), `OrderParsingEvaluationTests.Injection_messages_have_no_effect_on_the_result`
+  (21 injection örneği: hepsi işaretli, yalnızca gerçek satırlar, müşterinin yazdığı miktarlar).
+- *Halüsinasyon:* eşleştirme deterministik ve yalnızca tenant kataloğu; belirsiz satırda öneri yok (≤ 5 aday); onayda
+  her satır için açık `variantId`; fiyat Pricing'den. Değerlendirme kümesinde yanlış eşleşme oranı = 0 CI'da zorunlu.
+- *Veri sızıntısı:* istek gövdesinde yalnızca maskelenmiş mesaj + sabit talimat (katalog, fiyat, müşteri adı, tenant
+  kimliği yok — `AssistantApiTests.Ai_path_…`); anahtar yalnızca sunucu yapılandırmasında (`Anthropic__ApiKey`), loglanmaz.
+- *Maliyet saldırısı:* girdi ≤ 4.000 karakter / 150 satır; saatlik 30 ayrıştırma/tenant (429 + Retry-After, çoklu
+  instance'ta kesin — testli); günlük AI çağrı ve token kotası (aşımda ücretsiz kural ayrıştırıcı).
+- *Onaysız sipariş:* `whatsapp_ai` kaynaklı taslak `require_order_approval = false` olsa da submit'te
+  `pending_approval`'da bekler (testli).
 
 ### 3.8 CI/CD (GitHub Actions, public repo)
 | STRIDE | Tehdit | Ciddiyet | Önlem | Doğrulama testi |
@@ -187,6 +211,23 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 | T10 | Realtime / SignalR | Grup adı tahmin edilerek başka tenant olayları dinlenir | Gruplara yalnızca sunucu ekler (`tenant:{id}`), membership doğrulandıktan sonra | Integration: SignalR test client |
 | T11 | Outbox / bildirim | Bildirim yanlış tenant kullanıcılarına gider | Alıcılar tenant membership'ten sorgulanır | Integration |
 
+### 4.1 Üye daveti ve üyelik yönetimi (uygulanan, #129)
+
+E-posta gönderim altyapısı ve Supabase service-role anahtarı **yoktur**. Davet eden, `POST /members/invitations`
+yanıtındaki token'ı (32 rastgele bayt, base64url, bir kez gösterilir) davetliye kendisi iletir. Kabul açık bir uçtur
+(`POST /invitations/accept`, `X-Tenant-Id` yok); `GET /me` otomatik katılım yapmaz (salt okunur transaction; davet
+spam'iyle rıza dışı tenant'a eklemeyi önler).
+
+| # | Tehdit | Önlem | Test |
+|---|---|---|---|
+| I1 | Token sızıntısı (log, ekran görüntüsü, sohbet) ile hesap ele geçirme / yetkisiz katılım | Token tek başına yetmez: kabul, erişim token'ının `email` claim'i davet adresiyle (küçük harf, kırpılmış) **aynı** ve **doğrulanmış** olmalı. Token düz saklanmaz (yalnızca SHA-256, `identity.invitations.token_hash`); yanıt idempotency deposuna da yazılmaz (oluşturma/yenileme `Idempotency-Key` almaz). Web bağlantıyı URL fragment'i (`#token`) ile kurmalıdır (sunucu/Referer'a gitmez) | `InvitationsApiTests` (farklı/eksik e-posta, DB'de token yok, idempotency deposunda token yok) |
+| I2 | Doğrulanmamış e-posta ile davet adresini sahiplenme | Supabase token'ında üst düzey `email_verified` yok (yerel GoTrue ile doğrulandı); `user_metadata.email_verified` onayda `true` olur **ama kullanıcı tarafından yazılabilir**. Asıl güvence Supabase "Confirm email" ayarıdır (`enable_confirmations = true`: onaysız adres oturum alamaz — canlı yerel yığında doğrulandı). Üst düzey `email_verified` (OIDC / custom access-token hook) her zaman kabul edilir; `Invitations:TrustUserMetadataEmailVerified=false` ile yalnızca o kabul edilir. Anonim oturum (`is_anonymous`) hiçbir zaman sayılmaz | `InvitationsApiTests.An_unverified_or_anonymous_session_cannot_accept`, `MemberRulesTests` |
+| I3 | Replay / eski token | Tek kullanımlık (kabulde `accepted`); yenileme token'ı döndürür, eskisi geçersiz; iptal edilen/kabul edilen token → 404 `invitation.not_found` (bilinmeyen token ile aynı yanıt); süre 7 gün (`Invitations:LifetimeDays`) → 410 | `A_used_token_cannot_be_replayed_by_anyone`, `Expired_revoked_and_rotated_tokens_are_rejected` |
+| I4 | RLS dışı arama (davetli henüz üye değil) | `identity.find_invitation_tenant(bytea)` SECURITY DEFINER, sabit `search_path`, PUBLIC'e kapalı; sahibin politikası yalnızca `pending` satırları okur; fonksiyon yalnızca tenant id döner. Sonrası o tenant'ın bağlamında normal RLS ile | `The_runtime_role_finds_an_invitation_only_through_the_token_lookup_function`, `DatabaseSecurityGuardTests` |
+| I5 | Rol yükseltme (admin → admin/owner atama, owner'ı askıya alma) | Hiyerarşi: owner admin ve altını, admin yalnızca manager ve altını davet eder/yönetir (dipnot 1, K kaydı serviste değerlendirilir); `owner` yalnızca sahiplik devriyle (`ownership.transfer`, yalnızca owner) verilir; son aktif owner düşürülemez/askıya alınamaz; kişi kendini askıya alamaz. Üye değişiklikleri tenant başına transaction kilidiyle sıralanır (eşzamanlı iki owner birbirini düşüremez) | `MemberManagementApiTests` (rol × hedef × yeni rol tablosu, eşzamanlılık) |
+| I6 | Davet spam'i / koltuk aşımı | `members.invite` yalnızca owner/admin; e-posta başına tek bekleyen davet; `max_users` = aktif üye + açık davet, kilit altında sayılır (403 `entitlement.limit_exceeded`); genel yazma rate limit'i | `Max_users_counts_active_members_and_open_invitations`, `Concurrent_invitations_cannot_overshoot_max_users` |
+| I7 | Askıya alınan kullanıcının süren oturumu | Tenant çözümleme her istekte yalnızca `active` üyeliği kabul eder: askıya alma bir sonraki istekte etkilidir. Supabase oturumu iptal edilmez (service-role yok); kullanıcı başka tenant'larına erişmeye devam eder | `A_disabled_member_loses_access_on_the_next_request_and_regains_it_when_enabled` |
+
 ## 5. JWT tuzakları ve kontroller
 
 | Tuzak | Kontrol |
@@ -211,8 +252,8 @@ Test: `JwtValidationTests` — yanlış imza, yanlış issuer, yanlış audience
 
 ### 6.2 Zip bomb / xlsx açma limitleri
 xlsx bir ZIP arşividir. Limitler (başlangıç değerleri, ölçümle ayarlanır):
-- Yüklenen dosya ≤ 10 MB; MIME + uzantı + magic byte (`PK\x03\x04`) kontrolü.
-- Açılmış toplam boyut ≤ 100 MB; tek giriş ≤ 50 MB; sıkıştırma oranı ≤ 100:1; giriş sayısı ≤ 1.000.
+- Yüklenen dosya ≤ 20 MB (ürün sahibi kararı OD-04, 2026-11-09; yalnızca `.xlsx/.csv`, `.xls` onaylanmadı); MIME + uzantı + magic byte (`PK\x03\x04`) kontrolü.
+- Açılmış toplam boyut ≤ 100 MB; tek giriş ≤ 50 MB; sıkıştırma oranı ≤ 100:1; giriş sayısı ≤ 1.000. Bu sınırlar 20 MB'a geçişte bilerek büyütülmedi: 10.000 satır × 100 kolonu ayrıştırma işini sınırlarlar; meşru büyük bir `.xlsx` çoğunlukla zaten sıkıştırılmış parçalar (görseller) yüzünden büyüktür ve açıldığında boyutu pek değişmez.
 - Satır ≤ 50.000, sütun ≤ 100 (tenant planına göre); hücre metni ≤ 4.000 karakter.
 - XML dış varlıkları (XXE) kapalı; makro içeren `.xlsm` reddedilir.
 - Ayrıştırma arka plan işinde, zaman aşımı (ör. 120 sn) ve bellek sınırıyla.
@@ -240,22 +281,140 @@ Webhook hedefleri, URL'den katalog/görsel çekme gibi özellikler eklenirse:
 | Export | 10/saat | tenant |
 Aşımda `429` + `Retry-After`. Değerler pilot ölçümüyle güncellenir.
 
+**Uygulama (#160):** `services/api/src/BayiOS.Api/Platform/RateLimiting/ApiRateLimiting.cs`. Sınırlayıcı kimlik
+doğrulamadan hemen sonra, `TenantContextMiddleware` havuzdan bağlantı almadan **önce** çalışır (taşkın veritabanına
+dokunmadan reddedilir). İki zincirli kova: `(kullanıcı, X-Tenant-Id, okuma|yazma)` = yukarıdaki limit ve
+`(kullanıcı, okuma|yazma)` tüm tenant başlıkları üzerinden = `RateLimiting:UserAcrossTenantsFactor` (5) × limit —
+`X-Tenant-Id` döndürmek bütçe kazandırmaz (üye olunmayan başlık yine 403). Token bucket: kova bir dakikalık bütçeyi tutar,
+dakikada tam limit kadar dolar (300 → 1 sn'de 5; 60 → 1 sn'de 1); kuyruk yok. GET/HEAD = okuma, diğerleri yazma. Yanıt:
+`429` Problem Details `rate_limit.exceeded` + `Retry-After` (sn). Muaf: `/health*`, kimliksiz istekler (veritabanına
+gitmeden 401), meta. Yapılandırma: `RateLimiting:Enabled|ReadsPerMinute|WritesPerMinute` (varsayılanlar yukarıdaki
+değerler; `appsettings.Development.json` yerel demo tohumlama için yükseltir; test/yük/E2E koşum altyapıları kendi
+bütçesini verir). **Çoklu instance:** sayaçlar instance belleğindedir; üretim tek, sürekli açık makinedir
+(`infra/deploy/fly.production.toml`). N instance'ta bir istemci en fazla N × limit alır (hâlâ sınırlı). Ölçeklenirken
+limitler instance sayısına bölünmeli ya da sayaçlar paylaşılan depoya (Redis vb.) taşınmalıdır. Postgres sayacı bilinçli
+olarak seçilmedi: korunan veritabanına her isteğe bir yazma ekler.
+
 ## 7. Audit olayları listesi
 Her olay: `id, tenant_id, actor_user_id, actor_role, action, entity_type, entity_id, occurred_at, ip(hash), user_agent(kısaltılmış), correlation_id, before/after özeti (PII hariç)`.
 
 | Kategori | Olaylar |
 |---|---|
-| Kimlik/üyelik | `member.invited`, `member.joined`, `member.role_changed`, `member.removed`, `tenant.created`, `tenant.settings_changed` |
-| Erişim | `auth.forbidden_tenant_access` (başka tenant denemesi), `auth.rbac_denied`, `rate_limit.exceeded` |
+| Kimlik/üyelik | `member.invited`, `member.invite_resent`, `member.invite_revoked`, `member.joined`, `member.role_changed`, `member.disabled`, `member.enabled`, `member.ownership_transferred`, `member.removed`, `tenant.created`, `tenant.settings_changed`, `tenant.rules_changed` |
+| Erişim | `auth.membership_denied` (başka/askıdaki tenant denemesi; eski taslak adı `auth.forbidden_tenant_access`), `auth.access_denied` (izin/K-O reddi; eski taslak adı `auth.rbac_denied`), `auth.entitlement_denied` (plan/limit reddi), `rate_limit.exceeded` |
 | Katalog/fiyat | `product.created/updated/archived`, `price_list.updated`, `price_list.imported` |
-| Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.transfer_posted`, `inventory.count_posted` |
-| Sipariş | `order.created`, `order.approved` (rezervasyon), `order.cancelled` (release), `order.pick_progress`, `order.shipped` |
-| Import/Export | `import.started/completed/failed`, `export.requested/downloaded` |
+| Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.negative_stock_confirmed` (eski `warn` politikası; OD-09 ile stok eksiye düşmediğinden artık yazılmaz, eski kayıtlar okunur), `inventory.threshold_set`, `inventory.threshold_removed` (minimum stok eşiği), `inventory.transfer_posted` (transfer bacağı veya raf taşıma), `inventory.count_posted` (sayım düzeltmesi) |
+| Transfer/sayım (#168) | `stock_transfer.created`, `stock_transfer.dispatched`, `stock_transfer.received`, `stock_transfer.closed` (kayıp / kaynağa iade + sebep), `stock_transfer.cancelled`; `stock_count.created`, `stock_count.submitted`, `stock_count.recount_requested`, `stock_count.applied`, `stock_count.cancelled` |
+| Sipariş | `order.created`, `order.approved` (rezervasyon), `order.cancelled` (release), `order.pick_progress`, `order.shipped`, `order.remaining_closed` (short-close, kalan rezervasyonlar bırakılır), `order.price_overridden` (liste fiyatı dışı fiyat/iskonto) |
+| Depo hazırlama/sevkiyat | `picking.task_created`, `picking.task_assigned`, `picking.task_cancelled`, `picking.shortage_reported`, `shipment.packed`, `shipment.confirmed` (stok çıkışı), `shipment.cancelled` (onaylanmamış sevkiyat iptali; stok hareketi yok, toplananlar putaway'e) |
+| Import/Export | `import.started/completed/failed/cancelled`, `export.requested/downloaded` |
 | AI | `ai.parse_requested`, `ai.draft_created`, `ai.line_flagged_ambiguous`, `ai.draft_approved/rejected` |
 | Veri hakları | `data_export.tenant_requested`, `data_deletion.tenant_requested/completed` |
 | Güvenlik | `api_key.created/revoked` (ileride), `integration.webhook_changed` |
 
-Audit tablosu append-only; okuma yalnızca owner/admin; saklama süresi `data-policy.md`'de.
+**Uygulanan eylem kodları (2026-11-05, #89 denetimi; 2026-11-07 #60 RC kontrolünde koddan yeniden sayıldı):**
+`tenant.created`, `tenant.settings_changed` (iş ayarları ve firma
+profili; vergi no/telefon yalnızca `changed`), `inventory.receipt_posted`, `inventory.adjustment_posted`,
+`inventory.negative_stock_confirmed`, `inventory.threshold_set` / `inventory.threshold_removed` (#137/#151; entity
+`stock_threshold`; yalnızca `variantId`, `warehouseId` ve `minQuantity` from/to — stok hareketi oluşmaz), `order.created`, `order.approved`, `order.cancelled`, `order.shipped`,
+`order.remaining_closed`, `order.price_overridden`, `order.pick_progress`, `picking.task_created`, `picking.task_assigned`,
+`picking.task_cancelled`, `picking.shortage_reported`, `shipment.packed`, `shipment.confirmed`, `shipment.cancelled`,
+`import.started`, `import.completed`, `import.failed`, `import.cancelled`, `import.rollback_requested`, `import.rolled_back`,
+`import.rollback_failed`, `customer.anonymized` (yalnızca sayılar: silinen adres, maskelenen sipariş; kişisel veri yok),
+`ai.parse_requested` (ayrıştırıcı, model, prompt sürümü, geri dönüş nedeni, satır/eşleşme sayıları, uyarı kodları,
+token sayıları), `ai.draft_created` (sipariş id/no, seçim sayıları: proposed/candidate/manual/skipped),
+`ai.draft_rejected` — AI olaylarında **mesaj metni, ürün metni veya müşteri bilgisi yoktur**
+(`ai.line_flagged_ambiguous` ayrı olay yerine `ai.parse_requested.ambiguous` sayısı; `ai.draft_approved` = Orders'ın
+`order.approved` olayı), `billing.trial_started`, `billing.trial_expired`, `billing.module_activated`,
+`billing.module_deactivated`, `billing.module_trial_expired` (#124; ödeme bilgisi yok), `export.downloaded` (#125; yalnızca
+rapor, biçim ve satır sayısı — dışa aktarılan veri yoktur), **üyelik (#129):** `member.invited` (rol, bitiş),
+`member.invite_resent` (rol, token sayısı, bitiş), `member.invite_revoked` (rol), `member.joined` (kullanıcı id, rol, davet
+id), `member.role_changed` (kullanıcı id, rol from/to), `member.disabled` / `member.enabled` (kullanıcı id, rol, durum
+from/to), `member.ownership_transferred` (eski/yeni owner kullanıcı id'leri) — **e-posta adresi ve token hiçbir olayda
+yoktur** (data-policy §8); `tenant.rules_changed` (roles-permissions §4 kuralları: satış onayı, iskonto sınırı, maliyet
+görünürlüğü, depo barkod/mal kabul, 2FA bayrağı (negatif stok artık ayar değil, OD-09); diğer iş ayarları `tenant.settings_changed`'de kalır),
+`billing.trial_shortened` (operatör aracı `infra/ops/shorten-trial.sql`, `actor_role = 'operator'`). Kaynak:
+`SharedKernel/Platform/Audit/AuditLog.cs` (`AuditActions`) ve modül sabitleri (`BillingAuditActions`,
+`ImportAuditActions`, `CustomerAuditActions`, `AssistantAuditActions`, `OrderAuditActions`, `ReportAuditActions`).
+
+**Erişim reddi olayları (#89):** her 403 bir audit satırı yazar; entity tipi `access`, `entity_id` boş.
+- `auth.membership_denied` — `TenantContextMiddleware`: `X-Tenant-Id` aktif üyelik olmayan bir tenant'ı gösteriyor
+  (`code` = `tenant.access_denied`; `membershipStatus` = `none` | `invited` | `disabled`) ya da tenant aktif değil
+  (`code` = `tenant.inactive`, `membershipStatus` = `active`, `actor_role` = üyenin rolü). Satır **adı verilen** tenant'ın
+  log'una yazılır (owner/admin başka bir kullanıcının denemesini görür); o tenant yoksa hiçbir şey yazılmaz.
+- `auth.access_denied` — izin kapısı (`auth.forbidden`, `auth.disabled_by_tenant_rule` + `condition`), servis
+  düzeyindeki K/O kayıt reddi (`orders.not_owner`, `orders.discount_limit_exceeded` … — modülün 403 kodu) ve
+  fail-closed güvenlik ağı (`UnitOfWorkFilter`).
+- `auth.entitlement_denied` — `RequireEntitlement` kapısı (`entitlement.required`) ve servis limiti
+  (`entitlement.limit_exceeded`); `feature` = özellik/limit kodu.
+
+Yük yalnızca sunucu değerleridir: `code`, `method`, `route` (**şablon**, ör. `/api/v1/orders/{id:guid}` — ham yol veya
+sorgu yok), `permissions` (reddedilen izin ya da uç noktanın `anyOf` listesi), `condition`, `feature`,
+`suppressedRepeats`. Aktör = doğrulanmış JWT `sub`, `correlation_id`, `ip_hash` yalnızca `Audit:IpHashKey` varsa;
+**user agent, gövde, başlık metni veya e-posta yazılmaz**. Tekrarlanan idempotent yanıt (replay) yeniden yazılmaz.
+
+*Transaction:* istek UnitOfWork'ü 403'te geri alınır; satır bu yüzden `AccessDenialAuditLog` içinde havuzdan alınan
+**ayrı bir `bayios_app` bağlantısında, kendi kısa transaction'ında** yazılır: `set_config('app.user_id'|'app.tenant_id',
+…, true)` + `INSERT … SELECT … FROM identity.tenants WHERE id = @tenant` (RLS politikası `tenant_isolation` aynen
+uygulanır; sahte tenant id satır üretmez). İstemcinin bağlantıyı kesmesi yazmayı iptal etmez (`RequestAborted`
+kullanılmaz); yazma zaman aşımı 5 sn. Yazma hatası 403'ü değiştirmez: hata log'a (yalnızca id'ler) ve metriğe gider.
+
+*DoS sınırı (tekilleştirme seçimi):* örnekleme yerine **tekilleştirme** — örnekleme ilk denemeyi kaçırabilir,
+tekilleştirme her (kullanıcı, tenant, kod) için ilk reddi her zaman yazar. Pencere başına anahtar başına en fazla bir
+satır (`Audit:DenialDedupeWindow`, varsayılan 60 sn, 1 sn…1 sa); pencere içindeki tekrarlar sayılır ve anahtarın
+sonraki satırında `suppressedRepeats` olarak raporlanır. Bellek tablosu en fazla `Audit:DenialDedupeCapacity` (10 000)
+canlı anahtar tutar; doluysa ve süresi dolan yoksa yeni anahtarlar **yalnızca log'lanır** (süpürme en sık pencerenin
+onda birinde bir) — veritabanı yazımı pencere başına ≤ kapasite. Aynı anda en fazla `Audit:DenialMaxConcurrentWrites`
+(4) yazma bağlantı tutar; 2 sn'de yuva bulamayan red yazılmaz, log'lanır (istek başına ikinci bağlantı havuzu
+tüketemez). Kodlar sunucu sabitleri olduğundan anahtar uzayı kullanıcı × tenant ile sınırlıdır; hız sınırlayıcı (§6.5)
+bu yola ulaşmadan önce kullanıcı başına istek sayısını zaten sınırlar. Metrik: `bayios.audit.access_denials`
+(`outcome` = `written` | `suppressed` | `dropped` | `unknown_tenant` | `failed`). Instance başına: N instance anahtar ve
+pencere başına en fazla N satır yazar.
+
+*401 bilinçli olarak audit'e yazılmaz, yalnızca log'a* (`RequestLoggingMiddleware`, durum kodu + rota): geçersiz,
+süresi dolmuş veya anonim (L-2, #161) token'da doğrulanmış bir kimlik yoktur, `X-Tenant-Id` ise doğrulanmamış bir
+istemci değeridir. 401'i bir tenant'ın log'una yazmak kimliksiz herkese herhangi bir tenant'ın audit tablosuna satır
+yazdırmak olurdu; kimliksiz istekler hız sınırlayıcıdan da muaftır (veritabanına gitmeden 401) — bu, sınırsız bir yazma
+yükselticisi olurdu. Kimlik doğrulama saldırıları Supabase Auth tarafında ve istek log'unda izlenir.
+
+Kalan riskler: (1) çok sayıda gerçek hesap kontrol eden saldırgan, var olmayan tenant id'leri döndürerek tekilleştirme
+tablosunu doldurabilir; bu sürede yeni reddler veritabanına değil yalnızca log'a/metriğe düşer (`dropped`) — sessiz
+değildir. (2) Pencere içindeki son tekrarlar, anahtar bir daha görülmezse `suppressedRepeats` olarak hiç yazılmaz.
+(3) Bir instance çökerse bellek tablosu sıfırlanır (en fazla bir satır fazlası). Doğrulama: `AccessDenialAuditTests`
+(her yol tam bir satır, geri alma satırı silmez, tenant izolasyonu API + RLS, pencere/tekrar), `AccessDenialDeduplicatorTests`,
+`TenantIsolationSweepTests` (X-Tenant-Id taraması: A'daki tek değişiklik çağıran başına tek `auth.membership_denied`).
+
+Tablodaki şu kodlar **henüz uygulanmadı** (2026-11-07 itibarıyla kodda yok): `member.removed` (üyelik silinmez, askıya
+alınır); `rate_limit.exceeded` (429, sınırlayıcı veritabanına dokunmadan önce verir — audit'e yazmak taşkını
+veritabanına taşırdı; yalnızca Problem Details kodu ve log); `product.created/updated/archived`, `price_list.updated`,
+`price_list.imported` (katalog/fiyat değişiklikleri şu an audit'e yazılmaz; içe aktarma yalnızca `import.*` ile izlenir);
+`export.requested` (dışa aktarma
+eşzamanlı; yalnızca `export.downloaded`); `data_export.tenant_requested`, `data_deletion.tenant_requested/completed`
+(tenant veri hakları akışı yok); `api_key.*`, `integration.webhook_changed` (özellik yok).
+
+Audit tablosu append-only; okuma yalnızca owner/admin; saklama süresi `data-policy.md` §4 (2 yıl).
+
+**Saklama istisnası (#89) — append-only kuralının tek, gözden geçirilmiş istisnası:** 2 yıldan eski olaylar saatlik
+tenant'sız `platform.audit_retention` job'ıyla silinir. Silme yalnızca `audit.purge_expired_audit_events(retention, limit)`
+üzerinden olur (SECURITY DEFINER, sahibi `bayios_migrator`, sabit `search_path`, PUBLIC'e kapalı). Append-only tetikleyicisi
+yalnızca *sahip* rolüyle, fonksiyonun koyduğu transaction-yerel işaretle ve `occurred_at < now() - 2 yıl` olan satırın
+DELETE'ine izin verir; UPDATE/TRUNCATE her zaman reddedilir. `bayios_app`'in UPDATE/DELETE yetkisi yoktur (işaret koysa da);
+süper kullanıcı sahip olmadığından reddedilir; sahip FORCE RLS altında yalnızca 2 yıldan eski satırları görür. Tabanı
+kısaltmak migration + güvenlik incelemesi gerektirir; uzatmak `Audit:Retention` yapılandırmasıdır. Kalan risk: sahip rolü
+(`bayios_migrator`, yalnızca CI/deploy migration adımında) tetikleyiciyi zaten değiştirebilir — bu, istisnadan bağımsız
+mevcut bir güven varsayımıdır. Doğrulama: `PlatformMaintenanceTests` (yalnızca eski satırlar silinir; app/sahip/süper
+kullanıcı doğrudan silemez/değiştiremez), `DatabaseSecurityGuardTests` (yetkiler, politika allowlist'i, SECURITY DEFINER).
+
+### 7.1 Outbox olay tipleri (uygulanan)
+Yük yalnızca kimlik/durum içerir (kişisel veri yok); teslim en az bir kez, tüketici `message_id` ile idempotent (ADR 0006).
+
+| Modül | Olay tipleri |
+|---|---|
+| Orders | `orders.approved.v1`, `orders.cancelled.v1`, `orders.shipped.v1` |
+| Warehouse | `warehouse.picking_task_created.v1`, `warehouse.picking_task_assigned.v1`, `warehouse.picking_completed.v1`, `warehouse.shortage_reported.v1`, `warehouse.shipment_confirmed.v1`, `warehouse.shipment_cancelled.v1`, `warehouse.putaway_created.v1` |
+| Imports | `imports.import_completed.v1`, `imports.import_rolled_back.v1` |
+
+Henüz abonesi olan tip yok (Notifications modülü gelince); abonesiz mesaj yalnızca işlenmiş işaretlenir ve 7 gün sonra silinir.
 
 ## 8. En önemli riskler ve doğrulama
 

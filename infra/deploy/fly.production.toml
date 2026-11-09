@@ -1,0 +1,46 @@
+# BayiOS API — Fly.io PRODUCTION configuration TEMPLATE.
+#
+# STATUS: NOT DEPLOYED. No Fly.io account, app or machine exists for BayiOS. Used only by
+# .github/workflows/deploy-production.yml, which is disabled until the owner completes
+# docs/operations/deploy-and-rollback.md §8 and sets PRODUCTION_DEPLOY_ENABLED=true.
+# COST: always-on machines are billed continuously; sizing below needs owner approval (#138, OD-12).
+#
+# Same rules as fly.preview.toml: image built in CI and deployed by immutable tag, no [build], no release_command
+# (migrations run in the pipeline as bayios_migrator BEFORE this deploy), secrets only by name:
+#   ConnectionStrings__Default (bayios_app), Auth__Authority, Auth__Audience, Cors__AllowedOrigins__0..n,
+#   Audit__IpHashKey; Invitations__TrustUserMetadataEmailVerified=false once the access-token hook is enabled;
+#   Push__Enabled=true + Push__ServiceAccountJson only once the Firebase project exists (docs/operations/push-notifications.md).
+# NOT on the API app: ConnectionStrings__Migrator / PRODUCTION_MIGRATOR_CONNECTION.
+
+app = "bayios-api-prod"             # placeholder; final name chosen at app creation (FLY_APP variable in `production`)
+primary_region = "fra"
+
+[env]
+  ASPNETCORE_ENVIRONMENT = "Production"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Background worker + SignalR need an always-on instance (deploy-and-rollback.md §3).
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "20s"
+
+[deploy]
+  strategy = "rolling"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

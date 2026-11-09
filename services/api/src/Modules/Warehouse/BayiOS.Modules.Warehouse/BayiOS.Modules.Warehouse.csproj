@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>BayiOS.Modules.Warehouse</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BayiOS.SharedKernel\BayiOS.SharedKernel.csproj" />
+    <!-- Warehouse implements Inventory's location port and calls its stock contracts (ADR 0004 §8: dependency points to Inventory). -->
+    <ProjectReference Include="..\..\Inventory\BayiOS.Modules.Inventory\BayiOS.Modules.Inventory.csproj" />
+    <!-- Picking/shipping drive the order only through Orders' IOrderFulfillment contract (Orders never references Warehouse). -->
+    <ProjectReference Include="..\..\Orders\BayiOS.Modules.Orders\BayiOS.Modules.Orders.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BayiOS.Api" />
+    <InternalsVisibleTo Include="BayiOS.UnitTests" />
+    <InternalsVisibleTo Include="BayiOS.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

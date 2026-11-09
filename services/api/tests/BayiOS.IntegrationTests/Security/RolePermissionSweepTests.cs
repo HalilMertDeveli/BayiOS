@@ -1,0 +1,98 @@
+using System.Net;
+using BayiOS.IntegrationTests.Catalog;
+using BayiOS.IntegrationTests.Infrastructure;
+using BayiOS.SharedKernel.Authorization;
+
+namespace BayiOS.IntegrationTests.Security;
+
+/// <summary>
+/// Role sweep (roles-permissions.md §3, #15): every role × every permission-gated endpoint of the running API, with the
+/// expected outcome taken from the code matrix (<see cref="RolePermissions"/>, itself kept equal to the document by a
+/// unit test). Granted → the gate lets the call through (anything but 401/403); not granted → 403 <c>auth.forbidden</c>.
+/// Probes use unknown ids and empty bodies, so a granted call stops at 400/404/412/428 and changes nothing.
+/// </summary>
+[Trait("Category", "Security")]
+public sealed class RolePermissionSweepTests(ApiFixture fixture)
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>
+    /// Record-level K cells whose condition is about the endpoint itself rather than a record, so no probe id can
+    /// make them pass: the gate lets the role through and the service answers 403 with the condition's own code.
+    /// Footnote 4 (#53): sales holds reports.read / reports.export only for order and customer reports.
+    /// </summary>
+    private static readonly Dictionary<(string Route, string Role), string> ConditionDenials = new()
+    {
+        [("GET /api/v1/reports/critical-stock", Roles.Sales)] = "reports.orders_and_customers_only",
+        [("GET /api/v1/reports/stock-movements", Roles.Sales)] = "reports.orders_and_customers_only",
+        [("GET /api/v1/reports/picking-tasks", Roles.Sales)] = "reports.orders_and_customers_only",
+        [("POST /api/v1/reports/critical-stock/export", Roles.Sales)] = "reports.orders_and_customers_only",
+        [("POST /api/v1/reports/stock-movements/export", Roles.Sales)] = "reports.orders_and_customers_only",
+        [("POST /api/v1/reports/picking-tasks/export", Roles.Sales)] = "reports.orders_and_customers_only",
+    };
+
+    public static TheoryData<string> AllRoles() => [.. Roles.All];
+
+    [Fact]
+    public async Task Every_endpoint_permission_is_a_known_matrix_permission()
+    {
+        var routes = await ApiRoutes.LoadAsync(fixture);
+        var unknown = routes.SelectMany(r => r.AnyOf.Where(p => !RolePermissions.AllPermissions.Contains(p))
+            .Select(p => $"{r}: permission '{p}' is not in RolePermissions"));
+        SecurityProbes.AssertNone([.. unknown]);
+    }
+
+    [Theory]
+    [MemberData(nameof(AllRoles))]
+    public async Task Role_reaches_exactly_the_endpoints_its_permissions_allow(string role)
+    {
+        var routes = (await ApiRoutes.LoadAsync(fixture)).Where(r => r.IsTenantScoped).ToList();
+        var owner = await CatalogClient.NewTenantOwnerAsync(fixture);
+        var member = role == Roles.Owner ? owner : await owner.AddMemberAsync(fixture, role);
+
+        var failures = new List<string>();
+        int granted = 0, denied = 0;
+        foreach (var route in routes)
+        {
+            // Gate semantics (#69): any listed permission opens the endpoint; K cells follow the default tenant rules
+            // (roles-permissions §4) and record-level K / O cells pass the gate (the service then narrows the records).
+            var allowed = route.AnyOf.Any(p => AuthorizationContext.Evaluate(role, p, TenantAccessRules.Defaults) != PermissionScope.None);
+            var path = ApiRoutes.Fill(route.Template, (segment, _) => segment == "sector-templates" ? "zz-yok" : Guid.NewGuid().ToString());
+            object? body = route.Method is "GET" or "DELETE" ? null : route.RequestContentTypes.Contains("multipart/form-data") ? "multipart" : new { };
+            var response = await SecurityProbes.SendAsync(fixture, member, route, path, body, CatalogClient.ETag(1));
+            var code = await SecurityProbes.CodeAsync(response);
+
+            if (allowed && ConditionDenials.TryGetValue((route.Key, role), out var conditionCode))
+            {
+                granted++;
+                if (response.StatusCode != HttpStatusCode.Forbidden || code != conditionCode)
+                {
+                    failures.Add($"{route} [{route.Permission}]: {role} passes the gate only conditionally, expected 403 {conditionCode} but got {(int)response.StatusCode} {code}");
+                }
+            }
+            else if (allowed)
+            {
+                granted++;
+                if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden || (int)response.StatusCode >= 500)
+                {
+                    failures.Add($"{route} [{route.Permission}]: {role} is granted but got {(int)response.StatusCode} {code}");
+                }
+            }
+            else
+            {
+                denied++;
+                if (response.StatusCode != HttpStatusCode.Forbidden || code != "auth.forbidden")
+                {
+                    failures.Add($"{route} [{route.Permission}]: {role} is not granted but got {(int)response.StatusCode} {code}");
+                }
+            }
+        }
+
+        failures.AddRange(ConditionDenials.Keys
+            .Where(k => k.Role == role && routes.All(r => r.Key != k.Route))
+            .Select(k => $"{k.Route}: listed in ConditionDenials but no longer exists — remove it"));
+        SecurityProbes.AssertNone(failures);
+        Assert.Equal(routes.Count, granted + denied);
+        TestContext.Current.TestOutputHelper?.WriteLine($"{role}: {granted} endpoints granted, {denied} denied.");
+    }
+}

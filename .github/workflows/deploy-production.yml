@@ -1,0 +1,202 @@
+name: deploy-production
+
+# Production deploy SKELETON (issue #70, deploy-and-rollback.md §3/§5, AUTOPILOT §4). DISABLED until owner setup.
+#
+#   guard    no environment. Green no-op ("skipped: production deploy disabled") unless the repository variable
+#            PRODUCTION_DEPLOY_ENABLED is 'true'. When enabled it fails closed unless: the ref is a vX.Y.Z tag whose
+#            commit is on main, the GitHub Environment `production` exists AND has required reviewers, and
+#            infra/deploy/fly.production.toml exists.
+#   prepare  build the image and the idempotent EF scripts from the tag (no secrets).
+#   release  ONE job in Environment `production` => ONE owner approval, then in order: migration (bayios_migrator,
+#            PRODUCTION_MIGRATOR_CONNECTION) -> API (Fly, immutable tag) -> smoke -> web (optional Vercel hook).
+#            Every required secret must be present (strict: missing => red, nothing deployed).
+#
+# Rollback: run this workflow (workflow_dispatch) with the previous tag; DB is never rolled back (expand/contract).
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to deploy (vX.Y.Z, must be on main). For rollback: the previous tag."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: production guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      enabled: ${{ steps.guard.outputs.enabled }}
+      tag: ${{ steps.guard.outputs.tag }}
+      sha: ${{ steps.guard.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Guard
+        id: guard
+        env:
+          ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ "${ENABLED:-}" != true ]; then
+            echo "::notice title=Production deploy skipped::skipped: production deploy disabled until owner setup (#138). Set repository variable PRODUCTION_DEPLOY_ENABLED=true only after docs/operations/deploy-and-rollback.md §8 is done."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$EVENT" = workflow_dispatch ]; then tag="$INPUT_TAG"; else tag="$REF_NAME"; fi
+          printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::'${tag}' is not a vX.Y.Z tag"; exit 1; }
+          git rev-parse -q --verify "refs/tags/${tag}" >/dev/null || { echo "::error::tag ${tag} not found"; exit 1; }
+          git merge-base --is-ancestor "refs/tags/${tag}^{commit}" origin/main \
+            || { echo "::error::tag ${tag} is not on main"; exit 1; }
+          rules="$(gh api "repos/${REPO}/environments/production" --jq '[.protection_rules[]?.type] | join(",")' 2>/dev/null)" \
+            || { echo "::error::GitHub Environment 'production' does not exist"; exit 1; }
+          case ",${rules}," in *,required_reviewers,*) ;; *)
+            echo "::error::Environment 'production' has no required reviewers (rules: ${rules:-none}); refusing to deploy"; exit 1 ;;
+          esac
+          [ -f infra/deploy/fly.production.toml ] || { echo "::error::infra/deploy/fly.production.toml missing"; exit 1; }
+          {
+            echo "enabled=true"
+            echo "tag=${tag}"
+            echo "sha=$(git rev-parse "refs/tags/${tag}^{commit}")"
+          } >> "$GITHUB_OUTPUT"
+          echo "Production deploy of ${tag} allowed; waiting for the environment approval next."
+
+  prepare:
+    name: production prepare (image, migration scripts)
+    needs: guard
+    if: needs.guard.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: refs/tags/${{ needs.guard.outputs.tag }}
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: services/api/global.json
+
+      - name: Generate idempotent migration scripts (and rehearse them on an empty Postgres 17)
+        run: bash infra/ci/ef-migrations.sh
+        env:
+          OUT_DIR: ${{ runner.temp }}/migrations
+          POSTGRES_PASSWORD: ci-local-only
+          BAYIOS_APP_PASSWORD: ci-local-only
+          BAYIOS_MIGRATOR_PASSWORD: ci-local-only
+
+      - name: Build and save API image
+        env:
+          TAG: ${{ needs.guard.outputs.tag }}
+        run: |
+          docker build --pull -t "bayios-api:${TAG}" services/api
+          docker save "bayios-api:${TAG}" | gzip -1 > "${RUNNER_TEMP}/api-image.tar.gz"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/api-image.tar.gz
+            ${{ runner.temp }}/migrations/*.sql
+            ${{ runner.temp }}/migrations/manifest.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: production release (migrate -> API -> web)
+    needs: [guard, prepare]
+    if: needs.guard.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.API_BASE_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: refs/tags/${{ needs.guard.outputs.tag }}
+          sparse-checkout: infra
+
+      - name: Preflight (strict - every required secret and variable must exist)
+        id: preflight
+        env:
+          ENVIRONMENT: production
+          STRICT: "1"
+          REQUIRED: PRODUCTION_MIGRATOR_CONNECTION FLY_API_TOKEN FLY_APP API_BASE_URL
+          OPTIONAL: VERCEL_DEPLOY_HOOK_URL
+          PRODUCTION_MIGRATOR_CONNECTION: ${{ secrets.PRODUCTION_MIGRATOR_CONNECTION }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+          FLY_APP: ${{ vars.FLY_APP }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: bash infra/deploy/preflight.sh
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ github.run_id }}
+          path: ${{ runner.temp }}/release
+
+      - name: 1/4 Apply migrations as bayios_migrator, then posture check
+        env:
+          MIGRATOR_URL: ${{ secrets.PRODUCTION_MIGRATOR_CONNECTION }}
+          SCRIPTS_DIR: ${{ runner.temp }}/release/migrations
+        run: bash infra/deploy/apply-migrations.sh
+
+      - uses: superfly/flyctl-actions/setup-flyctl@fc53c09e1bc3be6f54706524e3b82c4f462f77be # 1.5
+        with:
+          version: 0.5.5
+
+      - name: 2/4 Push immutable image and deploy API (rolling)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          APP: ${{ vars.FLY_APP }}
+          TAG: ${{ needs.guard.outputs.tag }}
+          SHA: ${{ needs.guard.outputs.sha }}
+        run: |
+          case "$APP" in *[!a-z0-9-]*|"") echo "::error::invalid FLY_APP"; exit 1 ;; esac
+          target="registry.fly.io/${APP}:${TAG}-${SHA::12}"
+          gunzip -c "${RUNNER_TEMP}/release/api-image.tar.gz" | docker load
+          docker tag "bayios-api:${TAG}" "$target"
+          flyctl auth docker
+          docker push "$target"
+          flyctl deploy --config infra/deploy/fly.production.toml --app "$APP" --image "$target" \
+            --strategy rolling --wait-timeout 10m0s
+
+      - name: 3/4 Smoke (/health, /health/ready, /api/v1/meta = Production)
+        env:
+          API_URL: ${{ vars.API_BASE_URL }}
+          EXPECT_ENVIRONMENT: Production
+        run: bash infra/deploy/smoke.sh
+
+      - name: 4/4 Web (Vercel deploy hook)
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "${HOOK:-}" ]; then
+            echo "::notice title=Web::VERCEL_DEPLOY_HOOK_URL not set; promote the production web deployment in Vercel after this API release (deploy-and-rollback.md §4)."
+            exit 0
+          fi
+          response="$(curl -fsS -X POST --max-time 30 "$HOOK")"
+          echo "Vercel deploy job: $(printf '%s' "$response" | grep -oE '"id":"[^"]+"' | head -n 1)"

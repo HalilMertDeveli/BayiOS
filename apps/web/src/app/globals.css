@@ -1,0 +1,387 @@
+@import "tailwindcss";
+
+/*
+ * BayiOS design tokens — source of truth: docs/design/design-system-plan.md §2.
+ *
+ * Layer 1: raw semantic tokens as CSS custom properties (`--bos-*`), redefined for dark mode.
+ *          Dark mode follows `prefers-color-scheme`, and can be forced with `data-theme="light|dark"` on <html>.
+ * Layer 2: `@theme inline` maps them to Tailwind utilities (bg-card, text-fg-muted, bg-success-bg, …),
+ *          so components never hard-code a palette and never need `dark:` variants.
+ *
+ * Contrast targets (WCAG 2.2 AA): text.primary/secondary/muted ≥ 4.5:1 on page/card,
+ * border.strong (form controls) and focus ring ≥ 3:1, every tone fg ≥ 4.5:1 on its own bg — enforced by tokens.test.ts.
+ */
+
+:root {
+  color-scheme: light;
+
+  /*
+   * Brand palette (owner decision 2026-11-09, #61): deep petrol primary + warm copper accent.
+   * Raw scales — theme-independent; components never use them directly, only the semantic tokens below.
+   * Rationale and contrast table: docs/design/brand-colors.md. Mirrored in apps/mobile/lib/core/ui/tokens.dart.
+   */
+  --bos-petrol-50: #edf6f8;
+  --bos-petrol-100: #d4eaef;
+  --bos-petrol-200: #93cdd9;
+  --bos-petrol-300: #7fc4d3;
+  --bos-petrol-400: #6cb8c8;
+  --bos-petrol-500: #3d9aae;
+  --bos-petrol-600: #1f7a90;
+  --bos-petrol-700: #136579;
+  --bos-petrol-800: #0c5468;
+  --bos-petrol-900: #0a4354;
+  --bos-petrol-950: #04191e;
+  --bos-copper-50: #fcf3ed;
+  --bos-copper-100: #f8e1d2;
+  --bos-copper-200: #edb48d;
+  --bos-copper-300: #e39a68;
+  --bos-copper-400: #dd8650;
+  --bos-copper-500: #d4733a;
+  --bos-copper-600: #a4501f;
+  --bos-copper-700: #843f18;
+  --bos-copper-800: #66311a;
+  --bos-copper-900: #4f2815;
+  --bos-copper-950: #1f0f06;
+
+  /* color.brand — petrol primary (white text 8.46:1) */
+  --bos-brand-primary: var(--bos-petrol-800);
+  --bos-brand-primary-hover: var(--bos-petrol-900);
+  --bos-brand-primary-subtle: var(--bos-petrol-50);
+  --bos-brand-on-primary: #ffffff;
+  /* color.brand.accent — decorative only (brand mark, illustrations); never a status, never body text */
+  --bos-brand-accent: var(--bos-copper-500);
+  --bos-brand-accent-hover: var(--bos-copper-400);
+  --bos-brand-on-accent: var(--bos-copper-950);
+
+  /* color.text */
+  --bos-text-primary: #111827;
+  --bos-text-secondary: #374151;
+  --bos-text-muted: #5b6472;
+  --bos-text-inverse: #ffffff;
+  --bos-text-link: var(--bos-petrol-700);
+
+  /* color.surface */
+  --bos-surface-page: #f6f7f9;
+  --bos-surface-card: #ffffff;
+  --bos-surface-raised: #ffffff;
+  --bos-surface-sunken: #eef0f3;
+  --bos-surface-overlay: rgb(15 23 42 / 0.5);
+
+  /* color.border */
+  --bos-border-default: #dfe3e8;
+  --bos-border-strong: #7b8494;
+  --bos-border-focus: var(--bos-petrol-600);
+
+  /* color.{tone}.{fg,bg,border} — feedback + status families */
+  --bos-neutral-fg: #374151;
+  --bos-neutral-bg: #eef0f3;
+  --bos-neutral-border: #c5cbd3;
+  --bos-info-fg: #1d4ed8;
+  --bos-info-bg: #e8effd;
+  --bos-info-border: #9db7f2;
+  --bos-success-fg: #166534;
+  --bos-success-bg: #e8f5ec;
+  --bos-success-border: #86c79a;
+  --bos-warning-fg: #8a4b00;
+  --bos-warning-bg: #fff4e0;
+  --bos-warning-border: #f0b45a;
+  --bos-danger-fg: #b42318;
+  --bos-danger-bg: #fdecea;
+  --bos-danger-border: #f1a29b;
+  --bos-danger-solid: #b42318;
+  --bos-danger-solid-hover: #912018;
+  --bos-purple-fg: #6b21a8;
+  --bos-purple-bg: #f3e8fd;
+  --bos-purple-border: #c9a3ee;
+  --bos-teal-fg: #0f6b6b;
+  --bos-teal-bg: #e2f4f3;
+  --bos-teal-border: #8ccfcb;
+  --bos-brand-fg: var(--bos-petrol-800);
+  --bos-brand-bg: var(--bos-petrol-50);
+  --bos-brand-border: var(--bos-petrol-200);
+
+  /* color.ai — AI suggestions must be visually distinct */
+  --bos-ai-fg: #4338ca;
+  --bos-ai-bg: #eef0ff;
+  --bos-ai-border: #b4b9f5;
+
+  /* elevation.* */
+  --bos-elevation-1: 0 1px 2px rgb(16 24 40 / 0.06);
+  --bos-elevation-2: 0 4px 12px rgb(16 24 40 / 0.1);
+  --bos-elevation-3: 0 12px 32px rgb(16 24 40 / 0.18);
+  --bos-elevation-4: 0 8px 24px rgb(16 24 40 / 0.16);
+
+  /* motion.* */
+  --bos-motion-fast: 120ms;
+  --bos-motion-base: 200ms;
+  --bos-motion-slow: 300ms;
+
+  /* z.* */
+  --bos-z-dropdown: 20;
+  --bos-z-sticky: 10;
+  --bos-z-drawer: 40;
+  --bos-z-modal: 50;
+  --bos-z-toast: 60;
+
+  /* size.control.* */
+  --bos-control-sm: 2rem;
+  --bos-control-md: 2.25rem;
+  --bos-control-lg: 2.75rem;
+}
+
+/* Dark theme (unlayered so it beats the light :root values): system preference unless forced light, or forced with data-theme="dark". Keep both blocks in sync. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bos-brand-primary: var(--bos-petrol-400);
+    --bos-brand-primary-hover: var(--bos-petrol-200);
+    --bos-brand-primary-subtle: #0d262d;
+    --bos-brand-on-primary: var(--bos-petrol-950);
+    --bos-brand-accent: var(--bos-copper-300);
+    --bos-brand-accent-hover: var(--bos-copper-200);
+    --bos-brand-on-accent: var(--bos-copper-950);
+    --bos-text-primary: #e8ecf1;
+    --bos-text-secondary: #c3cad4;
+    --bos-text-muted: #98a2b0;
+    --bos-text-inverse: #0d1117;
+    --bos-text-link: var(--bos-petrol-300);
+    --bos-surface-page: #0d1117;
+    --bos-surface-card: #151b23;
+    --bos-surface-raised: #1c2430;
+    --bos-surface-sunken: #0a0e13;
+    --bos-surface-overlay: rgb(0 0 0 / 0.6);
+    --bos-border-default: #2a3340;
+    --bos-border-strong: #6b7685;
+    --bos-border-focus: var(--bos-petrol-300);
+    --bos-neutral-fg: #c3cad4;
+    --bos-neutral-bg: #222a35;
+    --bos-neutral-border: #3a4452;
+    --bos-info-fg: #9dbcff;
+    --bos-info-bg: #132042;
+    --bos-info-border: #34508f;
+    --bos-success-fg: #7ad69a;
+    --bos-success-bg: #0f2a1a;
+    --bos-success-border: #2f6b45;
+    --bos-warning-fg: #f3bf6b;
+    --bos-warning-bg: #2e2008;
+    --bos-warning-border: #7a5a1f;
+    --bos-danger-fg: #ff9b91;
+    --bos-danger-bg: #331512;
+    --bos-danger-border: #7f3029;
+    --bos-danger-solid: #c9372c;
+    --bos-danger-solid-hover: #b3302a;
+    --bos-purple-fg: #d3a9ff;
+    --bos-purple-bg: #26163a;
+    --bos-purple-border: #5d3a87;
+    --bos-teal-fg: #6fd3cc;
+    --bos-teal-bg: #0e2a2a;
+    --bos-teal-border: #2a6a66;
+    --bos-brand-fg: var(--bos-petrol-200);
+    --bos-brand-bg: #0d262d;
+    --bos-brand-border: #2b5d68;
+    --bos-ai-fg: #b7bcff;
+    --bos-ai-bg: #1c1f45;
+    --bos-ai-border: #444a9a;
+    --bos-elevation-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --bos-elevation-2: 0 4px 12px rgb(0 0 0 / 0.5);
+    --bos-elevation-3: 0 12px 32px rgb(0 0 0 / 0.6);
+    --bos-elevation-4: 0 8px 24px rgb(0 0 0 / 0.55);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bos-brand-primary: var(--bos-petrol-400);
+  --bos-brand-primary-hover: var(--bos-petrol-200);
+  --bos-brand-primary-subtle: #0d262d;
+  --bos-brand-on-primary: var(--bos-petrol-950);
+  --bos-brand-accent: var(--bos-copper-300);
+  --bos-brand-accent-hover: var(--bos-copper-200);
+  --bos-brand-on-accent: var(--bos-copper-950);
+  --bos-text-primary: #e8ecf1;
+  --bos-text-secondary: #c3cad4;
+  --bos-text-muted: #98a2b0;
+  --bos-text-inverse: #0d1117;
+  --bos-text-link: var(--bos-petrol-300);
+  --bos-surface-page: #0d1117;
+  --bos-surface-card: #151b23;
+  --bos-surface-raised: #1c2430;
+  --bos-surface-sunken: #0a0e13;
+  --bos-surface-overlay: rgb(0 0 0 / 0.6);
+  --bos-border-default: #2a3340;
+  --bos-border-strong: #6b7685;
+  --bos-border-focus: var(--bos-petrol-300);
+  --bos-neutral-fg: #c3cad4;
+  --bos-neutral-bg: #222a35;
+  --bos-neutral-border: #3a4452;
+  --bos-info-fg: #9dbcff;
+  --bos-info-bg: #132042;
+  --bos-info-border: #34508f;
+  --bos-success-fg: #7ad69a;
+  --bos-success-bg: #0f2a1a;
+  --bos-success-border: #2f6b45;
+  --bos-warning-fg: #f3bf6b;
+  --bos-warning-bg: #2e2008;
+  --bos-warning-border: #7a5a1f;
+  --bos-danger-fg: #ff9b91;
+  --bos-danger-bg: #331512;
+  --bos-danger-border: #7f3029;
+  --bos-danger-solid: #c9372c;
+  --bos-danger-solid-hover: #b3302a;
+  --bos-purple-fg: #d3a9ff;
+  --bos-purple-bg: #26163a;
+  --bos-purple-border: #5d3a87;
+  --bos-teal-fg: #6fd3cc;
+  --bos-teal-bg: #0e2a2a;
+  --bos-teal-border: #2a6a66;
+  --bos-brand-fg: var(--bos-petrol-200);
+  --bos-brand-bg: #0d262d;
+  --bos-brand-border: #2b5d68;
+  --bos-ai-fg: #b7bcff;
+  --bos-ai-bg: #1c1f45;
+  --bos-ai-border: #444a9a;
+  --bos-elevation-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --bos-elevation-2: 0 4px 12px rgb(0 0 0 / 0.5);
+  --bos-elevation-3: 0 12px 32px rgb(0 0 0 / 0.6);
+  --bos-elevation-4: 0 8px 24px rgb(0 0 0 / 0.55);
+}
+
+@theme inline {
+  /* Typography — Inter / JetBrains Mono, loaded with latin + latin-ext (Turkish: ç ğ ı İ ö ş ü). */
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+
+  --text-display: 1.875rem;
+  --text-display--line-height: 2.375rem;
+  --text-display--font-weight: 600;
+  --text-h1: 1.5rem;
+  --text-h1--line-height: 2rem;
+  --text-h1--font-weight: 600;
+  --text-h2: 1.25rem;
+  --text-h2--line-height: 1.75rem;
+  --text-h2--font-weight: 600;
+  --text-h3: 1rem;
+  --text-h3--line-height: 1.5rem;
+  --text-h3--font-weight: 600;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.25rem;
+  --text-body-lg: 1rem;
+  --text-body-lg--line-height: 1.5rem;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+  --text-code: 0.8125rem;
+  --text-code--line-height: 1.25rem;
+  --text-code--font-weight: 500;
+
+  /* Spacing: Tailwind's 4 px base (--spacing: 0.25rem) already matches space.* (p-1 = 4px … p-16 = 64px). */
+
+  /* radius.* */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  /* elevation.* → shadow-e1 … shadow-e4 */
+  --shadow-e1: var(--bos-elevation-1);
+  --shadow-e2: var(--bos-elevation-2);
+  --shadow-e3: var(--bos-elevation-3);
+  --shadow-e4: var(--bos-elevation-4);
+
+  /* Colors */
+  --color-brand: var(--bos-brand-primary);
+  --color-brand-hover: var(--bos-brand-primary-hover);
+  --color-brand-subtle: var(--bos-brand-primary-subtle);
+  --color-on-brand: var(--bos-brand-on-primary);
+  --color-accent: var(--bos-brand-accent);
+  --color-accent-hover: var(--bos-brand-accent-hover);
+  --color-on-accent: var(--bos-brand-on-accent);
+
+  --color-fg: var(--bos-text-primary);
+  --color-fg-secondary: var(--bos-text-secondary);
+  --color-fg-muted: var(--bos-text-muted);
+  --color-fg-inverse: var(--bos-text-inverse);
+  --color-link: var(--bos-text-link);
+
+  --color-page: var(--bos-surface-page);
+  --color-card: var(--bos-surface-card);
+  --color-raised: var(--bos-surface-raised);
+  --color-sunken: var(--bos-surface-sunken);
+  --color-overlay: var(--bos-surface-overlay);
+
+  --color-line: var(--bos-border-default);
+  --color-line-strong: var(--bos-border-strong);
+  --color-focus: var(--bos-border-focus);
+
+  --color-neutral-fg: var(--bos-neutral-fg);
+  --color-neutral-bg: var(--bos-neutral-bg);
+  --color-neutral-border: var(--bos-neutral-border);
+  --color-info-fg: var(--bos-info-fg);
+  --color-info-bg: var(--bos-info-bg);
+  --color-info-border: var(--bos-info-border);
+  --color-success-fg: var(--bos-success-fg);
+  --color-success-bg: var(--bos-success-bg);
+  --color-success-border: var(--bos-success-border);
+  --color-warning-fg: var(--bos-warning-fg);
+  --color-warning-bg: var(--bos-warning-bg);
+  --color-warning-border: var(--bos-warning-border);
+  --color-danger-fg: var(--bos-danger-fg);
+  --color-danger-bg: var(--bos-danger-bg);
+  --color-danger-border: var(--bos-danger-border);
+  --color-danger-solid: var(--bos-danger-solid);
+  --color-danger-solid-hover: var(--bos-danger-solid-hover);
+  --color-purple-fg: var(--bos-purple-fg);
+  --color-purple-bg: var(--bos-purple-bg);
+  --color-purple-border: var(--bos-purple-border);
+  --color-teal-fg: var(--bos-teal-fg);
+  --color-teal-bg: var(--bos-teal-bg);
+  --color-teal-border: var(--bos-teal-border);
+  --color-brand-fg: var(--bos-brand-fg);
+  --color-brand-bg: var(--bos-brand-bg);
+  --color-brand-border: var(--bos-brand-border);
+  --color-ai-fg: var(--bos-ai-fg);
+  --color-ai-bg: var(--bos-ai-bg);
+  --color-ai-border: var(--bos-ai-border);
+
+  /* color.stock.* — aliases onto tone families (shared vocabulary: Satılabilir / Az / Tükendi / Ayrıldı) */
+  --color-stock-ok: var(--bos-success-fg);
+  --color-stock-low: var(--bos-warning-fg);
+  --color-stock-out: var(--bos-danger-fg);
+  --color-stock-reserved: var(--bos-info-fg);
+
+  /* motion.* */
+  --default-transition-duration: var(--bos-motion-fast);
+}
+
+@layer base {
+  html {
+    background: var(--bos-surface-page);
+  }
+
+  body {
+    background: var(--bos-surface-page);
+    color: var(--bos-text-primary);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--bos-border-focus);
+    outline-offset: 2px;
+  }
+
+  dialog::backdrop {
+    background: var(--bos-surface-overlay);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

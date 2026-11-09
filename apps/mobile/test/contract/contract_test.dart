@@ -1,0 +1,145 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:bayios_mobile/app/features.dart';
+import 'package:bayios_mobile/core/api/contract.dart';
+import 'package:bayios_mobile/core/api/endpoint.dart';
+import 'package:bayios_mobile/core/session/identity_api.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+/// Contract drift check (ADR 0007 / ADR 0011): every endpoint and model field
+/// the app uses must match packages/contracts/openapi.json. CI runs this on
+/// every change to apps/mobile/** or the contract.
+void main() {
+  final file = File('../../packages/contracts/openapi.json');
+  final spec = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+  final paths = spec['paths']! as Map<String, Object?>;
+  final schemas =
+      (spec['components']! as Map<String, Object?>)['schemas']!
+          as Map<String, Object?>;
+
+  final endpoints = <ApiEndpoint>{
+    ...CoreEndpoints.all,
+    for (final f in appFeatures) ...f.endpoints,
+  };
+  final models = <ContractSchema>{
+    ...CoreEndpoints.schemas,
+    for (final f in appFeatures) ...f.schemas,
+  };
+
+  group('endpoints', () {
+    for (final endpoint in endpoints) {
+      test('$endpoint', () {
+        final item = paths[endpoint.path] as Map<String, Object?>?;
+        expect(item, isNotNull, reason: 'path not in the contract');
+        final op = item![endpoint.method.name] as Map<String, Object?>?;
+        expect(op, isNotNull, reason: 'method not in the contract');
+
+        final headers = {
+          for (final p in (op!['parameters'] as List<Object?>? ?? const []))
+            if (p is Map<String, Object?> && p['in'] == 'header')
+              p['name']! as String: p['required'] == true,
+        };
+        switch (endpoint.tenant) {
+          case TenantScope.required:
+            expect(headers['X-Tenant-Id'], isTrue, reason: 'X-Tenant-Id');
+          case TenantScope.optional:
+            expect(headers['X-Tenant-Id'], isFalse, reason: 'X-Tenant-Id');
+          case TenantScope.none:
+            expect(headers.containsKey('X-Tenant-Id'), isFalse);
+        }
+        expect(
+          headers['Idempotency-Key'] ?? false,
+          endpoint.idempotent,
+          reason: 'Idempotency-Key required ⇔ endpoint.idempotent',
+        );
+        final secured = (op['security'] as List<Object?>?)?.isNotEmpty ?? false;
+        expect(secured, endpoint.authenticated, reason: 'Bearer security');
+      });
+    }
+  });
+
+  group('schemas', () {
+    for (final model in models) {
+      test(model.name, () {
+        final schema = schemas[model.name] as Map<String, Object?>?;
+        expect(schema, isNotNull, reason: 'schema not in the contract');
+        final props = schema!['properties']! as Map<String, Object?>;
+        final required = {
+          ...?(schema['required'] as List<Object?>?)?.cast<String>(),
+        };
+        for (final entry in model.fields.entries) {
+          final field = entry.key;
+          final nullableInModel = entry.value.endsWith('?');
+          final type = entry.value.replaceAll('?', '');
+          final prop = props[field] as Map<String, Object?>?;
+          expect(prop, isNotNull, reason: '${model.name}.$field missing');
+
+          final (types, nullable) = _types(prop!, schemas);
+          expect(
+            types,
+            contains(type),
+            reason: '${model.name}.$field: contract types $types, model $type',
+          );
+          if (!nullableInModel) {
+            expect(
+              nullable,
+              isFalse,
+              reason: '${model.name}.$field may be null; mark it "$type?"',
+            );
+            expect(
+              required,
+              contains(field),
+              reason: '${model.name}.$field is optional; mark it "$type?"',
+            );
+          }
+        }
+      });
+    }
+  });
+}
+
+/// JSON types a property allows and whether null is one of them
+/// (`type: [null, string]`, `oneOf: [{type: null}, {$ref}]`, `$ref`).
+(Set<String>, bool) _types(
+  Map<String, Object?> prop,
+  Map<String, Object?> schemas,
+) {
+  final types = <String>{};
+  var nullable = false;
+  void add(Map<String, Object?> p) {
+    if (p[r'$ref'] case final String ref) {
+      final target = schemas[ref.split('/').last] as Map<String, Object?>?;
+      if (target == null) return;
+      if (target.containsKey('type') || target.containsKey('oneOf')) {
+        add(target);
+      } else {
+        types.add('object');
+      }
+      return;
+    }
+    switch (p['type']) {
+      case final String t:
+        types.add(t);
+      case final List<Object?> ts:
+        for (final t in ts.whereType<String>()) {
+          if (t == 'null') {
+            nullable = true;
+          } else {
+            types.add(t);
+          }
+        }
+    }
+    if (p['type'] == 'null') nullable = true;
+    for (final key in ['oneOf', 'anyOf', 'allOf']) {
+      for (final sub in (p[key] as List<Object?>? ?? const [])) {
+        if (sub is Map<String, Object?>) add(sub);
+      }
+    }
+    if (p.containsKey('enum') && types.isEmpty) types.add('string');
+  }
+
+  add(prop);
+  types.remove('null');
+  return (types, nullable);
+}

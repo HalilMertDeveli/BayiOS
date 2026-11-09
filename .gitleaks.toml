@@ -1,0 +1,33 @@
+# gitleaks configuration (threat-model R6, RC-1 finding R-7). Used by .github/workflows/secret-scan.yml.
+# Default rules + a NARROW allowlist: exact synthetic values only, scoped to the one rule that flags them.
+# Never allowlist a path: a global `paths` allowlist makes gitleaks skip the whole file (every rule), so a real key
+# added to an allowlisted file would go unnoticed. Every entry below must be a documented synthetic value.
+
+title = "BayiOS gitleaks config"
+
+[extend]
+useDefault = true
+
+# Synthetic invitation tokens in the web unit/e2e tests (apps/web/e2e/invitation.spec.ts,
+# apps/web/src/components/members/accept-invitation.test.tsx, apps/web/src/lib/members/invite-link.test.ts).
+# They are base64url of descriptive ASCII: "MockInvitationToken-synthetic-01", "SyntheticInvitationToken-0123456",
+# "BogusTokenForTestsOnly-123456789?", "old-token-old-token-old". The API never issued them.
+[[allowlists]]
+description = "synthetic invitation tokens in web tests"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = [
+  '''^TW9ja0ludml0YXRpb25Ub2tlbi1zeW50aGV0aWMtMDE$''',
+  '''^U3ludGhldGljSW52aXRhdGlvblRva2VuLTAxMjM0NTY$''',
+  '''^Qm9ndXNUb2tlbkZvclRlc3RzT25seS0xMjM0NTY3ODk_$''',
+  '''^b2xkLXRva2VuLW9sZC10b2tlbi1vbGQ$''',
+]
+
+# .env.example lists variable NAMES with empty values; the generic rule reads an empty assignment followed by the
+# next line's name (e.g. "Anthropic__ApiKey=") as the secret. Only ASP.NET-style configuration names (Section__Key,
+# optional trailing "=") are allowed — a real credential never has that shape.
+[[allowlists]]
+description = "configuration variable names read as values (.env.example)"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = ['''^[A-Za-z][A-Za-z0-9]*(__[A-Za-z0-9]+)+=?$''']

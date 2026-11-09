@@ -39,12 +39,12 @@
 | `X-Tenant-Id: <uuid>` | İstek | Tenant bağımsız uçlar hariç zorunlu |
 | `Idempotency-Key: <uuid>` | İstek | Tüm `POST` oluşturma ve durum geçişi uçlarında zorunlu |
 | `If-Match: "<etag>"` | İstek | Düzenlenebilir kaynaklarda `PATCH/PUT/DELETE` ve onay gibi geçişlerde zorunlu |
-| `X-Correlation-Id` | İki yön | Yoksa sunucu üretir; yanıtta döner |
+| `X-Correlation-Id` | İki yön | GUID ise normalize edilip (`N` biçimi) kullanılır; yoksa veya GUID değilse sunucu üretir; yanıtta döner |
 | `X-Client-Version`, `X-Client-Platform` | İstek | `web`, `android`, `ios` |
 | `Accept-Language` | İstek | `tr-TR` varsayılan (yalnızca sunucu tarafı metinler için) |
 | `ETag` | Yanıt | `W/"<row_version>"` |
 | `Location` | Yanıt | `201` oluşturmada |
-| `Retry-After` | Yanıt | `429`, `409 inventory.busy`, `503` |
+| `Retry-After` | Yanıt | `429`, `409 inventory.busy` / `order.busy` / `picking.busy` / `idempotency.in_progress`, `503`; CORS ile tarayıcıya açılır (OpenAPI'de ilgili 409 yanıtlarında belgeli) |
 | `RateLimit-*` | Yanıt | Kalan kota bilgisi |
 | `Idempotent-Replayed: true` | Yanıt | Kayıtlı yanıt tekrar döndüyse |
 
@@ -94,7 +94,7 @@
 |---|---|---|
 | 400 | Biçim/şema hatası, bilinmeyen filtre | `request.malformed` |
 | 401 | Token yok/geçersiz/süresi dolmuş | `auth.invalid_token` |
-| 403 | İzin yok, üyelik yok, entitlement yok | `auth.forbidden`, `tenant.access_denied`, `entitlement.required`, `entitlement.limit_exceeded` |
+| 403 | İzin yok, üyelik yok, tenant aktif değil (`suspended`/`closed`), entitlement yok | `auth.forbidden`, `tenant.access_denied`, `tenant.inactive`, `entitlement.required`, `entitlement.limit_exceeded` |
 | 404 | Kaynak yok (tenant içinde) | `resource.not_found` |
 | 409 | İş kuralı / durum çakışması | `order.invalid_transition`, `inventory.insufficient_stock`, `inventory.busy`, `idempotency.in_progress` |
 | 412 | `If-Match` uyuşmazlığı | `concurrency.version_mismatch` |
@@ -105,15 +105,35 @@
 
 `code` alanı istemcilerin yerelleştirme anahtarıdır; `title/detail` yalnızca geliştirici yardımıdır.
 
+Uzantılar (OpenAPI şemaları, #86): `StockProblemDetails` — `shortages[]` (variantId, sku, warehouseId, locationId, requested, available) ve `confirmationRequired` (**deprecated**, hiç gönderilmez: stok eksiye düşmez, OD-09; istek tarafındaki `confirmNegativeStock` de yok sayılır); `CodeConflictProblemDetails` — `409 catalog.sku_taken` / `catalog.barcode_taken` için `conflict` {field: sku | barcode, value, variantId, productId, sku} (yalnızca eşzamanlı bir yazımı veritabanı indeksi yakaladığında yoktur). Para alanları şimdilik JSON sayısı (`number`) olarak yayınlanır; istemci para hesabı yapmaz, toplamlar API'den gelir (karar #86).
+
+**Koşullu (K) / kendi kayıtları (O) izinleri (#69):** uç izin(ler)ini bildirir (`x-permission`; birden çoğu yeterliyse `x-permission-any-of`). Koşulsuz izin olduğu gibi geçer; tenant kuralına bağlı K (dipnot 2, 3, 6, 9) kural açıksa koşulsuz, kapalıysa `403 auth.disabled_by_tenant_rule` (#111); kayıt düzeyi K/O (dipnot 1, 4, 5, 7, 8, 10, 11, 12, O) kapıdan geçer ve uygulama servisi `IAuthorizationContext` ile koşulu uygular. Hiçbir servis koşulu değerlendirmezse başarılı yanıt `403 auth.forbidden`'a çevrilir ve transaction geri alınır (fail-closed; bu güvenlik ağı bilerek genel kodda kalır). Görünürlük koşulunun dışındaki kayıt `404`, görünür ama işleme kapalı kayıt `403` döner.
+
+**403 kod kataloğu (#111).** Hepsi `403`; istemci `code`'a göre mesaj seçer, `title` geliştirici yardımıdır (#111 öncesi başlıklar değişmedi — eski istemciler başlığı ayrıştırmaya devam edebilir).
+
+| `code` | Ne zaman | Uzantılar |
+|---|---|---|
+| `auth.forbidden` | Rolde izin hiç yok (matris "–"); alan düzeyi izin eksik; fail-closed güvenlik ağı | — |
+| `auth.disabled_by_tenant_rule` | Rol izni K olarak taşıyor ama bağlı tenant kuralı kapalı: uç kapısında (ör. sales `approve`/`reject`/`close-remaining`, "Satış personeli sipariş onaylayabilir" kapalı — dipnot 9; depo personeli barkod/mal kabul onayı — dipnot 2, 6) ve alan düzeyinde (sales iskonto sınırı %0 iken manuel fiyat/iskonto — dipnot 10). Başlık eskisiyle aynı (`Not allowed` / `Missing permission: …`) | `permission`, `condition` (koşul kodu) |
+| `orders.not_owner` | sales başkasının taslağını düzenler (O) veya başkasının siparişini iptal eder (dipnot 11) | `permission` |
+| `orders.cancel_not_allowed_in_status` | sales kendi siparişini Taslak / Onay bekliyor dışındaki bir durumda iptal eder (dipnot 11) | `permission`, `orderStatus` |
+| `orders.discount_limit_exceeded` | Satır iskontosu satış iskonto sınırını aşıyor (dipnot 10) | `permission`, `limitPercent` |
+| `orders.manual_price_not_allowed` | İskonto sınırı altındaki sales manuel birim fiyat giriyor (dipnot 10) | `permission`, `limitPercent` |
+| `entitlement.required` | Tenant'ın paketi / ek modülleri / override'ları özelliği vermiyor (#51). İzin kapısı önce değerlendirilir: izni olmayan çağıran `auth.forbidden` alır, paket bilgisi öğrenmez | `feature`, `suggestedPlan`, `suggestedModule` (kataloğun önerisi; yoksa `null`) |
+| `entitlement.limit_exceeded` | Bir tane daha eklemek paket limitini aşar (#51; ör. Temel'de 2. aktif depo, aylık AI ayrıştırma kotası). Transaction geri alınır, mevcut veri okunur kalır | `feature` (limit kodu), `limit`, `current`, `suggestedPlan`, `suggestedModule` |
+
+OpenAPI: ilgili sipariş uçlarının `description` alanı bu kodları listeler. Entitlement uçları `x-entitlement` (gereken özellik) ve `x-entitlement-limit` (zorlanan limit kodları) uzantılarını ve 403 için `EntitlementProblemDetails` şemasını taşır.
+
 ## 7. Idempotency
 
-- `Idempotency-Key` zorunlu: tüm oluşturma `POST`'ları ve durum geçişleri. Eksikse `428`.
+- `Idempotency-Key` zorunlu: tüm oluşturma `POST`'ları ve durum geçişleri. Eksikse `428`; 100 karakterden uzun veya birden çok değer → `400 request.malformed`.
+- **Uygulama (#68):** uç tanımında tek çağrı — `.RequireIdempotencyKey()` (`BayiOS.SharedKernel`, `WithUnitOfWork` ile birlikte). Filtre istek UnitOfWork transaction'ı **içinde** çalışır (ilk taslaktaki "ayrı kısa transaction" yerine): anahtar kaydı ile iş yazımı birlikte commit olur ya da birlikte geri alınır; çökme sonrası `in_progress`'te takılı anahtar kalmaz.
 - Akış:
-  1. `INSERT INTO platform.idempotency_keys (tenant_id, key, user_id, method, path, request_hash, status='in_progress') ON CONFLICT DO NOTHING` — **iş transaction'ından ayrı, kısa bir transaction'da**.
-  2. Çakışma varsa: kayıt `completed` ve hash aynı → kayıtlı yanıtı döndür (`Idempotent-Replayed: true`); hash farklı → `422 idempotency.key_reused`; `in_progress` → `409 idempotency.in_progress` + `Retry-After`.
-  3. İş transaction'ı commit olunca yanıt kaydedilir (`status='completed'`, durum kodu, gövde, başlıklar). İş transaction'ı başarısız olur ve sonuç 5xx ise anahtar silinir (yeniden denenebilir); 4xx iş hataları kaydedilir (aynı istek aynı sonucu alır).
-- Saklama: 24 saat; temizlik job'ı.
-- Anahtar kapsamı: (tenant_id, key); aynı anahtarın farklı kullanıcı/uç ile kullanımı `422`.
+  1. `INSERT INTO platform.idempotency_keys (…, status='in_progress') ON CONFLICT (kapsam, key) DO UPDATE … WHERE expires_at <= now` — süresi dolmuş anahtar yeni sayılır. Aynı anahtarla eşzamanlı ikinci istek unique index üzerinde ilk transaction bitene kadar bekler (`lock_timeout` 5 sn), sonra kayıtlı yanıtı alır; süre aşılırsa `409 idempotency.in_progress` + `Retry-After`.
+  2. Canlı kayıt varsa: farklı kullanıcı veya farklı hash (metot + gerçek yol + bağlanmış JSON gövde, SHA-256) → `422 idempotency.key_reused`; aynı → kayıtlı yanıt birebir (durum, `Content-Type`/`Location`/`ETag`, gövde baytları) + `Idempotent-Replayed: true`.
+  3. Handler 2xx dönerse yanıt aynı transaction'da kaydedilir (`status='completed'`). 4xx/5xx sonuçlarda transaction (anahtar dahil) geri alınır: hata yanıtları **saklanmaz**, aynı anahtarla düzeltilmiş istek yeniden çalışır (iş yazımı da geri alındığından çift etki olmaz).
+- Saklama: 24 saat (`expires_at`); temizlik job'ı henüz yok (job altyapısı gelince `ix_idempotency_keys_expires_at` ile silinecek).
+- Anahtar kapsamı: tenant'lı uçlarda (tenant_id, key); tenant'sız uçlarda (ör. `POST /tenants`) (user_id, key). Aynı anahtarın farklı kullanıcı/uç ile kullanımı `422`.
 
 ## 8. Optimistic concurrency (ETag / If-Match)
 
@@ -134,7 +154,7 @@
 - **Oluşturma:** `201 Created` + `Location` + kaynak gövdesi.
 - **Durum geçişleri:** `200 OK` + güncel kaynak (istemci ayrıca GET yapmasın).
 - **Uzun işlemler** (import, AI ayrıştırma): `202 Accepted` + `Location: /api/v1/import-jobs/{id}`; istemci polling (sonra SignalR/FCM).
-- **Dosya yükleme:** `multipart/form-data` API'ye (boyut ≤ 10 MB, `.xlsx/.csv`, içerik imzası kontrolü — PRD IMP-01'deki 20 MB / `.xls` ile fark ürün sahibi kararı bekliyor, bkz. `docs/operations/phase0-gate.md`) → API Storage'a yazar. İndirme: API `GET …/download-url` ile kısa ömürlü (ör. 5 dk) imzalı URL döner.
+- **Dosya yükleme:** `multipart/form-data` API'ye (boyut ≤ 20 MB, yalnızca `.xlsx/.csv`, içerik imzası kontrolü — ürün sahibi kararı OD-04, 2026-11-09, `docs/operations/phase0-gate.md` §5) → API Storage'a yazar. İndirme: API `GET …/download-url` ile kısa ömürlü (ör. 5 dk) imzalı URL döner.
 - **Toplu işlemler:** `POST /products/bulk` gibi uçlar en fazla 500 öğe, satır bazında sonuç (`207` değil, `200` + `results[]`).
 - **Silme:** iş kaynaklarında `DELETE` = arşivleme (`archived_at`); `204`.
 - **Genişletme:** `?include=lines,customer` yalnızca dokümante edilmiş ilişkiler.
@@ -171,22 +191,50 @@ flowchart LR
 ### 12.1 Identity & Tenancy
 | Metot | Yol | İzin | Not |
 |---|---|---|---|
-| GET | `/me` | (kimlik) | Profil + üyelikler (tenant listesi); `X-Tenant-Id` gerekmez |
+| GET | `/me` | (kimlik) | Profil + üyelikler (tenant listesi; her üyelikte `status` = üyelik durumu, `tenantStatus` = tenant durumu `active`/`suspended`/`closed` — #111, seçici askıdaki/kapalı işletmeyi pasif gösterir); `X-Tenant-Id` gerekmez. Başlık aktif tenant'taki aktif bir üyeliği gösterirse `activeTenant`: rol + etkin izinler (`scope`: `all` / `conditional` / `own`, `condition` kodu, `parameters` — koşulun tenant değeri, şimdilik yalnızca `orders.discount_within_limit` için `maxDiscountPercent`; diğerlerinde `null`; §4 tenant kuralları uygulanmış). Aksi hâlde `activeTenant: null` (hata değil) |
 | GET | `/me/permissions` | (üyelik) | Etkin rol, izinler, entitlement'lar |
 | PATCH | `/me` | (kimlik) | Profil |
 | POST | `/tenants` | (kimlik) | Yeni tenant (İ); çağıran owner olur, deneme planı |
 | GET/PATCH | `/tenant` | `tenant.manage` (PATCH, M) | Aktif tenant bilgisi |
-| GET/PATCH | `/tenant/settings` | `tenant.manage` (M) | |
-| GET | `/members` | `members.manage` | |
-| PATCH | `/members/{id}` | `members.manage` (M) | Rol/durum |
-| POST | `/invitations` | `members.manage` (İ) | |
-| DELETE | `/invitations/{id}` | `members.manage` | |
-| POST | `/invitations/accept` | (kimlik) (İ) | Token ile |
+| GET/PATCH | `/tenant/settings` | `tenant.manage` (M) | Uygulanan izin `tenant.settings.manage` (owner/admin), ETag/If-Match. #92 ile `requireOrderApproval` (varsayılan `true`) ve `orderNumberPrefix` (varsayılan `SIP`; 1–10 karakter A–Z/0–9, harfle başlar, küçük harf büyütülür) |
+| GET | `/members` (role, status, permission, limit, cursor) | `members.read` | Uygulandı (#86): aktif tenant üyeleri (userId, displayName, fullName, email, role, status), membership id keyset; personel seçici. Okuma matristeki `members.read` ile (owner/admin/manager = `tasks.assign` sahipleriyle aynı küme). `permission` (#111, virgüllü = hepsi): rolü bu izinleri aktif tenant kurallarıyla taşıyan üyeler (kayıt düzeyi K/O sayılır, kuralı kapalı K sayılmaz); `role` ile kesişir; bilinmeyen izin kimliği `400 request.malformed` |
+| GET | `/members/invitations` (status) | `members.read` | Uygulandı (#129): en yeni 200 davet; `status` = pending, accepted, revoked, expired (süresi geçmiş pending `expired` görünür). Token hiç dönmez |
+| POST | `/members/invitations` | `members.invite` | Uygulandı (#129): `{email, role}` → 201 `{invitation, token}`. Token bir kez gösterilir, yalnızca SHA-256 saklanır; yanıt idempotency deposuna yazılmasın diye **Idempotency-Key almaz** (doğal idempotent: e-posta başına tek bekleyen davet → 409 `invitation.already_pending` + `invitationId`). 403 `members.role_not_grantable`, 409 `members.already_member`, 403 `entitlement.limit_exceeded` (`max_users`) |
+| POST | `/members/invitations/{id}/resend` | `members.invite` | Uygulandı (#129): yeni token + yeni 7 gün; eski token geçersiz. Idempotency-Key almaz (aynı gerekçe). 409 `invitation.not_pending` |
+| POST | `/members/invitations/{id}/revoke` | `members.invite` (İ) | Uygulandı (#129): bekleyen daveti iptal (silmez) |
+| PUT | `/members/{userId}/role` | `members.manage` (İ) | Uygulandı (#129): `{role}`; owner verilemez (devir), 403 `members.not_manageable` / `members.role_not_grantable`, 409 `members.last_owner` |
+| POST | `/members/{userId}/disable`, `/members/{userId}/enable` | `members.manage` (İ) | Uygulandı (#129): erişim bir sonraki istekte kesilir/açılır; 409 `members.cannot_disable_self`, `members.last_owner`; enable `max_users`'a tabi |
+| POST | `/members/ownership-transfer` | `ownership.transfer` (İ) | Uygulandı (#129): `{userId}` aktif üye owner, çağıran admin olur |
+| POST | `/invitations/accept` | (kimlik) (İ) | Uygulandı (#129): `{token}`, `X-Tenant-Id` yok. E-posta ve doğrulama yalnızca token claim'lerinden (`email`; `email_verified` veya Supabase `user_metadata.email_verified`; `is_anonymous` değil). 404 `invitation.not_found` (bilinmeyen/kullanılmış/iptal/yenilenmiş — tek yanıt), 403 `invitation.email_mismatch`, 403 `invitation.email_not_verified`, 410 `invitation.expired`, 409 `invitation.already_member`, 403 `tenant.inactive`, 403 `entitlement.limit_exceeded`. Davetlinin tenant'ı `identity.find_invitation_tenant` (SECURITY DEFINER) ile bulunur, gerisi o tenant bağlamında RLS ile (system-architecture §10 açık noktası, phase0-gate C-5) |
 
 ### 12.2 Billing & Entitlements
 | GET | `/billing/plans` | (kimlik) | |
 | GET | `/billing/subscription` | `billing.manage` | |
 | GET | `/billing/usage` | `billing.manage` | Sayaçlar |
+
+> **Uygulanan durum (#51/#52, JOB 14):** ödeme yok, ücret alınmaz. `GET /billing/plans` (yalnızca kimlik; tenant ve DB yok):
+> sürümlü katalog (`catalogVersion`, `trialPlan` = professional, `fallbackPlan` = basic, `trialDays`, `moduleTrialDays`,
+> planlar ve ek modüller; özellik/limit kodlarıyla, fiyatsız). Okumalar `billing.read` (owner, admin — matris §3.1):
+> `GET /billing/subscription` (etkin paket, durum `trialing|active|expired|cancelled`, `trialEndsAt`, özellikler,
+> limitler, modüller), `GET /billing/modules` (modül mağazası: `included_in_trial|trialing|active|cancelled|expired|available|unavailable`,
+> `canActivate`, `canDeactivate`), `GET /billing/usage` (limit başına `limit` / `current` / `remaining`; `ai_parses_per_month`
+> için `period = month`). Değişiklikler `billing.manage` (owner) + Idempotency-Key, denetim kaydıyla:
+> `POST /billing/modules/{code}/activate` (ücretsiz, süreli etkinleştirme — modül ve tenant başına bir kez; tenant
+> denemesi sırasında başlatılırsa süre deneme bitiminde başlar; kapatılan modül süre bitene kadar yeniden açılabilir) ve
+> `POST /billing/modules/{code}/deactivate` (veri silinmez). Kodlar: `409 billing.module_unavailable` (henüz yapılmadı),
+> `billing.module_already_active`, `billing.trial_used`, `billing.module_not_active`; bilinmeyen modül `404`. Paket
+> değişikliği (Temel ↔ Profesyonel) API'de yok: ödeme entegrasyonu ürün sahibi onayı gerektirir; pilot/operatör
+> değişiklikleri `billing.tenant_entitlements` override'ı ile yapılır (SUB-08).
+>
+> `GET /me` aktif tenant için `activeTenant.entitlements` döner (plan, status, trialEndsAt, catalogVersion, features,
+> limits — `null` = sınırsız); her rol görür (fiyat/ödeme bilgisi yok). Ayrı `/me/permissions` yok.
+>
+> Uç kuralı: `.RequireEntitlement("feature")` (SharedKernel) izin kapısıyla aynı yetkilendirme adımında çalışır, fail-closed
+> (tenant yok / entitlement servisi yok / özellik yok → red); limitler servislerde `IEntitlements.EnsureCapacityAsync`
+> ile, sayım tenant başına transaction kilidiyle kontrol edilir. Okuma uçları ve dışa aktarmalar asla kapılanmaz (SUB-06, REP-08).
+> Uygulanan kapılar: `POST /warehouses/{id}/locations`, `PATCH /locations/{id}` (`warehouse_locations`); `POST /warehouses`
+> ve `PATCH /warehouses/{id}` (aktif depo sayısı `max_warehouses`; `usesLocations = true` → `warehouse_locations`);
+> `POST /ai/order-parses` (`ai_order_parsing` + aylık `ai_parses_per_month`).
 
 ### 12.3 Catalog
 | Metot | Yol | İzin |
@@ -198,7 +246,8 @@ flowchart LR
 | DELETE | `/products/{id}` (arşiv, M) | `catalog.write` |
 | POST | `/products/{id}/variants` (İ) | `catalog.write` |
 | PATCH/DELETE | `/variants/{id}` (M) | `catalog.write` |
-| GET | `/variants` (q, sku, barcode, ids) | `catalog.read` |
+| GET | `/variants` (q, sku, barcode, productId, status) | `catalog.read` |
+| GET | `/variants/batch?ids=` | `catalog.read` | Toplu görüntüleme okuması: 1–100 id (virgülle; tekrarlar tekilleşir) → id, productId, sku, name, productName, barcode, status (SKU sırasıyla). Bulunmayan / başka tenant'a ait id'ler sonuçta yer almaz (404 yok, ipucu yok); sayfasız ayrı yanıt şekli olduğu için listeye `ids` parametresi yerine ayrı uç |
 | GET | `/variants/lookup?barcode=` | `catalog.read` | Mobil okutma; tek sonuç veya 404 |
 | POST/DELETE | `/variants/{id}/barcodes` · `/variants/{id}/barcodes/{barcodeId}` | `catalog.write` |
 | POST/DELETE | `/variants/{id}/aliases` · `/variants/{id}/aliases/{aliasId}` | `catalog.write` |
@@ -227,16 +276,32 @@ flowchart LR
 | GET/PATCH | `/warehouses/{id}` (M) | | |
 | GET/POST | `/warehouses/{id}/locations` | | |
 | PATCH | `/locations/{id}` (M) | `tenant.manage` | |
-| GET | `/inventory/balances` (variantId, warehouseId, locationId, q, belowThreshold) | `inventory.read` | on_hand, reserved, available |
+| GET | `/inventory/balances` (variantId, warehouseId, locationId, q, belowThreshold) | `inventory.read` | on_hand, reserved, available. `q` uygulandı (#86, inventory-and-orders §6). #137: her satırda `minQuantity` (satırın deposundaki etkin minimum: depo istisnası, yoksa genel eşik; yoksa null) ve `belowMinimum` (varyantın o depodaki tüm raflarının satılabilir toplamı ≤ minQuantity). `belowThreshold` filtresi henüz yok (liste görünümü: kritik stok raporu) |
+| GET | `/inventory/thresholds` (variantId, variantIds ≤ 100, warehouseId, limit, cursor) | `inventory.read` | #137 minimum stok eşikleri; `warehouseId = null` satır = genel eşik. Keyset (id) |
+| GET | `/inventory/thresholds/{id}` | `inventory.read` | ETag |
+| POST | `/inventory/thresholds` (İ) | `catalog.write` | Upsert (variantId, warehouseId?) → 201 yeni / 200 güncellendi veya aynı; son yazan kazanır |
+| POST | `/inventory/thresholds/bulk` (İ) | `catalog.write` | 1–500 satır, hepsi ya da hiçbiri: `{variantId, warehouseId?, minQuantity}` ayarla, `{…, remove: true}` kaldır; yanıt created/updated/removed/unchanged + satırlar |
+| PUT / DELETE | `/inventory/thresholds/{id}` (M) | `catalog.write` | If-Match zorunlu (428 / 412) |
 | GET | `/inventory/availability?variantIds=…&warehouseId=` | `inventory.read` | Sipariş ekranı |
 | GET | `/inventory/movements` (variantId, warehouseId, type, from, to) | `inventory.read` | Stok kartı, keyset |
 | POST | `/inventory/receipts` (İ) | `inventory.receive` | §4.1 |
 | POST | `/inventory/adjustments` (İ) | `inventory.adjust` | §4.2 |
-| POST | `/inventory/transfers` (İ) | `inventory.transfer` | §4.7 |
-| GET/POST | `/stock-counts` (İ) | `inventory.count` | |
-| GET | `/stock-counts/{id}` | `inventory.count` | |
-| PUT | `/stock-counts/{id}/lines` (M) | `inventory.count` | Sayılan miktarlar (toplu) |
-| POST | `/stock-counts/{id}/submit` · `/apply` · `/cancel` (İ) | `inventory.count` / apply: `inventory.adjust` | §4.8 |
+| POST | `/inventory/relocations` (İ) | `inventory.transfer` | Uygulandı (#168): aynı depoda raftan rafa anlık taşıma (`transfer_out` + `transfer_in`, tek transaction); yalnızca satılabilir; 409 `inventory.insufficient_available` + `shortages` |
+| GET | `/stock-transfers` (status, warehouseId = kaynak veya hedef, limit, cursor) | `inventory.transfer` \| `inventory.transfer.receive` | Uygulandı (#168, OD-01): yeniden eskiye keyset; `isOverdue` (7 günden uzun yolda), `hasDiscrepancy` |
+| GET | `/stock-transfers/{id}` | `inventory.transfer` \| `inventory.transfer.receive` | Satırlar: gönderilen / teslim alınan / yolda / iade / kayıp / fark; ETag |
+| POST | `/stock-transfers` (İ) | `inventory.transfer` | Taslak: kaynak ≠ hedef depo, 1–500 satır (variant, miktar, kaynak raf, planlanan hedef raf) |
+| POST | `/stock-transfers/{id}/dispatch` (İ, M) | `inventory.transfer` | Kaynaktan yolda noktasına (inventory-and-orders §4.7); 409 `inventory.insufficient_available` |
+| POST | `/stock-transfers/{id}/receive` (İ, M) | `inventory.transfer.receive` | Kısmi olabilir: `lineId` veya `variantId`/okutulan `code` + hedef raf (`locationId`/`locationCode`); 422 `transfer.over_receipt` / `unknown_code` / `wrong_item` / `unknown_location` |
+| POST | `/stock-transfers/{id}/close` (İ, M) | `inventory.transfer` | `{resolution: lost \| return_to_source, reason}` — yolda kalan kayıp veya kaynağa iade |
+| POST | `/stock-transfers/{id}/cancel` (İ, M) | `inventory.transfer` | Yalnızca taslak, `{reason}`; stok hareketi yok |
+| GET | `/stock-counts` (status, warehouseId, limit, cursor) | `inventory.count.manage` \| `inventory.count.perform` | Uygulandı (#168): yeniden eskiye keyset |
+| GET | `/stock-counts/{id}` | `inventory.count.manage` \| `inventory.count.perform` | Satırlar + fark; kör sayımda sistem miktarı yalnızca `inventory.count.manage` ile (`quantitiesHidden`); ETag |
+| POST | `/stock-counts` (İ) | `inventory.count.manage` | `{warehouseId, scope: full \| locations \| variants, locationIds?, variantIds?, blind, note}`; anlık görüntü; depo başına tek açık sayım (409 `count.already_active`) |
+| POST | `/stock-counts/{id}/entries` (İ) | `inventory.count.perform` | 1–500 giriş: `lineId` veya ürün (`variantId`/`code`) + raf (`locationId`/`locationCode`), `mode: set \| add`; If-Match isteğe bağlı |
+| POST | `/stock-counts/{id}/submit` (İ, M) | `inventory.count.perform` | open → submitted; 409 `count.nothing_counted` |
+| POST | `/stock-counts/{id}/recount` (İ, M) | `inventory.count.manage` | `{lineIds}` sayılanı siler, open'a döner |
+| POST | `/stock-counts/{id}/apply` (İ, M) | `inventory.count.manage` | `count_correction` hareketleri (sayım anındaki bakiyeye göre); 409 `count.lines_moved` → `acceptMovedLines: true` ile tekrar; 409 `count.below_reserved` + `shortages` |
+| POST | `/stock-counts/{id}/cancel` (İ, M) | `inventory.count.manage` | `{reason}`; stok hareketi yok |
 
 ### 12.7 Orders
 | Metot | Yol | İzin | Not |
@@ -246,7 +311,7 @@ flowchart LR
 | GET | `/orders/{id}` (include=lines,history,shipments) | `orders.read` | |
 | PATCH | `/orders/{id}` (M) | `orders.write` | Yalnızca Draft |
 | PUT | `/orders/{id}/lines` (M) | `orders.write` | Satırları toptan değiştir (Draft) |
-| POST | `/orders/{id}/submit` (İ, M) | `orders.submit` | |
+| POST | `/orders/{id}/submit` (İ, M) | `orders.submit` | Adres snapshot'ı; `requireOrderApproval = false` ise onay yetkisi olan için aynı transaction'da onay + rezervasyon (#92, inventory-and-orders §7) |
 | POST | `/orders/{id}/withdraw` (İ) | `orders.submit` | |
 | POST | `/orders/{id}/reject` (İ) | `orders.approve` | |
 | POST | `/orders/{id}/approve` (İ, M) | `orders.approve` | Rezervasyon |
@@ -266,6 +331,7 @@ flowchart LR
 | GET | `/shipments/{id}` · `/shipments?orderId=` | `orders.read` | |
 | PATCH | `/shipments/{id}` (M) | `fulfillment.ship` | Taşıyıcı, takip no, satırlar (draft) |
 | POST | `/shipments/{id}/confirm` (İ) | `fulfillment.ship` | §4.6 |
+| POST | `/shipments/{id}/cancel` (İ) | `tasks.assign` | Uygulandı (#86): onaylanmamış sevkiyat iptali; stok/rezervasyon değişmez, putaway görevi (inventory-and-orders §8) |
 
 ### 12.9 Imports
 | POST | `/import-jobs` (multipart, İ) | `imports.run` | `202` |
@@ -282,12 +348,68 @@ flowchart LR
 | POST | `/ai/order-parses/{id}/approve` (İ) | `ai.review` | Draft sipariş oluşturur → `orderId` |
 | POST | `/ai/order-parses/{id}/reject` (İ) | `ai.review` | |
 
+> **Güncelleme (#121):** `POST /ai/order-parses` (İ) artık `202` + `Location: /ai/order-parses/{id}/status` döner
+> (`{ id, status: pending, statusUrl, resultUrl, pollAfterMs }`); ayrıştırma arka plan job'ında çalışır. Yeni uçlar:
+> `GET /ai/order-parses/{id}/status` (`pending | succeeded | failed`, `Cache-Control: no-store`), `GET /ai/settings`
+> (opt-in + giriş limitleri, ETag) ve `PUT /ai/settings` (`tenant.settings.manage`, If-Match isteğe bağlı),
+> `GET /ai/aliases`, `DELETE /ai/aliases/{id}`. Gövde `{ text, customerId?, warehouseId? }`; onay satırında `unit?`,
+> `learnAlias?`. Yeni kod: `409 ai.opt_in_required`. Aşağıdaki "senkron/201" ifadesi tarihseldir.
+>
+> **Uygulanan durum (#47/#48/#50, JOB 12):** izin `whatsapp.parse` (matris §3.5; `ai.parse`/`ai.review` gruplarının
+> karşılığı), onay ayrıca `orders.create` ister (servis kontrol eder). `POST /ai/order-parses` (İ) senkron çalışır ve
+> `201` + inceleme yükü döner (`202` değil; ADR 0010 uygulama notları); gövde `{ text, customerId? }` (`senderPhone`
+> yok — telefon zaten maskelenir). `GET /ai/order-parses?status=&limit=` (metinsiz liste), `GET /ai/order-parses/{id}`
+> (ETag), `POST /ai/order-parses/{id}/approve` (İ, If-Match isteğe bağlı; satır seçimleri gövdede — ayrı `PUT …/lines`
+> yok) → güncel ayrıştırma + `orderId`, `POST /ai/order-parses/{id}/reject` (İ), `GET /ai/usage` (bugünkü kullanım ve
+> limitler). Kodlar: `429 ai.rate_limited` (+ `Retry-After`), `409 ai.parse_not_reviewable`, `409 ai.parse_text_purged`;
+> Orders doğrulama hataları aynen iletilir. Entitlement (#51): `POST /ai/order-parses` `ai_order_parsing` ister (AI
+> WhatsApp asistanı ek modülü; tenant denemesinde açık) — yoksa `403 entitlement.required`; ek modülün aylık kotası
+> `ai_parses_per_month` dolunca `403 entitlement.limit_exceeded` (saatlik `429 ai.rate_limited` ile aynı sayaçta, tenant
+> başına kilitle). Liste/okuma, onay ve red ek modül kapalıyken de açıktır (mevcut ayrıştırmalar sipariş akışında takılı
+> kalmaz). AI sağlayıcı çağrısı ayrıca `Ai:Enabled` bayrağı ve günlük limitlerle sınırlıdır.
+
 ### 12.11 Audit & Notifications
 | GET | `/audit-events` (entityType, entityId, actor, from, to) | `audit.read` |
-| POST | `/devices` (İ) | (üyelik) | FCM token kaydı/yenileme |
-| DELETE | `/devices/{id}` | (üyelik) | |
+| GET | `/devices` | `tenant.read` (her rol) | Bu işletmede kendi push kayıtlarım (token dönmez) — #44 |
+| POST | `/devices` (İ) | `tenant.read` (her rol) | FCM token kaydı/yenileme; başka kullanıcıdaki/işletmedeki token çağırana taşınır; 422 `validation.failed` |
+| DELETE | `/devices/{id}` | `tenant.read` (her rol) | Kendi kaydı (çıkış, işletme değişimi); yoksa 404 |
 | GET | `/notifications` · POST `/notifications/{id}/read` | (üyelik) | |
 
 ### 12.12 Platform
 | GET | `/health/live`, `/health/ready` | anonim |
 | GET | `/openapi/v1.json` | yalnızca local/preview |
+
+### 12.13 Reports (#53) — entitlement yok (dışa aktarma hiçbir pakette kilitlenmez, roles-permissions §5)
+| GET | `/reports/critical-stock` (threshold, warehouseId, includeOutOfStock, limit, cursor) | `reports.read` | REP-03: aktif varyantlardan kullanılabilir (Σ eldeki − Σ rezerve; hiç bakiyesi olmayan = 0) ≤ eşik. SKU sırasıyla keyset (100, en fazla 500). **#137:** `threshold` verilmezse `mode = thresholds` — her varyant kendi etkin minimumuna göre (data-model §5.7 `stock_thresholds`), minimumu olmayanlar hariç; `includeOutOfStock=true` ile minimumu olmayan ve kullanılabilir ≤ 0 olanlar da. `threshold` verilirse `mode = fixed` (eski davranış: tüm aktif varyantlar ≤ eşik); ikisi birlikte 422. Yanıt: `mode`, `threshold` (fixed'de değer, aksi null), `includeOutOfStock`, `thresholdsConfigured` (kapsamda en az bir eşik var mı), satırda `minQuantity` |
+| GET | `/reports/orders` (from, to, status) | `reports.read` | REP-04: oluşturma günü (Europe/Istanbul) × güncel durum × para birimi; adet ve genel toplam |
+| GET | `/reports/top-products` (from, to, limit) | `reports.read` | REP-06: onaylanmış ve sonrası (approved, picking, packed, shipped, completed) siparişlerin satırları; miktar, sipariş sayısı, tutar (satır toplamı, KDV hariç) |
+| GET | `/reports/stock-movements` (from, to, warehouseId) | `reports.read` | REP-07: ledger, gün × hareket tipi: adet, giriş, çıkış miktarı (maliyet yok) |
+| GET | `/reports/picking-tasks` (from, to, warehouseId) | `reports.read` | REP-05 (tenant düzeyi): pick görevleri, kendi olay gününe göre oluşturulan / tamamlanan / eksikle tamamlanan / iptal, ortalama toplama süresi (dk). Personel kırılımı yok |
+| GET | `/reports/ai-usage` (from, to) | `billing.read` | AI asistan sayaçları (`integrations.ai_usage`) gün bazında: ayrıştırma, AI çağrısı, hata, geri dönüş, token'lar — owner/admin |
+| POST | `/reports/{critical-stock\|orders\|top-products\|stock-movements\|picking-tasks}/export` (İ) | `reports.export` | REP-08: gövde `{ format: csv\|xlsx, …raporun filtreleri }`; almadığı filtre → 422 |
+| POST | `/reports/ai-usage/export` (İ) | `billing.read` | |
+
+> **Uygulanan durum (#53):** Yeni **Reports** modülü salt okunur; iş verisi tutmaz. Veriyi sahibi modüllerin şemasından,
+> `BayiOS.Api/Platform/ReportsPorts.cs` içindeki port adaptörleri okur (her biri yalnız kendi modülünün DbContext'i ve
+> bağlantısı üzerinden, istek transaction'ında: RLS + açık `tenant_id` filtresi; iki modülün tablolarını birleştiren
+> sorgu yok — kritik stok, Inventory'den "eşik üstü" varyant kimliklerini alır, Catalog'da bunları dışlayarak sayfalar;
+> #137 eşik modunda Inventory'nin `IStockThresholdQueries` sözleşmesinden "minimumunda/altında" kimlikleri alır ve
+> Catalog'da yalnızca onları sayfalar, satırları sayfa okunurken yeniden doğrular). **Sözleşme değişikliği (#137):**
+> varsayılan davranış değişti — `threshold` parametresiz çağrı artık eşik modudur (önceden eşik 0'dı); eski sonucu almak
+> için `threshold=0` gönderin. `CriticalStockReportResponse.threshold` artık nullable; `mode`, `includeOutOfStock`,
+> `thresholdsConfigured` ve `CriticalStockItem.minQuantity` eklendi. Dışa aktarmada "Eşik" kolonu satırın karşılaştırıldığı
+> değerdir (sabit eşik ya da varyantın minimumu).
+> Tarih aralığı varsayılan son 30 gün, en fazla 366 gün; gün = Europe/Istanbul takvim günü (sabit UTC+03:00).
+> **İzinler:** sales (dipnot 4, kayıt düzeyi K) yalnızca sipariş raporları (`orders`, `top-products`) — diğerleri
+> `403 reports.orders_and_customers_only`; warehouse_staff hiçbiri (`403 auth.forbidden`). Tutarlar yalnızca koşulsuz
+> `prices.read.sell` ile dolu (`amountsVisible`); dışa aktarmada tutar kolonları o zaman hiç yazılmaz. Raporlarda ve
+> dosyalarda müşteri, kişi (üye/atanan), adres ve maliyet verisi yoktur.
+> **Dışa aktarma:** senkron, bellekte, en fazla 20.000 satır (`422 reports.export_too_large`). CSV: UTF-8 BOM, `;`
+> ayırıcı (tr-TR liste ayırıcısı; `,` ondalık ayırıcı olduğundan virgüllü CSV Türkçe Excel'de tek kolon açılır),
+> CRLF, RFC 4180 tırnaklama, ondalık virgül (`1234,5`), ISO tarih. XLSX: DocumentFormat.OpenXml (MIT), `OpenXmlWriter`
+> ile ileri yönlü yazım, metin = inline string (formül elemanı hiç yazılmaz), sayılar sayı, günler tarih biçimli.
+> Her metin hücresi `= + - @ TAB CR` ile başlıyorsa başına `'` eklenir (threat-model §6.1; Imports `CsvSanitizer` ile
+> aynı kural). Tenant başına saatte 10 dışa aktarma (threat-model §6.5): `reports.export_requests` (Postgres, tüm
+> instance'larca paylaşılır, tenant başına advisory lock) — aşımda `429 rate_limit.exceeded` + `Retry-After`; reddedilen
+> ve idempotent tekrar edilen istekler sayılmaz. Her dışa aktarma bir audit olayı: `export.downloaded`
+> (`report_export`; yalnızca rapor, biçim, satır sayısı). Export POST'tur çünkü GET transaction'ları salt okunurdur.
