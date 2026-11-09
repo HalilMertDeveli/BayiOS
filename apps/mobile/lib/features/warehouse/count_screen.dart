@@ -1,0 +1,471 @@
+import 'dart:async';
+
+import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/ui/widgets.dart';
+import 'package:bayios_mobile/features/picking/scan_alerts.dart';
+import 'package:bayios_mobile/features/picking/tasks_widgets.dart';
+import 'package:bayios_mobile/features/stock/quantity.dart';
+import 'package:bayios_mobile/features/stock/stock_api.dart';
+import 'package:bayios_mobile/features/stock/stock_errors.dart';
+import 'package:bayios_mobile/features/stock/stock_widgets.dart';
+import 'package:bayios_mobile/features/warehouse/count_controller.dart';
+import 'package:bayios_mobile/features/warehouse/count_list_screen.dart';
+import 'package:bayios_mobile/features/warehouse/document_scan_controller.dart';
+import 'package:bayios_mobile/features/warehouse/warehouse_api.dart';
+import 'package:bayios_mobile/features/warehouse/warehouse_errors.dart';
+import 'package:bayios_mobile/features/warehouse/warehouse_models.dart';
+import 'package:bayios_mobile/features/warehouse/warehouse_widgets.dart';
+import 'package:bayios_mobile/l10n/app_localizations.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+/// Sayım girişi: mode (ekle / sabitle) → shelf → quantity → product scan;
+/// counted lines below; "Sayımı bitir" submits for review. Applying the
+/// differences is a manager action on the web.
+class CountScreen extends ConsumerStatefulWidget {
+  const CountScreen({required this.countId, super.key});
+
+  final String countId;
+
+  @override
+  ConsumerState<CountScreen> createState() => _CountScreenState();
+}
+
+class _CountScreenState extends ConsumerState<CountScreen> {
+  late final CountController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = CountController(
+      api: ref.read(warehouseApiProvider),
+      stock: ref.read(stockApiProvider),
+      countId: widget.countId,
+      alerts: ref.read(scanAlertsProvider),
+      wait: ref.read(stockDelayProvider),
+    );
+    // Without the permission the screen only explains (no API call).
+    if (ref
+        .read(stockAccessProvider)
+        .canSome(WarehousePermissions.performCount)) {
+      unawaited(_controller.load());
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirmSubmit() async {
+    final l10n = AppLocalizations.of(context);
+    final count = _controller.count;
+    if (count == null) return;
+    final uncounted = count.lineCount - count.countedLineCount;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.countSubmitConfirmTitle),
+        content: Text(
+          uncounted > 0
+              ? l10n.countSubmitConfirmUncounted(uncounted)
+              : l10n.countSubmitConfirmBody,
+        ),
+        actions: [
+          TextButton(
+            key: const Key('count-submit-cancel'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.docCancel),
+          ),
+          FilledButton(
+            key: const Key('count-submit-confirm'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.countSubmit),
+          ),
+        ],
+      ),
+    );
+    if (ok ?? false) await _controller.submit();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final access = ref.watch(stockAccessProvider);
+    if (!access.canSome(WarehousePermissions.performCount)) {
+      return WarehouseForbidden(
+        title: l10n.countTitle,
+        message: l10n.countForbidden,
+      );
+    }
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) {
+        final c = _controller;
+        final Widget body;
+        if (c.loading && c.document == null) {
+          body = const LoadingView();
+        } else if (c.document == null) {
+          body = Center(
+            child: StockMessagePanel(
+              key: const Key('count-load-error'),
+              icon: Icons.cloud_off_outlined,
+              tone: BosColors.danger,
+              message: documentErrorMessage(
+                l10n,
+                c.loadError!,
+                forbidden: l10n.countForbidden,
+              ),
+              onRetry: c.load,
+              error: c.loadError,
+            ),
+          );
+        } else {
+          body = RefreshIndicator(
+            onRefresh: c.load,
+            child: _CountBody(controller: c),
+          );
+        }
+        final open = c.document?.count.isOpen ?? false;
+        return Scaffold(
+          appBar: AppBar(title: Text(c.count?.number ?? l10n.countTitle)),
+          body: body,
+          bottomNavigationBar: open || c.submitState is SubmitFailed
+              ? _SubmitBar(controller: c, onSubmit: _confirmSubmit)
+              : null,
+        );
+      },
+    );
+  }
+}
+
+class _CountBody extends StatelessWidget {
+  const _CountBody({required this.controller});
+
+  final CountController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final c = controller;
+    final detail = c.document!;
+    final count = detail.count;
+    final counted = detail.countedLines;
+    final locked = c.sending || c.hasPending;
+    final showShelf = c.warehouse == null || c.requiresShelf;
+    return ListView(
+      key: const Key('count-body'),
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(BosSpace.s16),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(BosSpace.s16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${count.warehouseName ?? '—'} · '
+                        '${countScopeLabel(l10n, count.scope)}',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                    ),
+                    if (count.isBlind)
+                      ToneBadge(l10n.countBlind, BosColors.purple),
+                  ],
+                ),
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    l10n.countProgress(count.countedLineCount, count.lineCount),
+                    key: const Key('count-progress'),
+                  ),
+                ),
+                if (count.quantitiesHidden)
+                  Text(
+                    l10n.countBlindHint,
+                    key: const Key('count-blind-hint'),
+                    style: const TextStyle(color: BosColors.textMuted),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: BosSpace.s16),
+        if (c.submitState is SubmitDone ||
+            count.status == CountStatus.submitted)
+          StockNotice(
+            key: const Key('count-submitted'),
+            tone: BosColors.success,
+            icon: Icons.check_circle_outline,
+            child: Text(l10n.countSubmitted),
+          )
+        else if (!count.isOpen)
+          StockNotice(
+            key: const Key('count-closed'),
+            tone: BosColors.warning,
+            icon: Icons.info_outline,
+            child: Text(l10n.countNotOpen),
+          )
+        else ...[
+          SegmentedButton<CountMode>(
+            key: const Key('count-mode'),
+            segments: [
+              ButtonSegment(
+                value: CountMode.add,
+                label: Text(l10n.countModeAdd),
+                icon: const Icon(Icons.add_circle_outline),
+              ),
+              ButtonSegment(
+                value: CountMode.set,
+                label: Text(l10n.countModeSet),
+                icon: const Icon(Icons.edit_outlined),
+              ),
+            ],
+            selected: {c.mode},
+            onSelectionChanged: locked
+                ? null
+                : (selection) => c.setMode(selection.first),
+            style: SegmentedButton.styleFrom(
+              minimumSize: const Size(0, BosSize.minTouchTarget),
+            ),
+          ),
+          const SizedBox(height: BosSpace.s4),
+          Text(
+            c.mode == CountMode.add
+                ? l10n.countModeAddHint
+                : l10n.countModeSetHint,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: BosColors.textMuted,
+            ),
+          ),
+          const SizedBox(height: BosSpace.s16),
+          if (showShelf) ...[
+            ShelfScanField(
+              keyPrefix: 'count',
+              shelf: c.shelf,
+              enabled: !locked,
+              required: c.requiresShelf,
+              missing: c.entryProblem == EntryProblem.shelfRequired,
+              onScanned: c.setShelf,
+              onClear: c.clearShelf,
+            ),
+            const SizedBox(height: BosSpace.s16),
+          ],
+          QuantityStepper(
+            keyPrefix: 'count',
+            text: c.quantityText,
+            label: c.mode == CountMode.add
+                ? l10n.countQuantityAddLabel
+                : l10n.countQuantitySetLabel,
+            error: quantityErrorText(l10n, c.quantityError),
+            enabled: !locked,
+            onChanged: c.setQuantityText,
+            onStep: c.stepQuantity,
+          ),
+          const SizedBox(height: BosSpace.s16),
+          CodeEntryField(
+            fieldKey: const Key('count-code-field'),
+            scanKey: const Key('count-code-scan'),
+            label: l10n.docProductLabel,
+            hint: l10n.countProductHint,
+            scanTitle: l10n.docProductScanTitle,
+            enabled: c.canScan,
+            busy: c.sending,
+            onSubmit: c.enter,
+          ),
+        ],
+        if (c.retryingBusy) ...[
+          const SizedBox(height: BosSpace.s8),
+          Text(l10n.docBusyRetrying, key: const Key('count-busy-retry')),
+        ],
+        if (c.feedback case final EntryFeedback feedback) ...[
+          const SizedBox(height: BosSpace.s12),
+          EntryFeedbackView(
+            keyPrefix: 'count',
+            feedback: feedback,
+            sending: c.sending,
+            forbidden: l10n.countForbidden,
+            acceptedLine: (line) => l10n.countAcceptedLine(
+              line.sku,
+              line.shelf ?? '—',
+              formatQuantity(line.total),
+            ),
+            onResend: c.resend,
+            onDiscard: c.discardPending,
+          ),
+        ],
+        const SizedBox(height: BosSpace.s16),
+        Text(
+          l10n.countLinesTitle(counted.length),
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: BosSpace.s8),
+        if (counted.isEmpty)
+          Text(
+            l10n.countNoLines,
+            key: const Key('count-no-lines'),
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: BosColors.textMuted,
+            ),
+          )
+        else
+          for (final line in counted)
+            _CountLineTile(line: line, showSystem: c.showsSystemQuantities),
+      ],
+    );
+  }
+}
+
+class _CountLineTile extends StatelessWidget {
+  const _CountLineTile({required this.line, required this.showSystem});
+
+  final CountLine line;
+  final bool showSystem;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final expected = line.expectedQuantity;
+    final difference = line.difference;
+    return Card(
+      key: Key('count-line-${line.id}'),
+      child: Padding(
+        padding: const EdgeInsets.all(BosSpace.s12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    line.sku,
+                    style: BosType.mono.copyWith(fontSize: 17),
+                  ),
+                ),
+                if (line.locationCode != null)
+                  Text(line.locationCode!, style: theme.textTheme.bodyLarge),
+              ],
+            ),
+            Text(
+              l10n.countLineCounted(formatQuantity(line.countedQuantity ?? 0)),
+              style: theme.textTheme.titleMedium,
+            ),
+            // System quantities only when the API sends them (never for a
+            // blind count seen without inventory.count.manage).
+            if (showSystem && expected != null)
+              Text(
+                l10n.countLineSystem(
+                  formatQuantity(expected),
+                  difference == null ? '—' : signedQuantity(difference),
+                ),
+                key: Key('count-line-system-${line.id}'),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: difference == null || difference == 0
+                      ? BosColors.textMuted
+                      : BosColors.danger.fg,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SubmitBar extends StatelessWidget {
+  const _SubmitBar({required this.controller, required this.onSubmit});
+
+  final CountController controller;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final c = controller;
+    final state = c.submitState;
+    final sending = state is SubmitSending;
+    return Material(
+      elevation: 8,
+      color: BosColors.surfaceCard,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(BosSpace.s12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (state is SubmitFailed) ...[
+                StockNotice(
+                  key: const Key('count-submit-error'),
+                  tone: BosColors.danger,
+                  icon: Icons.error_outline,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        documentErrorMessage(
+                          l10n,
+                          state.error,
+                          forbidden: l10n.countForbidden,
+                        ),
+                      ),
+                      if (state.pending) Text(l10n.docEntryPendingHint),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: BosSpace.s8),
+              ],
+              if (state is SubmitFailed && state.pending)
+                FilledButton.icon(
+                  key: const Key('count-submit-resend'),
+                  onPressed: c.submit,
+                  icon: const Icon(Icons.refresh),
+                  label: Text(l10n.resend),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: BosColors.dangerSolid,
+                    minimumSize: const Size.fromHeight(BosSize.primaryAction),
+                  ),
+                )
+              else if (c.document?.count.isOpen ?? false)
+                FilledButton.icon(
+                  key: const Key('count-submit'),
+                  onPressed: sending || c.sending || c.hasPending
+                      ? null
+                      : onSubmit,
+                  icon: sending
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: BosColors.brandOnPrimary,
+                          ),
+                        )
+                      : const Icon(Icons.task_alt),
+                  label: Text(
+                    sending ? l10n.countSubmitting : l10n.countSubmit,
+                  ),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(BosSize.primaryAction),
+                  ),
+                )
+              else
+                TextButton(
+                  key: const Key('count-submit-dismiss'),
+                  onPressed: c.dismissSubmitError,
+                  child: Text(l10n.docDismiss),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

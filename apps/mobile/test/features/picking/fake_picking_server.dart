@@ -32,9 +32,13 @@ class FakeLine {
   final int sequence;
   final String sku;
   final String barcode;
-  final String? locationId;
-  final String? locationCode;
-  final String? locationBarcode;
+  // Mutable: a re-allocation (#98) moves the line to another shelf.
+  String? locationId;
+  String? locationCode;
+  String? locationBarcode;
+
+  /// `locationIsActive` (#98); null = field absent (older API).
+  bool? locationIsActive;
   final String name;
   final String unit;
   final double toPick;
@@ -62,7 +66,17 @@ class FakeLine {
     'quantityShort': short,
     'quantityRemaining': remaining,
     'shortageReason': shortageReason,
+    if (locationIsActive != null) 'locationIsActive': locationIsActive,
   };
+}
+
+/// A shelf with free stock a scan may re-allocate a line to (#98).
+class FakeShelf {
+  const FakeShelf(this.id, this.code, this.barcode);
+
+  final String id;
+  final String code;
+  final String barcode;
 }
 
 /// A fake Warehouse API for one task: validates scans like PickingService
@@ -102,6 +116,14 @@ class FakePickingServer implements HttpClientAdapter {
 
   String? assignedTo;
   String status;
+
+  /// #98 task facts.
+  String priority = 'normal';
+  String? customerName = 'Yıldız Oto';
+  String? requestedDeliveryDate = '2026-11-12';
+
+  /// Shelves (not on the task) where a scan re-allocates the line.
+  final freeShelves = <FakeShelf>[];
   final List<FakeLine> lines;
   int version = 3;
   String? shipmentId;
@@ -153,6 +175,9 @@ class FakePickingServer implements HttpClientAdapter {
     'startedAt': null,
     'completedAt': null,
     'version': '$version',
+    'priority': priority,
+    'customerName': customerName,
+    'requestedDeliveryDate': requestedDeliveryDate,
   };
 
   Map<String, Object?> taskJson() => {
@@ -347,6 +372,16 @@ class FakePickingServer implements HttpClientAdapter {
           : problem(422, 'picking.unknown_code');
     }
     if (location == null) return problem(422, 'picking.location_required');
+    // Re-allocation (#98): another shelf with free stock takes the line.
+    final free = freeShelves
+        .where((f) => f.barcode == location || f.code == location.toUpperCase())
+        .firstOrNull;
+    if (free != null) {
+      candidates.first
+        ..locationId = free.id
+        ..locationCode = free.code
+        ..locationBarcode = free.barcode;
+    }
     final known = lines.any(
       (l) =>
           l.locationBarcode == location ||
