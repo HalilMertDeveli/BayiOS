@@ -1,17 +1,33 @@
 # STATUS — Gerçek proje durumu
 
-> Yalnızca doğrulanmış durum. Son güncelleme: 2026-11-09 (Faz C mobil tamam; iOS imzasız derleme CI'da (#172) — Apple hesabı ve canlı push sahip adımı bekliyor; Faz B kalanları sahip kararında).
+> Yalnızca doğrulanmış durum. Son güncelleme: 2026-11-09 (sahip kararları uygulandı; transfer/sayım, otomatik görev, self-servis kurulum; Supabase preview açıldı).
 > İş emirleri, bağımlılık grafiği ve aktif atamalar: `docs/operations/work-orders.md`. Yol haritası: #148.
 
 ## Mevcut faz
+**Sahip kararları uygulandı + Faz C genişledi (2026-11-09).** `preview` @ `e125a9f`.
+- Kararlar: `docs/operations/phase0-gate.md` §5.1–5.2 (#174, #182). Uygulayanlar: #181 (stok asla eksiye düşmez, Temel paket
+  999 kullanıcı/999 depo/sınırsız ürün + barkod/mobil toplama dahil, import 20 MB `.xlsx/.csv`, paket düşürmede boşaltma,
+  satış kendi siparişini onaylar — varsayılan açık, AI 300 ayrıştırma/ay) · #178 marka paleti (petrol `#0C5468` + bakır
+  `#D4733A`, web+Flutter, AA kontrast testli) ve Turnstile CAPTCHA (anahtar yoksa kapalı; mobil CAPTCHA pilot sonrası).
+- #168 iki aşamalı transfer ("Yolda", kısmi kabul, fark raporu), raf taşıma, stok sayımı (kör sayım, okutma): API #180,
+  web #183, mobil #185 — kapandı.
+- #98 otomatik toplama görevi (ayar), öncelik + müşteri adı, raf değişiminde yeniden dağıtım, depo görevlisi raf taşıma:
+  API #184, web #187, mobil #185. #98'de kalan: mal kabul notu, onayda fiyat yeniden hesaplama (sahip kararı).
+- #83 self-servis kurulum sihirbazı (`/kurulum`), panoda "İlk adımlar", sektörden bağımsız metinler (#186). Kalan: işletme
+  adresi (API alanı yok), genel demo veri seti, API şablon adları, davet e-postası, KVKK adımı (#139).
+- Altyapı (OD-12, yalnızca ücretsiz): Supabase `bayios-preview` açıldı (Free, eu-central-1), bootstrap 01–03 uygulandı,
+  `bayios_migrator` parolası ayarlandı. **Bekleyen (sahip):** `bayios_app` parolası (`bash .demo/supabase-kurulum.sh`),
+  GitHub Environment `preview` secret'ı, Auth ayarları + hook (`infra/supabase/bootstrap/README.md`), Render/Vercel/Firebase/
+  Cloudflare hesapları. Deploy pipeline Fly.io'ya göre yazılı → Render'a uyarlanacak. Org geçen dönem Egress kotasını aştı
+  (diğer projeler); bu dönem %3.
+
 **Faz C (Flutter mobil, Android) — tamam.** Flutter 3.47.9 (`D:/DevTools/flutter`), `apps/mobile`.
 - Birleşenler: #165 temel (giriş/oturum, tenant seçimi, API istemcisi, sözleşme testi, ci-mobile; ADR 0011) · #166 pano, görev
   listesi, barkodlu toplama (#41, #42) · #167 mal kabul, stok sorgu, düzeltme (#43) · #169 web↔mobil gerçek akış testi + CI
   Android emülatör işi (#45) · #170 Notifications modülü, cihaz kaydı, görev atamasında FCM (varsayılan kapalı), çevrimdışı
-  yönetimi (#44). #7, #15, #41–#44 kapandı.
+  yönetimi (#44) · #185 transfer kabul, sayım, raf taşıma. #7, #15, #41–#44, #168 kapandı.
 - Sahip adımı bekleyen: iOS dağıtımı (#45: Apple Developer hesabı, imza, APNs; imzasız derleme CI'da #172) · push'u açmak için Firebase projesi
   (`docs/operations/push-notifications.md` §3) · gerçek cihazda kamera okutma denemesi.
-- Açık iş: #168 stok transferi + sayım (API'de uç yok).
 
 **Faz B (canlıya hazırlık) — mühendislik kısmı tamam, sahip kararları bekleniyor.** `preview` @ `1955dbd`.
 - Birleşenler: #155 (#152 odak/URL kancaları) · #156 deploy pipeline + migration adımı, Supabase bootstrap, gitleaks

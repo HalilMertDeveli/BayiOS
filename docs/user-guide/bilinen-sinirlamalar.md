@@ -14,7 +14,6 @@ Son kontrol: 2026-11-07, `preview` `ba83e85` (release candidate raporu: `docs/op
 | **Minimum stoğu dosyadan aktarma** | Yok. Minimum stok ürün düzenleme ekranından (depoya özel eşik için ürünün stok sayfasından) girilir. Bkz. [Stok düzeltme](06-stok-duzeltme-negatif-stok.md#minimum-stok-kritik-stok-eşiği). |
 | **Kritik stok bildirimi** | Bildirim (e-posta/telefon) gitmez. Kritik ürünler panodaki **Kritik stok** kutusunda, **Stok** listesindeki **Kritik** rozetinde ve kritik stok raporunda görünür. |
 | **Transfer ve sayım için ayrı telefon uygulaması** | Transfer teslim alma ve sayım telefonun tarayıcısından yapılır ([kılavuz](15-transfer-sayim-raf-tasima.md)); kamerayla barkod okuma yoktur, el terminali veya klavye-okuyucu kullanın. |
-| **Toplama sırasında raf değişimi** | Ürün görevde yazan raf yerine başka bir raftan okutulursa okutma reddedilir; ayrılan stok yeni rafa aktarılmaz. Ürünü görevdeki raftan alın. Ürün sahibi kararı bekliyor (GitHub #98). |
 | **İki adımlı doğrulama (2FA)** | Yok. **Ayarlar → İş kuralları**'ndaki seçenek "Yakında · henüz uygulanmıyor" olarak görünür; işaretlemek giriş akışını değiştirmez. |
 | **Üyeliği askıya alınan kişinin oturumu** | Askıya alınan kişi bir sonraki işleminde işletmeye erişemez; ancak oturumu kapatılmaz (başka işletmelerine erişmeye devam eder). |
 | **Ürün görseli, tedarikçi kartı** | Ürüne görsel eklenemez. Tedarikçi bilgisi yalnızca mal kabulde **Referans (irsaliye / fatura no)** alanına yazılabilir; ürün kartında tedarikçi alanı yoktur. |
@@ -43,6 +42,5 @@ Aşağıdaki konular karar bekliyor; karar verildiğinde ilgili kılavuz sayfala
 - Mal kabul notu, sipariş onayında fiyatın yeniden hesaplanması (GitHub #98). Toplama sırasında raf değişimi kuralları
   2026-11-09'da karara bağlandı (bkz. [Toplama, paketleme ve sevkiyat](10-toplama-paketleme-sevkiyat.md)).
 - Seri numarası takibinin kapsamı (GitHub #57, #147).
-- Marka rengi ve repo lisansı.
 
 Kaynak: proje durum belgesi (`STATUS.md`, "Blokerler") — ayrıntılar GitHub #61'de.
