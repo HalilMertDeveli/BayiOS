@@ -94,4 +94,9 @@ public sealed record CreateAdjustmentRequest(
 /// <param name="Reference">Optional note, stored on the movements.</param>
 public sealed record CreateRelocationRequest(Guid? WarehouseId, string? Reference, IReadOnlyList<RelocationLineRequest>? Lines);
 
-public sealed record RelocationLineRequest(Guid? VariantId, Guid? FromLocationId, Guid? ToLocationId, decimal? Quantity);
+/// <param name="IncludeReserved">
+/// True: when the shelf has less available stock than <paramref name="Quantity"/>, the rest is taken from reserved stock
+/// that is still on the shelf (not picked, packed or reported missing); those reservations and the open picking task
+/// lines on them move to the target shelf in the same transaction (#98). Default false: only available stock moves.
+/// </param>
+public sealed record RelocationLineRequest(Guid? VariantId, Guid? FromLocationId, Guid? ToLocationId, decimal? Quantity, bool? IncludeReserved = null);

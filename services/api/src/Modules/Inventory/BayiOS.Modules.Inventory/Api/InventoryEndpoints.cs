@@ -57,11 +57,13 @@ internal static class InventoryEndpoints
             .ProducesRetryableConflict("inventory.busy")
             .ProducesStockProblems();
         group.MapPost("/relocations", CreateRelocation).WithName("Inventory_CreateRelocation")
-            .WithSummary("Raf/göz arası anlık taşıma (aynı depo): her satır için tek işlemde transfer_out + transfer_in; yalnızca satılabilir miktar taşınır")
+            .WithSummary("Raf/göz arası anlık taşıma (aynı depo): her satır için tek işlemde transfer_out + transfer_in; varsayılan yalnızca satılabilir miktar, includeReserved ile raftaki rezerve mal rezervasyonu ve açık toplama satırlarıyla birlikte taşınır")
             .WithDescription(
                 "Depolar arası transfer iki aşamalıdır: POST /api/v1/stock-transfers (OD-01). 409 `inventory.insufficient_available` "
-                + "(`shortages`) when a source shelf has less available stock than requested; stock never goes negative.")
-            .RequirePermission(Permissions.InventoryTransfer)
+                + "(`shortages`) when a source shelf has less available stock than requested (with `includeReserved`: available plus "
+                + "reserved stock still on the shelf — picked, packed or reported-missing goods never move); stock never goes negative. "
+                + "Carried reservations are returned in `reservationMoves`. Permission `inventory.relocate` (warehouse_staff included, #98).")
+            .RequirePermission(Permissions.InventoryRelocate)
             .RequireIdempotencyKey()
             .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity)
             .ProducesRetryableConflict("inventory.busy")
@@ -465,18 +467,14 @@ internal static class InventoryEndpoints
         }
 
         var relocationId = Guid.CreateVersion7();
-        var warehouse = request.WarehouseId!.Value;
-        var command = new TransferStock(
+        var command = new RelocateStock(
             relocationId,
-            [.. lines.Select(l => new TransferMove(
-                Guid.CreateVersion7(),
-                l.VariantId!.Value,
-                StockPoint.At(warehouse, l.FromLocationId),
-                StockPoint.At(warehouse, l.ToLocationId),
-                l.Quantity!.Value))],
+            request.WarehouseId!.Value,
+            [.. lines.Select(l => new RelocationMove(
+                Guid.CreateVersion7(), l.VariantId!.Value, l.FromLocationId, l.ToLocationId, l.Quantity!.Value, l.IncludeReserved ?? false))],
             request.Reference,
             http.TraceIdentifier);
-        var result = await inventory.TransferAsync(command, cancellationToken);
+        var result = await inventory.RelocateAsync(command, cancellationToken);
         return result.Error is { } error
             ? Problem(http, error)
             : TypedResults.Created($"/api/v1/inventory/movements?sourceId={relocationId}", result.Value);

@@ -23,6 +23,7 @@ const SETTINGS: TenantSettings = {
   pricesIncludeTaxDisplay: false,
   requireOrderApproval: true,
   orderNumberPrefix: "SIP",
+  autoCreatePickingTask: true,
 };
 
 describe("order number prefix (same rule as the API)", () => {

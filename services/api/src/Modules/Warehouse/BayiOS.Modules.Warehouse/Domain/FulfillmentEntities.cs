@@ -35,6 +35,29 @@ internal static class PickingTaskStatuses
     public static bool IsActive(string status) => status is Open or InProgress;
 }
 
+/// <summary>
+/// WHT-03 task priority (#98). Stored as text; <see cref="Rank"/> orders the work queue (urgent first). New tasks are
+/// <see cref="Normal"/> unless the creator says otherwise; supervisors change it while the task is active.
+/// </summary>
+internal static class PickingTaskPriorities
+{
+    public const string Low = "low";
+    public const string Normal = "normal";
+    public const string High = "high";
+    public const string Urgent = "urgent";
+
+    public static readonly IReadOnlyList<string> All = [Low, Normal, High, Urgent];
+
+    /// <summary>Higher = more urgent.</summary>
+    public static int Rank(string priority) => priority switch
+    {
+        Urgent => 3,
+        High => 2,
+        Normal => 1,
+        _ => 0,
+    };
+}
+
 /// <summary>WHT-06 shortage reasons: not on the shelf, damaged, or fewer than expected.</summary>
 internal static class ShortageReasons
 {
@@ -128,6 +151,9 @@ internal sealed class PickingTask : WarehouseModuleEntity, IHasOrder
 
     public string Status { get; set; } = PickingTaskStatuses.Open;
 
+    /// <summary>One of <see cref="PickingTaskPriorities"/> (WHT-03).</summary>
+    public string Priority { get; set; } = PickingTaskPriorities.Normal;
+
     public Guid? AssignedTo { get; set; }
 
     public DateTimeOffset? AssignedAt { get; set; }
@@ -188,10 +214,11 @@ internal sealed class PickingTaskLine : ITenantOwned
 
     public string Unit { get; private init; } = string.Empty;
 
-    /// <summary>The reserved location (null in a warehouse without locations).</summary>
-    public Guid? LocationId { get; private init; }
+    /// <summary>The reserved location (null in a warehouse without locations); follows a re-allocation (#98).</summary>
+    public Guid? LocationId { get; private set; }
 
-    public decimal QtyToPick { get; private init; }
+    /// <summary>Changes only by re-allocation (#98): open quantity moves to the line of the new shelf.</summary>
+    public decimal QtyToPick { get; private set; }
 
     public decimal QtyPicked { get; set; }
 
@@ -200,6 +227,28 @@ internal sealed class PickingTaskLine : ITenantOwned
     public string? ShortageReason { get; set; }
 
     public decimal Remaining => QtyToPick - QtyPicked - QtyShort;
+
+    /// <summary>The whole line moves to another shelf (nothing picked or reported short on it yet).</summary>
+    public void MoveTo(Guid locationId)
+    {
+        if (QtyPicked != 0 || QtyShort != 0)
+        {
+            throw new InvalidOperationException("Only an untouched line moves as a whole; split it instead.");
+        }
+
+        LocationId = locationId;
+    }
+
+    /// <summary>Adds (positive) or removes (negative) open quantity; never below what is already picked or short.</summary>
+    public void ChangeQtyToPick(decimal delta)
+    {
+        if (QtyToPick + delta < QtyPicked + QtyShort)
+        {
+            throw new InvalidOperationException("Cannot remove picked or short quantity from a line.");
+        }
+
+        QtyToPick += delta;
+    }
 
     public static PickingTaskLine Create(
         PickingTask task, int sequence, Guid orderLineId, Guid variantId, string sku, string name, string unit, Guid? locationId, decimal quantity) => new()

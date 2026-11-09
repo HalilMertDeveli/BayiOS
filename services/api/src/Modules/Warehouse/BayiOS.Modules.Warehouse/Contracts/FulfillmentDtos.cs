@@ -10,6 +10,12 @@ public sealed record FulfillmentPageInfo(string? NextCursor, bool HasMore, int L
 /// <param name="AssignedTo">null = in the shared pool (claimable).</param>
 /// <param name="AssigneeName">Display name of <paramref name="AssignedTo"/> (full name, else e-mail local part).</param>
 /// <param name="QuantityToPick">Σ over the lines (base units).</param>
+/// <param name="Priority">low, normal (default), high or urgent (WHT-03); supervisors change it.</param>
+/// <param name="CustomerName">
+/// The order's customer name (live; masked once the customer is anonymised) — the only customer field on a task, shown to
+/// everyone who may read the task, warehouse_staff included (owner decision 2026-11-09, #98). No address, phone or price.
+/// </param>
+/// <param name="RequestedDeliveryDate">The order's requested delivery date, if any (WHT-03).</param>
 public sealed record PickingTaskSummaryResponse(
     Guid Id,
     string Type,
@@ -26,10 +32,17 @@ public sealed record PickingTaskSummaryResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
-    long Version);
+    long Version,
+    string Priority,
+    string? CustomerName = null,
+    DateOnly? RequestedDeliveryDate = null);
 
-/// <param name="Sequence">Walking order: location pick sequence, then location code, then order line.</param>
+/// <param name="Sequence">
+/// Stable line number. The lines come in walking order on the current shelves (location pick sequence, location
+/// code, then sequence); a line created by a re-allocation (#98) gets the next free number.
+/// </param>
 /// <param name="Barcode">Current Catalog barcode of the variant (scan target), if any.</param>
+/// <param name="LocationIsActive">False when the line's shelf was deactivated and its open quantity could not move yet (#98).</param>
 public sealed record PickingTaskLineResponse(
     Guid Id,
     int Sequence,
@@ -46,7 +59,8 @@ public sealed record PickingTaskLineResponse(
     decimal QuantityPicked,
     decimal QuantityShort,
     decimal QuantityRemaining,
-    string? ShortageReason);
+    string? ShortageReason,
+    bool? LocationIsActive = null);
 
 /// <param name="ShipmentId">The draft/confirmed shipment created when this pick task completed.</param>
 public sealed record PickingTaskResponse(PickingTaskSummaryResponse Task, IReadOnlyList<PickingTaskLineResponse> Lines, Guid? ShipmentId);
@@ -57,7 +71,21 @@ public sealed record PickingTaskPageResponse(IReadOnlyList<PickingTaskSummaryRes
 public sealed record MyPickingTasksResponse(IReadOnlyList<PickingTaskSummaryResponse> Items);
 
 /// <summary>Creates the pick task of an approved order (normally automatic on approval; this re-creates for the remainder).</summary>
-public sealed record CreatePickingTaskRequest(Guid? OrderId);
+/// <param name="Priority">low, normal (default), high or urgent.</param>
+public sealed record CreatePickingTaskRequest(Guid? OrderId, string? Priority = null);
+
+/// <param name="Priority">low, normal, high or urgent.</param>
+public sealed record SetPickingTaskPriorityRequest(string? Priority);
+
+/// <summary>
+/// Moves the open quantity of the task's lines to active shelves with free stock (#98). Without
+/// <paramref name="FromLocationId"/>: lines on deactivated shelves. With it: lines on that shelf (active or not).
+/// </summary>
+public sealed record ReallocatePickingTaskRequest(Guid? FromLocationId);
+
+/// <param name="MovedQuantity">Open quantity that moved to other shelves.</param>
+/// <param name="UnmovedQuantity">Open quantity that stayed because no active shelf had enough free stock.</param>
+public sealed record ReallocatePickingTaskResponse(PickingTaskResponse Task, decimal MovedQuantity, decimal UnmovedQuantity);
 
 /// <param name="UserId">An active member of the tenant whose role may pick.</param>
 public sealed record AssignPickingTaskRequest(Guid? UserId);
@@ -181,6 +209,22 @@ public interface IFulfillmentCatalog
 
     /// <summary>The variant whose barcode equals the trimmed code, else whose SKU equals it (SKU rules); null when unknown.</summary>
     Task<Guid?> ResolveCodeAsync(string code, CancellationToken cancellationToken);
+}
+
+/// <summary>Order facts a task shows (WHT-03): customer name (live, so anonymisation applies) and requested delivery date.</summary>
+public sealed record TaskOrderInfo(string? CustomerName, DateOnly? RequestedDeliveryDate);
+
+/// <summary>Implemented over Orders + Customers: one batch query for a page of tasks (request tenant, RLS).</summary>
+public interface ITaskOrderDirectory
+{
+    Task<IReadOnlyDictionary<Guid, TaskOrderInfo>> DescribeAsync(IReadOnlyCollection<Guid> orderIds, CancellationToken cancellationToken);
+}
+
+/// <summary>Implemented over the tenant settings (Identity).</summary>
+public interface IFulfillmentSettings
+{
+    /// <summary>Tenant setting <c>auto_create_picking_task</c> (WHT-01, default true): approval creates the pick task.</summary>
+    Task<bool> AutoCreatePickingTaskAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Implemented over Identity memberships: the active role of a user in the current tenant, else null.</summary>

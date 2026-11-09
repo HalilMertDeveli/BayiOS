@@ -174,7 +174,8 @@ public sealed record TenantSettingsResponse(
     decimal DefaultTaxRate,
     bool PricesIncludeTaxDisplay,
     bool RequireOrderApproval,
-    string OrderNumberPrefix);
+    string OrderNumberPrefix,
+    bool AutoCreatePickingTask);
 
 /// <summary>JSON merge patch: omitted (null) fields are left unchanged.</summary>
 /// <param name="NegativeStockPolicy">
@@ -186,6 +187,7 @@ public sealed record TenantSettingsResponse(
 /// whatsapp_ai; otherwise it waits in pending_approval as with true (default).
 /// </param>
 /// <param name="OrderNumberPrefix">Prefix of new order numbers (<c>{prefix}-YYYY-NNNNNN</c>): 1–10 of A–Z and 0–9, starting with a letter (lowercase is upper-cased).</param>
+/// <param name="AutoCreatePickingTask">True (default): order approval creates the picking task; false: a supervisor creates it (POST /picking-tasks).</param>
 public sealed record UpdateTenantSettingsRequest(
     string? NegativeStockPolicy,
     bool? SalesCanApproveOrders,
@@ -198,4 +200,5 @@ public sealed record UpdateTenantSettingsRequest(
     decimal? DefaultTaxRate = null,
     bool? PricesIncludeTaxDisplay = null,
     bool? RequireOrderApproval = null,
-    string? OrderNumberPrefix = null);
+    string? OrderNumberPrefix = null,
+    bool? AutoCreatePickingTask = null);

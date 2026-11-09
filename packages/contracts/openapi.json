@@ -5867,8 +5867,8 @@
         "tags": [
           "Inventory"
         ],
-        "summary": "Raf/g\u00F6z aras\u0131 anl\u0131k ta\u015F\u0131ma (ayn\u0131 depo): her sat\u0131r i\u00E7in tek i\u015Flemde transfer_out \u002B transfer_in; yaln\u0131zca sat\u0131labilir miktar ta\u015F\u0131n\u0131r",
-        "description": "Depolar aras\u0131 transfer iki a\u015Famal\u0131d\u0131r: POST /api/v1/stock-transfers (OD-01). 409 \u0060inventory.insufficient_available\u0060 (\u0060shortages\u0060) when a source shelf has less available stock than requested; stock never goes negative.",
+        "summary": "Raf/g\u00F6z aras\u0131 anl\u0131k ta\u015F\u0131ma (ayn\u0131 depo): her sat\u0131r i\u00E7in tek i\u015Flemde transfer_out \u002B transfer_in; varsay\u0131lan yaln\u0131zca sat\u0131labilir miktar, includeReserved ile raftaki rezerve mal rezervasyonu ve a\u00E7\u0131k toplama sat\u0131rlar\u0131yla birlikte ta\u015F\u0131n\u0131r",
+        "description": "Depolar aras\u0131 transfer iki a\u015Famal\u0131d\u0131r: POST /api/v1/stock-transfers (OD-01). 409 \u0060inventory.insufficient_available\u0060 (\u0060shortages\u0060) when a source shelf has less available stock than requested (with \u0060includeReserved\u0060: available plus reserved stock still on the shelf \u2014 picked, packed or reported-missing goods never move); stock never goes negative. Carried reservations are returned in \u0060reservationMoves\u0060. Permission \u0060inventory.relocate\u0060 (warehouse_staff included, #98).",
         "operationId": "Inventory_CreateRelocation",
         "parameters": [
           {
@@ -5989,7 +5989,7 @@
             "Bearer": []
           }
         ],
-        "x-permission": "inventory.transfer"
+        "x-permission": "inventory.relocate"
       }
     },
     "/api/v1/inventory/thresholds": {
@@ -7554,7 +7554,7 @@
         "tags": [
           "Picking"
         ],
-        "summary": "Toplama g\u00F6revleri (t\u00FCm\u00FC): eskiden yeniye keyset; durum, tip, depo, sipari\u015F, atanan (uuid | none) filtresi",
+        "summary": "Toplama g\u00F6revleri (t\u00FCm\u00FC): eskiden yeniye keyset; durum, tip, \u00F6ncelik, depo, sipari\u015F, atanan (uuid | none) filtresi; m\u00FC\u015Fteri ad\u0131 ve teslim tarihi d\u00F6ner",
         "operationId": "Picking_List",
         "parameters": [
           {
@@ -7566,6 +7566,13 @@
           },
           {
             "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "priority",
             "in": "query",
             "schema": {
               "type": "string"
@@ -7819,7 +7826,7 @@
         "tags": [
           "Picking"
         ],
-        "summary": "Mobil i\u015F listesi: bana atanan aktif g\u00F6revler, sonra havuz (scope = all | assigned | pool)",
+        "summary": "Mobil i\u015F listesi: bana atanan aktif g\u00F6revler, sonra havuz (scope = all | assigned | pool); her grupta \u00F6ncelik (urgent \u2192 low), sonra eskiden yeniye",
         "operationId": "Picking_Mine",
         "parameters": [
           {
@@ -8303,6 +8310,342 @@
               "application/problem\u002Bjson": {
                 "schema": {
                   "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "tasks.assign"
+      }
+    },
+    "/api/v1/picking-tasks/{id}/priority": {
+      "post": {
+        "tags": [
+          "Picking"
+        ],
+        "summary": "Aktif g\u00F6revin \u00F6nceli\u011Fini de\u011Fi\u015Ftirir (low, normal, high, urgent); mobil i\u015F listesi \u00F6nceli\u011Fe g\u00F6re s\u0131ralan\u0131r",
+        "operationId": "Picking_SetPriority",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours.",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPickingTaskPriorityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PickingTaskResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Precondition Failed",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "x-permission": "tasks.assign"
+      }
+    },
+    "/api/v1/picking-tasks/{id}/reallocate": {
+      "post": {
+        "tags": [
+          "Picking"
+        ],
+        "summary": "Pasif raflardaki (veya fromLocationId raf\u0131ndaki) a\u00E7\u0131k miktar\u0131 bo\u015F sto\u011Fu olan aktif raflara yeniden tahsis eder; rezervasyon ayn\u0131 i\u015Flemde ta\u015F\u0131n\u0131r",
+        "operationId": "Picking_Reallocate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Active tenant; must be one of the caller\u0027s active memberships.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours.",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ReallocatePickingTaskRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReallocatePickingTaskResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. Transient lock conflicts (picking.busy, order.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Precondition Required",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Precondition Failed",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockProblemDetails"
                 }
               }
             }
@@ -23318,6 +23661,12 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "priority": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -25946,6 +26295,16 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "isTransit": {
+            "type": "boolean",
+            "default": false
+          },
+          "transferNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -27977,6 +28336,12 @@
               "null",
               "string"
             ]
+          },
+          "locationIsActive": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -28077,7 +28442,8 @@
           "createdAt",
           "startedAt",
           "completedAt",
-          "version"
+          "version",
+          "priority"
         ],
         "type": "object",
         "properties": {
@@ -28172,6 +28538,22 @@
               "string"
             ],
             "format": "int64"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "customerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestedDeliveryDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
           }
         }
       },
@@ -28904,6 +29286,50 @@
           }
         }
       },
+      "ReallocatePickingTaskRequest": {
+        "required": [
+          "fromLocationId"
+        ],
+        "type": "object",
+        "properties": {
+          "fromLocationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "ReallocatePickingTaskResponse": {
+        "required": [
+          "task",
+          "movedQuantity",
+          "unmovedQuantity"
+        ],
+        "type": "object",
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/PickingTaskResponse"
+          },
+          "movedQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "unmovedQuantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
       "ReceiptLineRequest": {
         "required": [
           "variantId",
@@ -29134,6 +29560,12 @@
               "string"
             ],
             "format": "double"
+          },
+          "includeReserved": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -29254,6 +29686,62 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "ReservationMoved": {
+        "required": [
+          "orderId",
+          "orderLineId",
+          "variantId",
+          "warehouseId",
+          "fromLocationId",
+          "toLocationId",
+          "quantity",
+          "fromReservationId",
+          "toReservationId"
+        ],
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderLineId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "variantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fromLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "toLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "fromReservationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "toReservationId": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -29575,6 +30063,20 @@
           },
           "allowsFraction": {
             "type": "boolean"
+          }
+        }
+      },
+      "SetPickingTaskPriorityRequest": {
+        "required": [
+          "priority"
+        ],
+        "type": "object",
+        "properties": {
+          "priority": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -31296,7 +31798,8 @@
           "defaultTaxRate",
           "pricesIncludeTaxDisplay",
           "requireOrderApproval",
-          "orderNumberPrefix"
+          "orderNumberPrefix",
+          "autoCreatePickingTask"
         ],
         "type": "object",
         "properties": {
@@ -31345,6 +31848,9 @@
           },
           "orderNumberPrefix": {
             "type": "string"
+          },
+          "autoCreatePickingTask": {
+            "type": "boolean"
           }
         }
       },
@@ -31471,6 +31977,15 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MovementResult"
+            }
+          },
+          "reservationMoves": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ReservationMoved"
             }
           }
         }
@@ -32284,6 +32799,12 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "autoCreatePickingTask": {
+            "type": [
+              "null",
+              "boolean"
             ]
           }
         }

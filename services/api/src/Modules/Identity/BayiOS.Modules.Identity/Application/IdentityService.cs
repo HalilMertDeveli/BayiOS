@@ -219,6 +219,7 @@ internal sealed partial class IdentityService(
         settings.PricesIncludeTaxDisplay = request.PricesIncludeTaxDisplay ?? settings.PricesIncludeTaxDisplay;
         settings.RequireOrderApproval = request.RequireOrderApproval ?? settings.RequireOrderApproval;
         settings.OrderNumberPrefix = prefix ?? settings.OrderNumberPrefix;
+        settings.AutoCreatePickingTask = request.AutoCreatePickingTask ?? settings.AutoCreatePickingTask;
         settings.MarkUpdated(UserId, clock.GetUtcNow());
 
         try
@@ -253,7 +254,8 @@ internal sealed partial class IdentityService(
             .Field("defaultTaxRate", before.DefaultTaxRate, after.DefaultTaxRate)
             .Field("pricesIncludeTaxDisplay", before.PricesIncludeTaxDisplay, after.PricesIncludeTaxDisplay)
             .Field("requireOrderApproval", before.RequireOrderApproval, after.RequireOrderApproval)
-            .Field("orderNumberPrefix", before.OrderNumberPrefix, after.OrderNumberPrefix);
+            .Field("orderNumberPrefix", before.OrderNumberPrefix, after.OrderNumberPrefix)
+            .Field("autoCreatePickingTask", before.AutoCreatePickingTask, after.AutoCreatePickingTask);
         if (changes.HasChanges)
         {
             await audit.RecordAsync(
@@ -401,7 +403,8 @@ internal sealed partial class IdentityService(
         s.DefaultTaxRate,
         s.PricesIncludeTaxDisplay,
         s.RequireOrderApproval,
-        s.OrderNumberPrefix);
+        s.OrderNumberPrefix,
+        s.AutoCreatePickingTask);
 
     [GeneratedRegex("^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$", RegexOptions.CultureInvariant)]
     private static partial Regex SlugPattern();

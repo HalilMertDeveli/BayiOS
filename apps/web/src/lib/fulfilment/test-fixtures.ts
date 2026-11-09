@@ -42,6 +42,7 @@ export function twoShelfTask(): TaskDetail {
       startedAt: null,
       completedAt: null,
       version: 1,
+      priority: "normal",
     },
     // Deliberately out of order: the screen sorts by sequence.
     lines: [

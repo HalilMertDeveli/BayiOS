@@ -1,5 +1,8 @@
 using BayiOS.Modules.Catalog.Infrastructure.Persistence;
+using BayiOS.Modules.Customers.Infrastructure.Persistence;
 using BayiOS.Modules.Identity.Contracts;
+using BayiOS.Modules.Identity.Infrastructure.Persistence;
+using BayiOS.Modules.Orders.Infrastructure.Persistence;
 using BayiOS.Modules.Warehouse.Contracts;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -17,8 +20,45 @@ internal static class FulfillmentPorts
     {
         services.AddScoped<IFulfillmentCatalog, CatalogFulfillmentCatalog>();
         services.AddScoped<ITaskAssigneeDirectory, MembershipTaskAssigneeDirectory>();
+        services.AddScoped<ITaskOrderDirectory, OrdersTaskOrderDirectory>();
+        services.AddScoped<IFulfillmentSettings, TenantFulfillmentSettings>();
         return services;
     }
+}
+
+/// <summary>
+/// Task list facts (WHT-03, #98) through the Orders and Customers DbContexts (tenant query filters plus RLS, request
+/// connection): the customer name is read live, so an anonymised customer shows its masked name on tasks too.
+/// </summary>
+internal sealed class OrdersTaskOrderDirectory(OrdersDbContext orders, CustomersDbContext customers) : ITaskOrderDirectory
+{
+    public async Task<IReadOnlyDictionary<Guid, TaskOrderInfo>> DescribeAsync(IReadOnlyCollection<Guid> orderIds, CancellationToken cancellationToken)
+    {
+        if (orderIds.Count == 0)
+        {
+            return new Dictionary<Guid, TaskOrderInfo>();
+        }
+
+        var rows = await orders.Orders.AsNoTracking()
+            .Where(o => orderIds.Contains(o.Id))
+            .Select(o => new { o.Id, o.CustomerId, o.RequestedDeliveryDate })
+            .ToListAsync(cancellationToken);
+        var customerIds = rows.Select(r => r.CustomerId).Distinct().ToList();
+        var names = await customers.Customers.AsNoTracking()
+            .Where(c => customerIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.Name, cancellationToken);
+        return rows.ToDictionary(r => r.Id, r => new TaskOrderInfo(names.GetValueOrDefault(r.CustomerId), r.RequestedDeliveryDate));
+    }
+}
+
+/// <summary><c>identity.tenant_settings.auto_create_picking_task</c> (request tenant); default true without a row.</summary>
+internal sealed class TenantFulfillmentSettings(IdentityDbContext identity) : IFulfillmentSettings
+{
+    public async Task<bool> AutoCreatePickingTaskAsync(CancellationToken cancellationToken) =>
+        await identity.TenantSettings.AsNoTracking()
+            .Select(s => (bool?)s.AutoCreatePickingTask)
+            .SingleOrDefaultAsync(cancellationToken)
+        ?? true;
 }
 
 /// <summary>Scans resolve by barcode first (exact, trimmed — Catalog's barcode rule), then by SKU (upper-case).</summary>
