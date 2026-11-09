@@ -3,20 +3,27 @@ import 'package:flutter/material.dart';
 /// BayiOS design tokens for Flutter, mirrored from the web
 /// (apps/web/src/app/globals.css, `--bos-*`, light theme) and
 /// docs/design/design-system-plan.md §2. Keep the values in sync with the web
-/// file; the dark theme is P2 (design plan D-03).
+/// file (apps/web/src/app/tokens.test.ts checks them); the dark theme is P2
+/// (design plan D-03). Brand palette rationale and contrast table:
+/// docs/design/brand-colors.md (owner decision 2026-11-09, #61).
 abstract final class BosColors {
-  // color.brand
-  static const brandPrimary = Color(0xFF0F4C75);
-  static const brandPrimaryHover = Color(0xFF0B3A5B);
-  static const brandPrimarySubtle = Color(0xFFE6F0F7);
+  // color.brand — deep petrol primary (petrol-800/900/50; white 8.46:1).
+  static const brandPrimary = Color(0xFF0C5468);
+  static const brandPrimaryHover = Color(0xFF0A4354);
+  static const brandPrimarySubtle = Color(0xFFEDF6F8);
   static const brandOnPrimary = Color(0xFFFFFFFF);
+
+  // color.brand.accent — warm copper (copper-500/950), decorative only
+  // (brand mark, illustrations); never a status colour, never body text.
+  static const brandAccent = Color(0xFFD4733A);
+  static const brandOnAccent = Color(0xFF1F0F06);
 
   // color.text
   static const textPrimary = Color(0xFF111827);
   static const textSecondary = Color(0xFF374151);
   static const textMuted = Color(0xFF5B6472);
   static const textInverse = Color(0xFFFFFFFF);
-  static const textLink = Color(0xFF0F5C8F);
+  static const textLink = Color(0xFF136579);
 
   // color.surface
   static const surfacePage = Color(0xFFF6F7F9);
@@ -27,7 +34,7 @@ abstract final class BosColors {
   // color.border
   static const borderDefault = Color(0xFFDFE3E8);
   static const borderStrong = Color(0xFF7B8494);
-  static const borderFocus = Color(0xFF2563EB);
+  static const borderFocus = Color(0xFF1F7A90);
 
   // color.{tone}.{fg,bg,border}
   static const neutral = BosTone(
@@ -66,11 +73,41 @@ abstract final class BosColors {
     border: Color(0xFF8CCFCB),
   );
   static const brand = BosTone(
-    fg: Color(0xFF0F4C75),
-    bg: Color(0xFFE6F0F7),
-    border: Color(0xFF93B8D3),
+    fg: Color(0xFF0C5468),
+    bg: Color(0xFFEDF6F8),
+    border: Color(0xFF93CDD9),
   );
   static const dangerSolid = Color(0xFFB42318);
+}
+
+/// Petrol brand scale (`--bos-petrol-*`).
+abstract final class BosPetrol {
+  static const p50 = Color(0xFFEDF6F8);
+  static const p100 = Color(0xFFD4EAEF);
+  static const p200 = Color(0xFF93CDD9);
+  static const p300 = Color(0xFF7FC4D3);
+  static const p400 = Color(0xFF6CB8C8);
+  static const p500 = Color(0xFF3D9AAE);
+  static const p600 = Color(0xFF1F7A90);
+  static const p700 = Color(0xFF136579);
+  static const p800 = Color(0xFF0C5468);
+  static const p900 = Color(0xFF0A4354);
+  static const p950 = Color(0xFF04191E);
+}
+
+/// Copper accent scale (`--bos-copper-*`).
+abstract final class BosCopper {
+  static const p50 = Color(0xFFFCF3ED);
+  static const p100 = Color(0xFFF8E1D2);
+  static const p200 = Color(0xFFEDB48D);
+  static const p300 = Color(0xFFE39A68);
+  static const p400 = Color(0xFFDD8650);
+  static const p500 = Color(0xFFD4733A);
+  static const p600 = Color(0xFFA4501F);
+  static const p700 = Color(0xFF843F18);
+  static const p800 = Color(0xFF66311A);
+  static const p900 = Color(0xFF4F2815);
+  static const p950 = Color(0xFF1F0F06);
 }
 
 /// A feedback / status colour family (`color.{tone}.fg|bg|border`).

@@ -29,7 +29,7 @@ Token isimlendirme: `kategori.rol.varyant` (ör. `color.text.muted`). Kaynak tek
 ### 2.1 Renk
 | Grup | Token örnekleri | Not |
 |---|---|---|
-| Marka | `color.brand.primary`, `.primary-hover`, `.primary-subtle` | Kurumsal, sakin ton (lacivert/petrol ailesi önerisi); kesin değer Figma'da |
+| Marka | `color.brand.primary`, `.primary-hover`, `.primary-subtle`, `.accent` | **Karar verildi (#61, 2026-11-09):** derin petrol `#0C5468` + dekoratif bakır vurgu `#D4733A`; ölçekler, eşleme ve kontrast tablosu: `brand-colors.md` |
 | Nötr | `color.neutral.0…950` (11 adım) | Arka plan, kenarlık, metin |
 | Metin | `color.text.primary`, `.secondary`, `.muted`, `.inverse`, `.link` | `primary` ve `secondary` beyaz üzerinde ≥ 4.5:1 |
 | Yüzey | `color.surface.page`, `.card`, `.raised`, `.overlay`, `.sunken` | |
@@ -48,7 +48,7 @@ Her durum: rozet arka planı (`bg`), metin (`fg`), ikon. Metin/zemin kontrastı 
 | Approved | Onaylandı | Mavi (info) | onay işareti |
 | Picking | Toplanıyor | Mor | el arabası |
 | Packed | Paketlendi | Camgöbeği (teal) | kutu |
-| Shipped | Sevk Edildi | Lacivert (brand) | kamyon |
+| Shipped | Sevk Edildi | Petrol (brand) | kamyon |
 | Completed | Tamamlandı | Yeşil (success) | çift onay |
 | Cancelled | İptal | Kırmızı (danger) — soluk | çarpı |
 | (alt) PartiallyShipped | Kısmi Sevk | Mavi-amber | yarım kamyon |
@@ -213,6 +213,6 @@ Flutter: telefon (< 600 dp) birincil; tablet (≥ 600 dp) iki bölmeli görev li
 ## 9. Açık konular (tasarım)
 | # | Konu |
 |---|---|
-| D-01 | Marka rengi ve logo (BayiOS) — ürün sahibi tercihi |
+| D-01 | Marka rengi **kapandı** (#61: petrol + bakır, `brand-colors.md`); logo hâlâ geçici "B" işareti — ürün sahibi tercihi |
 | D-02 | Tenant logosu dışında tenant'a özel tema (renk) MVP'de yok — onay |
 | D-03 | Depo ekranlarında koyu tema (loş depo) ihtiyacı pilotta gözlemlenecek |

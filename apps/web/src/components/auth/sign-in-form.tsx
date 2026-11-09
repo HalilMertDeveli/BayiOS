@@ -10,6 +10,7 @@ import { ROUTES, safeNextPath } from "@/lib/auth/routes";
 import { compactErrors, validateEmail, validatePasswordPresent } from "@/lib/auth/validation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { FormMessage } from "./auth-layout";
+import { CaptchaField, useCaptcha } from "./captcha-field";
 
 const NOTICES: Record<string, { tone: "error" | "success"; text: string }> = {
   "baglanti-gecersiz": {
@@ -30,6 +31,7 @@ export function SignInForm() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const captcha = useCaptcha("login");
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -37,9 +39,16 @@ export function SignInForm() {
     setErrors(fieldErrors);
     setFormError(null);
     if (Object.keys(fieldErrors).length > 0) return;
+    const captchaToken = captcha.tokenForSubmit();
+    if (captchaToken === null) return;
 
     setSubmitting(true);
-    const { error } = await getSupabaseBrowserClient().auth.signInWithPassword({ email: email.trim(), password });
+    const { error } = await getSupabaseBrowserClient().auth.signInWithPassword({
+      email: email.trim(),
+      password,
+      options: { captchaToken },
+    });
+    captcha.reset();
     if (error) {
       setFormError(authErrorMessage(error));
       setSubmitting(false);
@@ -77,6 +86,7 @@ export function SignInForm() {
           Şifremi unuttum
         </Link>
       </div>
+      {captcha.fieldProps ? <CaptchaField {...captcha.fieldProps} /> : null}
       <Button type="submit" size="lg" loading={submitting}>
         Giriş yap
       </Button>

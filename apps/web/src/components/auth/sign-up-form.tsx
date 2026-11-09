@@ -17,6 +17,7 @@ import {
 } from "@/lib/auth/validation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { FormMessage } from "./auth-layout";
+import { CaptchaField, useCaptcha } from "./captcha-field";
 
 type Fields = { fullName: string; email: string; password: string; confirm: string };
 
@@ -30,6 +31,7 @@ export function SignUpForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const captcha = useCaptcha("signup");
 
   const set = (field: keyof Fields) => (event: React.ChangeEvent<HTMLInputElement>) =>
     setValues((v) => ({ ...v, [field]: event.target.value }));
@@ -45,6 +47,8 @@ export function SignUpForm() {
     setErrors(fieldErrors);
     setFormError(null);
     if (Object.keys(fieldErrors).length > 0) return;
+    const captchaToken = captcha.tokenForSubmit();
+    if (captchaToken === null) return;
 
     setSubmitting(true);
     const email = values.email.trim();
@@ -55,8 +59,10 @@ export function SignUpForm() {
         data: { full_name: values.fullName.trim() },
         // The confirmation link returns through /auth/callback, which opens `next` (the onboarding wizard by default).
         emailRedirectTo: `${window.location.origin}${ROUTES.authCallback}?next=${encodeURIComponent(next)}`,
+        captchaToken,
       },
     });
+    captcha.reset();
     setSubmitting(false);
     if (error) {
       setFormError(authErrorMessage(error));
@@ -115,6 +121,7 @@ export function SignUpForm() {
         onChange={set("confirm")}
         error={errors.confirm}
       />
+      {captcha.fieldProps ? <CaptchaField {...captcha.fieldProps} /> : null}
       <Button type="submit" size="lg" loading={submitting}>
         Hesap oluştur
       </Button>

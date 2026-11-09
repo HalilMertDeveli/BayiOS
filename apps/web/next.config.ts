@@ -24,7 +24,16 @@ export type SecurityHeaderEnv = {
   supabaseUrl?: string;
   /** `next dev`: React needs `eval` for its debugging features (never in production). */
   development?: boolean;
+  /**
+   * NEXT_PUBLIC_TURNSTILE_SITE_KEY is set: the auth forms show Cloudflare Turnstile (OD-05, #61), so its script and
+   * challenge-frame origin — and nothing else — is allowed. Unset (local/CI/e2e) = no foreign origin at all. Site-wide
+   * rather than per auth route on purpose: a client-side navigation into /giris keeps the CSP of the first document.
+   */
+  turnstile?: boolean;
 };
+
+/** Cloudflare Turnstile (script + challenge iframe). Same value as TURNSTILE_ORIGIN in src/lib/auth/captcha.ts. */
+export const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 
 export type Header = { key: string; value: string };
 
@@ -43,10 +52,11 @@ export function contentSecurityPolicy(env: SecurityHeaderEnv): string {
   const origins = [originOf(env.apiBaseUrl), originOf(env.supabaseUrl)].filter((o): o is string => o !== null);
   const connect = ["'self'", ...new Set(origins)];
   const allHttps = origins.length > 0 && origins.every((o) => o.startsWith("https://"));
+  const turnstile = env.turnstile ? [TURNSTILE_ORIGIN] : [];
 
   const directives: [string, ...string[]][] = [
     ["default-src", "'self'"],
-    ["script-src", "'self'", "'unsafe-inline'", ...(env.development ? ["'unsafe-eval'"] : [])],
+    ["script-src", "'self'", "'unsafe-inline'", ...(env.development ? ["'unsafe-eval'"] : []), ...turnstile],
     // Next's default error pages carry inline style attributes/tags; Tailwind CSS is a same-origin file.
     ["style-src", "'self'", "'unsafe-inline'"],
     // blob: = report downloads (URL.createObjectURL); data: = inline SVG/data images.
@@ -56,7 +66,7 @@ export function contentSecurityPolicy(env: SecurityHeaderEnv): string {
     ["object-src", "'none'"],
     ["base-uri", "'none'"],
     ["form-action", "'self'"],
-    ["frame-src", "'none'"],
+    turnstile.length > 0 ? ["frame-src", ...turnstile] : ["frame-src", "'none'"],
     ["frame-ancestors", "'none'"],
     ["manifest-src", "'self'"],
     ["worker-src", "'self'"],
@@ -118,6 +128,7 @@ const nextConfig: NextConfig = {
           apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
           supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
           development: process.env.NODE_ENV === "development",
+          turnstile: Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()),
         }),
       },
     ];
