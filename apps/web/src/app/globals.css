@@ -52,6 +52,13 @@
   --bos-brand-accent: var(--bos-copper-500);
   --bos-brand-accent-hover: var(--bos-copper-400);
   --bos-brand-on-accent: var(--bos-copper-950);
+  /*
+   * color.brand.panel — the deep petrol brand surface (auth side panel). Theme-independent on purpose (it stays dark in
+   * both themes), so it is only defined here. White text 10.8:1, muted text 8.4:1, copper accent 3.9:1 (decorative).
+   */
+  --bos-brand-panel: var(--bos-petrol-900);
+  --bos-brand-on-panel: #ffffff;
+  --bos-brand-on-panel-muted: var(--bos-petrol-100);
 
   /* color.text */
   --bos-text-primary: #111827;
@@ -295,6 +302,9 @@
   --color-accent: var(--bos-brand-accent);
   --color-accent-hover: var(--bos-brand-accent-hover);
   --color-on-accent: var(--bos-brand-on-accent);
+  --color-brand-panel: var(--bos-brand-panel);
+  --color-on-brand-panel: var(--bos-brand-on-panel);
+  --color-on-brand-panel-muted: var(--bos-brand-on-panel-muted);
 
   --color-fg: var(--bos-text-primary);
   --color-fg-secondary: var(--bos-text-secondary);

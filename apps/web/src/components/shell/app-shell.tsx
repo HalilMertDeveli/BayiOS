@@ -13,6 +13,7 @@ import { clearActiveTenantId } from "@/lib/session/active-tenant";
 import { useSession } from "@/lib/session/session-context";
 import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
 import { TrialBanner } from "@/components/billing/trial-banner";
+import { Breadcrumbs } from "./breadcrumbs";
 import { NavMenu } from "./nav-menu";
 import { SessionGate } from "./session-gate";
 import { UserMenu } from "./user-menu";
@@ -136,7 +137,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 collapsed && "justify-center px-0",
               )}
             >
-              {collapsed ? <PanelLeftOpen className="size-5" /> : <PanelLeftClose className="size-5" />}
+              {collapsed ? <PanelLeftOpen className="size-5" aria-hidden="true" /> : <PanelLeftClose className="size-5" aria-hidden="true" />}
               <span className={cn(collapsed && "sr-only")}>{collapsed ? "Menüyü genişlet" : "Menüyü daralt"}</span>
             </button>
           </div>
@@ -174,7 +175,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </dialog>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-(--bos-z-sticky) flex h-14 items-center gap-3 border-b border-line bg-card px-4">
+        <header className="sticky top-0 z-(--bos-z-sticky) flex h-14 items-center gap-3 border-b border-line bg-card/95 px-4 backdrop-blur md:px-8">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
@@ -188,11 +189,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="md:hidden">
             <Brand />
           </div>
+          <Breadcrumbs sections={sections} className="hidden min-w-0 md:block" />
           <div className="ml-auto flex min-w-0 items-center gap-2">
             <UserMenu />
           </div>
         </header>
-        <main id="main" tabIndex={-1} className="flex w-full flex-1 flex-col gap-6 px-4 py-6 focus:outline-none md:px-8">
+        <main id="main" tabIndex={-1} className="mx-auto flex w-full max-w-[96rem] flex-1 flex-col gap-6 px-4 py-6 focus:outline-none md:px-8 md:py-8">
           <TrialBanner />
           <SessionGate>{children}</SessionGate>
         </main>

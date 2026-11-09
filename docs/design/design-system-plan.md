@@ -152,6 +152,11 @@ Her durum: rozet arka planı (`bg`), metin (`fg`), ikon. Metin/zemin kontrastı 
 
 **Sol menü (öneri, ≤ 8):** Pano · Siparişler · Ürünler · Stok · Depo görevleri · Müşteriler · Raporlar · Ayarlar (Modül mağazası Ayarlar altında + profil menüsünde).
 
+**Uygulanan menü (web, UI polish 2026-11):** öğe sayısı 8'i aştığı için iş alanına göre gruplandı — *Genel* (Pano, Raporlar) ·
+*Satış* (Siparişler, Müşteriler, Fiyat listeleri) · *Stok ve depo* (Ürünler, Stok, Depo, Görevler, Sevkiyatlar, Transferler,
+Sayımlar) · *Yönetim* (İçe aktarma, Ayarlar). Etkin öğe: arka plan + kalın metin + sol kenarda marka çubuğu (yalnızca
+renge dayanmaz). Üst çubukta (md ve üstü) menüden türetilen konum izi (breadcrumb: bölüm › sayfa › alt sayfa) gösterilir.
+
 ### 4.2 Mobil (Flutter) — warehouse_staff, manager
 | # | Ekran | Kritik etkileşim | Öncelik |
 |---|---|---|---|

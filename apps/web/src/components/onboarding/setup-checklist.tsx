@@ -85,6 +85,30 @@ export function SetupChecklist() {
   if (total === 0) return null;
   const complete = done === total;
 
+  // Everything done: a one-line confirmation instead of the full list, so the dashboard leads with today's work.
+  if (complete) {
+    return (
+      <section aria-labelledby={headingId} className="flex items-center gap-3 rounded-xl border border-success-border bg-success-bg px-4 py-3 text-success-fg">
+        <CircleCheck className="size-5 shrink-0" aria-hidden="true" />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+          <h2 id={headingId} className="text-body font-semibold">
+            İlk adımlar
+          </h2>
+          <p className="text-body">Kurulum tamamlandı; {total} adımın hepsi bitti. Bu bildirimi kapatabilirsiniz.</p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setDismissed(true)}
+          icon={<X className="size-4" />}
+          aria-label="İlk adımlar listesini kapat"
+        >
+          <span className="hidden sm:inline">Kapat</span>
+        </Button>
+      </section>
+    );
+  }
+
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-lg border border-brand-border bg-card p-4 shadow-e1 sm:p-6">
       <div className="flex items-start justify-between gap-3">

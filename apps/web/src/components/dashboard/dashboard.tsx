@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Bot, ChevronRight, CircleAlert, ClipboardCheck, ClipboardList, LayoutDashboard, PackageMinus, ShoppingCart, Sparkles, type LucideIcon } from "lucide-react";
+import { Bot, ChevronRight, CircleAlert, ClipboardCheck, ClipboardList, LayoutDashboard, PackageMinus, Plus, ShoppingCart, Sparkles, type LucideIcon } from "lucide-react";
+import { TaskStatusBadge } from "@/components/fulfilment/fulfilment-badges";
 import { SetupChecklist } from "@/components/onboarding/setup-checklist";
 import { OrderStatus } from "@/components/orders/order-badges";
-import { Badge } from "@/components/ui/badge";
+import { Badge, orderStatusMeta, type BadgeTone } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -14,10 +15,10 @@ import { PLAN_PAGE_HREF, planLabel, subscriptionStatusLabels } from "@/lib/billi
 import { trialDaysLeft } from "@/lib/billing/trial";
 import { PARSES_PAGE, PENDING_PAGE, TILE_ROWS, anyTile, countText, dashboardTiles, quickLinks, summarizeOrders } from "@/lib/dashboard/tiles";
 import { listMyTasks, taskHref, TASKS_HREF, type TaskSummary } from "@/lib/fulfilment/api";
-import { taskStatusMeta, taskTypeLabels } from "@/lib/fulfilment/labels";
+import { taskTypeLabels } from "@/lib/fulfilment/labels";
 import { ORDERS_HREF, listOrders, orderHref, type OrderPage } from "@/lib/orders/api";
 import { orderErrorMessage } from "@/lib/orders/errors";
-import { orderStatusLabel } from "@/lib/orders/labels";
+import { orderBadgeKey, orderStatusLabel } from "@/lib/orders/labels";
 import { formatMoney, formatQuantity } from "@/lib/pricing/money";
 import { getCriticalStock, getOrdersReport, type CriticalStockReport, type OrdersReport } from "@/lib/reports/api";
 import { istanbulToday } from "@/lib/reports/date-range";
@@ -53,6 +54,7 @@ function useTile<T>(load: (signal: AbortSignal) => Promise<T>, errorMessage: (er
 
 const dateTime = new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Istanbul" });
 const dateLong = new Intl.DateTimeFormat("tr-TR", { dateStyle: "long", timeZone: "Europe/Istanbul" });
+const dateFull = new Intl.DateTimeFormat("tr-TR", { dateStyle: "full", timeZone: "Europe/Istanbul" });
 
 /** /pano (W03): role-aware overview from existing endpoints; tiles the user may not load are not rendered. */
 export function Dashboard() {
@@ -60,24 +62,36 @@ export function Dashboard() {
   const tiles = dashboardTiles(access, entitlements);
   const links = quickLinks(access, entitlements);
   const name = state.status === "ready" ? (state.user.fullName ?? null) : null;
+  const [today] = useState(() => dateFull.format(new Date()));
 
   return (
     <>
-      <PageHeader title="Pano" description={name ? `Hoş geldiniz, ${name}. İşletmenizin bugünkü özeti.` : "İşletmenizin bugünkü özeti."} />
+      <PageHeader
+        title="Pano"
+        description={
+          <>
+            {name ? `Hoş geldiniz, ${name}. İşletmenizin bugünkü özeti.` : "İşletmenizin bugünkü özeti."}
+            <span className="mt-0.5 block text-caption">{today}</span>
+          </>
+        }
+        actions={
+          links.length > 0 ? (
+            <nav aria-label="Hızlı işlemler">
+              <ul className="flex flex-wrap gap-2 sm:justify-end">
+                {links.map((l, i) => (
+                  <li key={l.href}>
+                    <Link href={l.href} className={buttonClasses(i === 0 ? "primary" : "secondary")}>
+                      {i === 0 ? <Plus className="size-4" aria-hidden="true" /> : null}
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ) : null
+        }
+      />
       <SetupChecklist />
-      {links.length > 0 ? (
-        <nav aria-label="Hızlı işlemler">
-          <ul className="flex flex-wrap gap-2">
-            {links.map((l, i) => (
-              <li key={l.href}>
-                <Link href={l.href} className={buttonClasses(i === 0 ? "primary" : "secondary")}>
-                  {l.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      ) : null}
       {anyTile(tiles) ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {tiles.pendingApproval ? <PendingApprovalTile /> : null}
@@ -122,12 +136,14 @@ function Tile<T>({
   // Unique per instance: a hidden (kept-alive) previous route may hold the same tile (a11y audit A-1).
   const headingId = `${useId()}-tile-${id}`;
   return (
-    <section aria-labelledby={headingId} aria-busy={state.status === "loading" || undefined} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
-      <h2 id={headingId} className="flex items-center gap-2 text-h3 text-fg">
-        <Icon className="size-5 shrink-0 text-brand-fg" aria-hidden="true" />
+    <section aria-labelledby={headingId} aria-busy={state.status === "loading" || undefined} className="flex flex-col rounded-xl border border-line bg-card shadow-e1">
+      <h2 id={headingId} className="flex items-center gap-3 px-5 pt-5 text-h3 text-fg">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-subtle text-brand-fg" aria-hidden="true">
+          <Icon className="size-5" />
+        </span>
         {title}
       </h2>
-      <div className="flex flex-1 flex-col gap-2">
+      <div className="flex flex-1 flex-col gap-3 px-5 pt-4 pb-5">
         {state.status === "loading" ? (
           <div aria-hidden="true" className="flex flex-col gap-2">
             <span className="block h-8 w-16 animate-pulse rounded-sm bg-sunken" />
@@ -149,20 +165,50 @@ function Tile<T>({
         ) : null}
         {state.status === "ready" ? children(state.data) : null}
       </div>
-      <Link href={href} className="inline-flex w-fit items-center gap-1 text-body font-medium text-brand-fg underline-offset-2 hover:underline">
-        {linkLabel}
-        <ChevronRight className="size-4" aria-hidden="true" />
-      </Link>
+      <div className="border-t border-line px-5 py-3">
+        <Link href={href} className="inline-flex min-h-6 w-fit items-center gap-1 text-body font-medium text-brand-fg underline-offset-2 hover:underline">
+          {linkLabel}
+          <ChevronRight className="size-4" aria-hidden="true" />
+        </Link>
+      </div>
     </section>
   );
 }
 
 function Kpi({ value, label }: { value: string; label: string }) {
   return (
-    <p className="flex items-baseline gap-2">
-      <span className="text-display font-semibold text-fg tabular-nums">{value}</span>
+    <p className="flex flex-wrap items-baseline gap-x-2">
+      <span className="text-display font-semibold tracking-tight text-fg tabular-nums">{value}</span>
       <span className="text-body text-fg-muted">{label}</span>
     </p>
+  );
+}
+
+/** Bar fill per badge tone (decorative; the list under the bar carries the numbers). */
+const toneFill: Record<BadgeTone, string> = {
+  neutral: "bg-neutral-border",
+  info: "bg-info-fg",
+  success: "bg-success-fg",
+  warning: "bg-warning-border",
+  danger: "bg-danger-fg",
+  purple: "bg-purple-fg",
+  teal: "bg-teal-fg",
+  brand: "bg-brand",
+  ai: "bg-ai-fg",
+};
+
+/** A simple proportional bar of today's orders by status — decorative, hidden from assistive technology. */
+function StatusBar({ items }: { items: readonly { status: string; count: number }[] }) {
+  const total = items.reduce((sum, i) => sum + i.count, 0);
+  if (total === 0) return null;
+  return (
+    <div aria-hidden="true" data-testid="today-status-bar" className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-sunken">
+      {items.map((i) => {
+        const key = orderBadgeKey(i.status);
+        const tone = key ? orderStatusMeta[key].tone : "neutral";
+        return <span key={i.status} className={toneFill[tone]} style={{ width: `${(i.count / total) * 100}%` }} />;
+      })}
+    </div>
   );
 }
 
@@ -233,6 +279,7 @@ function TodayOrdersTile() {
                 <span className="font-medium tabular-nums">{money.map((m) => formatMoney(m.amount, m.currency)).join(" · ")}</span>
               </p>
             ) : null}
+            <StatusBar items={summary.byStatus} />
             <RowList label="Bugünkü siparişler durumlara göre">
               {summary.byStatus.map((s) => (
                 <li key={s.status} className="flex items-center justify-between gap-3 py-1.5 text-body">
@@ -279,9 +326,14 @@ function CriticalStockTile() {
                     <span className="font-medium text-fg">{item.sku}</span>
                     <span className="truncate text-caption text-fg-muted">{item.name}</span>
                   </span>
-                  <span className="shrink-0 text-caption text-fg-muted tabular-nums">
-                    satılabilir {formatQuantity(item.available)}
-                    {item.minQuantity !== null && item.minQuantity !== undefined ? ` / min. ${formatQuantity(item.minQuantity)}` : ""} {item.unit}
+                  <span className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+                    <Badge tone={Number(item.available) <= 0 ? "danger" : "warning"} className="tabular-nums">
+                      satılabilir {formatQuantity(item.available)}
+                    </Badge>
+                    <span className="text-caption text-fg-muted tabular-nums">
+                      {item.minQuantity !== null && item.minQuantity !== undefined ? `min. ${formatQuantity(item.minQuantity)} ` : ""}
+                      {item.unit}
+                    </span>
                   </span>
                 </li>
               ))}
@@ -319,7 +371,7 @@ function MyTasksTile() {
                         {formatQuantity(t.quantityPicked)} / {formatQuantity(t.quantityToPick)} toplandı
                       </span>
                     </span>
-                    <Badge tone={taskStatusMeta[t.status]?.tone ?? "neutral"}>{taskStatusMeta[t.status]?.label ?? t.status}</Badge>
+                    <TaskStatusBadge status={t.status} />
                   </li>
                 ))}
               </RowList>

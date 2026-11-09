@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { ArrowRightLeft, Boxes, CircleAlert, PackagePlus, Rows3, Rows4, ScanBarcode, SearchX, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -133,6 +134,7 @@ export function StockBalances() {
     {
       key: "sku",
       header: "SKU",
+      nowrap: true,
       cell: (b) => {
         const v = skuOf(b);
         const text = v === undefined ? "…" : v === null ? "Bilinmeyen ürün" : v.sku;
@@ -146,16 +148,15 @@ export function StockBalances() {
       },
     },
     { key: "name", header: "Varyant", cell: (b) => skuOf(b)?.name ?? <span className="text-fg-muted">—</span> },
-    { key: "warehouse", header: "Depo", cell: (b) => warehouseLabel(b.warehouseId) },
-    { key: "location", header: "Raf/göz", cell: (b) => <span className="font-mono text-caption">{locationLabel(b)}</span> },
-    { key: "onHand", header: "Rafta", numeric: true, width: "7rem", cell: (b) => formatQuantity(b.onHand) },
-    { key: "reserved", header: "Ayrılmış", numeric: true, width: "7rem", cell: (b) => formatQuantity(b.reserved) },
-    { key: "available", header: "Satılabilir", numeric: true, width: "9rem", cell: (b) => <AvailableQuantity value={b.available} /> },
+    { key: "warehouse", header: "Depo", nowrap: true, cell: (b) => warehouseLabel(b.warehouseId) },
+    { key: "location", header: "Raf/göz", nowrap: true, cell: (b) => <span className="font-mono text-caption">{locationLabel(b)}</span> },
+    { key: "onHand", header: "Rafta", numeric: true, cell: (b) => formatQuantity(b.onHand) },
+    { key: "reserved", header: "Ayrılmış", numeric: true, cell: (b) => formatQuantity(b.reserved) },
+    { key: "available", header: "Satılabilir", numeric: true, cell: (b) => <AvailableQuantity value={b.available} /> },
     {
       key: "minimum",
       header: <abbr title="Minimum stok: depodaki toplam satılabilir bu değere eşit veya altındaysa kritik">Min. stok</abbr>,
       numeric: true,
-      width: "9rem",
       cell: (b) => <MinimumCell minQuantity={b.minQuantity} belowMinimum={b.belowMinimum} />,
     },
     ...(permissions.adjust || canRelocate
@@ -163,7 +164,7 @@ export function StockBalances() {
           {
             key: "actions",
             header: <span className="sr-only">İşlemler</span>,
-            width: "8rem",
+            nowrap: true,
             cell: (b: Balance) => (
               <span className="flex flex-wrap gap-x-3">
                 {permissions.adjust ? (
@@ -376,7 +377,7 @@ export function StockBalances() {
             </div>
             <div className="md:hidden">
               {loading ? (
-                <p className="py-6 text-center text-body text-fg-muted">Yükleniyor…</p>
+                <SkeletonCards />
               ) : rows.length === 0 ? (
                 <div className="rounded-lg border border-line bg-card">{emptyView}</div>
               ) : (

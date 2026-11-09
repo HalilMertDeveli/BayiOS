@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CircleAlert, Lock, MessageSquareText, Plus, Rows3, Rows4, Search, SearchX, ShoppingCart } from "lucide-react";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import { Button, buttonClasses } from "@/components/ui/button";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
@@ -190,19 +191,19 @@ function OrderListView({
     {
       key: "number",
       header: "Sipariş no",
-      width: "11rem",
+      nowrap: true,
       cell: (o) => (
         <Link href={orderHref(o.id)} className="font-mono font-medium text-brand-fg underline-offset-2 hover:underline">
           {o.number}
         </Link>
       ),
     },
-    { key: "customer", header: "Müşteri", cell: (o) => customerName(o) },
-    { key: "status", header: "Durum", width: "14rem", cell: (o) => <OrderStatusCell status={o.status} fulfillmentStatus={o.fulfillmentStatus} /> },
-    { key: "source", header: "Kaynak", width: "8rem", cell: (o) => orderSourceLabels[o.source] ?? o.source },
-    { key: "lines", header: "Satır", numeric: true, width: "5rem", cell: (o) => formatQuantity(o.lineCount) },
-    { key: "total", header: "Genel toplam", numeric: true, width: "10rem", cell: (o) => formatMoney(o.grandTotal, o.currency) ?? "—" },
-    { key: "created", header: "Oluşturma", width: "10rem", cell: (o) => <span className="text-caption">{formatOrderDate(o.createdAt)}</span> },
+    { key: "customer", header: "Müşteri", cell: (o) => <span className="block min-w-40">{customerName(o)}</span> },
+    { key: "status", header: "Durum", nowrap: true, cell: (o) => <OrderStatusCell status={o.status} fulfillmentStatus={o.fulfillmentStatus} /> },
+    { key: "source", header: "Kaynak", nowrap: true, cell: (o) => orderSourceLabels[o.source] ?? o.source },
+    { key: "lines", header: "Satır", numeric: true, cell: (o) => formatQuantity(o.lineCount) },
+    { key: "total", header: "Genel toplam", numeric: true, cell: (o) => formatMoney(o.grandTotal, o.currency) ?? "—" },
+    { key: "created", header: "Oluşturma", nowrap: true, cell: (o) => <span className="text-fg-muted tabular-nums">{formatOrderDate(o.createdAt)}</span> },
   ];
 
   const emptyView = hasCriteria ? (
@@ -381,7 +382,7 @@ function OrderListView({
             </div>
             <div className="md:hidden">
               {loading ? (
-                <p className="py-6 text-center text-body text-fg-muted">Yükleniyor…</p>
+                <SkeletonCards />
               ) : rows.length === 0 ? (
                 <div className="rounded-lg border border-line bg-card">{emptyView}</div>
               ) : (
