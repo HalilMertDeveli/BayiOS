@@ -347,7 +347,7 @@ internal sealed class ThresholdService(
         s AS (
             SELECT b.variant_id, sum(b.on_hand) - sum(b.reserved) AS available
             FROM inventory.inventory_balances b
-            WHERE b.tenant_id = @tenant AND (@warehouse::uuid IS NULL OR b.warehouse_id = @warehouse)
+            WHERE b.tenant_id = @tenant AND NOT b.is_transit AND (@warehouse::uuid IS NULL OR b.warehouse_id = @warehouse)
             GROUP BY b.variant_id)
         """;
 

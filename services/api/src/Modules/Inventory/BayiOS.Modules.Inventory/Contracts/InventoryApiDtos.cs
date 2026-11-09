@@ -82,3 +82,13 @@ public sealed record CreateAdjustmentRequest(
     decimal? Quantity,
     string? Reason,
     bool? ConfirmNegativeStock);
+
+/// <summary>
+/// Shelf-to-shelf move inside one located warehouse (#168): instant and atomic — per line one <c>transfer_out</c> and one
+/// <c>transfer_in</c> in the same transaction under one <c>transfer_group_id</c>. Only available stock moves; never
+/// negative. Moves between warehouses are two-stage documents (<c>/stock-transfers</c>, OD-01).
+/// </summary>
+/// <param name="Reference">Optional note, stored on the movements.</param>
+public sealed record CreateRelocationRequest(Guid? WarehouseId, string? Reference, IReadOnlyList<RelocationLineRequest>? Lines);
+
+public sealed record RelocationLineRequest(Guid? VariantId, Guid? FromLocationId, Guid? ToLocationId, decimal? Quantity);

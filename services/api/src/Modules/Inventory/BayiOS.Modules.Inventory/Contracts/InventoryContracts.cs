@@ -22,6 +22,22 @@ public interface IInventoryService
 
     /// <summary>Shipment deduction (§4.6): consumes reservations and writes <c>shipment_out</c>; available is unchanged.</summary>
     Task<InventoryResult<IssueResult>> IssueAsync(IssueStock command, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Transfer legs (§4.7, OD-01): each move takes stock out of one point (<c>transfer_out</c>) and into another
+    /// (<c>transfer_in</c>) under one <c>transfer_group_id</c>, or writes it off (<c>adjustment_out</c>, no group) when
+    /// <see cref="TransferMove.To"/> is null. A point is a (warehouse, location) or the in-transit stock of the transfer
+    /// (<see cref="StockPoint.InTransit"/>). Never goes below zero, whatever the negative-stock policy: a real point
+    /// gives only its <b>available</b> stock (reserved stock never moves), the in-transit point only what it holds.
+    /// </summary>
+    Task<InventoryResult<TransferResult>> TransferAsync(TransferStock command, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Count correction (§4.8): per counted line one <c>count_correction</c> movement of
+    /// counted − (system balance when the line was counted), so movements after the count are kept and movements
+    /// before it are not double counted. Never leaves on_hand below zero or below reserved (409 <c>count.below_reserved</c>).
+    /// </summary>
+    Task<InventoryResult<CountResult>> ApplyCountAsync(ApplyCount command, CancellationToken cancellationToken);
 }
 
 /// <summary>Read-side questions other modules may ask.</summary>
@@ -36,7 +52,21 @@ public interface IStockQueries
     /// and re-check before changing anything.
     /// </summary>
     Task<IReadOnlyList<ReservationAllocation>> GetOpenReservationsAsync(Guid orderId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Balance rows of one warehouse (never in-transit stock), optionally narrowed to locations and/or variants,
+    /// ordered by (variant, location). At most <paramref name="max"/> rows (callers pass their limit + 1).
+    /// </summary>
+    Task<IReadOnlyList<StockLevel>> LevelsAsync(
+        Guid warehouseId, IReadOnlyCollection<Guid>? locationIds, IReadOnlyCollection<Guid>? variantIds, int max, CancellationToken cancellationToken);
+
+    /// <summary>The given keys of one warehouse that have any ledger movement after their <c>Since</c> instant.</summary>
+    Task<IReadOnlySet<(Guid VariantId, Guid? LocationId)>> MovedSinceAsync(
+        Guid warehouseId, IReadOnlyCollection<(Guid VariantId, Guid? LocationId, DateTimeOffset Since)> keys, CancellationToken cancellationToken);
 }
+
+/// <summary>One balance row: physical (on_hand) and reserved quantity at a (variant, warehouse, location).</summary>
+public sealed record StockLevel(Guid VariantId, Guid? LocationId, decimal OnHand, decimal Reserved);
 
 /// <summary>
 /// Minimum stock (critical stock) questions other modules may ask (PRD CAT-12, REP-03; data-model §5.13). A variant's
@@ -157,6 +187,37 @@ public sealed record IssueStock(Guid ShipmentId, Guid WarehouseId, IReadOnlyList
 
 public sealed record IssueLine(Guid ShipmentLineId, Guid OrderLineId, Guid VariantId, Guid? LocationId, decimal Quantity);
 
+/// <summary>
+/// Where stock sits for a transfer leg: a warehouse (+ location in located warehouses), or — <see cref="IsTransit"/> —
+/// the virtual in-transit point of one transfer ("Yolda"). In-transit stock is a balance row keyed by the transfer id
+/// in place of a warehouse id and flagged <c>is_transit</c>: it belongs to no warehouse, so it is never available or
+/// reservable anywhere, yet the ledger still accounts for every unit.
+/// </summary>
+public sealed record StockPoint(Guid WarehouseId, Guid? LocationId, bool IsTransit = false)
+{
+    public static StockPoint InTransit(Guid transferId) => new(transferId, null, true);
+
+    public static StockPoint At(Guid warehouseId, Guid? locationId) => new(warehouseId, locationId);
+}
+
+/// <param name="TransferId">The source document: <c>source_id</c> of every movement and key of its in-transit point.</param>
+/// <param name="Reason">Stored on the movements (e.g. the loss reason of a write-off).</param>
+public sealed record TransferStock(
+    Guid TransferId,
+    IReadOnlyList<TransferMove> Moves,
+    string? Reason = null,
+    string? CorrelationId = null);
+
+/// <param name="MoveId">Unique per leg (<c>source_line_id</c>): the ledger rejects applying the same leg twice.</param>
+/// <param name="To">Null = write-off of <paramref name="Quantity"/> from <paramref name="From"/> (<c>adjustment_out</c>).</param>
+public sealed record TransferMove(Guid MoveId, Guid VariantId, StockPoint From, StockPoint? To, decimal Quantity);
+
+/// <param name="Lines">Counted lines only; uncounted lines are not applied.</param>
+public sealed record ApplyCount(Guid StockCountId, Guid WarehouseId, IReadOnlyList<CountLine> Lines, string? CorrelationId = null);
+
+/// <param name="CountedAt">When the quantity was counted: movements after it are added to the counted quantity.</param>
+public sealed record CountLine(Guid CountLineId, Guid VariantId, Guid? LocationId, decimal CountedQuantity, DateTimeOffset CountedAt);
+
 // ---- Results ----
 
 public sealed record InventoryResult<T>(T? Value, InventoryError? Error)
@@ -218,6 +279,14 @@ public sealed record ReservationAllocation(
 public sealed record ReservationResult(Guid OrderId, IReadOnlyList<ReservationAllocation> Reservations);
 
 public sealed record IssueResult(Guid ShipmentId, IReadOnlyList<MovementResult> Movements);
+
+public sealed record TransferResult(Guid TransferId, IReadOnlyList<MovementResult> Movements);
+
+/// <param name="SystemAtCount">on_hand when the line was counted (current on_hand − movements after the count).</param>
+/// <param name="Delta">counted − <paramref name="SystemAtCount"/>: the movement quantity (0 = no movement written).</param>
+public sealed record CountLineResult(Guid CountLineId, decimal SystemAtCount, decimal OnHandBefore, decimal Delta, Guid? MovementId);
+
+public sealed record CountResult(Guid StockCountId, IReadOnlyList<CountLineResult> Lines, IReadOnlyList<MovementResult> Movements);
 
 // ------------------------------------------------------------------------------------------------------------------
 // Ports: Inventory is a pure stock engine (ADR 0004 §8). The owning modules implement these so Inventory never

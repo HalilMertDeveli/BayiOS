@@ -23,6 +23,9 @@ internal sealed class BalanceRow
 
     public bool AllowNegative { get; set; }
 
+    /// <summary>In-transit stock of a transfer (OD-01); see <c>InventoryBalance.IsTransit</c>.</summary>
+    public bool IsTransit { get; init; }
+
     public decimal Available => OnHand - Reserved;
 }
 
@@ -52,7 +55,8 @@ internal sealed record NewMovement(
     Guid? SourceId,
     Guid? SourceLineId,
     string? Reason,
-    string? CorrelationId);
+    string? CorrelationId,
+    Guid? TransferGroupId = null);
 
 /// <summary>
 /// SQL of the stock engine (inventory-and-orders §2), always on the request's UnitOfWork connection and transaction.
@@ -67,7 +71,7 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
 
     private const string Order = "variant_id, warehouse_id, location_id NULLS FIRST";
 
-    private const string BalanceColumns = "id, variant_id, warehouse_id, location_id, on_hand, reserved, allow_negative";
+    private const string BalanceColumns = "id, variant_id, warehouse_id, location_id, on_hand, reserved, allow_negative, is_transit";
 
     private const string ReservationColumns =
         "id, order_id, order_line_id, variant_id, warehouse_id, location_id, quantity, consumed_quantity, released_quantity, status";
@@ -95,8 +99,14 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
     /// LOCK_BALANCES (§2.5): creates missing rows (<c>INSERT … ON CONFLICT DO NOTHING</c>, sorted) and locks every
     /// key's row (<c>FOR UPDATE</c>, sorted). Returns the rows in lock order.
     /// </summary>
+    /// <param name="transitIds">Warehouse-id slots that are in-transit points (transfer ids): their missing rows are
+    /// created with <c>is_transit</c> and <c>allow_negative = false</c>.</param>
     public async Task<IReadOnlyList<BalanceRow>> LockBalancesAsync(
-        IReadOnlyCollection<BalanceKey> keys, bool allowNegative, bool createMissing, CancellationToken cancellationToken)
+        IReadOnlyCollection<BalanceKey> keys,
+        bool allowNegative,
+        bool createMissing,
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<Guid>? transitIds = null)
     {
         var distinct = keys.Distinct().ToList();
         if (distinct.Count == 0)
@@ -113,8 +123,9 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
             await using var insert = Command(
                 $"""
                 INSERT INTO inventory.inventory_balances
-                    (id, tenant_id, variant_id, warehouse_id, location_id, on_hand, reserved, allow_negative, version, created_at)
-                SELECT k.id, @tenant, k.variant_id, k.warehouse_id, k.location_id, 0, 0, @allow_negative, 0, now()
+                    (id, tenant_id, variant_id, warehouse_id, location_id, on_hand, reserved, allow_negative, is_transit, version, created_at)
+                SELECT k.id, @tenant, k.variant_id, k.warehouse_id, k.location_id, 0, 0,
+                       @allow_negative AND NOT (k.warehouse_id = ANY(@transit)), k.warehouse_id = ANY(@transit), 0, now()
                 FROM unnest(@ids, @variants, @warehouses, @locations) AS k(id, variant_id, warehouse_id, location_id)
                 ORDER BY k.{Order.Replace(", ", ", k.", StringComparison.Ordinal)}
                 ON CONFLICT (tenant_id, variant_id, warehouse_id, location_id) DO NOTHING
@@ -125,6 +136,7 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
             insert.Parameters.Add(Uuids("warehouses", warehouses.Select(w => (Guid?)w).ToArray()));
             insert.Parameters.Add(Uuids("locations", locations));
             insert.Parameters.Add(new NpgsqlParameter<bool>("allow_negative", allowNegative));
+            insert.Parameters.Add(Uuids("transit", [.. (transitIds ?? []).Select(t => (Guid?)t)]));
             await insert.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -203,9 +215,9 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
             """
             INSERT INTO inventory.inventory_movements
                 (id, tenant_id, variant_id, warehouse_id, location_id, type, quantity, unit_cost, source_type, source_id,
-                 source_line_id, reason, balance_after, correlation_id, occurred_at, created_by)
+                 source_line_id, transfer_group_id, reason, balance_after, correlation_id, occurred_at, created_by)
             VALUES (@id, @tenant, @variant, @warehouse, @location, @type, @quantity, @unit_cost, @source_type, @source_id,
-                    @source_line_id, @reason, @balance_after, @correlation_id, now(), @user)
+                    @source_line_id, @transfer_group, @reason, @balance_after, @correlation_id, now(), @user)
             RETURNING occurred_at
             """);
         insert.Parameters.Add(Uuid("id", id));
@@ -219,6 +231,7 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
         insert.Parameters.Add(Text("source_type", movement.SourceType));
         insert.Parameters.Add(Uuid("source_id", movement.SourceId));
         insert.Parameters.Add(Uuid("source_line_id", movement.SourceLineId));
+        insert.Parameters.Add(Uuid("transfer_group", movement.TransferGroupId));
         insert.Parameters.Add(Text("reason", movement.Reason));
         insert.Parameters.Add(new NpgsqlParameter<decimal>("balance_after", balanceAfter));
         insert.Parameters.Add(Text("correlation_id", movement.CorrelationId));
@@ -241,6 +254,46 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
             movement.CorrelationId,
             new DateTimeOffset(DateTime.SpecifyKind(occurredAt, DateTimeKind.Utc)),
             UserId);
+    }
+
+    /// <summary>
+    /// Σ ledger quantity per key after its instant (exclusive). Called with the keys' balance rows locked, so no
+    /// movement of these keys can appear concurrently and the sum is exact against the locked on_hand.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<BalanceKey, decimal>> SumMovementsAfterAsync(
+        IReadOnlyList<(BalanceKey Key, DateTimeOffset After)> keys, CancellationToken cancellationToken)
+    {
+        var sums = new Dictionary<BalanceKey, decimal>();
+        if (keys.Count == 0)
+        {
+            return sums;
+        }
+
+        await using var select = Command(
+            """
+            SELECT k.variant_id, k.warehouse_id, k.location_id, coalesce(sum(m.quantity), 0)
+            FROM unnest(@variants, @warehouses, @locations, @after) AS k(variant_id, warehouse_id, location_id, after_at)
+            LEFT JOIN inventory.inventory_movements m
+              ON m.tenant_id = @tenant AND m.variant_id = k.variant_id AND m.warehouse_id = k.warehouse_id
+             AND m.location_id IS NOT DISTINCT FROM k.location_id AND m.occurred_at > k.after_at
+            GROUP BY k.variant_id, k.warehouse_id, k.location_id
+            """);
+        select.Parameters.Add(Uuid("tenant", TenantId));
+        select.Parameters.Add(Uuids("variants", [.. keys.Select(k => (Guid?)k.Key.VariantId)]));
+        select.Parameters.Add(Uuids("warehouses", [.. keys.Select(k => (Guid?)k.Key.WarehouseId)]));
+        select.Parameters.Add(Uuids("locations", [.. keys.Select(k => k.Key.LocationId)]));
+        select.Parameters.Add(new NpgsqlParameter("after", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz)
+        {
+            Value = keys.Select(k => k.After.UtcDateTime).ToArray(),
+        });
+        await using var reader = await select.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var key = new BalanceKey(reader.GetGuid(0), reader.GetGuid(1), reader.IsDBNull(2) ? null : reader.GetGuid(2));
+            sums[key] = reader.GetDecimal(3);
+        }
+
+        return sums;
     }
 
     /// <summary>Active reservations of order lines, unlocked (callers lock balances first, then reservations).</summary>
@@ -350,6 +403,7 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
                 OnHand = reader.GetDecimal(4),
                 Reserved = reader.GetDecimal(5),
                 AllowNegative = reader.GetBoolean(6),
+                IsTransit = reader.GetBoolean(7),
             });
         }
 

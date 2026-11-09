@@ -102,6 +102,12 @@ public sealed class DatabaseSecurityGuardTests(ApiFixture fixture)
         ["warehouse.shipment_package_items"] = AppendOnly,
         ["warehouse.shipment_packages"] = AppendOnly,
         ["warehouse.shipments"] = ArchiveOnly,
+
+        // Transfers and counts are cancelled/closed/applied, never deleted (#168); stock moves only through the ledger.
+        ["warehouse.stock_count_lines"] = ArchiveOnly,
+        ["warehouse.stock_counts"] = ArchiveOnly,
+        ["warehouse.stock_transfer_lines"] = ArchiveOnly,
+        ["warehouse.stock_transfers"] = ArchiveOnly,
         ["warehouse.warehouse_locations"] = ArchiveOnly,
         ["warehouse.warehouses"] = ArchiveOnly,
     };

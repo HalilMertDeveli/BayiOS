@@ -234,7 +234,8 @@ public sealed class AuditFixesTests(ApiFixture fixture)
         await using var production = fixture.Derive(builder => builder.UseEnvironment("Production"));
         foreach (var client in new[] { owner, On(production, owner) })
         {
-            foreach (var limit in new[] { "1e3", "abc", "99999999999" })
+            // "xyz" (not hex): the correlation id is hex and once contained "abc" by chance.
+            foreach (var limit in new[] { "1e3", "xyz", "99999999999" })
             {
                 var response = await client.GetAsync($"/api/v1/ai/order-parses?limit={limit}");
                 var problem = await HttpAssert.ProblemJsonAsync(response, HttpStatusCode.BadRequest, "request.malformed");

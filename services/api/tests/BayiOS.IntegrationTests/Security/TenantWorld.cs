@@ -47,6 +47,8 @@ internal sealed class TenantWorld
         ["members"] = "member",
         ["invitations"] = "invitation",
         ["devices"] = "device",
+        ["stock-transfers"] = "stockTransfer",
+        ["stock-counts"] = "stockCount",
     };
 
     private readonly ApiFixture _fixture;
@@ -141,6 +143,19 @@ internal sealed class TenantWorld
 
         // Minimum stock (#137): a warehouse override; the probes address it by id.
         await CreateAsync("threshold", "/api/v1/inventory/thresholds", new { variantId = Id("variant"), warehouseId = Id("warehouse"), minQuantity = 5m });
+
+        // Transfers and counts (#168): a second, location-less warehouse, a draft transfer into it and an open count.
+        await CreateAsync("warehouse2", "/api/v1/warehouses", new { code = "X" + Token[..6], name = "Depo 2 " + Token });
+        var transfer = await CreateAsync(null, "/api/v1/stock-transfers", new
+        {
+            sourceWarehouseId = Id("warehouse"),
+            destinationWarehouseId = Id("warehouse2"),
+            note = "Transfer " + Token,
+            lines = new[] { new { variantId = Id("variant"), quantity = 1m, sourceLocationId = (Guid?)Id("location") } },
+        });
+        Remember("stockTransfer", transfer.GetProperty("transfer"));
+        var count = await CreateAsync(null, "/api/v1/stock-counts", new { warehouseId = Id("warehouse"), note = "Sayım " + Token });
+        Remember("stockCount", count.GetProperty("count"));
 
         await CreateAsync("priceList", "/api/v1/price-lists", new { name = "Perakende " + Token, isDefault = true });
         var items = await SendOkAsync(HttpMethod.Put, $"/api/v1/price-lists/{Id("priceList")}/items", new
