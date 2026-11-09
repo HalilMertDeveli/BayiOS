@@ -1,0 +1,55 @@
+name: ci-linux
+
+# Static checks for the self-hosted Linux deploy kit (infra/linux, #194): shellcheck, nginx -t, systemd-analyze
+# verify + security (exposure threshold). No server, no secrets, no release build, no deploy.
+# The full end-to-end harness (real release, systemd container, deploy/rollback) is infra/linux/test/run.sh (local).
+
+on:
+  pull_request:
+    paths:
+      - "infra/linux/**"
+      - ".github/workflows/ci-linux.yml"
+  push:
+    branches: [main, preview]
+    paths:
+      - "infra/linux/**"
+      - ".github/workflows/ci-linux.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Same versions as the local harness (infra/linux/test/run.sh); bump tag + digest together.
+  SHELLCHECK_IMAGE: koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d
+  UBUNTU_IMAGE: ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+
+jobs:
+  linux:
+    name: linux deploy kit (shellcheck, nginx -t, systemd-analyze)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Line endings (LF only)
+        run: |
+          if grep -rlI $'\r' infra/linux; then
+            echo "::error::CRLF line endings in the files above (scripts/units must be LF)"
+            exit 1
+          fi
+
+      - name: shellcheck
+        run: |
+          docker run --rm -v "$PWD/infra/linux:/mnt:ro" -w /mnt "$SHELLCHECK_IMAGE" -x \
+            scripts/lib.sh scripts/deploy.sh scripts/rollback.sh scripts/healthcheck.sh \
+            scripts/provision.sh scripts/build-release.sh test/run.sh test/static-checks.sh
+          echo "shellcheck: no findings"
+
+      - name: nginx -t, systemd-analyze verify + security (Ubuntu 24.04 container)
+        run: docker run --rm -v "$PWD/infra/linux:/src:ro" "$UBUNTU_IMAGE" bash /src/test/static-checks.sh

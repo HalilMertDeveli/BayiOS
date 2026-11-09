@@ -4,7 +4,7 @@
 |---|---|
 | Sahip | DevOps Engineer |
 | Durum | v0.2 — deploy hattı **hazır** (`deploy-preview.yml`, `deploy-production.yml` iskeleti, #70) ve Supabase bootstrap'ı hazır (#76); **hiçbir ortam deploy edilmedi**, hesaplar ürün sahibini bekliyor (#138) |
-| İlgili | `environments.md` (ortamlar, sırlar, migration terfisi), `ci-cd.md` (workflow'lar), `hosting-options.md`, `infra/deploy/`, `infra/supabase/bootstrap/`, olay anı adımları: `runbooks/rollback.md`, yedek: `backup-and-restore.md`, izleme: `observability.md` |
+| İlgili | `environments.md` (ortamlar, sırlar, migration terfisi), `ci-cd.md` (workflow'lar), `hosting-options.md`, `infra/deploy/`, `infra/linux/` (self-hosted Ubuntu VPS alternatifi — API + web + Nginx; sunucu açılmadı, #194), `infra/supabase/bootstrap/`, olay anı adımları: `runbooks/rollback.md`, yedek: `backup-and-restore.md`, izleme: `observability.md` |
 | Son güncelleme | 2026-11-07 |
 
 ## 1. Preview ve production ayrımı
