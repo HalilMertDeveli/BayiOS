@@ -1,0 +1,4 @@
+# Filled-in env files (real values) must never be committed. Only *.example files belong to the repo.
+*
+!.gitignore
+!*.example

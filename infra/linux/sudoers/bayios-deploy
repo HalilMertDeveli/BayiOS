@@ -1,0 +1,3 @@
+# /etc/sudoers.d/bayios-deploy — installed by infra/linux/bootstrap.sh (validated with `visudo -cf`).
+# The deploy user may only restart / query the two BayiOS services, nothing else. __DEPLOY_USER__ is replaced.
+__DEPLOY_USER__ ALL=(root) NOPASSWD: /usr/bin/systemctl restart bayios-api.service, /usr/bin/systemctl restart bayios-web.service, /usr/bin/systemctl is-active bayios-api.service, /usr/bin/systemctl is-active bayios-web.service

@@ -1,0 +1,66 @@
+# BayiOS API (ASP.NET Core / Kestrel) as a systemd service. Installed by infra/linux/bootstrap.sh to
+# /etc/systemd/system/bayios-api.service. Kestrel listens on loopback only; nginx is the only public entry.
+#
+# Release layout (infra/linux/deploy.sh): /opt/bayios/current -> /opt/bayios/releases/<id>, the API is in <id>/api.
+# Logs: journalctl -u bayios-api -f
+
+[Unit]
+Description=BayiOS API (ASP.NET Core, Kestrel)
+Documentation=https://github.com/HalilMertDeveli/BayiOS/tree/main/infra/linux
+After=network-online.target
+Wants=network-online.target
+# A crash loop must not hammer the database forever: at most 10 starts in 5 minutes, then the unit stays failed.
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=exec
+User=bayios-api
+Group=bayios-api
+WorkingDirectory=/opt/bayios/current/api
+ExecStart=/usr/bin/dotnet /opt/bayios/current/api/BayiOS.Api.dll
+
+# Defaults first; /etc/bayios/api.env (secrets, root-only file) is read after them.
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5080
+Environment=DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1
+# ASP.NET Core Data Protection keys and other runtime state live in the private state directory.
+Environment=HOME=%S/bayios-api
+EnvironmentFile=/etc/bayios/api.env
+StateDirectory=bayios-api
+StateDirectoryMode=0700
+
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+SyslogIdentifier=bayios-api
+
+# --- Hardening (systemd-analyze security bayios-api) ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RemoveIPC=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+UMask=0077
+# MemoryDenyWriteExecute is deliberately NOT set: the .NET JIT needs writable+executable memory.
+
+[Install]
+WantedBy=multi-user.target

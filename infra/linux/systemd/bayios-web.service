@@ -1,0 +1,64 @@
+# BayiOS web (Next.js `next start`) as a systemd service. Installed by infra/linux/bootstrap.sh to
+# /etc/systemd/system/bayios-web.service. Node listens on loopback only; nginx is the only public entry.
+#
+# Release layout (infra/linux/deploy.sh): /opt/bayios/current -> /opt/bayios/releases/<id>, the web app is in <id>/web.
+# Logs: journalctl -u bayios-web -f
+
+[Unit]
+Description=BayiOS web (Next.js)
+Documentation=https://github.com/HalilMertDeveli/BayiOS/tree/main/infra/linux
+After=network-online.target bayios-api.service
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=exec
+User=bayios-web
+Group=bayios-web
+WorkingDirectory=/opt/bayios/current/web
+# The release is read-only for this user. Next.js writes its runtime cache to .next/cache, which deploy.sh links to
+# the private cache directory below; it is emptied on every start so a new release never reads an old build's cache.
+ExecStartPre=/usr/bin/find %C/bayios-web -mindepth 1 -delete
+ExecStart=/usr/bin/node /opt/bayios/current/web/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
+
+Environment=NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
+EnvironmentFile=/etc/bayios/web.env
+CacheDirectory=bayios-web
+CacheDirectoryMode=0700
+
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+SyslogIdentifier=bayios-web
+
+# --- Hardening (systemd-analyze security bayios-web) ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RemoveIPC=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+UMask=0077
+# MemoryDenyWriteExecute is deliberately NOT set: the V8 JIT needs writable+executable memory.
+
+[Install]
+WantedBy=multi-user.target
