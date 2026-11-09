@@ -1,0 +1,76 @@
+# BayiOS API (ASP.NET Core, .NET 10) — self-hosted Linux deployment, see infra/linux/README.md.
+# Installed to /etc/systemd/system by infra/linux/scripts/provision.sh. Secrets: /etc/bayios/api.env (root:bayios 0640).
+# Listens on loopback only; Nginx terminates TLS for api.<domain> and proxies here.
+
+[Unit]
+Description=BayiOS API
+Documentation=https://github.com/HalilMertDeveli/BayiOS/blob/main/infra/linux/README.md
+Wants=network-online.target
+After=network-online.target
+# No release deployed yet (fresh server): skip quietly instead of crash-looping at boot.
+ConditionPathExists=/opt/bayios/current/api/BayiOS.Api.dll
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=bayios
+Group=bayios
+WorkingDirectory=/opt/bayios/current/api
+ExecStart=/usr/bin/dotnet /opt/bayios/current/api/BayiOS.Api.dll
+# Defaults; /etc/bayios/api.env is read afterwards and may override them.
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5280
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+Environment=DOTNET_NOLOGO=1
+# Workstation GC: smaller footprint on a 1-2 vCPU VPS.
+Environment=DOTNET_gcServer=0
+# Writable home for the runtime (ASP.NET Data Protection key ring etc.); everything else is read-only.
+Environment=HOME=/var/lib/bayios-api
+EnvironmentFile=/etc/bayios/api.env
+StateDirectory=bayios-api
+StateDirectoryMode=0700
+SyslogIdentifier=bayios-api
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+LimitNOFILE=65536
+TasksMax=512
+MemoryHigh=640M
+MemoryMax=768M
+
+# --- Hardening (check with: systemd-analyze security bayios-api) ---
+# No MemoryDenyWriteExecute: the .NET JIT needs W+X mappings.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateUsers=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RemoveIPC=yes
+UMask=0077
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# Not ~@resources: CoreCLR needs sched_setaffinity/sched_setscheduler/prlimit64 (fails with HRESULT 0x8007054F).
+SystemCallFilter=~@privileged
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target
