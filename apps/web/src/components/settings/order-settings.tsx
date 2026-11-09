@@ -13,7 +13,7 @@ import { ApiError } from "@/lib/api/client";
 import { getTenantSettings, updateTenantSettings, type TenantSettings } from "@/lib/api/identity";
 import { etagOf } from "@/lib/catalog/api";
 import { isVersionConflict } from "@/lib/catalog/errors";
-import { negativeStockOptions, priceDisplayOptions, taxRateOptions } from "@/lib/onboarding/tenant-form";
+import { priceDisplayOptions, taxRateOptions } from "@/lib/onboarding/tenant-form";
 import {
   ORDER_NUMBER_PREFIX_MAX,
   buildSettingsPatch,
@@ -25,14 +25,15 @@ import {
 } from "@/lib/settings/order-settings-form";
 import { useSession } from "@/lib/session/session-context";
 import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
+import { NegativeStockRule } from "./negative-stock-rule";
 
 type Loaded = { settings: TenantSettings; etag: string };
 type LoadState = { status: "loading" } | { status: "error"; message: string } | ({ status: "ready" } & Loaded);
 
-const FIELD_KEYS = ["requireOrderApproval", "orderNumberPrefix", "negativeStockPolicy", "defaultTaxRate", "pricesIncludeTaxDisplay"];
+const FIELD_KEYS = ["requireOrderApproval", "orderNumberPrefix", "defaultTaxRate", "pricesIncludeTaxDisplay"];
 
 /**
- * Ayarlar → Sipariş ayarları (#92): approval requirement, order number prefix, negative stock policy, default VAT rate
+ * Ayarlar → Sipariş ayarları (#92): approval requirement, order number prefix, the fixed negative-stock rule (OD-09), default VAT rate
  * and price display. GET/PATCH /tenant/settings (tenant.settings.manage) with If-Match; a 412 asks to reload.
  */
 export function OrderSettings() {
@@ -210,15 +211,8 @@ export function OrderSettingsForm({ loaded, onSaved, onReload }: { loaded: Loade
 
       <fieldset className="flex flex-col gap-3">
         <legend className="mb-1 text-body font-semibold text-fg">Stok ve KDV</legend>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Select
-            label="Stok yetmediğinde"
-            options={negativeStockOptions}
-            value={values.negativeStockPolicy}
-            error={errors.negativeStockPolicy}
-            hint="Onay ve stok çıkışında satılabilir stok eksiye düşecekse uygulanır."
-            onChange={(e) => set({ negativeStockPolicy: e.target.value as OrderSettingsValues["negativeStockPolicy"] })}
-          />
+        <NegativeStockRule />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Select
             label="Varsayılan KDV oranı"
             options={taxOptions}

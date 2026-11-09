@@ -5,6 +5,7 @@ using BayiOS.Modules.Catalog.Application;
 using BayiOS.Modules.Catalog.Contracts;
 using BayiOS.Modules.Catalog.Domain;
 using BayiOS.SharedKernel.Authorization;
+using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -84,9 +85,13 @@ internal static class CatalogEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
         Write(group.MapPost("/products", CreateProduct).WithName("Catalog_CreateProduct")
             .WithSummary("Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants)").RequirePermission(Permissions.CatalogWrite)
+            .WithDescription("403 `entitlement.limit_exceeded` when the plan's product limit (`max_products`, Basic: 999 non-archived products) is reached.")
+            .EnforcesEntitlementLimit(EntitlementCodes.MaxProducts)
             .WithMetadata(new ConflictDetailMetadata()));
         Update(group.MapPatch("/products/{id:guid}", UpdateProduct).WithName("Catalog_UpdateProduct")
             .WithSummary("Ürünü günceller (JSON merge patch, If-Match zorunlu)").RequirePermission(Permissions.CatalogWrite)
+            .WithDescription("Restoring an archived product (status active/inactive) counts against `max_products` (403 `entitlement.limit_exceeded`).")
+            .EnforcesEntitlementLimit(EntitlementCodes.MaxProducts)
             .Accepts<UpdateProductRequest>(MergePatch, "application/json"));
         Update(group.MapDelete("/products/{id:guid}", ArchiveProduct).WithName("Catalog_ArchiveProduct")
             .WithSummary("Ürünü arşivler (If-Match zorunlu)").RequirePermission(Permissions.CatalogWrite));

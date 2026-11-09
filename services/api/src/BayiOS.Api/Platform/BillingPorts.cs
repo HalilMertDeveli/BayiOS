@@ -1,4 +1,5 @@
 using BayiOS.Modules.Billing.Contracts;
+using BayiOS.Modules.Catalog.Infrastructure.Persistence;
 using BayiOS.Modules.Identity.Domain;
 using BayiOS.Modules.Identity.Infrastructure.Persistence;
 using BayiOS.Modules.Integrations.Application;
@@ -24,12 +25,14 @@ internal static class BillingPorts
 
 internal sealed class ModuleBillingUsageSource(
     WarehouseDbContext warehouses,
+    CatalogDbContext catalog,
     IdentityDbContext identity,
     AiUsageMeter ai,
     IRequestContext requestContext,
     TimeProvider clock) : IBillingUsageSource
 {
     private const string ActiveWarehouse = "active";
+    private const string ArchivedProduct = "archived";
 
     public async Task<IReadOnlyDictionary<string, long>> CurrentAsync(CancellationToken cancellationToken)
     {
@@ -45,6 +48,8 @@ internal sealed class ModuleBillingUsageSource(
         {
             [EntitlementCodes.MaxWarehouses] = await warehouses.Warehouses.CountAsync(w => w.Status == ActiveWarehouse, cancellationToken),
             [EntitlementCodes.MaxUsers] = activeMembers + openInvitations,
+            // Products that are not archived — the same count Catalog enforces (OD-02).
+            [EntitlementCodes.MaxProducts] = await catalog.Products.CountAsync(p => p.Status != ArchivedProduct, cancellationToken),
             [EntitlementCodes.AiParsesPerMonth] = await ai.MonthToDateParsesAsync(tenantId, requestContext.UserId, cancellationToken),
         };
     }

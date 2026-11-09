@@ -96,7 +96,7 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
     /// key's row (<c>FOR UPDATE</c>, sorted). Returns the rows in lock order.
     /// </summary>
     public async Task<IReadOnlyList<BalanceRow>> LockBalancesAsync(
-        IReadOnlyCollection<BalanceKey> keys, bool allowNegative, bool createMissing, CancellationToken cancellationToken)
+        IReadOnlyCollection<BalanceKey> keys, bool createMissing, CancellationToken cancellationToken)
     {
         var distinct = keys.Distinct().ToList();
         if (distinct.Count == 0)
@@ -114,7 +114,7 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
                 $"""
                 INSERT INTO inventory.inventory_balances
                     (id, tenant_id, variant_id, warehouse_id, location_id, on_hand, reserved, allow_negative, version, created_at)
-                SELECT k.id, @tenant, k.variant_id, k.warehouse_id, k.location_id, 0, 0, @allow_negative, 0, now()
+                SELECT k.id, @tenant, k.variant_id, k.warehouse_id, k.location_id, 0, 0, false, 0, now()
                 FROM unnest(@ids, @variants, @warehouses, @locations) AS k(id, variant_id, warehouse_id, location_id)
                 ORDER BY k.{Order.Replace(", ", ", k.", StringComparison.Ordinal)}
                 ON CONFLICT (tenant_id, variant_id, warehouse_id, location_id) DO NOTHING
@@ -124,7 +124,6 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
             insert.Parameters.Add(Uuids("variants", variants.Select(v => (Guid?)v).ToArray()));
             insert.Parameters.Add(Uuids("warehouses", warehouses.Select(w => (Guid?)w).ToArray()));
             insert.Parameters.Add(Uuids("locations", locations));
-            insert.Parameters.Add(new NpgsqlParameter<bool>("allow_negative", allowNegative));
             await insert.ExecuteNonQueryAsync(cancellationToken);
         }
 

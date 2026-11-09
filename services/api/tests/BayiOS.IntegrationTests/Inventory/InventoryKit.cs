@@ -123,14 +123,14 @@ internal sealed class InventoryKit
             new ReserveStock(orderId, warehouseId, [.. lines.Select(l => new ReserveLine(Guid.CreateVersion7(), l.VariantId, l.Quantity))]),
             Ct));
 
-    public async Task SetNegativeStockPolicyAsync(string policy)
+    /// <summary>Runs <paramref name="sql"/> as superuser (bypassing the API) with <c>$1</c> = this tenant; returns the row count.</summary>
+    public async Task<int> ExecuteAsSuperuserAsync(string sql)
     {
         await using var connection = new NpgsqlConnection(_fixture.SuperuserConnectionString);
         await connection.OpenAsync(Ct);
-        await using var command = new NpgsqlCommand("UPDATE identity.tenant_settings SET negative_stock_policy = $1 WHERE tenant_id = $2", connection);
-        command.Parameters.Add(new NpgsqlParameter { Value = policy });
+        await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.Add(new NpgsqlParameter { Value = TenantId });
-        Assert.Equal(1, await command.ExecuteNonQueryAsync(Ct));
+        return await command.ExecuteNonQueryAsync(Ct);
     }
 
     /// <summary>(on_hand, reserved) of one balance row, read as superuser; (0, 0) when the row does not exist.</summary>

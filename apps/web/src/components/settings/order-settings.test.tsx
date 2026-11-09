@@ -107,12 +107,12 @@ describe("Ayarlar → Sipariş ayarları (#92)", () => {
   it("412: someone else saved first → reload notice; reloading shows the current settings", async () => {
     const { api, calls } = fakeApi({ conflictOnce: true });
     renderAs("admin", api);
-    await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Stok yetmediğinde" }), "warn");
+    await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Fiyat gösterimi" }), "included");
     await userEvent.click(screen.getByRole("button", { name: "Ayarları kaydet" }));
     expect(await screen.findByText("Ayarlar başkası tarafından değiştirildi")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Ayarları kaydet" }) as HTMLButtonElement).disabled).toBe(true);
     await userEvent.click(screen.getByRole("button", { name: "Güncel ayarları yükle" }));
-    expect(await screen.findByRole("combobox", { name: "Stok yetmediğinde" })).toHaveProperty("value", "block");
+    expect(await screen.findByRole("combobox", { name: "Fiyat gösterimi" })).toHaveProperty("value", "excluded");
     expect(screen.queryByText("Ayarlar başkası tarafından değiştirildi")).toBeNull();
     expect(calls.filter((c) => !c.options.method || c.options.method === "GET")).toHaveLength(2);
   });
@@ -128,7 +128,7 @@ describe("Ayarlar → Sipariş ayarları (#92)", () => {
         },
       };
       renderAs("admin", failing);
-      await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Stok yetmediğinde" }), "warn");
+      await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Fiyat gösterimi" }), "included");
       await userEvent.click(screen.getByRole("button", { name: "Ayarları kaydet" }));
       const alert = (await screen.findByText("Ayarlar kaydedilemedi")).closest('[tabindex="-1"]');
       await waitFor(() => expect(document.activeElement).toBe(alert));
@@ -140,9 +140,17 @@ describe("Ayarlar → Sipariş ayarları (#92)", () => {
   it("412: the reload notice takes focus (the save button it came from is disabled now)", async () => {
     const { api } = fakeApi({ conflictOnce: true });
     renderAs("admin", api);
-    await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Stok yetmediğinde" }), "warn");
+    await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Fiyat gösterimi" }), "included");
     await userEvent.click(screen.getByRole("button", { name: "Ayarları kaydet" }));
     const notice = (await screen.findByText("Ayarlar başkası tarafından değiştirildi")).closest('[tabindex="-1"]');
     await waitFor(() => expect(document.activeElement).toBe(notice));
+  });
+
+  it("shows 'stock never goes below zero' as a fixed rule, not a choice (OD-09)", async () => {
+    const { api } = fakeApi();
+    renderAs("admin", api);
+    expect(await screen.findByText("Stok eksiye düşmez")).toBeTruthy();
+    expect(screen.getByText("Sabit kural")).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Stok yetmediğinde" })).toBeNull();
   });
 });

@@ -38,7 +38,7 @@ internal static class WarehouseEndpoints
         group.MapPost("/warehouses", Create).WithName("Warehouse_Create")
             .WithSummary("Depo oluşturur (tenant'ın ilk deposu varsayılan olur)").RequirePermission(Permissions.WarehousesManage)
             .WithDescription(
-                "403 `entitlement.limit_exceeded` when the plan's active-warehouse limit (`max_warehouses`, Basic: 1) is reached; "
+                "403 `entitlement.limit_exceeded` when the plan's active-warehouse limit (`max_warehouses`, Basic: 999) is reached; "
                 + "403 `entitlement.required` (`warehouse_locations`) for usesLocations = true without the Professional plan.")
             .EnforcesEntitlementLimit(EntitlementCodes.MaxWarehouses)
             .RequireIdempotencyKey()

@@ -4,29 +4,20 @@ import {
   inventoryErrorMessage,
   inventoryFieldErrors,
   isBusy,
-  needsNegativeStockConfirmation,
   readShortages,
   translateInventoryFieldMessage,
 } from "./errors";
 
 const apiError = (status: number, problem: Record<string, unknown>) => new ApiError("x", status, problem);
 
-describe("negative stock (warn policy)", () => {
-  const warn = apiError(409, {
+describe("stock shortages (OD-09: stock never goes below zero)", () => {
+  const shortage = apiError(409, {
     code: "inventory.insufficient_stock",
-    confirmationRequired: true,
     shortages: [{ variantId: "v-1", sku: "MOCK-1", warehouseId: "wh-1", locationId: null, requested: 5, available: 2 }, { bad: true }],
   });
 
-  it("asks for confirmation only when the API says so", () => {
-    expect(needsNegativeStockConfirmation(warn)).toBe(true);
-    expect(needsNegativeStockConfirmation(apiError(409, { code: "inventory.insufficient_stock" }))).toBe(false);
-    expect(needsNegativeStockConfirmation(apiError(409, { code: "inventory.insufficient_available", confirmationRequired: true }))).toBe(false);
-    expect(needsNegativeStockConfirmation(new Error("x"))).toBe(false);
-  });
-
   it("reads well-formed shortages and skips the rest", () => {
-    expect(readShortages(warn)).toEqual([{ variantId: "v-1", sku: "MOCK-1", warehouseId: "wh-1", locationId: null, requested: 5, available: 2 }]);
+    expect(readShortages(shortage)).toEqual([{ variantId: "v-1", sku: "MOCK-1", warehouseId: "wh-1", locationId: null, requested: 5, available: 2 }]);
     expect(readShortages(apiError(409, { shortages: "nope" }))).toEqual([]);
   });
 });

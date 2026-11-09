@@ -68,7 +68,10 @@ internal sealed class InventoryBalance : ITenantOwned
 
     public decimal Reserved { get; private set; }
 
-    /// <summary>Denormalised copy of the tenant's negative-stock policy; the DB CHECK reads it.</summary>
+    /// <summary>
+    /// Exemption from the DB CHECK (on_hand &gt;= 0 AND reserved &lt;= on_hand). Always false for new rows and after any
+    /// worsening change (OD-09: stock never goes below zero); true only on a row still negative from before OD-09.
+    /// </summary>
     public bool AllowNegative { get; private set; }
 
     public long Version { get; private set; }

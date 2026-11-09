@@ -37,6 +37,7 @@ export const featureLabels: Record<string, string> = {
 export const limitLabels: Record<string, string> = {
   max_warehouses: "Aktif depo sayısı",
   max_users: "Kullanıcı sayısı",
+  max_products: "Ürün sayısı (arşiv hariç)",
   ai_parses_per_month: "Aylık AI ayrıştırma",
 };
 
@@ -75,7 +76,9 @@ export const SUGGESTIONS: Record<string, { plan: string | null; module: string |
   warehouse_locations: { plan: "professional", module: null },
   barcode_operations: { plan: "professional", module: null },
   max_warehouses: { plan: "professional", module: null },
-  max_users: { plan: "professional", module: null },
+  // OD-02 (2026-11-09): Basic 999 users / warehouses / products; Professional has no more users, unlimited products.
+  max_users: { plan: null, module: null },
+  max_products: { plan: "professional", module: null },
   ai_order_parsing: { plan: null, module: "ai_assistant" },
   ai_parses_per_month: { plan: null, module: "ai_assistant" },
 };

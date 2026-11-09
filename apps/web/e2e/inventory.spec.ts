@@ -9,7 +9,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { DESKTOP, MOBILE } from "./viewports";
 import { TENANT_A, signedIn, type MockMembership } from "./support/mock-backend";
 import { createMockCatalog, problemBody, fulfillJson, type MockCatalog } from "./support/mock-catalog";
-import { LOCATION_IDS, WAREHOUSE_IDS, busyResponse, createMockInventory, type MockInventory } from "./support/mock-inventory";
+import { LOCATION_IDS, WAREHOUSE_IDS, busyResponse, createMockInventory } from "./support/mock-inventory";
 
 test.use({ viewport: DESKTOP });
 
@@ -25,9 +25,9 @@ async function expectNoSeriousViolations(page: Page) {
 
 const variantOf = (catalog: MockCatalog, n: number) => catalog.products[n - 1].variants[0];
 
-function setup(options: { products?: number; stocked?: number; policy?: MockInventory["policy"] } = {}) {
+function setup(options: { products?: number; stocked?: number } = {}) {
   const catalog = createMockCatalog({ products: options.products ?? 3 });
-  const inventory = createMockInventory(catalog, { stocked: options.stocked, policy: options.policy });
+  const inventory = createMockInventory(catalog, { stocked: options.stocked });
   return { catalog, inventory };
 }
 
@@ -268,8 +268,8 @@ test.describe("mal kabul (mock)", () => {
 });
 
 test.describe("stok düzeltme (mock)", () => {
-  test("warn politikası: açık onay diyaloğu; onaydan sonra confirmNegativeStock=true ile yeniden gönderilir", async ({ page }) => {
-    const { catalog, inventory } = setup({ policy: "warn" });
+  test("stok eksiye düşmez (OD-09): onay diyaloğu yok, satılabilir kadarı kaydedilir", async ({ page }) => {
+    const { catalog, inventory } = setup();
     const v = variantOf(catalog, 1);
     const api = await signedIn(page, { catalog, inventory });
     await page.goto("/stok");
@@ -282,23 +282,17 @@ test.describe("stok düzeltme (mock)", () => {
     await page.getByLabel("Miktar").fill("15");
     await page.getByLabel("Sebep").fill("Sel hasarı (mock)");
     await page.getByRole("button", { name: "Düzeltmeyi kaydet" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "Stok eksiye düşecek" });
-    await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("istenen 15, satılabilir 10");
+    const alert = page.getByRole("alert").filter({ hasText: "Düzeltme kaydedilemedi" });
+    await expect(alert).toContainText("Satılabilir: 10, istenen: 15.");
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    expect(inventory.movements).toHaveLength(0);
     await expectNoSeriousViolations(page);
 
-    await dialog.getByRole("button", { name: "Vazgeç" }).click();
-    await expect(dialog).toBeHidden();
-    await expect(page.getByText("Düzeltme kaydedilmedi: eksi stok onaylanmadı.")).toBeVisible();
-    expect(inventory.movements).toHaveLength(0);
-
+    await page.getByLabel("Miktar").fill("10");
     await page.getByRole("button", { name: "Düzeltmeyi kaydet" }).click();
-    await dialog.getByRole("button", { name: "Yine de kaydet" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Stok düzeltildi" })).toBeVisible();
-    await expect(page.getByText(/MOCK-001-1 için yeni rafta bakiye: [-−]4./)).toBeVisible();
 
     const posts = requestsTo(api, "POST", "/api/v1/inventory/adjustments");
-    expect(posts.map((p) => (p.body as { confirmNegativeStock: boolean }).confirmNegativeStock)).toEqual([false, false, true]);
     expect(posts[0].body).toEqual({
       variantId: v.id,
       warehouseId: WAREHOUSE_IDS.main,
@@ -306,16 +300,13 @@ test.describe("stok düzeltme (mock)", () => {
       type: "damage_out",
       quantity: 15,
       reason: "Sel hasarı (mock)",
-      confirmNegativeStock: false,
     });
-    // Same body → same key; the confirmed body is a new attempt → new key.
-    expect(posts[1].headers["idempotency-key"]).toBe(posts[0].headers["idempotency-key"]);
-    expect(posts[2].headers["idempotency-key"]).not.toBe(posts[0].headers["idempotency-key"]);
+    expect(posts.every((p) => !Object.hasOwn(p.body as object, "confirmNegativeStock"))).toBe(true);
     expect(inventory.movements).toHaveLength(1);
   });
 
-  test("block politikası: rezerve stok düşülemez mesajı satılabilir miktarla gösterilir", async ({ page }) => {
-    const { catalog, inventory } = setup({ policy: "block" });
+  test("rezerve stok düşülemez mesajı satılabilir miktarla gösterilir", async ({ page }) => {
+    const { catalog, inventory } = setup();
     await signedIn(page, { catalog, inventory });
     await page.goto(`/stok/duzeltme?variantId=${variantOf(catalog, 1).id}&warehouseId=${WAREHOUSE_IDS.main}`);
     await expect(page.getByRole("form", { name: "Stok düzeltme" }).getByText("MOCK-001-1", { exact: true })).toBeVisible();

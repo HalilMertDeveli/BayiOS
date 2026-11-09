@@ -162,24 +162,25 @@ owner'ı kilitler — ürün sahibi kararı).
 | Alış fiyatı görünürlüğü (manager, viewer) | Kapalı | prices.read.cost |
 | Depo personeli barkod atayabilir | Kapalı | catalog.barcode.assign |
 | Depo personeli mal kabul onaylayabilir | Kapalı | inventory.receive.approve |
-| Negatif stok politikası | İzin verme | orders.approve, inventory.adjust |
+| Stok eksiye düşmez (sabit kural, OD-09 — ayarlanamaz) | Her zaman | orders.approve, inventory.adjust |
 | 2FA zorunlu (owner/admin) | Kapalı (öneri: açık) | Oturum |
 
 ## 5. Entitlement eşlemesi (özet)
 | Özellik | Temel | Profesyonel | Ek modül | Not |
 |---|---|---|---|---|
 | Ürün, temel stok, sipariş, temel rapor | ✓ | ✓ | – | |
-| Tek depo | ✓ | ✓ | – | |
-| Çoklu depo + transfer | – | ✓ | – | |
-| Raf/lokasyon + barkod operasyonları (mobil toplama barkod doğrulaması) | – | ✓ | – | Öneri: Temel'de mobil toplama listesi var, barkod doğrulaması yok (ürün sahibi kararı) |
-| Çoklu personel (kullanıcı sınırı) | Sınırlı | Geniş | – | Sayılar AQ-01 |
+| Depo sayısı (`max_warehouses`, aktif depo) | 999 | Sınırsız | – | Temel: ürün sahibi kararı OD-02 (2026-11-09) |
+| Depolar arası transfer, stok düzeltme | ✓ | ✓ | – | Paket düşürmede ve limit aşımında da açık (OD-03) |
+| Raf/lokasyon + barkod operasyonları (mobil toplama barkod doğrulaması) | – | ✓ | – | Öneri: Temel'de mobil toplama listesi var, barkod doğrulaması yok (OD-02'de cevaplanmadı; mevcut durum korunur) |
+| Kullanıcı sayısı (`max_users`) | 999 | 999 | – | Temel: OD-02. Profesyonel sayısı kararlaştırılmadı; Temel'in altına inmesin diye eşit |
+| Ürün sayısı (`max_products`, arşivlenmemiş ürün) | 999 | Sınırsız | – | Temel: OD-02. Profesyonel sınırsız: 10.000 satırlık içe aktarma (IMP) denemede ve Profesyonel'de çalışsın |
 | AI WhatsApp asistanı | – | – | ✓ | Yokken manuel sipariş formu |
 | Bayi portalı (`dealer_user`) | – | – | ✓ | MVP dışı |
 | Seri/garanti | – | – | ✓ | MVP dışı |
 | ERP entegrasyonu, resmî WhatsApp otomasyonu, gelişmiş analitik | – | – | ✓ | MVP dışı |
 | Ledger, rezervasyon, audit, 2FA, CSV/Excel dışa aktarma, tam veri dışa aktarma, işlem geçmişi | ✓ | ✓ | – | **Asla kilitlenmez** |
 
-Abonelik düşürüldüğünde/bittiğinde: veri silinmez; entitlement'ı kalkan özellik salt okunur olur (ör. çoklu depo: mevcut depolar görüntülenir, yeni transfer yapılamaz; ancak stoğu sıfırlamak için transfer/düzeltme izinli bırakılır — öneri, ürün sahibi kararı).
+Abonelik düşürüldüğünde/bittiğinde: veri silinmez; entitlement'ı kalkan özellik salt okunur olur. **Ürün sahibi kararı OD-03 (2026-11-09):** limit aşımında bile (ör. düşürme sonrası aktif depo sayısı > `max_warehouses`) depoyu boşaltmak için **transfer ve stok düzeltme her zaman yapılabilir**; bu uçlar hiçbir paket özelliği veya limitiyle kapılanmaz (`DowngradeOverLimitTests`: limit aşımında düzeltmeyle boşaltma + boşalan depoyu pasifleştirme; transfer/düzeltme uçlarında OpenAPI `x-entitlement` / `x-entitlement-limit` yok — iki aşamalı transfer #168 uçları da bu kurala tabidir).
 
 **Uygulanan davranış (#51/#52 — ürün sahibi onayına sunulan kararlar):**
 - Deneme: yeni tenant `Billing:TrialDays` (varsayılan 30) gün Profesyonel + tüm ek modüllerle başlar (SUB-05); bitişte Temel'e iner (`status = expired`). Pilot tenant'lara süresiz erişim (AQ-08) operatör override'ı ile verilir.
@@ -187,7 +188,7 @@ Abonelik düşürüldüğünde/bittiğinde: veri silinmez; entitlement'ı kalkan
 - **Salt okunur olanlar (yeni kullanım kapalı):** yeni aktif depo (aktif depo sayısı ≤ `max_warehouses`; pasif depoyu yeniden aktifleştirme de sayılır), lokasyon oluşturma/düzenleme ve depoda lokasyonu açma (`warehouse_locations`), yeni WhatsApp ayrıştırması (`ai_order_parsing`). Depo adı değiştirme, depoyu pasifleştirme, lokasyonu kapatma (`usesLocations = false`, stok yokken) her pakette açıktır (geri dönüş yolu).
 - AI ek modülü kapalıyken mevcut ayrıştırmalar listelenir, okunur, **onaylanır/reddedilir** (sipariş akışında takılı kalmaz); yalnızca yeni ayrıştırma reddedilir.
 - Ek modül "etkinleştirme" ödeme olmadan ücretsiz ve süreli (`Billing:ModuleTrialDays`, varsayılan 30) bir denemedir; modül başına bir kez; yalnızca owner (`billing.manage`), denetim kaydıyla. Paket değişikliği API'de yoktur.
-- Limit sayıları geçicidir (AQ-01/AQ-06): Temel `max_warehouses` 1, `max_users` 5; Profesyonel depo sınırsız, `max_users` 25; AI ek modülü `ai_parses_per_month` 1000. `max_users` = **aktif üye + açık (bekleyen, süresi dolmamış) davet**; davet oluşturma, davet yenileme, davet kabulü ve askıdaki üyeyi yeniden etkinleştirme bu sınırla zorlanır (#129); askıdaki üye ve iptal edilmiş/süresi dolmuş davet koltuk tutmaz. `barcode_operations` (Profesyonel) tanımlıdır, henüz bir uç kapılamaz.
+- Limitler (katalog `2026-11-09.1`): **Temel `max_users` 999, `max_warehouses` 999, `max_products` 999 (OD-02)**; Profesyonel depo ve ürün sınırsız, `max_users` 999; AI ek modülü `ai_parses_per_month` 1000 (geçici, AQ-06). `max_products` = arşivlenmemiş ürün: ürün oluşturma, arşivden geri alma ve ürün içe aktarma bu sınırla zorlanır (içe aktarmada sınırı aşan satırlar `entitlement.limit_exceeded` ile başarısız olur, iş devam eder); arşivleme yer açar; eşzamanlı oluşturmalar tenant başına kilitle sayılır. `max_users` = **aktif üye + açık (bekleyen, süresi dolmamış) davet**; davet oluşturma, davet yenileme, davet kabulü ve askıdaki üyeyi yeniden etkinleştirme bu sınırla zorlanır (#129); askıdaki üye ve iptal edilmiş/süresi dolmuş davet koltuk tutmaz. `barcode_operations` (Profesyonel) tanımlıdır, henüz bir uç kapılamaz.
 
 ## 6. Test gereksinimleri
 - Her API ucu için rol × izin tablo-temelli yetki testi (bu dokümandaki matris kaynak alınır).

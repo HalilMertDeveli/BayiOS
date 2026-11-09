@@ -165,23 +165,19 @@ describe("submit when the tenant needs no approval (#92)", () => {
     expect(posts.map((p) => p.path)).toEqual(["/api/v1/orders/ord-1/submit"]);
   });
 
-  it("warn policy: the shortage is confirmed in a dialog and the submit repeated with confirmNegativeStock", async () => {
-    const approved = orderDetail([orderLine()], { status: "approved", version: 4 });
-    const { api, posts } = transitionApi(draft(ME), (_body, call) => {
-      if (call === 1) throw new ApiError("x", 409, { code: "inventory.insufficient_stock", confirmationRequired: true, shortages: [SHORTAGE] });
-      return approved;
+  it("a shortage never offers a negative-stock confirmation (OD-09), even if a problem still carries confirmationRequired", async () => {
+    const { api, posts } = transitionApi(draft(ME), () => {
+      throw new ApiError("x", 409, { code: "inventory.insufficient_stock", confirmationRequired: true, shortages: [SHORTAGE] });
     });
     renderWith(api);
     await userEvent.click(await screen.findByRole("button", { name: "Onaya gönder" }));
-    const dialog = await screen.findByRole("alertdialog", { name: "Stok eksiye düşecek" });
-    expect(dialog.textContent).toContain("sipariş gönderilince hemen onaylanır");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Yine de gönder ve onayla" }));
-    expect(await screen.findByText(/otomatik onaylandı/)).toBeTruthy();
-    expect(posts.map((p) => p.body)).toEqual([undefined, { confirmNegativeStock: true }]);
-    expect(posts[1].key).not.toBe(posts[0].key);
+    expect(await screen.findByRole("heading", { name: "Gönderilemedi: stok yetersiz" })).toBeTruthy();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Yine de/ })).toBeNull();
+    expect(posts.map((p) => p.body)).toEqual([undefined]);
   });
 
-  it("block policy: the shortages panel says the order stayed a draft", async () => {
+  it("the shortages panel says the order stayed a draft", async () => {
     const { api } = transitionApi(draft(ME), () => {
       throw new ApiError("x", 409, { code: "inventory.insufficient_stock", shortages: [SHORTAGE] });
     });
@@ -192,7 +188,7 @@ describe("submit when the tenant needs no approval (#92)", () => {
     expect(screen.getByRole("list", { name: "Stoğu yetmeyen satırlar" }).textContent).toContain("istenen 2, satılabilir 1");
   });
 
-  it("block policy: the shortages heading takes focus even when a frame runs before the update commits (#152)", async () => {
+  it("the shortages heading takes focus even when a frame runs before the update commits (#152)", async () => {
     frameBeforeCommit();
     try {
       const { api } = transitionApi(draft(ME), () => {

@@ -17,7 +17,7 @@ describe("importErrorMessage", () => {
   });
 
   it.each([
-    ["imports.file_too_large", 413, /10 MB/],
+    ["imports.file_too_large", 413, /20 MB/],
     ["imports.file_macro_not_allowed", 415, /\.xlsm/],
     ["imports.file_type_not_allowed", 415, /\.xlsx veya \.csv/],
     ["imports.file_too_many_rows", 422, /10\.000/],
@@ -30,7 +30,7 @@ describe("importErrorMessage", () => {
   });
 
   it("413/415 without a code still name the file problem; other codes fall back to the shared messages", () => {
-    expect(importErrorMessage(apiError(413))).toMatch(/10 MB/);
+    expect(importErrorMessage(apiError(413))).toMatch(/20 MB/);
     expect(importErrorMessage(apiError(415))).toMatch(/dosya türü/);
     expect(importErrorMessage(apiError(403, "auth.forbidden"))).toMatch(/yetkiniz yok/);
     expect(importErrorMessage(new Error("x"))).toMatch(/Beklenmeyen/);
@@ -61,16 +61,19 @@ describe("importErrorMessage", () => {
 
 describe("preCheckFile", () => {
   const file = (name: string, size = 1000) => ({ name, size });
-  it("accepts .xlsx and .csv up to 10 MB", () => {
+  it("accepts .xlsx and .csv up to 20 MB", () => {
     expect(preCheckFile(file("urunler.xlsx"))).toBeNull();
     expect(preCheckFile(file("URUNLER.CSV"))).toBeNull();
+    // OD-04: a file over the former 10 MB limit is fine; exactly 20 MB is the edge.
+    expect(preCheckFile(file("orta.xlsx", 15 * 1024 * 1024))).toBeNull();
+    expect(preCheckFile(file("sinir.csv", 20 * 1024 * 1024))).toBeNull();
   });
   it("rejects .xls, .xlsm, other types, empty and oversized files with a hint", () => {
     expect(preCheckFile(file("eski.xls"))).toMatch(/\.xlsx/);
     expect(preCheckFile(file("makro.xlsm"))).toMatch(/Makro/);
     expect(preCheckFile(file("liste.pdf"))).toMatch(/Yalnızca/);
     expect(preCheckFile(file("bos.csv", 0))).toMatch(/boş/);
-    expect(preCheckFile(file("buyuk.xlsx", 10 * 1024 * 1024 + 1))).toMatch(/10 MB/);
+    expect(preCheckFile(file("buyuk.xlsx", 20 * 1024 * 1024 + 1))).toMatch(/20 MB/);
   });
 });
 

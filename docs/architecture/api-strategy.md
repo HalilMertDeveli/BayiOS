@@ -105,7 +105,7 @@
 
 `code` alanı istemcilerin yerelleştirme anahtarıdır; `title/detail` yalnızca geliştirici yardımıdır.
 
-Uzantılar (OpenAPI şemaları, #86): `StockProblemDetails` — `shortages[]` (variantId, sku, warehouseId, locationId, requested, available) ve `confirmationRequired` (negatif stok politikası `warn`: aynı isteği onay bayrağıyla tekrarla); `CodeConflictProblemDetails` — `409 catalog.sku_taken` / `catalog.barcode_taken` için `conflict` {field: sku | barcode, value, variantId, productId, sku} (yalnızca eşzamanlı bir yazımı veritabanı indeksi yakaladığında yoktur). Para alanları şimdilik JSON sayısı (`number`) olarak yayınlanır; istemci para hesabı yapmaz, toplamlar API'den gelir (karar #86).
+Uzantılar (OpenAPI şemaları, #86): `StockProblemDetails` — `shortages[]` (variantId, sku, warehouseId, locationId, requested, available) ve `confirmationRequired` (**deprecated**, hiç gönderilmez: stok eksiye düşmez, OD-09; istek tarafındaki `confirmNegativeStock` de yok sayılır); `CodeConflictProblemDetails` — `409 catalog.sku_taken` / `catalog.barcode_taken` için `conflict` {field: sku | barcode, value, variantId, productId, sku} (yalnızca eşzamanlı bir yazımı veritabanı indeksi yakaladığında yoktur). Para alanları şimdilik JSON sayısı (`number`) olarak yayınlanır; istemci para hesabı yapmaz, toplamlar API'den gelir (karar #86).
 
 **Koşullu (K) / kendi kayıtları (O) izinleri (#69):** uç izin(ler)ini bildirir (`x-permission`; birden çoğu yeterliyse `x-permission-any-of`). Koşulsuz izin olduğu gibi geçer; tenant kuralına bağlı K (dipnot 2, 3, 6, 9) kural açıksa koşulsuz, kapalıysa `403 auth.disabled_by_tenant_rule` (#111); kayıt düzeyi K/O (dipnot 1, 4, 5, 7, 8, 10, 11, 12, O) kapıdan geçer ve uygulama servisi `IAuthorizationContext` ile koşulu uygular. Hiçbir servis koşulu değerlendirmezse başarılı yanıt `403 auth.forbidden`'a çevrilir ve transaction geri alınır (fail-closed; bu güvenlik ağı bilerek genel kodda kalır). Görünürlük koşulunun dışındaki kayıt `404`, görünür ama işleme kapalı kayıt `403` döner.
 
@@ -154,7 +154,7 @@ OpenAPI: ilgili sipariş uçlarının `description` alanı bu kodları listeler.
 - **Oluşturma:** `201 Created` + `Location` + kaynak gövdesi.
 - **Durum geçişleri:** `200 OK` + güncel kaynak (istemci ayrıca GET yapmasın).
 - **Uzun işlemler** (import, AI ayrıştırma): `202 Accepted` + `Location: /api/v1/import-jobs/{id}`; istemci polling (sonra SignalR/FCM).
-- **Dosya yükleme:** `multipart/form-data` API'ye (boyut ≤ 10 MB, `.xlsx/.csv`, içerik imzası kontrolü — PRD IMP-01'deki 20 MB / `.xls` ile fark ürün sahibi kararı bekliyor, bkz. `docs/operations/phase0-gate.md`) → API Storage'a yazar. İndirme: API `GET …/download-url` ile kısa ömürlü (ör. 5 dk) imzalı URL döner.
+- **Dosya yükleme:** `multipart/form-data` API'ye (boyut ≤ 20 MB, yalnızca `.xlsx/.csv`, içerik imzası kontrolü — ürün sahibi kararı OD-04, 2026-11-09, `docs/operations/phase0-gate.md` §5) → API Storage'a yazar. İndirme: API `GET …/download-url` ile kısa ömürlü (ör. 5 dk) imzalı URL döner.
 - **Toplu işlemler:** `POST /products/bulk` gibi uçlar en fazla 500 öğe, satır bazında sonuç (`207` değil, `200` + `results[]`).
 - **Silme:** iş kaynaklarında `DELETE` = arşivleme (`archived_at`); `204`.
 - **Genişletme:** `?include=lines,customer` yalnızca dokümante edilmiş ilişkiler.

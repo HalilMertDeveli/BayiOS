@@ -24,7 +24,7 @@ public class AuditTests(ApiFixture fixture)
     {
         var owner = await CatalogClient.NewTenantOwnerAsync(fixture);
 
-        var patch = await owner.PatchAsync("/api/v1/tenant/settings", new { negativeStockPolicy = "warn", defaultTaxRate = 10m }, "W/\"1\"");
+        var patch = await owner.PatchAsync("/api/v1/tenant/settings", new { salesCanApproveOrders = false, defaultTaxRate = 10m }, "W/\"1\"");
         Assert.Equal(HttpStatusCode.OK, patch.StatusCode);
         var correlationId = Assert.Single(patch.Headers.GetValues("X-Correlation-Id"));
 
@@ -39,13 +39,13 @@ public class AuditTests(ApiFixture fixture)
         }
 
         var ruleChanges = ChangesOf(rules);
-        Assert.Equal("block", ruleChanges.GetProperty("negativeStockPolicy").GetProperty("from").GetString());
-        Assert.Equal("warn", ruleChanges.GetProperty("negativeStockPolicy").GetProperty("to").GetString());
+        Assert.True(ruleChanges.GetProperty("salesCanApproveOrders").GetProperty("from").GetBoolean());
+        Assert.False(ruleChanges.GetProperty("salesCanApproveOrders").GetProperty("to").GetBoolean());
         Assert.False(ruleChanges.TryGetProperty("require2fa", out _)); // unchanged fields are not recorded
         Assert.False(ruleChanges.TryGetProperty("defaultTaxRate", out _));
         var changes = ChangesOf(audit);
         Assert.Equal(10m, changes.GetProperty("defaultTaxRate").GetProperty("to").GetDecimal());
-        Assert.False(changes.TryGetProperty("negativeStockPolicy", out _));
+        Assert.False(changes.TryGetProperty("salesCanApproveOrders", out _));
 
         // The tenant creation itself was audited too.
         var created = await owner.OkAsync<AuditEventPageResponse>(await owner.GetAsync($"/api/v1/audit-events?action={AuditActions.TenantCreated}"));
@@ -117,27 +117,23 @@ public class AuditTests(ApiFixture fixture)
     }
 
     [Fact]
-    public async Task Receipts_adjustments_and_confirmed_negative_stock_are_audited()
+    public async Task Receipts_and_adjustments_are_audited_and_a_refused_confirmation_leaves_no_negative_stock_event()
     {
         var kit = await InventoryKit.CreateAsync(fixture);
         var variant = await kit.VariantAsync();
         var warehouse = await kit.WarehouseAsync("A1");
         await kit.ReceiveAsync(warehouse.Id, (variant, 2m, null));
-        await kit.SetNegativeStockPolicyAsync("warn");
 
-        var response = await kit.AdjustAsync(kit.Owner, variant, warehouse.Id, MovementTypes.AdjustmentOut, 5m, confirm: true);
+        // OD-09: even with the old confirmation flag the stock cannot go below zero (nothing audited for it).
+        Assert.Equal(HttpStatusCode.Conflict, (await kit.AdjustAsync(kit.Owner, variant, warehouse.Id, MovementTypes.AdjustmentOut, 5m, confirm: true)).StatusCode);
+        var response = await kit.AdjustAsync(kit.Owner, variant, warehouse.Id, MovementTypes.AdjustmentOut, 2m);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var page = await kit.Owner.OkAsync<AuditEventPageResponse>(await kit.Owner.GetAsync("/api/v1/audit-events?limit=200"));
         var actions = page.Items.Select(e => e.Action).ToHashSet();
-        Assert.Superset(
-            new HashSet<string> { AuditActions.InventoryReceiptPosted, AuditActions.InventoryAdjustmentPosted, AuditActions.InventoryNegativeStockConfirmed },
-            actions);
-        var confirmed = Assert.Single(page.Items, e => e.Action == AuditActions.InventoryNegativeStockConfirmed);
-        var shortage = Assert.Single(ChangesOf(confirmed).GetProperty("shortages").EnumerateArray());
-        Assert.Equal((5m, 2m), (shortage.GetProperty("requested").GetDecimal(), shortage.GetProperty("available").GetDecimal()));
+        Assert.Superset(new HashSet<string> { AuditActions.InventoryReceiptPosted, AuditActions.InventoryAdjustmentPosted }, actions);
+        Assert.DoesNotContain(AuditActions.InventoryNegativeStockConfirmed, actions);
         var adjustment = Assert.Single(page.Items, e => e.Action == AuditActions.InventoryAdjustmentPosted);
-        Assert.Equal(adjustment.EntityId, confirmed.EntityId);
         Assert.DoesNotContain("Sayım", ChangesOf(adjustment).GetRawText(), StringComparison.Ordinal);
     }
 

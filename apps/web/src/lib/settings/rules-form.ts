@@ -1,4 +1,4 @@
-import { NEGATIVE_STOCK_POLICIES, type NegativeStockPolicy, type TenantSettings, type UpdateTenantSettingsRequest } from "@/lib/api/identity";
+import type { TenantSettings, UpdateTenantSettingsRequest } from "@/lib/api/identity";
 import { parseDecimalInput, toDecimalInput } from "@/lib/pricing/money";
 import { translateSettingsFieldMessage } from "./order-settings-form";
 
@@ -14,7 +14,6 @@ export type RulesValues = {
   showCostToViewer: boolean;
   staffCanAssignBarcode: boolean;
   staffCanApproveReceipt: boolean;
-  negativeStockPolicy: NegativeStockPolicy;
   /** Stored and audited by the API but NOT enforced yet (roles-permissions §4). */
   require2fa: boolean;
 };
@@ -26,12 +25,8 @@ export const RULE_FIELDS = [
   "showCostToViewer",
   "staffCanAssignBarcode",
   "staffCanApproveReceipt",
-  "negativeStockPolicy",
   "require2fa",
 ] as const satisfies readonly (keyof RulesValues)[];
-
-const toPolicy = (value: string): NegativeStockPolicy =>
-  (NEGATIVE_STOCK_POLICIES as readonly string[]).includes(value) ? (value as NegativeStockPolicy) : "block";
 
 export function settingsToRules(s: TenantSettings): RulesValues {
   return {
@@ -41,7 +36,6 @@ export function settingsToRules(s: TenantSettings): RulesValues {
     showCostToViewer: s.showCostToViewer,
     staffCanAssignBarcode: s.staffCanAssignBarcode,
     staffCanApproveReceipt: s.staffCanApproveReceipt,
-    negativeStockPolicy: toPolicy(s.negativeStockPolicy),
     require2fa: s.require2fa,
   };
 }
@@ -71,7 +65,6 @@ export function buildRulesPatch(original: TenantSettings, values: RulesValues): 
   for (const key of flags) if (values[key] !== original[key]) patch[key] = values[key];
   const discount = parseDiscountPercent(values.salesMaxDiscountPercent);
   if (discount !== null && Number(discount) !== Number(original.salesMaxDiscountPercent)) patch.salesMaxDiscountPercent = Number(discount);
-  if (values.negativeStockPolicy !== original.negativeStockPolicy) patch.negativeStockPolicy = values.negativeStockPolicy;
   return patch;
 }
 

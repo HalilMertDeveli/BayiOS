@@ -47,7 +47,7 @@ internal static class ImportsEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapPost("/import-jobs", Upload).WithName("Imports_Upload")
-            .WithSummary("Dosya yükler (.xlsx/.csv, ≤ 10 MB, ≤ 10.000 satır): içerik/magic byte, makro, zip bombası ve satır/kolon limitleri doğrulanır")
+            .WithSummary("Dosya yükler (.xlsx/.csv, ≤ 20 MB, ≤ 10.000 satır): içerik/magic byte, makro, zip bombası ve satır/kolon limitleri doğrulanır")
             .RequirePermission(Permissions.ImportsRun)
             .RequireIdempotencyKey()
             .WithMetadata(new UploadIdempotencyHash())

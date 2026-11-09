@@ -188,23 +188,32 @@ public class TenancyApiTests(ApiFixture fixture)
     {
         var client = fixture.CreateClientFor(Guid.NewGuid());
         var tenant = await CreateTenant(client);
-        const string body = "{\"negativeStockPolicy\":\"warn\",\"salesMaxDiscountPercent\":5}";
+        const string body = "{\"negativeStockPolicy\":\"block\",\"salesMaxDiscountPercent\":5}";
 
         var missing = await Send(client, HttpMethod.Patch, "/api/v1/tenant/settings", tenant.Id, body, ifMatch: null);
         var stale = await Send(client, HttpMethod.Patch, "/api/v1/tenant/settings", tenant.Id, body, "W/\"7\"");
         var invalid = await Send(client, HttpMethod.Patch, "/api/v1/tenant/settings", tenant.Id, "{\"negativeStockPolicy\":\"maybe\"}", "W/\"1\"");
+        // OD-09: stock never goes below zero — the former warn / allow values are validation errors.
+        var warn = await Send(client, HttpMethod.Patch, "/api/v1/tenant/settings", tenant.Id, "{\"negativeStockPolicy\":\"warn\"}", "W/\"1\"");
+        var allow = await Send(client, HttpMethod.Patch, "/api/v1/tenant/settings", tenant.Id, "{\"negativeStockPolicy\":\"allow\"}", "W/\"1\"");
         var ok = await Send(client, HttpMethod.Patch, "/api/v1/tenant/settings", tenant.Id, body, "W/\"1\"");
         var replay = await Send(client, HttpMethod.Patch, "/api/v1/tenant/settings", tenant.Id, body, "W/\"1\"");
 
         await HttpAssert.ProblemAsync(missing, HttpStatusCode.PreconditionRequired, "precondition.required");
         await HttpAssert.ProblemAsync(stale, HttpStatusCode.PreconditionFailed, "concurrency.version_mismatch");
         await HttpAssert.ProblemAsync(invalid, HttpStatusCode.UnprocessableEntity, "validation.failed");
+        foreach (var refused in new[] { warn, allow })
+        {
+            var problem = await HttpAssert.ProblemJsonAsync(refused, HttpStatusCode.UnprocessableEntity, "validation.failed");
+            Assert.True(problem.GetProperty("errors").TryGetProperty("negativeStockPolicy", out _));
+        }
+
         Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
         Assert.Equal("W/\"2\"", ok.Headers.ETag?.ToString());
         await HttpAssert.ProblemAsync(replay, HttpStatusCode.PreconditionFailed, "concurrency.version_mismatch");
 
         var saved = await (await Send(client, HttpMethod.Get, "/api/v1/tenant/settings", tenant.Id)).Content.ReadFromJsonAsync<TenantSettingsResponse>(Ct);
-        Assert.Equal(("warn", 5m), (saved!.NegativeStockPolicy, saved.SalesMaxDiscountPercent));
+        Assert.Equal(("block", 5m), (saved!.NegativeStockPolicy, saved.SalesMaxDiscountPercent));
     }
 
     private static async Task<TenantResponse> CreateTenant(HttpClient client, string? slug = null)

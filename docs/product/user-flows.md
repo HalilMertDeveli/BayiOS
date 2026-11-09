@@ -18,7 +18,7 @@ Genel kurallar (tüm akışlar):
 2. E-posta doğrulama bağlantısına tıklar.
 3. **Sektör seçimi:** Motosiklet yedek parça / LED-Elektronik / Genel. Şablon önizlemesi (kategoriler, özel alanlar, birimler) gösterilir.
 4. **İşletme bilgileri:** logo (opsiyonel, atlanabilir), adres, telefon, vergi no (opsiyonel).
-5. **Ticari ayarlar:** para birimi TRY (varsayılan), varsayılan KDV %20, fiyat gösterimi (KDV hariç/dahil), negatif stok politikası (varsayılan "izin verme").
+5. **Ticari ayarlar:** para birimi TRY (varsayılan), varsayılan KDV %20, fiyat gösterimi (KDV hariç/dahil); "Stok eksiye düşmez" sabit kural olarak gösterilir (OD-09, seçim yok).
 6. **İlk depo:** ad (varsayılan "Merkez Depo"); raf kullanımı açık/kapalı.
 7. **Veri başlangıcı** (üç seçenek): (a) Demo veriyle dene, (b) Excel'den içe aktar → AF-02, (c) Boş başla.
 8. **Ekip daveti:** e-posta + rol (atlanabilir).
@@ -65,7 +65,7 @@ flowchart TD
 
 **Stok içe aktarma farkı:** Adım 5'te depo (ve raf kolonu) seçilir; miktar "mutlak (sayım)" veya "artış" modunda; her satır `import` hareketi üretir (IMP-11).
 
-**Kenar durumları:** Dosya > 20 MB veya > 50.000 satır → reddedilir, bölme önerisi · Aynı SKU dosyada iki kez → ikisi de hatalı · Ondalık "1.234,56" ve "1234.56" ikisi de geçerli · Geri alma sonrası işlem görmüş (siparişe girmiş) ürün → arşivlenir ama silinmez, uyarı.
+**Kenar durumları:** Dosya > 20 MB (OD-04) veya > 10.000 satır (uygulanan MVP sınırı; PRD IMP-01 hedefi 50.000) → reddedilir, bölme önerisi · `.xls` / `.xlsm` → reddedilir, `.xlsx` olarak kaydetme önerisi · Aynı SKU dosyada iki kez → ikisi de hatalı · Ondalık "1.234,56" ve "1234.56" ikisi de geçerli · Geri alma sonrası işlem görmüş (siparişe girmiş) ürün → arşivlenir ama silinmez, uyarı.
 
 ```mermaid
 flowchart TD
@@ -104,7 +104,7 @@ flowchart TD
 8. Satış kullanıcısı "Onaya gönder" → Onay Bekliyor (veya tenant ayarı izin veriyorsa doğrudan "Onayla").
 9. Onaylayan (manager+ veya yetkili sales) "Onayla":
    - API, tek transaction'da her satır için satılabilir ≥ istenen kontrolü yapar ve rezervasyon kaydı oluşturur (rezervasyon stok hareketi değildir: `reserved` artar, ledger'a satır yazılmaz).
-   - Yetersizse: politika "izin verme" → onay reddedilir, eksik satırlar listelenir; "uyar" → onay için ek teyit.
+   - Yetersizse: onay reddedilir, eksik satırlar listelenir (stok eksiye düşmez, OD-09; teyitle geçme yok).
 10. Durum Onaylandı; toplama görevi oluşur (otomatik/manuel ayarı).
 
 ### C. Toplama (mobil)

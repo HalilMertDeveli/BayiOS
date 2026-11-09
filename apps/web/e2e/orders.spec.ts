@@ -31,10 +31,10 @@ const variantOf = (catalog: MockCatalog, n: number) => catalog.products[n - 1].v
 type Setup = { catalog: MockCatalog; commerce: MockCommerce; orders: MockOrders };
 
 /** Catalog with 3 products (variant 3 has no price), 3 customers, and orders built by `build`. */
-function setup(build: (ctx: Setup) => void = () => undefined, options: { policy?: MockOrders["policy"] } = {}): Setup {
+function setup(build: (ctx: Setup) => void = () => undefined): Setup {
   const catalog = createMockCatalog({ products: 3 });
   const commerce = createMockCommerce(catalog);
-  const orders = createMockOrders({ policy: options.policy });
+  const orders = createMockOrders();
   const ctx = { catalog, commerce, orders };
   build(ctx);
   return ctx;
@@ -250,7 +250,7 @@ test.describe("onay, red, iptal (mock)", () => {
     const approve = requestsTo(api, "POST", actionPath(1, "approve"))[0];
     expect(approve.headers["if-match"]).toBe('W/"1"');
     expect(approve.headers["idempotency-key"]).toBeTruthy();
-    expect(approve.body).toEqual({ confirmNegativeStock: false });
+    expect(approve.body ?? {}).not.toHaveProperty("confirmNegativeStock"); // OD-09: nothing to confirm
 
     await expect(page.getByRole("button", { name: "Onayla ve stok ayır" })).toBeHidden();
     await expect(page.getByRole("button", { name: "Siparişi iptal et" })).toBeVisible();
@@ -277,7 +277,7 @@ test.describe("onay, red, iptal (mock)", () => {
     await expect(page.getByRole("region", { name: "Satır bazında sevkiyat durumu" })).toContainText("MOCK-001-1");
   });
 
-  test("stok yetersiz (engelle): ya hep ya hiç mesajı ve eksik satır listesi; sipariş onay bekliyor kalır", async ({ page }) => {
+  test("stok yetersiz: ya hep ya hiç mesajı ve eksik satır listesi; sipariş onay bekliyor kalır", async ({ page }) => {
     const ctx = setup((c) => {
       add(c, 1, { status: "pending_approval", lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 5 }, { variantId: variantOf(c.catalog, 2).id, quantity: 1 }] });
       c.orders.available.set(variantOf(c.catalog, 1).id, 2);
@@ -295,42 +295,18 @@ test.describe("onay, red, iptal (mock)", () => {
     expect(ctx.orders.orders[0].status).toBe("pending_approval");
   });
 
-  test("stok yetersiz (uyar): teyit diyaloğu, ikinci istek confirmNegativeStock ile yeni anahtarla gider", async ({ page }) => {
-    const ctx = setup(
-      (c) => {
-        add(c, 1, { status: "pending_approval", lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 5 }] });
-        c.orders.available.set(variantOf(c.catalog, 1).id, 2);
-      },
-      { policy: "warn" },
-    );
+  test("stok eksiye düşmez (OD-09): teyit diyaloğu yok, tek istek, sipariş onay bekliyor kalır", async ({ page }) => {
+    const ctx = setup((c) => {
+      add(c, 1, { status: "pending_approval", lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 5 }] });
+      c.orders.available.set(variantOf(c.catalog, 1).id, 2);
+    });
     const api = await signedIn(page, ctx);
     await page.goto(`/siparisler/${orderId(1)}`);
     await page.getByRole("button", { name: "Onayla ve stok ayır" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "Stok eksiye düşecek" });
-    await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("MOCK-001-1: istenen 5, satılabilir 2");
+    await expect(page.getByRole("heading", { name: "Onaylanamadı: stok yetersiz" })).toBeVisible();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Yine de/ })).toHaveCount(0);
     await expectNoSeriousViolations(page);
-    await dialog.getByRole("button", { name: "Yine de onayla" }).click();
-    await expect(page.getByText("SIP-2026-000001: Sipariş onaylandı; stok ayrıldı")).toBeVisible();
-    const [first, second] = requestsTo(api, "POST", actionPath(1, "approve"));
-    expect(first.body).toEqual({ confirmNegativeStock: false });
-    expect(second.body).toEqual({ confirmNegativeStock: true });
-    expect(second.headers["idempotency-key"]).not.toBe(first.headers["idempotency-key"]);
-  });
-
-  test("uyar diyaloğunda vazgeç: hiçbir şey gönderilmez", async ({ page }) => {
-    const ctx = setup(
-      (c) => {
-        add(c, 1, { status: "pending_approval", lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 5 }] });
-        c.orders.available.set(variantOf(c.catalog, 1).id, 2);
-      },
-      { policy: "warn" },
-    );
-    const api = await signedIn(page, ctx);
-    await page.goto(`/siparisler/${orderId(1)}`);
-    await page.getByRole("button", { name: "Onayla ve stok ayır" }).click();
-    await page.getByRole("alertdialog").getByRole("button", { name: "Vazgeç" }).click();
-    await expect(page.getByRole("alertdialog")).toBeHidden();
     expect(requestsTo(api, "POST", actionPath(1, "approve"))).toHaveLength(1);
     expect(ctx.orders.orders[0].status).toBe("pending_approval");
   });
@@ -567,24 +543,20 @@ test.describe("sipariş ayarları etkisi ve adresler (mock, #92)", () => {
     expect(ctx.orders.orders[0].status).toBe("draft");
   });
 
-  test("onay zorunlu değil + uyar: gönderim teyitle confirmNegativeStock ile tekrarlanır", async ({ page }) => {
-    const ctx = setup(
-      (c) => {
-        add(c, 1, { createdBy: USER.id, lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 5 }] });
-        c.orders.available.set(variantOf(c.catalog, 1).id, 2);
-      },
-      { policy: "warn" },
-    );
+  test("onay zorunlu değil + stok yetersiz: gönderim reddedilir, teyit sorulmaz (OD-09), taslak kalır", async ({ page }) => {
+    const ctx = setup((c) => {
+      add(c, 1, { createdBy: USER.id, lines: [{ variantId: variantOf(c.catalog, 1).id, quantity: 5 }] });
+      c.orders.available.set(variantOf(c.catalog, 1).id, 2);
+    });
     const api = await signedIn(page, { ...ctx, settings: { requireOrderApproval: false } });
     await page.goto(`/siparisler/${orderId(1)}`);
     await page.getByRole("button", { name: "Onaya gönder" }).click();
-    const dialog = page.getByRole("alertdialog", { name: "Stok eksiye düşecek" });
-    await expect(dialog).toContainText("sipariş gönderilince hemen onaylanır");
-    await dialog.getByRole("button", { name: "Yine de gönder ve onayla" }).click();
-    await expect(page.getByText("SIP-2026-000001: Sipariş otomatik onaylandı; stok ayrıldı")).toBeVisible();
-    const [first, second] = requestsTo(api, "POST", actionPath(1, "submit"));
-    expect(first.body).toBeNull();
-    expect(second.body).toEqual({ confirmNegativeStock: true });
+    await expect(page.getByRole("heading", { name: "Gönderilemedi: stok yetersiz" })).toBeVisible();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    const submits = requestsTo(api, "POST", actionPath(1, "submit"));
+    expect(submits).toHaveLength(1);
+    expect(submits[0].body).toBeNull();
+    expect(ctx.orders.orders[0].status).toBe("draft");
   });
 
   test("satış (onay yetkisi yok): onay zorunlu olmasa da sipariş onay bekler", async ({ page }) => {

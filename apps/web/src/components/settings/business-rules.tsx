@@ -9,13 +9,11 @@ import { CheckboxField } from "@/components/ui/checkbox-field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
-import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api/client";
 import { getTenantSettings, updateTenantSettings, type TenantSettings } from "@/lib/api/identity";
 import { etagOf } from "@/lib/catalog/api";
 import { isVersionConflict } from "@/lib/catalog/errors";
-import { negativeStockOptions } from "@/lib/onboarding/tenant-form";
 import { useSession } from "@/lib/session/session-context";
 import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
 import {
@@ -27,6 +25,7 @@ import {
   validateRules,
   type RulesValues,
 } from "@/lib/settings/rules-form";
+import { NegativeStockRule } from "./negative-stock-rule";
 import { SettingsBackLink } from "./settings-back-link";
 
 type Loaded = { settings: TenantSettings; etag: string };
@@ -234,16 +233,8 @@ export function BusinessRulesForm({ loaded, onSaved, onReload }: { loaded: Loade
         />
       </RuleGroup>
 
-      <RuleGroup legend="Stok" description="Sipariş onayı ve stok düzeltmede satılabilir stok eksiye düşecekse.">
-        <Select
-          label="Stok yetmediğinde"
-          options={negativeStockOptions}
-          value={values.negativeStockPolicy}
-          error={errors.negativeStockPolicy}
-          hint="Tüm roller için geçerlidir. Aynı ayar Sipariş ayarları bölümünde de görünür."
-          className="sm:max-w-sm"
-          onChange={(e) => set({ negativeStockPolicy: e.target.value as RulesValues["negativeStockPolicy"] })}
-        />
+      <RuleGroup legend="Stok" description="Sipariş onayı, stok düzeltme ve sevkiyatta tüm roller için geçerlidir.">
+        <NegativeStockRule />
       </RuleGroup>
 
       <RuleGroup legend="Güvenlik" description="Hesap güvenliği tercihleri.">

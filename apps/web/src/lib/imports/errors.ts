@@ -3,7 +3,7 @@ import { SERVER_ERROR_MESSAGE } from "@/lib/api/problems";
 
 /** Imports problem codes (409 / 413 / 415 / 422 / 429) and job failure codes → Turkish ("what happened + what to do"). */
 export const IMPORT_MESSAGES: Record<string, string> = {
-  "imports.file_too_large": "Dosya 10 MB sınırını aşıyor. Dosyayı daha küçük parçalara bölüp ayrı ayrı yükleyin.",
+  "imports.file_too_large": "Dosya 20 MB sınırını aşıyor. Dosyayı daha küçük parçalara bölüp ayrı ayrı yükleyin.",
   "imports.file_type_not_allowed": "Bu dosya türü kabul edilmiyor. Yalnızca .xlsx veya .csv yükleyin; eski .xls dosyasını Excel'de .xlsx olarak kaydedin.",
   "imports.file_macro_not_allowed": "Makro içeren Excel dosyaları (.xlsm) kabul edilmez. Dosyayı Excel'de .xlsx olarak kaydedip tekrar yükleyin.",
   "imports.file_content_mismatch": "Dosyanın içeriği uzantısıyla uyuşmuyor. Dosyayı Excel'de .xlsx veya .csv olarak yeniden kaydedip tekrar yükleyin.",

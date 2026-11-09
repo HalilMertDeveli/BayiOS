@@ -34,7 +34,7 @@ test("yavaş cihaz: kaydedilemeyen ayarlarda hata kutusu odağı alır", async (
   const form = page.getByRole("form", { name: "Sipariş ayarları" });
   await expect(form.getByRole("textbox", { name: /Sipariş numarası öneki/ })).toHaveValue("SIP");
   await throttleCpu(page);
-  await form.getByRole("combobox", { name: "Stok yetmediğinde" }).selectOption("warn");
+  await form.getByRole("combobox", { name: "Fiyat gösterimi" }).selectOption("included");
   await form.getByRole("button", { name: "Ayarları kaydet" }).click();
   const alert = form.getByRole("alert").filter({ hasText: "Ayarlar kaydedilemedi" });
   await expect(alert).toBeVisible();

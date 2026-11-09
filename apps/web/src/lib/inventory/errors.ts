@@ -90,14 +90,6 @@ export function readShortages(error: unknown): Shortage[] {
   return result;
 }
 
-/**
- * Tenant policy `warn`: the API answers 409 `inventory.insufficient_stock` with `confirmationRequired: true`;
- * the same request repeated with `confirmNegativeStock: true` goes through.
- */
-export function needsNegativeStockConfirmation(error: unknown): boolean {
-  return error instanceof ApiError && error.code === "inventory.insufficient_stock" && error.problem?.confirmationRequired === true;
-}
-
 export function isBusy(error: unknown): boolean {
   return error instanceof ApiError && error.code === "inventory.busy";
 }

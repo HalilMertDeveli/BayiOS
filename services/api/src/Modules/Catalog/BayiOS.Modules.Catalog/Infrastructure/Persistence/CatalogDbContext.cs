@@ -58,14 +58,19 @@ internal sealed class CatalogDbContext : DbContext, ITenantScopedDbContext
         Finish(builder);
     }
 
-    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    /// <summary>Joins the request/job transaction (nested transactions are not supported).</summary>
+    public async Task JoinTransactionAsync(CancellationToken cancellationToken)
     {
-        // Join the request transaction so EF does not try to open its own (nested transactions are not supported).
         if (_unitOfWork?.Transaction is { } transaction && Database.CurrentTransaction is null)
         {
             await Database.UseTransactionAsync(transaction, cancellationToken);
         }
+    }
 
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        // Join the request transaction so EF does not try to open its own (nested transactions are not supported).
+        await JoinTransactionAsync(cancellationToken);
         return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 

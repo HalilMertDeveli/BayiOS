@@ -73,7 +73,7 @@ Yerel deneme (ücretsiz, dış gönderim yok): `infra/ops/observability/otel-col
 |---|---|---|---|---|
 | `bayios.orders.approved` | `bayios_orders_approved_total` | counter | — | `order.approved` audit'i **commit edildikten sonra** |
 | `bayios.inventory.reservation_shortages` | `bayios_inventory_reservation_shortages_total` | counter | `decision` = `blocked` \| `confirmation_required` | Rezervasyon stok yetersizliğiyle reddedildi (409) |
-| `bayios.inventory.negative_stock_confirmed` | `bayios_inventory_negative_stock_confirmed_total` | counter | — | `warn` politikasında eksiye düşen değişiklik onaylandı (commit sonrası) |
+| `bayios.inventory.negative_stock_confirmed` | `bayios_inventory_negative_stock_confirmed_total` | counter | — | Eski `warn` politikasında eksiye düşen onaylı değişiklik. OD-09 (2026-11-09) ile hiç yayınlanmaz; değer görülürse hatadır |
 | `bayios.jobs.dead_lettered` | `bayios_jobs_dead_lettered_total` | counter | `job.type` | Job `dead` oldu (deneme bitti veya lease süpürücü) |
 | `bayios.jobs.retried` | `bayios_jobs_retried_total` | counter | `job.type` | Başarısız deneme, geri çekilmeyle yeniden kuyrukta |
 | `bayios.imports.failed` | `bayios_imports_failed_total` | counter | `outcome` = `failed` \| `rollback_failed` | İçe aktarma başarısız bitti (commit sonrası) |

@@ -14,7 +14,6 @@ internal sealed record AppError(
     string Title,
     IDictionary<string, string[]>? Errors = null,
     IReadOnlyList<StockShortage>? Shortages = null,
-    bool ConfirmationRequired = false,
     IReadOnlyDictionary<string, object>? Extensions = null)
 {
     public static AppError NotFound() => new(404, "resource.not_found", "Resource not found");
@@ -83,7 +82,7 @@ internal sealed record AppError(
             Extensions: new Dictionary<string, object> { ["permission"] = Permissions.OrdersPriceOverride, ["limitPercent"] = limit });
 
     public static AppError FromInventory(InventoryError error) =>
-        new(error.Status, error.Code, error.Title, error.Errors, error.Shortages, error.ConfirmationRequired);
+        new(error.Status, error.Code, error.Title, error.Errors, error.Shortages);
 }
 
 /// <summary>Order-specific 403 codes for record-level refusals (api-strategy §6, #111).</summary>

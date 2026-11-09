@@ -253,7 +253,7 @@ internal sealed class OrderService(
     /// then fails the whole submit (the order stays a draft, nothing reserved). Otherwise the order waits for approval.
     /// </summary>
     public Task<AppResult<OrderDetailResponse>> SubmitAsync(
-        Guid id, long? expectedVersion, bool confirmNegativeStock, string? correlationId, CancellationToken cancellationToken) =>
+        Guid id, long? expectedVersion, string? correlationId, CancellationToken cancellationToken) =>
         WithLockedOrderAsync(id, expectedVersion, async order =>
         {
             var submitted = await ApplyTransitionAsync(order, OrderActions.Submit, null, correlationId, async o =>
@@ -277,7 +277,7 @@ internal sealed class OrderService(
                 OrderActions.Approve,
                 null,
                 correlationId,
-                o => ApproveEffectAsync(o, confirmNegativeStock, correlationId, onSubmit: true, cancellationToken),
+                o => ApproveEffectAsync(o, correlationId, onSubmit: true, cancellationToken),
                 false,
                 cancellationToken);
         }, cancellationToken);
@@ -302,14 +302,14 @@ internal sealed class OrderService(
     /// shortage returns 409 <c>inventory.insufficient_stock</c> with the shortages and nothing is reserved.
     /// </summary>
     public Task<AppResult<OrderDetailResponse>> ApproveAsync(
-        Guid id, long expectedVersion, bool confirmNegativeStock, string? correlationId, CancellationToken cancellationToken) =>
+        Guid id, long expectedVersion, string? correlationId, CancellationToken cancellationToken) =>
         TransitionAsync(
             id,
             expectedVersion,
             OrderActions.Approve,
             null,
             correlationId,
-            order => ApproveEffectAsync(order, confirmNegativeStock, correlationId, onSubmit: false, cancellationToken),
+            order => ApproveEffectAsync(order, correlationId, onSubmit: false, cancellationToken),
             cancellationToken);
 
     /// <summary>
@@ -318,7 +318,7 @@ internal sealed class OrderService(
     /// audit, outbox and the picking task. The order is locked and still pending_approval.
     /// </summary>
     private async Task<AppError?> ApproveEffectAsync(
-        Order order, bool confirmNegativeStock, string? correlationId, bool onSubmit, CancellationToken cancellationToken)
+        Order order, string? correlationId, bool onSubmit, CancellationToken cancellationToken)
     {
         if ((CheckPriced(order) ?? CheckCustomer(await customers.FindAsync(order.CustomerId, cancellationToken))) is { } error)
         {
@@ -337,7 +337,6 @@ internal sealed class OrderService(
                 order.Id,
                 order.WarehouseId,
                 [.. lines.Select(l => new ReserveLine(l.Id, l.VariantId, l.Quantity))],
-                confirmNegativeStock,
                 correlationId),
             cancellationToken);
         if (reserved.Error is { } stockError)

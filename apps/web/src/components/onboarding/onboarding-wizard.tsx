@@ -17,7 +17,6 @@ import {
   getTenantSettings,
   updateTenant,
   updateTenantSettings,
-  type NegativeStockPolicy,
   type Sector,
   type TenantSettings,
 } from "@/lib/api/identity";
@@ -25,8 +24,8 @@ import { ROUTES } from "@/lib/auth/routes";
 import { cn } from "@/lib/cn";
 import {
   FIELD_STEP,
+  NEGATIVE_STOCK_RULE,
   currencyOptions,
-  negativeStockOptions,
   priceDisplayOptions,
   sectorOptions,
   slugify,
@@ -48,7 +47,6 @@ type Values = {
   currency: string;
   taxRate: string;
   priceDisplay: "excluded" | "included";
-  negativeStock: NegativeStockPolicy;
 };
 type Errors = { name?: string; slug?: string; sector?: string };
 
@@ -91,7 +89,6 @@ export function OnboardingWizard() {
     currency: "TRY",
     taxRate: "20",
     priceDisplay: "excluded",
-    negativeStock: "block",
   });
   const [errors, setErrors] = useState<Errors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -168,7 +165,6 @@ export function OnboardingWizard() {
     await runFollowUp("settings", async () => {
       const { settings, etag } = await getTenantSettings(api);
       const wanted: Partial<TenantSettings> = {
-        negativeStockPolicy: values.negativeStock,
         defaultTaxRate: Number(values.taxRate),
         pricesIncludeTaxDisplay: values.priceDisplay === "included",
       };
@@ -386,13 +382,10 @@ export function OnboardingWizard() {
               onChange={(e) => setValues((v) => ({ ...v, priceDisplay: e.target.value as Values["priceDisplay"] }))}
               options={priceDisplayOptions}
             />
-            <Select
-              label="Negatif stok"
-              value={values.negativeStock}
-              onChange={(e) => setValues((v) => ({ ...v, negativeStock: e.target.value as NegativeStockPolicy }))}
-              options={negativeStockOptions}
-              hint="Stokta olmayan bir ürünün sevkine izin verilip verilmeyeceği. Ayarlar'dan değiştirilebilir."
-            />
+            <div className="flex flex-col gap-1 rounded-lg border border-line p-3">
+              <span className="text-body font-medium text-fg">{NEGATIVE_STOCK_RULE.title}</span>
+              <p className="text-caption text-fg-secondary">{NEGATIVE_STOCK_RULE.text}</p>
+            </div>
           </>
         ) : null}
 
@@ -411,7 +404,7 @@ export function OnboardingWizard() {
               {label(taxRateOptions, values.taxRate)} · {label(priceDisplayOptions, values.priceDisplay)}
             </dd>
             <dt className="text-fg-muted">Negatif stok</dt>
-            <dd className="text-fg">{label(negativeStockOptions, values.negativeStock)}</dd>
+            <dd className="text-fg">{NEGATIVE_STOCK_RULE.title} (sabit kural)</dd>
           </dl>
         ) : null}
 

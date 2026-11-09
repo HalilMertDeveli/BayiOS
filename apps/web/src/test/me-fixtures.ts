@@ -171,10 +171,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function entitlementsFor(plan: FixturePlan, options: { trialDaysLeft?: number; now?: number } = {}): FixtureEntitlements {
   const now = options.now ?? Date.now();
-  const catalogVersion = "2026-11-05.1";
+  const catalogVersion = "2026-11-09.1";
+  // Mirrors services/api BillingCatalog (OD-02: Basic 999 users / warehouses / products).
   const basicLimits = [
-    { code: "max_warehouses", value: 1 },
-    { code: "max_users", value: 5 },
+    { code: "max_warehouses", value: 999 },
+    { code: "max_users", value: 999 },
+    { code: "max_products", value: 999 },
   ];
   switch (plan) {
     case "trial":
@@ -187,7 +189,8 @@ export function entitlementsFor(plan: FixturePlan, options: { trialDaysLeft?: nu
         features: ["warehouse_locations", "barcode_operations", "ai_order_parsing"],
         limits: [
           { code: "max_warehouses", value: null },
-          { code: "max_users", value: 25 },
+          { code: "max_users", value: 999 },
+          { code: "max_products", value: null },
           { code: "ai_parses_per_month", value: 1000 },
         ],
       };
@@ -200,7 +203,8 @@ export function entitlementsFor(plan: FixturePlan, options: { trialDaysLeft?: nu
         features: ["warehouse_locations", "barcode_operations"],
         limits: [
           { code: "max_warehouses", value: null },
-          { code: "max_users", value: 25 },
+          { code: "max_users", value: 999 },
+          { code: "max_products", value: null },
         ],
       };
     case "basic":

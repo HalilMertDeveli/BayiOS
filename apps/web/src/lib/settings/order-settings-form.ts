@@ -1,4 +1,4 @@
-import { NEGATIVE_STOCK_POLICIES, type NegativeStockPolicy, type TenantSettings, type UpdateTenantSettingsRequest } from "@/lib/api/identity";
+import type { TenantSettings, UpdateTenantSettingsRequest } from "@/lib/api/identity";
 import { translateFieldMessage } from "@/lib/catalog/errors";
 import { parseDecimalInput, toDecimalInput } from "@/lib/pricing/money";
 
@@ -10,7 +10,6 @@ export type OrderSettingsValues = {
   requireOrderApproval: boolean;
   /** As typed; normalised to upper case on save, as the API does. */
   orderNumberPrefix: string;
-  negativeStockPolicy: NegativeStockPolicy;
   /** Default VAT rate in percent, as text ("20", "10", "1", "0" or any 0–100 value with ≤ 2 decimals). */
   defaultTaxRate: string;
   pricesIncludeTaxDisplay: boolean;
@@ -22,14 +21,10 @@ export const ORDER_NUMBER_PREFIX_MAX = 10;
 
 export const normalisePrefix = (value: string): string => value.trim().toLocaleUpperCase("en-US");
 
-const toPolicy = (value: string): NegativeStockPolicy =>
-  (NEGATIVE_STOCK_POLICIES as readonly string[]).includes(value) ? (value as NegativeStockPolicy) : "block";
-
 export function settingsToValues(s: TenantSettings): OrderSettingsValues {
   return {
     requireOrderApproval: s.requireOrderApproval,
     orderNumberPrefix: s.orderNumberPrefix,
-    negativeStockPolicy: toPolicy(s.negativeStockPolicy),
     defaultTaxRate: toDecimalInput(s.defaultTaxRate),
     pricesIncludeTaxDisplay: s.pricesIncludeTaxDisplay,
   };
@@ -69,7 +64,6 @@ export function buildSettingsPatch(original: TenantSettings, values: OrderSettin
   if (values.requireOrderApproval !== original.requireOrderApproval) patch.requireOrderApproval = values.requireOrderApproval;
   const prefix = normalisePrefix(values.orderNumberPrefix);
   if (prefix !== original.orderNumberPrefix) patch.orderNumberPrefix = prefix;
-  if (values.negativeStockPolicy !== original.negativeStockPolicy) patch.negativeStockPolicy = values.negativeStockPolicy;
   const tax = parseDecimalInput(values.defaultTaxRate, 2);
   if (tax.ok && Number(tax.value) !== Number(original.defaultTaxRate)) patch.defaultTaxRate = Number(tax.value);
   if (values.pricesIncludeTaxDisplay !== original.pricesIncludeTaxDisplay) patch.pricesIncludeTaxDisplay = values.pricesIncludeTaxDisplay;

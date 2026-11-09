@@ -72,7 +72,7 @@ Ayrıntı: `personas.md`.
 | 01 Tenant & Onboarding | Kayıt, sektör seçimi (şablon), logo, para birimi, KDV, birimler, personel daveti, sabit roller, demo veri |
 | 02 Katalog | SKU, barkod, marka, kategori, varyant, alış/satış fiyatı, birimler, tedarikçi, görsel, sektör özel alanları, durum, çoklu fiyat listesi, bayi fiyatı |
 | 03 Toplu içe aktarma | Excel/CSV, eşleme sihirbazı, AI kolon önerisi, doğrulama, önizleme, satır hataları, yeniden yüklemede tekrar önleme, stok/fiyat ayrı içe aktarma, arka plan işi, geri alma, 10k satır |
-| 04 Stok & Depo | Fiziksel/rezerve/satılabilir, çoklu depo, raf, mal kabul, sayım, düzeltme, transfer, iade, hasar, hareket geçmişi, negatif stok politikası |
+| 04 Stok & Depo | Fiziksel/rezerve/satılabilir, çoklu depo, raf, mal kabul, sayım, düzeltme, transfer, iade, hasar, hareket geçmişi; stok eksiye düşmez (OD-09) |
 | 05 Siparişler | Manuel / WhatsApp metninden / web; durum makinesi; iptal; kısmi sevkiyat; idempotent işlemler |
 | 06 WhatsApp asistanı v1 | Yapıştırılan mesajı AI ile ayrıştırma, yalnızca tenant kataloğuyla eşleşme, belirsizlik işaretleme, zorunlu insan onayı |
 | 07 Depo görevleri | Toplama görevi atama, mobil toplama listesi, raf görünümü, barkod okuma, eksik bildirimi, paket kontrolü, sevkiyat onayı |
@@ -116,7 +116,7 @@ Ayrıntı: `personas.md`.
 | TEN-09 | Demo veri yükleme ve "demo veriyi temizle" (yalnızca demo etiketli kayıtlar, tek işlem). | P1 |
 | TEN-10 | Onboarding kontrol listesi (logo, ilk depo, ürün içe aktarma, personel daveti, ilk sipariş) ilerleme göstergesi. | P1 |
 | TEN-11 | Bir kullanıcı birden çok tenant'a üye olabilir; tenant seçici. | P1 |
-| TEN-12 | Negatif stok politikası tenant düzeyinde: `izin verme` (varsayılan) / `uyar` / `izin ver`. | P0 |
+| TEN-12 | Stok hiçbir zaman eksiye düşmez (ürün sahibi kararı OD-09, 2026-11-09): onay, düzeltme ve sevkiyat satılabilir stoğun altına inemez. Tenant ayarı değildir; ayarlarda sabit kural olarak gösterilir (eski `uyar` / `izin ver` seçenekleri kaldırıldı). | P0 |
 
 ### 5.2 Modül 02 — Katalog (CAT)
 | ID | Gereksinim | Öncelik |
@@ -139,7 +139,7 @@ Ayrıntı: `personas.md`.
 ### 5.3 Modül 03 — Toplu içe aktarma (IMP)
 | ID | Gereksinim | Öncelik |
 |---|---|---|
-| IMP-01 | .xlsx, .xls, .csv (UTF-8 / Windows-1254, `;` ve `,` ayırıcı otomatik tespit) yükleme; ≤ 20 MB, ≤ 50.000 satır. | P0 |
+| IMP-01 | .xlsx, .csv (UTF-8 / Windows-1254, `;` ve `,` ayırıcı otomatik tespit) yükleme; ≤ 20 MB (ürün sahibi kararı OD-04, 2026-11-09; `.xls` onaylanmadı), ≤ 50.000 satır (uygulanan MVP iş sınırı: ≤ 10.000 satır/dosya). | P0 |
 | IMP-02 | İçe aktarma türleri ayrı: **Ürün**, **Stok (açılış/sayım)**, **Fiyat listesi**, **Müşteri**. | P0 |
 | IMP-03 | Kolon eşleme sihirbazı: kaynak kolon → hedef alan; eşleme şablonu kaydedilir ve sonraki yüklemelerde önerilir. | P0 |
 | IMP-04 | AI kolon önerisi: başlık ve örnek değerlere göre eşleme önerisi + güven skoru; kullanıcı onaylamadan uygulanmaz. Hiçbir satır verisi AI tarafından üretilmez/değiştirilmez. | P1 |
@@ -261,7 +261,7 @@ Ayrıntı: `personas.md`.
 | SUB-06 | Abonelik bittiğinde/düşürüldüğünde veri silinmez; ilgili özellik salt okunur olur; dışa aktarma her zaman açık. | P0 |
 | SUB-07 | Ücret duvarı dışı (her pakette): güvenlik (2FA, audit), temel stok doğruluğu (ledger, rezervasyon), veri dışa aktarma, işlem geçmişi. | P0 |
 | SUB-08 | Platform yöneticisi (iç kullanım) tenant entitlement'ını değiştirebilir; değişiklik denetim kaydına yazılır. | P0 |
-| SUB-09 | Paket limitleri (ör. kullanıcı, depo sayısı) — sayılar ürün sahibi kararıyla (AQ-01). | P1 |
+| SUB-09 | Paket limitleri: Temel 999 kullanıcı, 999 aktif depo, 999 ürün (ürün sahibi kararı OD-02, 2026-11-09); limit aşımında depoyu boşaltmak için transfer/düzeltme açık kalır (OD-03). | P1 |
 
 ### 5.11 Platform & Güvenlik (PLT / SEC)
 | ID | Gereksinim | Öncelik |
@@ -370,10 +370,10 @@ Ayrıntı: `personas.md`.
 ## 9. Ürün sahibine açık sorular
 | ID | Soru | Etki |
 |---|---|---|
-| AQ-01 | Temel / Profesyonel paket limitleri (kullanıcı, depo, ürün sayısı) ve fiyat aralığı nedir? | SUB-09, modül mağazası metinleri |
+| AQ-01 | **Kısmen karar verildi (OD-02, 2026-11-09):** Temel 999 kullanıcı / 999 depo / 999 ürün. Profesyonel limitleri ve fiyat aralığı açık. | SUB-09, modül mağazası metinleri |
 | AQ-02 | `sales` rolü kendi oluşturduğu siparişi onaylayabilsin mi (varsayılan öneri: tenant ayarı, varsayılan **evet**)? | ORD-10, yetki matrisi |
 | AQ-03 | LED pilotu için seri numarası takibi MVP'de mi (sevkte seri no okutma)? Öneri: MVP'de opsiyonel serbest alan, tam modül P2. | Kapsam, WHT, veri modeli |
-| AQ-04 | Negatif stok varsayılanı "izin verme" olarak kalsın mı? Motosiklet pilotunda "rafta var ama sisteme girilmedi" durumu yaygınsa "uyar" gerekebilir. | INV-12, onboarding |
+| AQ-04 | **Karar verildi (OD-09, 2026-11-09):** stok eksiye düşmez; "uyar" / "izin ver" yoktur. "Rafta var ama sisteme girilmedi" durumu mal kabul veya sayım/düzeltme ile çözülür. | INV-12, onboarding |
 | AQ-05 | Veri barındırma bölgesi (AB — Frankfurt vs. Türkiye) ve KVKK yurt dışı aktarım yaklaşımı? | Altyapı, sözleşmeler |
 | AQ-06 | AI sağlayıcı seçimi ve aylık AI bütçesi / tenant başı kota? | WAI-09, WAI-11, maliyet |
 | AQ-07 | Pilot işletmelerin gerçek (anonimleştirilmiş) ürün dosyası örneği test için alınabilir mi, yoksa tamamen sentetik mi çalışılacak? | IMP doğrulaması, AI eşleşme kalitesi |

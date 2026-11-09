@@ -294,7 +294,7 @@ export function NewImport() {
               className="max-w-full text-body text-fg file:mr-3 file:h-9 file:rounded-md file:border file:border-line-strong file:bg-card file:px-3 file:text-body file:text-fg"
             />
             <p id={`${inputId}-hint`} className="text-caption text-fg-muted">
-              .xlsx veya .csv · en fazla 10 MB ve 10.000 satır · ilk satır kolon başlıkları. Makrolu (.xlsm) ve eski (.xls) dosyalar kabul edilmez.
+              .xlsx veya .csv · en fazla 20 MB ve 10.000 satır · ilk satır kolon başlıkları. Makrolu (.xlsm) ve eski (.xls) dosyalar kabul edilmez.
             </p>
             {fileError ? (
               <p id={`${inputId}-error`} role="alert" className="text-caption text-danger-fg">

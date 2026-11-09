@@ -65,8 +65,8 @@ internal static class OrdersEndpoints
                 "Copies the shipping / billing address snapshot (422 when a chosen address was removed). When the tenant setting "
                 + "requireOrderApproval is false, the source is not whatsapp_ai and the caller holds orders.approve under the active "
                 + "rules, the order is approved in the same transaction exactly as by approve (all-or-nothing reservation: a "
-                + "shortage answers 409 inventory.insufficient_stock and the order stays a draft; confirmNegativeStock as on "
-                + "approve). Otherwise it goes to pending_approval.")
+                + "shortage answers 409 inventory.insufficient_stock and the order stays a draft; stock never goes below zero, "
+                + "OD-09). Otherwise it goes to pending_approval.")
             .RequirePermission(Permissions.OrdersSubmit)
             .ProducesStockProblems());
         Transition(group.MapPost("/{id:guid}/withdraw", Withdraw).WithName("Orders_Withdraw")
@@ -218,7 +218,7 @@ internal static class OrdersEndpoints
     private static async Task<Results<Ok<OrderDetailResponse>, ProblemHttpResult>> Submit(
         Guid id, SubmitOrderRequest? request, [FromHeader(Name = "If-Match")] string? ifMatch, OrderService service, HttpContext http, CancellationToken cancellationToken) =>
         OptionalIfMatch(ifMatch, out var version)
-        ?? Ok(http, await service.SubmitAsync(id, version, request?.ConfirmNegativeStock ?? false, http.TraceIdentifier, cancellationToken));
+        ?? Ok(http, await service.SubmitAsync(id, version, http.TraceIdentifier, cancellationToken));
 
     private static async Task<Results<Ok<OrderDetailResponse>, ProblemHttpResult>> Withdraw(
         Guid id, [FromHeader(Name = "If-Match")] string? ifMatch, OrderService service, HttpContext http, CancellationToken cancellationToken) =>
@@ -237,7 +237,7 @@ internal static class OrdersEndpoints
             return precondition;
         }
 
-        return Ok(http, await service.ApproveAsync(id, version, request?.ConfirmNegativeStock ?? false, http.TraceIdentifier, cancellationToken));
+        return Ok(http, await service.ApproveAsync(id, version, http.TraceIdentifier, cancellationToken));
     }
 
     private static async Task<Results<Ok<OrderDetailResponse>, ProblemHttpResult>> CloseRemaining(
@@ -303,7 +303,7 @@ internal static class OrdersEndpoints
         return TypedResults.Ok(result.Value);
     }
 
-    /// <summary>RFC 9457 with the stable code, plus <c>shortages</c> / <c>confirmationRequired</c> for stock errors.</summary>
+    /// <summary>RFC 9457 with the stable code, plus <c>shortages</c> for stock errors.</summary>
     private static ProblemHttpResult Problem(HttpContext http, AppError error)
     {
         var problem = error.Errors is null || error.Code != "validation.failed"
@@ -325,11 +325,6 @@ internal static class OrdersEndpoints
                 requested = s.Requested,
                 available = s.Available,
             }).ToList();
-        }
-
-        if (error.ConfirmationRequired)
-        {
-            problem.Extensions["confirmationRequired"] = true;
         }
 
         foreach (var (name, value) in error.Extensions ?? new Dictionary<string, object>())

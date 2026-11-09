@@ -397,7 +397,10 @@ export interface paths {
          */
         get: operations["Catalog_ListProducts"];
         put?: never;
-        /** Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants) */
+        /**
+         * Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants)
+         * @description 403 `entitlement.limit_exceeded` when the plan's product limit (`max_products`, Basic: 999 non-archived products) is reached.
+         */
         post: operations["Catalog_CreateProduct"];
         delete?: never;
         options?: never;
@@ -420,7 +423,10 @@ export interface paths {
         delete: operations["Catalog_ArchiveProduct"];
         options?: never;
         head?: never;
-        /** Ürünü günceller (JSON merge patch, If-Match zorunlu) */
+        /**
+         * Ürünü günceller (JSON merge patch, If-Match zorunlu)
+         * @description Restoring an archived product (status active/inactive) counts against `max_products` (403 `entitlement.limit_exceeded`).
+         */
         patch: operations["Catalog_UpdateProduct"];
         trace?: never;
     };
@@ -732,7 +738,7 @@ export interface paths {
         put?: never;
         /**
          * Depo oluşturur (tenant'ın ilk deposu varsayılan olur)
-         * @description 403 `entitlement.limit_exceeded` when the plan's active-warehouse limit (`max_warehouses`, Basic: 1) is reached; 403 `entitlement.required` (`warehouse_locations`) for usesLocations = true without the Professional plan.
+         * @description 403 `entitlement.limit_exceeded` when the plan's active-warehouse limit (`max_warehouses`, Basic: 999) is reached; 403 `entitlement.required` (`warehouse_locations`) for usesLocations = true without the Professional plan.
          */
         post: operations["Warehouse_Create"];
         delete?: never;
@@ -1293,7 +1299,7 @@ export interface paths {
         /** İçe aktarma geçmişi (yeniden eskiye, keyset sayfalama) */
         get: operations["Imports_List"];
         put?: never;
-        /** Dosya yükler (.xlsx/.csv, ≤ 10 MB, ≤ 10.000 satır): içerik/magic byte, makro, zip bombası ve satır/kolon limitleri doğrulanır */
+        /** Dosya yükler (.xlsx/.csv, ≤ 20 MB, ≤ 10.000 satır): içerik/magic byte, makro, zip bombası ve satır/kolon limitleri doğrulanır */
         post: operations["Imports_Upload"];
         delete?: never;
         options?: never;
@@ -1544,7 +1550,7 @@ export interface paths {
         put?: never;
         /**
          * Taslak → Onay bekliyor (en az bir satır, fiyatsız satır yok); onay gerekmeyen tenant'ta onaylama yetkisi olan için doğrudan Onaylandı + rezervasyon
-         * @description Copies the shipping / billing address snapshot (422 when a chosen address was removed). When the tenant setting requireOrderApproval is false, the source is not whatsapp_ai and the caller holds orders.approve under the active rules, the order is approved in the same transaction exactly as by approve (all-or-nothing reservation: a shortage answers 409 inventory.insufficient_stock and the order stays a draft; confirmNegativeStock as on approve). Otherwise it goes to pending_approval.
+         * @description Copies the shipping / billing address snapshot (422 when a chosen address was removed). When the tenant setting requireOrderApproval is false, the source is not whatsapp_ai and the caller holds orders.approve under the active rules, the order is approved in the same transaction exactly as by approve (all-or-nothing reservation: a shortage answers 409 inventory.insufficient_stock and the order stays a draft; stock never goes below zero, OD-09). Otherwise it goes to pending_approval.
          */
         post: operations["Orders_Submit"];
         delete?: never;
@@ -2373,7 +2379,7 @@ export interface components {
             lines: null | components["schemas"]["ApproveOrderParseLine"][];
         };
         ApproveOrderRequest: {
-            confirmNegativeStock: null | boolean;
+            confirmNegativeStock?: null | boolean;
         };
         AssignPickingTaskRequest: {
             /** Format: uuid */
@@ -2574,7 +2580,7 @@ export interface components {
             /** Format: double */
             quantity: null | number | string;
             reason: null | string;
-            confirmNegativeStock: null | boolean;
+            confirmNegativeStock?: null | boolean;
         };
         CreateBrandRequest: {
             name: null | string;
@@ -4156,10 +4162,11 @@ export interface components {
             totals: components["schemas"]["MovementTypeTotal"][];
             days: components["schemas"]["MovementDayTotal"][];
         };
-        /** @description Stock problem: shortages per line (insufficient stock) and confirmationRequired (negative-stock policy 'warn' — retry with the confirmation flag). */
+        /** @description Stock problem: shortages per line (insufficient stock). confirmationRequired is deprecated and never sent: stock never goes below zero (owner decision OD-09). */
         StockProblemDetails: components["schemas"]["ProblemDetails"] & {
             code?: string;
             shortages?: components["schemas"]["StockShortage"][];
+            /** @deprecated */
             confirmationRequired?: boolean;
         };
         StockShortage: {
@@ -4201,7 +4208,7 @@ export interface components {
             warehouseId?: null | string;
         };
         SubmitOrderRequest: {
-            confirmNegativeStock: null | boolean;
+            confirmNegativeStock?: null | boolean;
         };
         SubscriptionResponse: {
             plan: string;
@@ -6894,7 +6901,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["EntitlementProblemDetails"];
                 };
             };
             /** @description Conflict */
@@ -7136,7 +7143,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["EntitlementProblemDetails"];
                 };
             };
             /** @description Not Found */

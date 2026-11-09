@@ -44,7 +44,7 @@ test("sahip: üyeler, roller, durumlar ve kullanıcı sayısı; filtreler sunucu
   // Own row: no management actions.
   await expect(row(page, "Mock Kullanıcı").getByRole("button")).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Kullanıcı sayısı" })).toBeVisible();
-  await expect(page.getByText("4 / 25")).toBeVisible();
+  await expect(page.getByText("4 / 999")).toBeVisible(); // trial = Professional: 999 users (OD-02)
   await expectNoSeriousViolations(page);
 
   await page.getByRole("combobox", { name: "Rol" }).selectOption("sales");
@@ -193,7 +193,8 @@ test("sahiplik devri: güçlü onay; sonra çağıran yönetici olur ve devir se
 
 test("max_users: koltuk dolu uyarısı ve davet reddi", async ({ page }) => {
   const members = [...defaultMembers("owner"), member(5, "Ek Üye (mock)", "viewer")];
-  await openTeam(page, { billing: createMockBilling({ plan: "basic" }), members });
+  // Basic allows 999 users (OD-02); an operator limit of 5 fills the seats.
+  await openTeam(page, { billing: createMockBilling({ plan: "basic", overrides: { max_users: 5 } }), members });
   await expect(page.getByText("5 / 5")).toBeVisible();
   await expect(page.getByText(/Sınıra ulaştınız/)).toBeVisible();
   await page.getByRole("button", { name: "Kişi davet et" }).click();

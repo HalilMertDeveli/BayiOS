@@ -27,12 +27,13 @@ public sealed record ModuleDefinition(
 /// <summary>
 /// The versioned plan / add-on catalog (PRD SUB-01, SUB-02, SUB-05, SUB-09; roles-permissions §5). Code, not a table:
 /// it ships and is reviewed with the code that enforces it, and every tenant resolves against the same version.
-/// Change <see cref="Version"/> with every edit. Limit numbers are provisional until the owner decides (AQ-01, AQ-06).
+/// Change <see cref="Version"/> with every edit. Basic limits are the owner decision OD-02 (2026-11-09: 999 users,
+/// 999 warehouses, 999 products); Professional is never below Basic. The AI quota is still provisional (AQ-06).
 /// </summary>
 public static class BillingCatalog
 {
     /// <summary>Recorded on each subscription when it is created or changes.</summary>
-    public const string Version = "2026-11-05.1";
+    public const string Version = "2026-11-09.1";
 
     public const string Basic = "basic";
     public const string Professional = "professional";
@@ -40,28 +41,35 @@ public static class BillingCatalog
     /// <summary>The AI WhatsApp assistant add-on (WAI).</summary>
     public const string AiAssistantModule = "ai_assistant";
 
+    /// <summary>Basic users, active warehouses and products (owner decision OD-02, 2026-11-09).</summary>
+    public const long BasicLimit = 999;
+
     public static readonly PlanDefinition BasicPlan = new(
         Basic,
         "Temel",
-        "Ürün, temel stok, sipariş, tek depo, temel rapor. Dışa aktarma, audit, 2FA ve stok doğruluğu her pakette açıktır.",
+        "Ürün, temel stok, sipariş, temel rapor. Dışa aktarma, audit, 2FA ve stok doğruluğu her pakette açıktır.",
         1,
         [],
         new Dictionary<string, long?>
         {
-            [EntitlementCodes.MaxWarehouses] = 1,
-            [EntitlementCodes.MaxUsers] = 5, // provisional (AQ-01)
+            [EntitlementCodes.MaxWarehouses] = BasicLimit, // OD-02
+            [EntitlementCodes.MaxUsers] = BasicLimit, // OD-02
+            [EntitlementCodes.MaxProducts] = BasicLimit, // OD-02
         });
 
     public static readonly PlanDefinition ProfessionalPlan = new(
         Professional,
         "Profesyonel",
-        "Gelişmiş depo: çoklu depo, raf/lokasyon, barkod operasyonları, çoklu personel.",
+        "Gelişmiş depo: sınırsız depo ve ürün, raf/lokasyon, barkod operasyonları.",
         2,
         [EntitlementCodes.WarehouseLocations, EntitlementCodes.BarcodeOperations],
         new Dictionary<string, long?>
         {
             [EntitlementCodes.MaxWarehouses] = null,
-            [EntitlementCodes.MaxUsers] = 25, // provisional (AQ-01)
+            // OD-02 set Basic only. Users: kept equal to Basic (an upgrade never lowers a limit). Products: unlimited, so
+            // the 10,000-row product import (PRD IMP, NFR) stays possible on Professional and in the trial.
+            [EntitlementCodes.MaxUsers] = BasicLimit,
+            [EntitlementCodes.MaxProducts] = null,
         });
 
     public static readonly IReadOnlyList<PlanDefinition> Plans = [BasicPlan, ProfessionalPlan];

@@ -4,8 +4,9 @@
  * Stand-in for /api/v1/billing/* and the `activeTenant.entitlements` of GET /me, following the contract shapes in
  * packages/contracts/openapi.json and the as-built rules of api-strategy §12.2: reads need billing.read (owner, admin),
  * store changes billing.manage (owner) + Idempotency-Key; 409 billing.module_unavailable / module_already_active /
- * trial_used / module_not_active; activation is free and time-limited. The catalog mirrors BillingCatalog 2026-11-05.1
- * (names, features, provisional limits) — a simplified model, not the real resolver.
+ * trial_used / module_not_active; activation is free and time-limited. The catalog mirrors BillingCatalog 2026-11-09.1
+ * (names, features, limits — Basic 999 users / warehouses / products, OD-02); `overrides` stand in for operator limit
+ * overrides (billing.tenant_entitlements) so limit states stay testable. A simplified model, not the real resolver.
  */
 import type { Route } from "@playwright/test";
 import { entitlementsFor, grantsForRoleName, type FixtureEntitlements, type FixturePlan, type FixtureRules } from "../../src/test/me-fixtures";
@@ -33,6 +34,8 @@ export type MockBilling = {
   activeUsers: number;
   /** Active warehouses (max_warehouses usage); the backend wires it to the inventory mock when there is one. */
   activeWarehouses: () => number;
+  /** Operator limit overrides (code → value; null = unlimited), applied over the plan like billing.tenant_entitlements. */
+  overrides: Record<string, number | null>;
   requests: { method: string; path: string; headers: Record<string, string> }[];
 };
 
@@ -40,7 +43,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const iso = (offsetDays: number) => new Date(Date.now() + offsetDays * DAY_MS).toISOString();
 
 const CATALOG = {
-  catalogVersion: "2026-11-05.1",
+  catalogVersion: "2026-11-09.1",
   trialPlan: "professional",
   fallbackPlan: "basic",
   trialDays: 30,
@@ -49,21 +52,23 @@ const CATALOG = {
     {
       code: "basic",
       name: "Temel",
-      description: "Ürün, temel stok, sipariş, tek depo, temel rapor. Dışa aktarma, audit, 2FA ve stok doğruluğu her pakette açıktır.",
+      description: "Ürün, temel stok, sipariş, temel rapor. Dışa aktarma, audit, 2FA ve stok doğruluğu her pakette açıktır.",
       features: [],
       limits: [
-        { code: "max_warehouses", value: 1 },
-        { code: "max_users", value: 5 },
+        { code: "max_warehouses", value: 999 },
+        { code: "max_users", value: 999 },
+        { code: "max_products", value: 999 },
       ],
     },
     {
       code: "professional",
       name: "Profesyonel",
-      description: "Gelişmiş depo: çoklu depo, raf/lokasyon, barkod operasyonları, çoklu personel.",
+      description: "Gelişmiş depo: sınırsız depo ve ürün, raf/lokasyon, barkod operasyonları.",
       features: ["warehouse_locations", "barcode_operations"],
       limits: [
         { code: "max_warehouses", value: null },
-        { code: "max_users", value: 25 },
+        { code: "max_users", value: 999 },
+        { code: "max_products", value: null },
       ],
     },
   ],
@@ -90,7 +95,9 @@ function defaultModules(plan: FixturePlan): MockModule[] {
   return [ai, soon("dealer_portal", "Bayi portalı"), soon("erp_integrations", "ERP entegrasyonları")];
 }
 
-export function createMockBilling(options: { plan?: FixturePlan; trialDaysLeft?: number; modules?: MockModule[] } = {}): MockBilling {
+export function createMockBilling(
+  options: { plan?: FixturePlan; trialDaysLeft?: number; modules?: MockModule[]; overrides?: Record<string, number | null> } = {},
+): MockBilling {
   const plan = options.plan ?? "trial";
   return {
     plan,
@@ -99,6 +106,7 @@ export function createMockBilling(options: { plan?: FixturePlan; trialDaysLeft?:
     aiParsesThisMonth: 12,
     activeUsers: 4,
     activeWarehouses: () => 1,
+    overrides: options.overrides ?? {},
     requests: [],
   };
 }
@@ -113,6 +121,11 @@ export function mockEntitlements(billing: MockBilling): FixtureEntitlements {
     const def = CATALOG.modules.find((c) => c.code === m.code);
     for (const f of def?.features ?? []) features.add(f);
     for (const l of def?.limits ?? []) if (!limits.some((x) => x.code === l.code)) limits.push(l);
+  }
+  for (const [code, value] of Object.entries(billing.overrides)) {
+    const at = limits.findIndex((x) => x.code === code);
+    if (at >= 0) limits[at] = { code, value };
+    else limits.push({ code, value });
   }
   return { ...base, features: [...features], limits };
 }

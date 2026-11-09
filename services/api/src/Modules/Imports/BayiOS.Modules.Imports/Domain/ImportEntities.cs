@@ -287,7 +287,7 @@ internal sealed class ImportJob : ImportsEntity
 }
 
 /// <summary>
-/// imports.import_files: the raw uploaded bytes (≤ 10 MB) behind <see cref="Infrastructure.Files.IImportFileStore"/>.
+/// imports.import_files: the raw uploaded bytes (≤ 20 MB) behind <see cref="Infrastructure.Files.IImportFileStore"/>.
 /// Kept in the database until hosted object storage exists; the store interface lets Supabase Storage replace it.
 /// </summary>
 internal sealed class ImportFile : ITenantOwned

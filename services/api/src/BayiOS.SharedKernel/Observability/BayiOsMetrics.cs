@@ -33,7 +33,7 @@ public static class BayiOsMetrics
 
     /// <summary>Stock changes that went below zero after an explicit confirmation (warn policy), counted after commit.</summary>
     public static readonly Counter<long> NegativeStockConfirmed = Meter.CreateCounter<long>(
-        "bayios.inventory.negative_stock_confirmed", "{change}", "Stock changes confirmed below zero under the warn policy.");
+        "bayios.inventory.negative_stock_confirmed", "{change}", "Stock changes confirmed below zero (former warn policy). Never emitted since OD-09 (stock never goes below zero): any value is a defect.");
 
     /// <summary>Jobs moved to <c>dead</c>. Tag <c>job.type</c>.</summary>
     public static readonly Counter<long> JobsDeadLettered = Meter.CreateCounter<long>(

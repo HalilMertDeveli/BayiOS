@@ -114,8 +114,9 @@ test("trial banner: shown when the trial ends within a week, dismissible for the
   await expect(page.getByRole("region", { name: "Deneme süresi" })).toHaveCount(0);
 });
 
-test("Temel plan: second active warehouse and new locations are locked; existing ones stay visible (MOCK)", async ({ page }) => {
-  await signedIn(page, { billing: createMockBilling({ plan: "basic" }) });
+test("Temel plan at its warehouse limit: a further active warehouse and new locations are locked; existing ones stay visible (MOCK)", async ({ page }) => {
+  // Basic allows 999 warehouses (OD-02); an operator limit of 1 puts the tenant at its limit.
+  await signedIn(page, { billing: createMockBilling({ plan: "basic", overrides: { max_warehouses: 1 } }) });
   await page.goto("/depo");
   await expect(page.getByRole("cell", { name: "Ana Depo (mock) Varsayılan" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Raflı Depo (mock)", exact: true })).toBeVisible();

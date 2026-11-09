@@ -156,7 +156,7 @@ onayı stoğu bir kez düşer, paralel okutma fazla toplamaz, eşzamanlı mal ka
 | R2 tenant bağlamsız arka plan işi | Kapalı — iş tenant bağlamında, `Handler_runs_in_the_job_tenant_context_and_sees_only_that_tenant` |
 | R4 eşzamanlı negatif stok / çift rezervasyon | Kapalı — §3.4 eşzamanlılık testleri |
 | R7 AI uydurma/onaysız sipariş | Kapalı (pilot): AI varsayılan kapalı (`Ai:Enabled=false`), her satır insan onayı, WhatsApp kaynaklı sipariş otomatik onaylanmaz |
-| R8 kötü niyetli Excel | Kapalı — 10 MB / 10.000 satır, `.xls`/`.xlsm` red, içerik/uzantı kontrolü, CSV formül temizleme |
+| R8 kötü niyetli Excel | Kapalı — 20 MB (OD-04, 2026-11-09; önce 10 MB) / 10.000 satır, `.xls`/`.xlsm` red, içerik/uzantı kontrolü, CSV formül temizleme |
 | Audit (§7) | Uygulanan kodlar koddan yeniden sayıldı; `inventory.threshold_set` / `inventory.threshold_removed` eklendi. **Açık:** erişim reddi olayları (`auth.*`, `rate_limit.exceeded`, #89), katalog/fiyat değişiklik olayları (`product.*`, `price_list.*`) |
 | I2 davet kabulünde e-posta doğrulaması | **Açık bağımlılık:** güvence Supabase **Confirm email** ayarına dayanır. API varsayılanı `Invitations:TrustUserMetadataEmailVerified = true` (kullanıcının yazabildiği `user_metadata.email_verified` kabul edilir). Production için: Confirm email + Secure email change açık, `email_confirmed_at`'ten üst düzey `email_verified` üreten custom access-token hook, ardından `TrustUserMetadataEmailVerified=false` |
 | I7 askıya alınan üyenin oturumu | **Kalan risk (düşük):** tenant erişimi bir sonraki istekte kesilir; Supabase oturumu sonlanmaz (service-role kullanılmıyor) |

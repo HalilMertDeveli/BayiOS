@@ -3345,6 +3345,7 @@
           "Catalog"
         ],
         "summary": "\u00DCr\u00FCn olu\u015Fturur (basit \u00FCr\u00FCn: sku/barcode; varyantl\u0131: variants)",
+        "description": "403 \u0060entitlement.limit_exceeded\u0060 when the plan\u0027s product limit (\u0060max_products\u0060, Basic: 999 non-archived products) is reached.",
         "operationId": "Catalog_CreateProduct",
         "parameters": [
           {
@@ -3405,7 +3406,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/EntitlementProblemDetails"
                 }
               }
             }
@@ -3456,7 +3457,10 @@
             "Bearer": []
           }
         ],
-        "x-permission": "catalog.write"
+        "x-permission": "catalog.write",
+        "x-entitlement-limit": [
+          "max_products"
+        ]
       }
     },
     "/api/v1/products/{id}": {
@@ -3551,6 +3555,7 @@
           "Catalog"
         ],
         "summary": "\u00DCr\u00FCn\u00FC g\u00FCnceller (JSON merge patch, If-Match zorunlu)",
+        "description": "Restoring an archived product (status active/inactive) counts against \u0060max_products\u0060 (403 \u0060entitlement.limit_exceeded\u0060).",
         "operationId": "Catalog_UpdateProduct",
         "parameters": [
           {
@@ -3621,7 +3626,7 @@
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
+                  "$ref": "#/components/schemas/EntitlementProblemDetails"
                 }
               }
             }
@@ -3692,7 +3697,10 @@
             "Bearer": []
           }
         ],
-        "x-permission": "catalog.write"
+        "x-permission": "catalog.write",
+        "x-entitlement-limit": [
+          "max_products"
+        ]
       },
       "delete": {
         "tags": [
@@ -6669,7 +6677,7 @@
           "Warehouse"
         ],
         "summary": "Depo olu\u015Fturur (tenant\u0027\u0131n ilk deposu varsay\u0131lan olur)",
-        "description": "403 \u0060entitlement.limit_exceeded\u0060 when the plan\u0027s active-warehouse limit (\u0060max_warehouses\u0060, Basic: 1) is reached; 403 \u0060entitlement.required\u0060 (\u0060warehouse_locations\u0060) for usesLocations = true without the Professional plan.",
+        "description": "403 \u0060entitlement.limit_exceeded\u0060 when the plan\u0027s active-warehouse limit (\u0060max_warehouses\u0060, Basic: 999) is reached; 403 \u0060entitlement.required\u0060 (\u0060warehouse_locations\u0060) for usesLocations = true without the Professional plan.",
         "operationId": "Warehouse_Create",
         "parameters": [
           {
@@ -12209,7 +12217,7 @@
         "tags": [
           "Imports"
         ],
-        "summary": "Dosya y\u00FCkler (.xlsx/.csv, \u2264 10 MB, \u2264 10.000 sat\u0131r): i\u00E7erik/magic byte, makro, zip bombas\u0131 ve sat\u0131r/kolon limitleri do\u011Frulan\u0131r",
+        "summary": "Dosya y\u00FCkler (.xlsx/.csv, \u2264 20 MB, \u2264 10.000 sat\u0131r): i\u00E7erik/magic byte, makro, zip bombas\u0131 ve sat\u0131r/kolon limitleri do\u011Frulan\u0131r",
         "operationId": "Imports_Upload",
         "parameters": [
           {
@@ -14436,7 +14444,7 @@
           "Orders"
         ],
         "summary": "Taslak \u2192 Onay bekliyor (en az bir sat\u0131r, fiyats\u0131z sat\u0131r yok); onay gerekmeyen tenant\u0027ta onaylama yetkisi olan i\u00E7in do\u011Frudan Onayland\u0131 \u002B rezervasyon",
-        "description": "Copies the shipping / billing address snapshot (422 when a chosen address was removed). When the tenant setting requireOrderApproval is false, the source is not whatsapp_ai and the caller holds orders.approve under the active rules, the order is approved in the same transaction exactly as by approve (all-or-nothing reservation: a shortage answers 409 inventory.insufficient_stock and the order stays a draft; confirmNegativeStock as on approve). Otherwise it goes to pending_approval.",
+        "description": "Copies the shipping / billing address snapshot (422 when a chosen address was removed). When the tenant setting requireOrderApproval is false, the source is not whatsapp_ai and the caller holds orders.approve under the active rules, the order is approved in the same transaction exactly as by approve (all-or-nothing reservation: a shortage answers 409 inventory.insufficient_stock and the order stays a draft; stock never goes below zero, OD-09). Otherwise it goes to pending_approval.",
         "operationId": "Orders_Submit",
         "parameters": [
           {
@@ -19651,9 +19659,6 @@
         }
       },
       "ApproveOrderRequest": {
-        "required": [
-          "confirmNegativeStock"
-        ],
         "type": "object",
         "properties": {
           "confirmNegativeStock": {
@@ -20477,8 +20482,7 @@
           "locationId",
           "type",
           "quantity",
-          "reason",
-          "confirmNegativeStock"
+          "reason"
         ],
         "type": "object",
         "properties": {
@@ -27405,12 +27409,13 @@
                 }
               },
               "confirmationRequired": {
-                "type": "boolean"
+                "type": "boolean",
+                "deprecated": true
               }
             }
           }
         ],
-        "description": "Stock problem: shortages per line (insufficient stock) and confirmationRequired (negative-stock policy \u0027warn\u0027 \u2014 retry with the confirmation flag)."
+        "description": "Stock problem: shortages per line (insufficient stock). confirmationRequired is deprecated and never sent: stock never goes below zero (owner decision OD-09)."
       },
       "StockShortage": {
         "type": "object",
@@ -27545,9 +27550,6 @@
         }
       },
       "SubmitOrderRequest": {
-        "required": [
-          "confirmNegativeStock"
-        ],
         "type": "object",
         "properties": {
           "confirmNegativeStock": {

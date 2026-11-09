@@ -80,7 +80,7 @@ public sealed class TenantIsolationDatabaseTests(ApiFixture fixture) : IAsyncLif
     [Theory]
     [InlineData("INSERT INTO identity.memberships (id, tenant_id, user_id, role, status, created_at) VALUES (gen_random_uuid(), '{B}', '{USER}', 'owner', 'active', now())")]
     [InlineData("INSERT INTO identity.tenants (id, name, slug, status, sector, default_currency, locale, time_zone, row_version, created_at) VALUES (gen_random_uuid(), 'X', 'rls-x-' || gen_random_uuid(), 'active', 'general', 'TRY', 'tr-TR', 'Europe/Istanbul', 1, now())")]
-    [InlineData("INSERT INTO identity.tenant_settings (tenant_id, negative_stock_policy, sales_can_approve_orders, sales_max_discount_percent, show_cost_to_manager, show_cost_to_viewer, staff_can_assign_barcode, staff_can_approve_receipt, require2fa, row_version, created_at) VALUES ('{C}', 'allow', true, 0, false, false, false, false, false, 1, now())")]
+    [InlineData("INSERT INTO identity.tenant_settings (tenant_id, negative_stock_policy, sales_can_approve_orders, sales_max_discount_percent, show_cost_to_manager, show_cost_to_viewer, staff_can_assign_barcode, staff_can_approve_receipt, require2fa, row_version, created_at) VALUES ('{C}', 'block', true, 0, false, false, false, false, false, 1, now())")]
     [InlineData("INSERT INTO identity.user_profiles (user_id, created_at) VALUES (gen_random_uuid(), now())")]
     public async Task Rls_rejects_inserts_for_another_tenant(string sql)
     {

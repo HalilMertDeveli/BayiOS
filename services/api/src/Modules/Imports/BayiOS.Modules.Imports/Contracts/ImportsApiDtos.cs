@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Http;
 namespace BayiOS.Modules.Imports.Contracts;
 
 /// <summary>
-/// Multipart upload (≤ 10 MB): <c>file</c> (.xlsx or .csv) and <c>type</c> (<c>products</c> | <c>prices</c>).
+/// Multipart upload (≤ 20 MB): <c>file</c> (.xlsx or .csv) and <c>type</c> (<c>products</c> | <c>prices</c>).
 /// Only documents the request shape; the endpoint reads the form itself with hard limits.
 /// </summary>
 public sealed record UploadImportForm(IFormFile File, string Type);

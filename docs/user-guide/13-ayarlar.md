@@ -16,8 +16,7 @@ diğer roller "Ayarları değiştirme yetkiniz yok" mesajını görür.
   `SIP-2026-000123` biçiminde numaralanır; mevcut numaralar değişmez.
 
 ### Stok ve KDV
-- **Stok yetmediğinde** — İzin verme (önerilen) / Uyar, devam etmeye izin ver / İzin ver.
-  Onay ve stok çıkışında satılabilir stok eksiye düşecekse uygulanır. Ayrıntı: [Stok düzeltme ve negatif stok](06-stok-duzeltme-negatif-stok.md).
+- **Stok eksiye düşmez** — sabit kural, değiştirilemez. Onay, stok çıkışı ve sevkiyat satılabilir stoğun altına inemez. Ayrıntı: [Stok düzeltme ve negatif stok](06-stok-duzeltme-negatif-stok.md).
 - **Varsayılan KDV oranı** — yeni ürünlerde önerilir; ürün kartından değiştirilebilir.
 - **Fiyat gösterimi** — ekranlarda fiyatların KDV dahil mi hariç mi gösterileceği.
 

@@ -11,7 +11,7 @@ Stok doğruluğu ürünün temel değeridir. Gereksinimler: denetlenebilir geçm
 2. `inventory.inventory_balances (tenant_id, variant_id, warehouse_id, location_id NULL, on_hand, reserved, version)`: hareketle **aynı transaction'da** güncellenir. `available = on_hand − reserved`. Benzersizlik `NULLS NOT DISTINCT`.
 3. `inventory.stock_reservations`: sipariş satırı (ve lokasyonlu depoda lokasyon) başına; onayda oluşturulur, sevkiyatta tüketilir, iptalde serbest bırakılır.
 4. Eşzamanlılık: READ COMMITTED + bakiye satırlarının `SELECT … FOR UPDATE` ile **deterministik sırada** (`variant_id, warehouse_id, location_id`) kilitlenmesi; kilit hiyerarşisi (sipariş başlığı → warehouse dokümanı → bakiyeler → rezervasyonlar). Deadlock/lock-timeout'ta tüm transaction idempotent şekilde yeniden denenir.
-5. DB son savunması: `CHECK (reserved >= 0)` ve `CHECK (allow_negative OR (on_hand >= 0 AND reserved <= on_hand))`; `allow_negative` tenant ayarının denormalize kopyasıdır.
+5. DB son savunması: `CHECK (reserved >= 0)` ve `CHECK (allow_negative OR (on_hand >= 0 AND reserved <= on_hand))`; `allow_negative` CHECK muafiyetidir; ürün sahibi kararı OD-09 (2026-11-09) ile stok eksiye düşmez — yeni satırlarda ve kötüleştiren her değişiklikte `false` (ayrıntı: inventory-and-orders.md §2.4).
 6. Sipariş onayında çok satırlı rezervasyon **ya hep ya hiç**; sevkiyatta `shipment_out` + rezervasyon tüketimi; iptalde serbest bırakma. Algoritmalar: [inventory-and-orders.md](../architecture/inventory-and-orders.md).
 7. Günlük mutabakat job'ı `on_hand = Σ ledger` ve `reserved = Σ açık rezervasyon` kontrol eder; fark kritik alarmdır.
 8. Inventory modülü dışa bağımlılığı olmayan saf bir stok motorudur; Warehouse ve Orders onun Contracts komutlarını çağırır.
