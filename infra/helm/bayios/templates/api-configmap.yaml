@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bayios.fullname" . }}-api
+  labels:
+    {{- include "bayios.labels" (dict "root" $ "component" "api") | nindent 4 }}
+data:
+  # Non-secret settings only. ConnectionStrings__Default comes from a Secret (see api-deployment.yaml).
+  ASPNETCORE_ENVIRONMENT: {{ .Values.api.environment | quote }}
+  Auth__Authority: {{ .Values.api.auth.authority | quote }}
+  Auth__Audience: {{ .Values.api.auth.audience | quote }}
+  Auth__RequireHttpsMetadata: {{ .Values.api.auth.requireHttpsMetadata | toString | quote }}
+  {{- with .Values.api.auth.jwksUrl }}
+  Auth__JwksUrl: {{ . | quote }}
+  {{- end }}
+  {{- range $i, $origin := .Values.api.corsAllowedOrigins }}
+  Cors__AllowedOrigins__{{ $i }}: {{ $origin | quote }}
+  {{- end }}
+  {{- range $k, $v := .Values.api.extraEnv }}
+  {{ $k }}: {{ $v | toString | quote }}
+  {{- end }}

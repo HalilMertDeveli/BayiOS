@@ -1,0 +1,81 @@
+{{- $api := .Values.api }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bayios.fullname" . }}-api
+  labels:
+    {{- include "bayios.labels" (dict "root" $ "component" "api") | nindent 4 }}
+spec:
+  {{- if not $api.autoscaling.enabled }}
+  replicas: {{ $api.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      {{- include "bayios.selectorLabels" (dict "root" $ "component" "api") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "bayios.selectorLabels" (dict "root" $ "component" "api") | nindent 8 }}
+      annotations:
+        # Roll the pods when the non-secret config changes.
+        checksum/config: {{ include (print $.Template.BasePath "/api-configmap.yaml") . | sha256sum }}
+        {{- with $api.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654      # app user of the chiseled ASP.NET image (services/api/Dockerfile)
+        runAsGroup: 1654
+        seccompProfile: { type: RuntimeDefault }
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: api
+          image: {{ include "bayios.image" (dict "root" $ "image" $api.image) | quote }}
+          imagePullPolicy: {{ $api.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $api.containerPort }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "bayios.fullname" . }}-api
+          env:
+            - name: ConnectionStrings__Default
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "bayios.api.dbSecretName" . }}
+                  key: ConnectionStrings__Default
+          startupProbe:
+            {{- include "bayios.httpProbe" (dict "probe" $api.probes.startup "port" "http") | nindent 12 }}
+          livenessProbe:
+            {{- include "bayios.httpProbe" (dict "probe" $api.probes.liveness "port" "http") | nindent 12 }}
+          readinessProbe:
+            {{- include "bayios.httpProbe" (dict "probe" $api.probes.readiness "port" "http") | nindent 12 }}
+          resources:
+            {{- toYaml $api.resources | nindent 12 }}
+          securityContext:
+            {{- include "bayios.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+      {{- with $api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

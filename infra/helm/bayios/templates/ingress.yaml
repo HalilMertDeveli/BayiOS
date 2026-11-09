@@ -1,0 +1,49 @@
+{{- if .Values.ingress.enabled }}
+{{- $fullname := include "bayios.fullname" . }}
+# One host: the API owns /api and /health, everything else goes to the web app. The browser then calls the API on
+# the same origin (NEXT_PUBLIC_API_BASE_URL = the ingress URL), so no CORS configuration is needed.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "bayios.labels" (dict "root" $ "component" "ingress") | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - {{- with .Values.ingress.host }}
+      host: {{ . | quote }}
+      {{- end }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullname }}-api
+                port: { name: http }
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullname }}-api
+                port: { name: http }
+          {{- if .Values.web.enabled }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullname }}-web
+                port: { name: http }
+          {{- end }}
+{{- end }}

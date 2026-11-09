@@ -1,0 +1,80 @@
+{{- if .Values.web.enabled }}
+{{- $web := .Values.web }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bayios.fullname" . }}-web
+  labels:
+    {{- include "bayios.labels" (dict "root" $ "component" "web") | nindent 4 }}
+spec:
+  {{- if not $web.autoscaling.enabled }}
+  replicas: {{ $web.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels:
+      {{- include "bayios.selectorLabels" (dict "root" $ "component" "web") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "bayios.selectorLabels" (dict "root" $ "component" "web") | nindent 8 }}
+      {{- with $web.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000      # node user of the Node.js image (apps/web/Dockerfile)
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: web
+          image: {{ include "bayios.image" (dict "root" $ "image" $web.image) | quote }}
+          imagePullPolicy: {{ $web.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $web.containerPort }}
+          env:
+            - name: PORT
+              value: {{ $web.containerPort | quote }}
+          startupProbe:
+            {{- include "bayios.httpProbe" (dict "probe" $web.probes.startup "port" "http") | nindent 12 }}
+          livenessProbe:
+            {{- include "bayios.httpProbe" (dict "probe" $web.probes.liveness "port" "http") | nindent 12 }}
+          readinessProbe:
+            {{- include "bayios.httpProbe" (dict "probe" $web.probes.readiness "port" "http") | nindent 12 }}
+          resources:
+            {{- toYaml $web.resources | nindent 12 }}
+          securityContext:
+            {{- include "bayios.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            # Next.js writes its data/image cache here; the rest of the filesystem stays read-only.
+            - name: next-cache
+              mountPath: /app/.next/cache
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: next-cache
+          emptyDir: { sizeLimit: 256Mi }
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+      {{- with $web.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $web.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $web.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

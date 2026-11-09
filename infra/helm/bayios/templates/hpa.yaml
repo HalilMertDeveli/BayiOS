@@ -1,0 +1,27 @@
+{{- range $component := list "api" "web" }}
+{{- $c := index $.Values $component }}
+{{- if and $c.autoscaling.enabled (or (eq $component "api") $.Values.web.enabled) }}
+---
+# Needs metrics-server in the cluster (not installed in kind by default).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "bayios.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "bayios.labels" (dict "root" $ "component" $component) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "bayios.fullname" $ }}-{{ $component }}
+  minReplicas: {{ $c.autoscaling.minReplicas }}
+  maxReplicas: {{ $c.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $c.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}
