@@ -1,0 +1,201 @@
+# Default values for the BayiOS chart.
+#
+# PUBLIC REPOSITORY: this file holds NO real value — no password, key, connection string or real hostname.
+# Secrets are injected at install time (`--set-string`, a CI secret store, or `existingSecret` pointing at a Secret
+# managed outside the chart, e.g. External Secrets / Sealed Secrets). See infra/k8s/README.md.
+#
+# Production layout (docs/architecture): the database is managed Supabase PostgreSQL, so `postgres.enabled` stays
+# false and `api.secret` carries the `bayios_app` connection string. `postgres` + `migrations` exist for local/CI
+# clusters (kind) only.
+
+nameOverride: ""
+fullnameOverride: ""
+imagePullSecrets: []
+
+# Applied to every pod unless overridden per component.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+api:
+  enabled: true
+  replicaCount: 2
+  image:
+    # Built from services/api/Dockerfile. No registry is published yet; kind loads the image directly.
+    repository: bayios-api
+    tag: ""            # defaults to .Chart.AppVersion
+    pullPolicy: IfNotPresent
+  containerPort: 8080
+  service:
+    type: ClusterIP
+    port: 80
+  # Non-secret settings -> ConfigMap (names: .env.example at the repo root).
+  config:
+    ASPNETCORE_ENVIRONMENT: Production
+    Auth__Authority: "https://<supabase-project-ref>.supabase.co/auth/v1"
+    Auth__Audience: authenticated
+    Auth__RequireHttpsMetadata: "true"
+    Cors__AllowedOrigins__0: "https://app.example.com"
+  # Logs: the API already writes redacted JSON lines to stdout (kubectl logs / any cluster log agent).
+  # Secret settings -> Secret. Either let the chart create it from `values` (filled at install time, never committed)
+  # or reference a Secret that already exists in the namespace with `existingSecret`.
+  secret:
+    create: true
+    existingSecret: ""
+    values:
+      # Runtime role only (bayios_app, NOBYPASSRLS). Built automatically when postgres.enabled=true.
+      ConnectionStrings__Default: ""
+      # >= 32 bytes; empty = client IPs are not hashed into the audit log.
+      Audit__IpHashKey: ""
+      Anthropic__ApiKey: ""
+      Storage__ServiceKey: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  podSecurityContext:
+    runAsUser: 1654       # `app` user of the chiseled .NET image
+    runAsGroup: 1654
+    fsGroup: 1654
+  # GET /health is dependency-free (liveness); GET /health/ready checks the database, settings and job queue.
+  startupProbe:
+    httpGet: { path: /health, port: http }
+    periodSeconds: 2
+    timeoutSeconds: 3
+    failureThreshold: 30
+  livenessProbe:
+    httpGet: { path: /health, port: http }
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readinessProbe:
+    httpGet: { path: /health/ready, port: http }
+    periodSeconds: 5
+    timeoutSeconds: 6
+    failureThreshold: 3
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+web:
+  enabled: true
+  replicaCount: 2
+  image:
+    # Built from apps/web/Dockerfile. NEXT_PUBLIC_* values are build args (public, inlined into the bundle).
+    repository: bayios-web
+    tag: ""
+    pullPolicy: IfNotPresent
+  containerPort: 3000
+  service:
+    type: ClusterIP
+    port: 80
+  config:
+    NODE_ENV: production
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+  podSecurityContext:
+    runAsUser: 1000       # `node` user of the node:alpine image
+    runAsGroup: 1000
+    fsGroup: 1000
+  startupProbe:
+    httpGet: { path: /, port: http }
+    periodSeconds: 2
+    timeoutSeconds: 3
+    failureThreshold: 30
+  livenessProbe:
+    httpGet: { path: /, port: http }
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readinessProbe:
+    httpGet: { path: /, port: http }
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Single-instance PostgreSQL 17 for local/CI clusters ONLY (no backups, no HA). Production uses Supabase.
+postgres:
+  enabled: false
+  image:
+    repository: postgres
+    tag: 17-alpine
+    pullPolicy: IfNotPresent
+  database: bayios
+  # Required when enabled; pass at install time (CI generates random ones). Never commit values here.
+  auth:
+    existingSecret: ""     # keys: postgres-password, app-password, migrator-password
+    postgresPassword: ""
+    appPassword: ""
+    migratorPassword: ""
+  persistence:
+    size: 1Gi
+    storageClass: ""       # "" = cluster default
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+# Applies the idempotent EF Core scripts (infra/ci/ef-migrations.sh output) as bayios_migrator before the API becomes
+# ready. The scripts are not part of the chart: create a ConfigMap from that directory and name it here, e.g.
+#   kubectl create configmap bayios-migrations --from-file="$OUT_DIR"
+migrations:
+  enabled: false
+  scriptsConfigMap: ""
+  image:
+    repository: postgres
+    tag: 17-alpine
+    pullPolicy: IfNotPresent
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # Two hosts, same scheme as infra/linux (Nginx): the web panel and the API on their own names.
+  web:
+    host: app.example.com
+  api:
+    host: api.example.com
+  tls: []
+  #  - secretName: bayios-tls
+  #    hosts: [app.example.com, api.example.com]
+
+# Default-deny style policies: only the web/API ports are reachable, PostgreSQL only from the API and the migration
+# Job. Needs a CNI that enforces NetworkPolicy (kind's default kindnet does since v0.24).
+networkPolicy:
+  enabled: true

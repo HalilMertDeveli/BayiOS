@@ -809,6 +809,7 @@ Strateji: [`docs/testing/test-strategy.md`](docs/testing/test-strategy.md).
 | `e2e-real` | Gerçek yığın uçtan uca testler |
 | `load-short` | k6 yük testi ve rezervasyon dayanıklılık testi |
 | `ci-container` | API Docker imajı + Trivy taraması |
+| `ci-k8s` | API + web imajları → 3 düğümlü kind cluster → Helm chart (`infra/k8s`) → health/readiness/401/web smoke testi |
 | `codeql`, `secret-scan`, `dependency-review` | Statik analiz, gitleaks, açıklı bağımlılıklar |
 | `deploy-preview`, `deploy-production` | Migration → API'yi Fly.io'ya yayınlama → smoke testleri; production için sahip onayı gerekir |
 

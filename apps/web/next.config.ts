@@ -118,6 +118,9 @@ const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  // Container image only (apps/web/Dockerfile sets NEXT_OUTPUT=standalone): a self-contained server.js with the
+  // traced node_modules. Local dev, CI and Vercel keep the default output.
+  ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   // No "X-Powered-By: Next.js" (security audit 2026-11 M-2).
   poweredByHeader: false,
   async headers() {

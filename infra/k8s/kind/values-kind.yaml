@@ -1,0 +1,39 @@
+# Values for a throwaway kind cluster (local machine and .github/workflows/ci-k8s.yml).
+# No secret lives here: the three PostgreSQL passwords are generated at install time (see infra/k8s/kind/up.sh).
+
+api:
+  replicaCount: 2
+  image:
+    repository: bayios-api
+    tag: kind
+    pullPolicy: Never      # loaded with `kind load docker-image`
+  config:
+    ASPNETCORE_ENVIRONMENT: Production
+    # No Supabase Auth in the kind cluster: a syntactically valid placeholder keeps /health/ready green; every
+    # authenticated call fails closed (401), which is exactly what an unconfigured auth provider must do.
+    Auth__Authority: "http://auth.invalid/auth/v1"
+    Auth__Audience: authenticated
+    Auth__RequireHttpsMetadata: "false"
+    Cors__AllowedOrigins__0: "http://localhost:3000"
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+web:
+  replicaCount: 2
+  image:
+    repository: bayios-web
+    tag: kind
+    pullPolicy: Never
+  resources:
+    requests: { cpu: 25m, memory: 96Mi }
+    limits: { cpu: 500m, memory: 384Mi }
+
+postgres:
+  enabled: true
+  persistence:
+    size: 1Gi
+
+migrations:
+  enabled: true
+  scriptsConfigMap: bayios-migrations
