@@ -33,6 +33,12 @@ public static class WarehouseModule
         services.AddScoped<IOrderTaskVisibility>(sp => sp.GetRequiredService<TaskVisibility>());
         services.AddScoped<ITaskContextVariants>(sp => sp.GetRequiredService<TaskVisibility>());
         services.TryAddSingleton(TimeProvider.System);
+
+        // Two-stage warehouse transfers and stock counts (#168); stock moves only through IInventoryService.
+        services.AddScoped<StockTransferQueries>();
+        services.AddScoped<StockTransferService>();
+        services.AddScoped<StockCountQueries>();
+        services.AddScoped<StockCountService>();
         return services;
     }
 
@@ -40,6 +46,7 @@ public static class WarehouseModule
     {
         app.MapWarehouseEndpoints();
         app.MapFulfillmentEndpoints();
+        app.MapStockDocumentEndpoints();
         return app;
     }
 }

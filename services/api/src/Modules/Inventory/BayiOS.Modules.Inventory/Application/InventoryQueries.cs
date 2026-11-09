@@ -41,7 +41,8 @@ internal sealed class InventoryQueries(
     /// <returns>Null when <see cref="BalanceQuery.Term"/> matches more than <see cref="MaxSearchMatches"/> variants.</returns>
     public async Task<BalancePageResponse?> ListBalancesAsync(BalanceQuery query, CancellationToken cancellationToken)
     {
-        var balances = db.Balances.AsNoTracking();
+        // In-transit stock (OD-01) belongs to no warehouse: it is shown on its transfer, never as a balance.
+        var balances = db.Balances.AsNoTracking().Where(b => !b.IsTransit);
         if (query.Term is { } term)
         {
             var matches = await variants.SearchVariantIdsAsync(term, MaxSearchMatches + 1, cancellationToken);
@@ -226,6 +227,57 @@ internal sealed class InventoryQueries(
 
     public Task<bool> WarehouseHasStockAsync(Guid warehouseId, CancellationToken cancellationToken) =>
         db.Balances.AnyAsync(b => b.WarehouseId == warehouseId && (b.OnHand != 0 || b.Reserved != 0), cancellationToken);
+
+    public async Task<IReadOnlyList<StockLevel>> LevelsAsync(
+        Guid warehouseId, IReadOnlyCollection<Guid>? locationIds, IReadOnlyCollection<Guid>? variantIds, int max, CancellationToken cancellationToken)
+    {
+        var balances = db.Balances.AsNoTracking().Where(b => b.WarehouseId == warehouseId && !b.IsTransit);
+        if (locationIds is not null)
+        {
+            var locations = locationIds.ToList();
+            balances = balances.Where(b => b.LocationId != null && locations.Contains(b.LocationId.Value));
+        }
+
+        if (variantIds is not null)
+        {
+            var variants = variantIds.ToList();
+            balances = balances.Where(b => variants.Contains(b.VariantId));
+        }
+
+        return await balances
+            .OrderBy(b => b.VariantId).ThenBy(b => b.LocationId)
+            .Take(max)
+            .Select(b => new StockLevel(b.VariantId, b.LocationId, b.OnHand, b.Reserved))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlySet<(Guid VariantId, Guid? LocationId)>> MovedSinceAsync(
+        Guid warehouseId, IReadOnlyCollection<(Guid VariantId, Guid? LocationId, DateTimeOffset Since)> keys, CancellationToken cancellationToken)
+    {
+        var moved = new HashSet<(Guid, Guid?)>();
+        if (keys.Count == 0)
+        {
+            return moved;
+        }
+
+        var variantIds = keys.Select(k => k.VariantId).Distinct().ToList();
+        var earliest = keys.Min(k => k.Since);
+        var latest = await db.Movements.AsNoTracking()
+            .Where(m => m.WarehouseId == warehouseId && variantIds.Contains(m.VariantId) && m.OccurredAt > earliest)
+            .GroupBy(m => new { m.VariantId, m.LocationId })
+            .Select(g => new { g.Key.VariantId, g.Key.LocationId, Last = g.Max(m => m.OccurredAt) })
+            .ToListAsync(cancellationToken);
+        var lastByKey = latest.ToDictionary(l => (l.VariantId, l.LocationId), l => l.Last);
+        foreach (var (variantId, locationId, since) in keys)
+        {
+            if (lastByKey.TryGetValue((variantId, locationId), out var last) && last > since)
+            {
+                moved.Add((variantId, locationId));
+            }
+        }
+
+        return moved;
+    }
 
     public async Task<IReadOnlyList<ReservationAllocation>> GetOpenReservationsAsync(Guid orderId, CancellationToken cancellationToken)
     {

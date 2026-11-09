@@ -10,7 +10,8 @@ using WarehouseModel = BayiOS.Modules.Warehouse.Domain.Warehouse;
 
 namespace BayiOS.Modules.Warehouse.Application;
 
-internal sealed record AppError(int Status, string Code, string Title, IDictionary<string, string[]>? Errors = null)
+internal sealed record AppError(
+    int Status, string Code, string Title, IDictionary<string, string[]>? Errors = null, IReadOnlyList<StockShortage>? Shortages = null)
 {
     public static AppError NotFound() => new(404, "resource.not_found", "Resource not found");
 
@@ -129,6 +130,16 @@ internal sealed class WarehouseService(
         if (status != WarehouseStatuses.Active && (warehouse.IsDefault || makeDefault))
         {
             return AppError.Conflict("warehouse.default_inactive", "The default warehouse cannot be inactive");
+        }
+
+        // Goods on the road must still be able to arrive at (or return to) both ends (OD-01).
+        if (status != WarehouseStatuses.Active && warehouse.Status == WarehouseStatuses.Active
+            && await db.StockTransfers.AnyAsync(
+                t => (t.SourceWarehouseId == warehouse.Id || t.DestinationWarehouseId == warehouse.Id)
+                    && StockTransferStatuses.Open.Contains(t.Status),
+                cancellationToken))
+        {
+            return AppError.Conflict("warehouse.has_open_transfers", "The warehouse has transfers in transit; receive or close them first");
         }
 
         if (request.UsesLocations is { } usesLocations && usesLocations != warehouse.UsesLocations

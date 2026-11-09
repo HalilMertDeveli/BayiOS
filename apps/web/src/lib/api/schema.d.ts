@@ -666,6 +666,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inventory/relocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Raf/göz arası anlık taşıma (aynı depo): her satır için tek işlemde transfer_out + transfer_in; yalnızca satılabilir miktar taşınır
+         * @description Depolar arası transfer iki aşamalıdır: POST /api/v1/stock-transfers (OD-01). 409 `inventory.insufficient_available` (`shortages`) when a source shelf has less available stock than requested; stock never goes negative.
+         */
+        post: operations["Inventory_CreateRelocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inventory/thresholds": {
         parameters: {
             query?: never;
@@ -1064,6 +1084,229 @@ export interface paths {
         put?: never;
         /** Onaylanmamış (taslak/paketlenmiş) sevkiyatı iptal eder: stok hareketi yok, rezervasyon ve sipariş durumu değişmez, toplananlar için yerine koyma (putaway) görevi */
         post: operations["Shipments_Cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Depolar arası transferler (yeniden eskiye keyset): durum listesi, depo (kaynak veya hedef) filtresi */
+        get: operations["StockTransfers_List"];
+        put?: never;
+        /** Taslak transfer: kaynak ve hedef depo (farklı), satırlar (ürün, miktar, kaynak raf, planlanan hedef raf) */
+        post: operations["StockTransfers_Create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-transfers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Transfer: satırlar, gönderilen / teslim alınan / yolda / iade / kayıp miktarlar ve fark (ETag döner) */
+        get: operations["StockTransfers_Get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-transfers/{id}/dispatch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Gönder: kaynaktan çıkış (yalnızca satılabilir miktar, asla eksi stok), mal yolda — hiçbir depoda satılabilir değil */
+        post: operations["StockTransfers_Dispatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-transfers/{id}/receive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Teslim al (kısmi olabilir): satır id veya okutulan ürün kodu + hedef raf (id veya okutulan raf kodu); yoldakinden fazlası reddedilir */
+        post: operations["StockTransfers_Receive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-transfers/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Farkı kapat: yolda kalan miktar kayıp (lost) olarak düşülür veya kaynağa iade edilir (return_to_source); sebep zorunlu */
+        post: operations["StockTransfers_Close"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-transfers/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Taslağı iptal eder (yalnızca gönderilmeden önce); stok hareketi yok */
+        post: operations["StockTransfers_Cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stok sayımları (yeniden eskiye keyset): durum listesi ve depo filtresi */
+        get: operations["StockCounts_List"];
+        put?: never;
+        /** Sayım başlatır: depo, kapsam (full / locations / variants), kör sayım; kapsamdaki stok anlık görüntü olarak alınır (depo başına tek açık sayım) */
+        post: operations["StockCounts_Create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-counts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sayım ve satırları (fark raporu); kör sayımda sistem miktarları yalnızca inventory.count.manage ile görünür (ETag döner) */
+        get: operations["StockCounts_Get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-counts/{id}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sayılan miktarlar: satır id veya okutulan ürün + raf kodu; mode = set (mutlak) | add (okutma başına ekle) */
+        post: operations["StockCounts_Enter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-counts/{id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sayım bitti: fark raporu incelemeye hazır */
+        post: operations["StockCounts_Submit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-counts/{id}/recount": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Seçili satırları yeniden saydırır (sayılan miktar silinir, sayım açık duruma döner) */
+        post: operations["StockCounts_Recount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-counts/{id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Onayla: her fark için count_correction hareketi (sayım anındaki sistem bakiyesine göre); rezervin altına inemez (count.below_reserved) */
+        post: operations["StockCounts_Apply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stock-counts/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sayımı iptal eder (uygulanmadıysa); stok hareketi yok */
+        post: operations["StockCounts_Cancel"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2353,6 +2596,13 @@ export interface components {
             /** Format: int32 */
             skipped: number | string;
         };
+        ApplyStockCountRequest: {
+            acceptMovedLines: null | boolean;
+        };
+        ApplyStockCountResponse: {
+            count: components["schemas"]["StockCountResponse"];
+            movementIds: string[];
+        };
         ApproveOrderParseLine: {
             /** Format: int32 */
             lineNo: null | number | string;
@@ -2486,6 +2736,12 @@ export interface components {
             /** Format: uuid */
             putawayTaskId: null | string;
         };
+        CancelStockCountRequest: {
+            reason: null | string;
+        };
+        CancelStockTransferRequest: {
+            reason: null | string;
+        };
         CatalogModuleResponse: {
             code: string;
             name: string;
@@ -2515,6 +2771,10 @@ export interface components {
         };
         ChangeMemberRoleRequest: {
             role: null | string;
+        };
+        CloseStockTransferRequest: {
+            resolution: null | string;
+            reason: null | string;
         };
         CodeConflict: {
             /** @enum {string} */
@@ -2696,6 +2956,29 @@ export interface components {
             warehouseId: null | string;
             reference: null | string;
             lines: null | components["schemas"]["ReceiptLineRequest"][];
+        };
+        CreateRelocationRequest: {
+            /** Format: uuid */
+            warehouseId: null | string;
+            reference: null | string;
+            lines: null | components["schemas"]["RelocationLineRequest"][];
+        };
+        CreateStockCountRequest: {
+            /** Format: uuid */
+            warehouseId: null | string;
+            scope: null | string;
+            locationIds: null | string[];
+            variantIds: null | string[];
+            blind: null | boolean;
+            note: null | string;
+        };
+        CreateStockTransferRequest: {
+            /** Format: uuid */
+            sourceWarehouseId: null | string;
+            /** Format: uuid */
+            destinationWarehouseId: null | string;
+            note: null | string;
+            lines: null | components["schemas"]["StockTransferLineRequest"][];
         };
         CreateTenantRequest: {
             name: null | string;
@@ -3945,11 +4228,39 @@ export interface components {
             warehouseId: string;
             movements: components["schemas"]["MovementResult"][];
         };
+        ReceiveStockTransferLineRequest: {
+            /** Format: uuid */
+            lineId: null | string;
+            /** Format: uuid */
+            variantId: null | string;
+            code: null | string;
+            /** Format: double */
+            quantity: null | number | string;
+            /** Format: uuid */
+            locationId: null | string;
+            locationCode: null | string;
+        };
+        ReceiveStockTransferRequest: {
+            lines: null | components["schemas"]["ReceiveStockTransferLineRequest"][];
+        };
+        RecountStockCountRequest: {
+            lineIds: null | string[];
+        };
         RegisterDeviceRequest: {
             token: null | string;
             platform: null | string;
             appVersion: null | string;
             locale: null | string;
+        };
+        RelocationLineRequest: {
+            /** Format: uuid */
+            variantId: null | string;
+            /** Format: uuid */
+            fromLocationId: null | string;
+            /** Format: uuid */
+            toLocationId: null | string;
+            /** Format: double */
+            quantity: null | number | string;
         };
         ReportExportRequest: {
             /** @enum {null|string} */
@@ -4146,6 +4457,96 @@ export interface components {
             /** Format: int64 */
             version: number | string;
         };
+        StockCountEntriesRequest: {
+            entries: null | components["schemas"]["StockCountEntryRequest"][];
+        };
+        StockCountEntryRequest: {
+            /** Format: uuid */
+            lineId: null | string;
+            /** Format: uuid */
+            variantId: null | string;
+            code: null | string;
+            /** Format: uuid */
+            locationId: null | string;
+            locationCode: null | string;
+            /** Format: double */
+            quantity: null | number | string;
+            mode: null | string;
+        };
+        StockCountLineResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            variantId: string;
+            sku: string;
+            /** Format: uuid */
+            locationId: null | string;
+            locationCode: null | string;
+            /** Format: double */
+            expectedQuantity: null | number | string;
+            /** Format: double */
+            countedQuantity: null | number | string;
+            /** Format: double */
+            difference: null | number | string;
+            /** Format: date-time */
+            snapshotAt: string;
+            /** Format: date-time */
+            countedAt: null | string;
+            status: string;
+            movedSinceSnapshot: boolean;
+            /** Format: double */
+            appliedDelta: null | number | string;
+        };
+        StockCountPageResponse: {
+            items: components["schemas"]["StockCountSummaryResponse"][];
+            page: components["schemas"]["FulfillmentPageInfo"];
+        };
+        StockCountResponse: {
+            count: components["schemas"]["StockCountSummaryResponse"];
+            locationIds: string[];
+            variantIds: string[];
+            /** Format: int32 */
+            differenceCount: null | number | string;
+            /** Format: int32 */
+            movedCount: null | number | string;
+            /** Format: uuid */
+            createdBy: null | string;
+            /** Format: uuid */
+            submittedBy: null | string;
+            /** Format: uuid */
+            appliedBy: null | string;
+            /** Format: date-time */
+            cancelledAt: null | string;
+            cancelReason: null | string;
+            lines: components["schemas"]["StockCountLineResponse"][];
+        };
+        StockCountSummaryResponse: {
+            /** Format: uuid */
+            id: string;
+            number: string;
+            /** Format: uuid */
+            warehouseId: string;
+            warehouseName: null | string;
+            scope: string;
+            isBlind: boolean;
+            quantitiesHidden: boolean;
+            status: string;
+            note: null | string;
+            /** Format: int32 */
+            lineCount: number | string;
+            /** Format: int32 */
+            countedLineCount: number | string;
+            /** Format: date-time */
+            snapshotAt: string;
+            /** Format: date-time */
+            submittedAt: null | string;
+            /** Format: date-time */
+            appliedAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: int64 */
+            version: number | string;
+        };
         StockMovementsReportResponse: {
             /** Format: date */
             from: string;
@@ -4192,6 +4593,105 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: null | string;
+        };
+        StockTransferActionResponse: {
+            transfer: components["schemas"]["StockTransferResponse"];
+            movementIds: string[];
+        };
+        StockTransferLineRequest: {
+            /** Format: uuid */
+            variantId: null | string;
+            /** Format: double */
+            quantity: null | number | string;
+            /** Format: uuid */
+            sourceLocationId: null | string;
+            /** Format: uuid */
+            destinationLocationId: null | string;
+        };
+        StockTransferLineResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            lineNo: number | string;
+            /** Format: uuid */
+            variantId: string;
+            sku: string;
+            /** Format: uuid */
+            sourceLocationId: null | string;
+            sourceLocationCode: null | string;
+            /** Format: uuid */
+            destinationLocationId: null | string;
+            destinationLocationCode: null | string;
+            /** Format: double */
+            quantity: number | string;
+            /** Format: double */
+            receivedQuantity: number | string;
+            /** Format: double */
+            inTransitQuantity: number | string;
+            /** Format: double */
+            returnedQuantity: number | string;
+            /** Format: double */
+            lostQuantity: number | string;
+            /** Format: double */
+            discrepancyQuantity: number | string;
+        };
+        StockTransferPageResponse: {
+            items: components["schemas"]["StockTransferSummaryResponse"][];
+            page: components["schemas"]["FulfillmentPageInfo"];
+        };
+        StockTransferResponse: {
+            transfer: components["schemas"]["StockTransferSummaryResponse"];
+            /** Format: uuid */
+            createdBy: null | string;
+            /** Format: uuid */
+            dispatchedBy: null | string;
+            closeResolution: null | string;
+            closeReason: null | string;
+            /** Format: uuid */
+            closedBy: null | string;
+            /** Format: date-time */
+            cancelledAt: null | string;
+            cancelReason: null | string;
+            lines: components["schemas"]["StockTransferLineResponse"][];
+        };
+        StockTransferSummaryResponse: {
+            /** Format: uuid */
+            id: string;
+            number: string;
+            /** Format: uuid */
+            sourceWarehouseId: string;
+            sourceWarehouseName: null | string;
+            /** Format: uuid */
+            destinationWarehouseId: string;
+            destinationWarehouseName: null | string;
+            status: string;
+            note: null | string;
+            /** Format: int32 */
+            lineCount: number | string;
+            /** Format: double */
+            quantity: number | string;
+            /** Format: double */
+            receivedQuantity: number | string;
+            /** Format: double */
+            inTransitQuantity: number | string;
+            /** Format: double */
+            returnedQuantity: number | string;
+            /** Format: double */
+            lostQuantity: number | string;
+            /** Format: double */
+            discrepancyQuantity: number | string;
+            hasDiscrepancy: boolean;
+            isOverdue: boolean;
+            /** Format: date-time */
+            dispatchedAt: null | string;
+            /** Format: date-time */
+            lastReceivedAt: null | string;
+            /** Format: date-time */
+            completedAt: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: int64 */
+            version: number | string;
         };
         SubmitOrderParseRequest: {
             text: null | string;
@@ -4310,6 +4810,11 @@ export interface components {
         TransferOwnershipRequest: {
             /** Format: uuid */
             userId: null | string;
+        };
+        TransferResult: {
+            /** Format: uuid */
+            transferId: string;
+            movements: components["schemas"]["MovementResult"][];
         };
         UnitResponse: {
             /** Format: uuid */
@@ -8540,6 +9045,91 @@ export interface operations {
             };
         };
     };
+    Inventory_CreateRelocation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRelocationRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     Inventory_ListThresholds: {
         parameters: {
             query?: {
@@ -11096,6 +11686,1390 @@ export interface operations {
             409: {
                 headers: {
                     /** @description Seconds to wait before retrying; sent with the transient lock conflicts picking.busy, order.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockTransfers_List: {
+        parameters: {
+            query?: {
+                status?: string;
+                warehouseId?: string;
+                limit?: string;
+                cursor?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockTransferPageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockTransfers_Create: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStockTransferRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockTransferResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (transfer.busy, count.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts transfer.busy, count.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockTransfers_Get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockTransferResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockTransfers_Dispatch: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockTransferActionResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (transfer.busy, count.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts transfer.busy, count.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockTransfers_Receive: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiveStockTransferRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockTransferActionResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (transfer.busy, count.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts transfer.busy, count.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockTransfers_Close: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CloseStockTransferRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockTransferActionResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (transfer.busy, count.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts transfer.busy, count.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockTransfers_Cancel: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelStockTransferRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockTransferActionResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (transfer.busy, count.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts transfer.busy, count.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockCounts_List: {
+        parameters: {
+            query?: {
+                status?: string;
+                warehouseId?: string;
+                limit?: string;
+                cursor?: string;
+            };
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockCountPageResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockCounts_Create: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStockCountRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockCountResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (transfer.busy, count.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts transfer.busy, count.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockCounts_Get: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockCountResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockCounts_Enter: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StockCountEntriesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockCountResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (transfer.busy, count.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts transfer.busy, count.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockCounts_Submit: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockCountResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (transfer.busy, count.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts transfer.busy, count.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockCounts_Recount: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecountStockCountRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockCountResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (transfer.busy, count.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts transfer.busy, count.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockCounts_Apply: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyStockCountRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplyStockCountResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (transfer.busy, count.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts transfer.busy, count.busy, inventory.busy. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["StockProblemDetails"];
+                };
+            };
+            /** @description Precondition Required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    StockCounts_Cancel: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match"?: string;
+                /** @description Active tenant; must be one of the caller's active memberships. */
+                "X-Tenant-Id": string;
+                /** @description Client-generated key (UUID recommended). Retries with the same key and body replay the stored success response with Idempotent-Replayed: true for 24 hours. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelStockCountRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockCountResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict. Transient lock conflicts (transfer.busy, count.busy, inventory.busy) come with Retry-After: retry the same request (same Idempotency-Key). */
+            409: {
+                headers: {
+                    /** @description Seconds to wait before retrying; sent with the transient lock conflicts transfer.busy, count.busy, inventory.busy. */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };

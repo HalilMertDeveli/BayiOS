@@ -62,7 +62,25 @@ internal static class SecurityProbes
             "POST /api/v1/orders" => new { customerId = own.Id("customer"), warehouseId = own.Id("warehouse"), lines = new[] { new { variantId = own.Id("variant"), quantity = 1m } } },
             "PATCH /api/v1/orders/{id}" => new { notes = hack },
             "POST /api/v1/orders/{id}/reject" or "POST /api/v1/orders/{id}/close-remaining" or "POST /api/v1/orders/{id}/cancel"
-                or "POST /api/v1/shipments/{id}/cancel" => new { reason = hack },
+                or "POST /api/v1/shipments/{id}/cancel" or "POST /api/v1/stock-transfers/{id}/cancel" or "POST /api/v1/stock-counts/{id}/cancel"
+                => new { reason = hack },
+            "POST /api/v1/inventory/relocations" => new
+            {
+                warehouseId = own.Id("warehouse"),
+                lines = new[] { new { variantId = own.Id("variant"), fromLocationId = own.Id("location"), toLocationId = own.Id("location"), quantity = 1m } },
+            },
+            "POST /api/v1/stock-transfers" => new
+            {
+                sourceWarehouseId = own.Id("warehouse"),
+                destinationWarehouseId = own.Id("warehouse2"),
+                lines = new[] { new { variantId = own.Id("variant"), quantity = 1m, sourceLocationId = own.Id("location") } },
+            },
+            "POST /api/v1/stock-transfers/{id}/receive" => new { lines = new[] { new { code = victim.Sku, quantity = 1m } } },
+            "POST /api/v1/stock-transfers/{id}/close" => new { resolution = "lost", reason = hack },
+            "POST /api/v1/stock-counts" => new { warehouseId = own.Id("warehouse2"), scope = "full" },
+            "POST /api/v1/stock-counts/{id}/entries" => new { entries = new[] { new { code = victim.Sku, locationId = victim.Id("location"), quantity = 1m } } },
+            "POST /api/v1/stock-counts/{id}/recount" => new { lineIds = new[] { Guid.NewGuid() } },
+            "POST /api/v1/stock-counts/{id}/apply" => new { acceptMovedLines = true },
             "POST /api/v1/orders/{id}/shipments" => new
             {
                 lines = new[] { new { orderLineId = victim.OrderLineId, quantity = 1m, locationId = (Guid?)victim.Id("location") } },
