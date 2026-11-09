@@ -101,7 +101,7 @@ internal sealed class InventoryReportSource(
 
     public async Task<IReadOnlyList<Guid>> VariantsAboveAsync(decimal threshold, Guid? warehouseId, CancellationToken cancellationToken) =>
         await inventory.Balances.AsNoTracking()
-            .Where(b => warehouseId == null || b.WarehouseId == warehouseId)
+            .Where(b => !b.IsTransit && (warehouseId == null || b.WarehouseId == warehouseId))
             .GroupBy(b => b.VariantId)
             .Where(g => g.Sum(b => b.OnHand) - g.Sum(b => b.Reserved) > threshold)
             .Select(g => g.Key)
@@ -116,7 +116,7 @@ internal sealed class InventoryReportSource(
 
         var ids = variantIds.ToList();
         return await inventory.Balances.AsNoTracking()
-            .Where(b => ids.Contains(b.VariantId) && (warehouseId == null || b.WarehouseId == warehouseId))
+            .Where(b => !b.IsTransit && ids.Contains(b.VariantId) && (warehouseId == null || b.WarehouseId == warehouseId))
             .GroupBy(b => b.VariantId)
             .Select(g => new ReportStockLevel(g.Key, g.Sum(b => b.OnHand), g.Sum(b => b.Reserved)))
             .ToListAsync(cancellationToken);
@@ -134,6 +134,8 @@ internal sealed class InventoryReportSource(
                    coalesce(-sum(m.quantity) FILTER (WHERE m.quantity < 0), 0) AS quantity_out
             FROM inventory.inventory_movements m
             WHERE m.tenant_id = $1 AND m.occurred_at >= $2 AND m.occurred_at < $3 AND ($4::uuid IS NULL OR m.warehouse_id = $4)
+              -- In-transit legs (OD-01: warehouse slot = the transfer id) would count every transfer twice; a write-off stays.
+              AND NOT (m.source_type = 'transfer' AND m.warehouse_id = m.source_id AND m.type IN ('transfer_out', 'transfer_in'))
             GROUP BY 1, 2
             """,
             [ReportSql.Tenant(requestContext), ReportSql.Instant(startUtc), ReportSql.Instant(endUtc), ReportSql.Uuid(warehouseId)],

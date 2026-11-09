@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-labelledby="t d">
+  <title id="t">BayiOS</title>
+  <desc id="d">Çok kiracılı B2B stok, depo ve sipariş yönetimi SaaS'ı.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d3a5c"/>
+      <stop offset="1" stop-color="#14567f"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.05"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="320" rx="16" fill="url(#bg)"/>
+  <rect width="1280" height="320" rx="16" fill="url(#grid)"/>
+  <g font-family="Segoe UI, Inter, -apple-system, Helvetica, Arial, sans-serif">
+    <rect x="80" y="96" width="96" height="96" rx="20" fill="#ffffff"/>
+    <text x="128" y="163" text-anchor="middle" font-size="56" font-weight="700" fill="#0d3a5c">B</text>
+    <text x="208" y="150" font-size="64" font-weight="700" fill="#ffffff">BayiOS</text>
+    <text x="210" y="192" font-size="24" fill="#cfe3f2">WhatsApp'tan gelen siparişten depodan çıkan son koliye kadar.</text>
+    <text x="210" y="240" font-size="17" fill="#9cc3e0" letter-spacing="0.5">ÇOK KİRACILI  ·  B2B STOK  ·  DEPO  ·  SİPARİŞ  ·  AI DESTEKLİ</text>
+  </g>
+  <g transform="translate(1000 70)" fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" opacity="0.9">
+    <path d="M90 10 160 45 90 80 20 45Z" fill="#ffffff" fill-opacity="0.08"/>
+    <path d="M20 45V125L90 160V80"/>
+    <path d="M160 45V125L90 160"/>
+    <path d="M55 27.5 125 62.5V92" stroke-opacity="0.6"/>
+  </g>
+</svg>

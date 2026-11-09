@@ -125,6 +125,38 @@ Ciddiyet: **BLOCKER** = düzeltilmeden kapı geçilemez · **MAJOR** = ilgili ha
 | OD-11 | GitHub: public repo oluşturma, lisans seçimi, `main` onay modeli (ajanlar için bot hesabı/GitHub App vs environment reviewer — risk R-20). | Kriter 5 | W2 Gün 06 |
 | OD-12 | Ücretli kaynaklar: Supabase `bayios-preview` (free kotası) ve prod (Pro), API host (öneri Fly.io), ticari pilot için Vercel Pro — fiyatlar resmi panelden teyit edilerek. | F-32 | W2 Gün 10 / W3 sonu |
 
+### 5.1 Ürün sahibinin cevapları (2026-11-09)
+
+| ID | Karar | Uygulama |
+|---|---|---|
+| OD-01 | **İki aşamalı transfer:** gönderilen mal "Yolda" görünür, alan depo varışı onaylar (kısmi teslim + fark raporu). | #168 |
+| OD-02 | Temel paket limitleri: **999 kullanıcı, 999 depo, 999 ürün**. Barkod/mobil toplama doğrulaması sorusu cevaplanmadı; mevcut durum korunur. | Billing plan limitleri |
+| OD-03 | **Evet:** paket düşürmede depoyu boşaltmak için transfer ve düzeltme yapılabilir. | Billing/Inventory |
+| OD-04 | İçe aktarma dosya limiti **20 MB**; `.xls` onaylanmadı → yalnızca `.xlsx/.csv`. | Imports |
+| OD-05 | **Supabase Auth hazır hız limiti + CAPTCHA** (Cloudflare Turnstile); özel kilit/e-posta yok. | Web giriş/kayıt/şifre sıfırlama |
+| OD-06 | Ücretsiz plan (Supabase Free: günlük yedek, PITR yok). Pilot sonrası RPO/plan yeniden değerlendirilir. | — |
+| OD-07 | Şimdilik **AB-Frankfurt** (`eu-central-1`); ileride Türkiye'de yerel barındırmaya geçilecek (taşıma planı o zaman yazılır). | Ortam kurulumu |
+| OD-08 | AI sağlayıcısı **Claude**; WhatsApp ham metni **30 gün** saklanır. Tenant başı bütçe/kota belirtilmedi (AI ayrıştırma tenant için varsayılan kapalı kalır). | #121 |
+| OD-09 | **Stok hiçbir zaman eksiye düşmez** (`negative_stock_policy` yalnızca `block`). Satışçının kendi siparişini onaylaması ve kısmi onay cevaplanmadı; mevcut davranış korunur. | Identity/Inventory |
+| OD-10 | Seri numarası **ayrı modül** (P2); MVP'de sevk satırına serbest kayıt yok. | #147 |
+| OD-11 | **Evet:** repo public kalır, `main` merge yalnızca ürün sahibi onayıyla. Açık kaynak lisansı eklenmez (tüm hakları saklı). | — |
+| OD-12 | **Yalnızca ücretsiz kaynaklar:** Supabase Free, Vercel Hobby, ücretsiz API barındırma (Fly.io ücretsiz değil → alternatif seçilir), Firebase Spark, Cloudflare Turnstile. Ücretli plan açılmaz. | #138 |
+| Marka rengi | Ürün sahibi seçimi bize bıraktı: güven veren, sıradan maviden farklı bir renk. | Tasarım token'ları |
+
+### 5.2 Ürün sahibinin ikinci tur cevapları (2026-11-09)
+
+| Konu | Karar |
+|---|---|
+| OD-02 (düzeltme) | Temel paket: **999 kullanıcı, 999 depo, ürün sınırsız**. Barkod okutma / mobil toplama **temel pakette**. |
+| OD-09 | Satışçı kendi siparişini **onaylayabilir** (yeni tenant varsayılanı açık); işletme sahibi ayarlardan kapatabilir. **Kısmi onay MVP'de yok** (pilot sonrası); stok yoksa sipariş bekler. |
+| OD-08 | AI ek paketi kotası **ayda 300 ayrıştırma** / tenant; tenant açmadıkça AI kapalı. |
+| Alarm kanalı | **E-posta** (ücretsiz). |
+| #98 depo görevleri | Sipariş onayında toplama görevi **otomatik** açılır; görevde **öncelik ve müşteri adı** görünür; raf değişiminde görev **yeniden dağıtılır**. |
+| OD-12 | Pilot için ücretsiz barındırma yeterli (API: Render Free, web: Vercel Hobby); satış başlayınca ücretli plana geçilir. |
+| OD-04 | `.xls` **yok**; `.xlsx` ve `.csv` yeterli. |
+| Mobil CAPTCHA | Cevaplanmadı → öneri uygulanır: pilot sonrası. Supabase'te CAPTCHA o zamana kadar kapalı kalır (`environments.md` §2.1). |
+| Ürün yönü | **Sektörden bağımsız self-servis:** müşteri kendi alanını (işletme/tenant) kendisi oluşturur; hiç depo sistemi olmayan biri girip kurulumu kendi başına, otomatik yönlendirmelerle tamamlayabilmeli. LED ve motosiklet yalnızca örnek senaryolardır; ürün, metinler ve demo bunlara bağlı kalmaz. |
+
 ## 6. Karar
 
 **KOŞULLU GEÇTİ.**

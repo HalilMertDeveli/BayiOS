@@ -1,8 +1,9 @@
 # Supabase bootstrap (barındırılan projeler: `bayios-preview`, `bayios-prod`)
 
-> **Durum: hiçbir Supabase projesine UYGULANMADI.** Proje henüz yok (#138). Bu klasör, proje açıldığında ürün sahibinin
-> bir kez çalıştıracağı hazır script'leri içerir. CI bunları her PR'da geçici container'larda prova eder
-> (`.github/workflows/ci-db-bootstrap.yml`).
+> **Durum (2026-11-09):** `bayios-preview` projesi açıldı (Free plan, `eu-central-1` Frankfurt — OD-07). `01-roles.sql`,
+> `02-extensions.sql`, `03-access-token-hook.sql` uygulandı (rol özellikleri ve `pg_trgm@extensions` doğrulandı).
+> **Bekleyen (ürün sahibi):** rol parolaları (§1 adım 2–3, `--set-passwords`), GitHub Environment `preview` secret'ları (§2),
+> Auth ayarları (§3) ve hook'un açılması. Migration'ları deploy pipeline uygular. `bayios-prod` yok (Free plan proje sınırı).
 
 Şemanın tek kaynağı EF Core migration'larıdır (ADR 0005). Burada yalnızca migration'ların **ön koşulları** vardır:
 DB rolleri, uzantılar, Auth hook'u. İş tablosu, RLS politikası veya GRANT burada **yazılmaz** (onlar migration'larda).
@@ -69,10 +70,12 @@ Gerekenler: Docker (yerel `psql` yoksa `postgres:17` imajı kullanılır), proje
 - [ ] Anonymous sign-ins: KAPALI · Manual linking: KAPALI · Signups: AÇIK (self-servis kayıt). API anonim oturumları
       (`is_anonymous: true`) bu ayardan bağımsız olarak her uçta 401 ile reddeder (denetim L-2).
 - [ ] **CAPTCHA (Cloudflare Turnstile)** — kayıt/giriş/parola sıfırlama kötüye kullanımına karşı önerilir (denetim L-3,
-      tehdit modeli §6.5). **Önce web entegrasyonu gerekir** (ayrı iş): Supabase'te CAPTCHA açılınca `signUp`/`signIn`/
-      `resetPasswordForEmail` çağrıları `captchaToken` göndermek zorundadır ve web CSP'sine (`apps/web/next.config.ts`)
-      `https://challenges.cloudflare.com` (`script-src`, `frame-src`) eklenmelidir. Web desteklemeden açılırsa **kimse giriş
-      yapamaz**. Gizli anahtar yalnızca Supabase Dashboard'da durur; site anahtarı web'e `NEXT_PUBLIC_` ile gider.
+      tehdit modeli §6.5; OD-05 kararı: hız limitleri + CAPTCHA, özel kilit yok). **Web entegrasyonu hazır (#61):**
+      `NEXT_PUBLIC_TURNSTILE_SITE_KEY` dolu olan web derlemesi `captchaToken` gönderir ve CSP'ye yalnızca
+      `https://challenges.cloudflare.com` eklenir. Sıra: önce Vercel'e site anahtarı + yeniden deploy, sonra burada gizli
+      anahtar — tersi **kimsenin giriş yapamaması** demektir. **Mobil uygulama henüz token göndermez:** burada açılınca mobil
+      giriş reddedilir. Adımlar ve mobil notu: `docs/operations/environments.md` §2.1. Gizli anahtar yalnızca Supabase
+      Dashboard'da durur.
 - [ ] Rate Limits: e-posta gönderimi (`Email sent`) ve doğrulama/OTP sınırları Supabase varsayılanlarında veya daha sıkı;
       onay/sıfırlama e-postaları arası en az 60 sn (yerel yığındaki `max_frequency = "1s"` yalnızca E2E hızı içindir).
 - [ ] URL Configuration: **Site URL** = ortamın web adresi; **Redirect URLs** yalnızca o ortamın

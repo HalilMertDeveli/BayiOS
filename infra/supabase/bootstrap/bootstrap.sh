@@ -41,8 +41,14 @@ run_psql() {
   if command -v psql >/dev/null 2>&1; then
     psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 "$@"
   else
-    local tty=(-i); [ -t 0 ] && tty=(-it)
-    MSYS_NO_PATHCONV=1 docker run --rm "${tty[@]}" -e SUPABASE_DB_URL \
+    # -t only when both ends are a terminal: inside $(...) stdout is a pipe and "docker run -t" fails. Git Bash's
+    # mintty is not a Windows console, so an interactive container (the \password prompts) goes through winpty.
+    local tty=(-i) pre=()
+    if [ -t 0 ] && [ -t 1 ]; then
+      tty=(-it)
+      if [ "${TERM_PROGRAM:-}" = mintty ] && command -v winpty >/dev/null 2>&1; then pre=(winpty); fi
+    fi
+    MSYS_NO_PATHCONV=1 "${pre[@]}" docker run --rm "${tty[@]}" -e SUPABASE_DB_URL \
       -v "$(native_path "$HERE"):/bootstrap:ro" -w /bootstrap \
       "$PSQL_IMAGE" sh -c 'exec psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 "$@"' psql "$@"
   fi
@@ -50,7 +56,9 @@ run_psql() {
 
 if command -v psql >/dev/null 2>&1; then dir="$HERE"; else dir=/bootstrap; fi
 
-who="$(run_psql -tAc 'select current_user' | tr -d '[:space:]')"
+who="$(run_psql -tAc 'select current_user')" \
+  || fail "could not connect: check the URL/password (Session pooler, port 5432) and that Docker is running"
+who="$(printf '%s' "$who" | tr -d '[:space:]')"
 echo "connected as: ${who}"
 [ "$who" = postgres ] || [ "${ALLOW_NON_POSTGRES_ROLE:-0}" = 1 ] || fail "expected to run as the postgres role, got '${who}'"
 

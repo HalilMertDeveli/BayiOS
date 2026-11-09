@@ -56,6 +56,16 @@ internal static class InventoryEndpoints
             .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity)
             .ProducesRetryableConflict("inventory.busy")
             .ProducesStockProblems();
+        group.MapPost("/relocations", CreateRelocation).WithName("Inventory_CreateRelocation")
+            .WithSummary("Raf/göz arası anlık taşıma (aynı depo): her satır için tek işlemde transfer_out + transfer_in; yalnızca satılabilir miktar taşınır")
+            .WithDescription(
+                "Depolar arası transfer iki aşamalıdır: POST /api/v1/stock-transfers (OD-01). 409 `inventory.insufficient_available` "
+                + "(`shortages`) when a source shelf has less available stock than requested; stock never goes negative.")
+            .RequirePermission(Permissions.InventoryTransfer)
+            .RequireIdempotencyKey()
+            .ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity)
+            .ProducesRetryableConflict("inventory.busy")
+            .ProducesStockProblems();
 
         // Minimum stock thresholds (#137): read with inventory.read, managed with catalog.write (product data, PRD CAT-12).
         group.MapGet("/thresholds", ListThresholds).WithName("Inventory_ListThresholds")
@@ -433,6 +443,43 @@ internal static class InventoryEndpoints
         return result.Error is { } error
             ? Problem(http, error)
             : TypedResults.Created($"/api/v1/inventory/movements/{result.Value!.Id}", result.Value);
+    }
+
+    private static async Task<Results<Created<TransferResult>, ProblemHttpResult>> CreateRelocation(
+        CreateRelocationRequest request, IInventoryService inventory, HttpContext http, CancellationToken cancellationToken)
+    {
+        var errors = new Dictionary<string, string[]>();
+        Require(errors, "warehouseId", request.WarehouseId);
+        var lines = request.Lines ?? [];
+        for (var i = 0; i < lines.Count; i++)
+        {
+            Require(errors, $"lines[{i}].variantId", lines[i]?.VariantId);
+            Require(errors, $"lines[{i}].fromLocationId", lines[i]?.FromLocationId);
+            Require(errors, $"lines[{i}].toLocationId", lines[i]?.ToLocationId);
+            Require(errors, $"lines[{i}].quantity", lines[i]?.Quantity);
+        }
+
+        if (errors.Count > 0)
+        {
+            return TypedResults.Problem(ApiProblems.Validation(errors));
+        }
+
+        var relocationId = Guid.CreateVersion7();
+        var warehouse = request.WarehouseId!.Value;
+        var command = new TransferStock(
+            relocationId,
+            [.. lines.Select(l => new TransferMove(
+                Guid.CreateVersion7(),
+                l.VariantId!.Value,
+                StockPoint.At(warehouse, l.FromLocationId),
+                StockPoint.At(warehouse, l.ToLocationId),
+                l.Quantity!.Value))],
+            request.Reference,
+            http.TraceIdentifier);
+        var result = await inventory.TransferAsync(command, cancellationToken);
+        return result.Error is { } error
+            ? Problem(http, error)
+            : TypedResults.Created($"/api/v1/inventory/movements?sourceId={relocationId}", result.Value);
     }
 
     // ---- Helpers ----

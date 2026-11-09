@@ -49,6 +49,28 @@ public static class AuditActions
     /// </summary>
     public const string InventoryNegativeStockConfirmed = "inventory.negative_stock_confirmed";
 
+    /// <summary>Transfer legs were posted (dispatch, receipt, return, write-off or a shelf move); payload: counts and quantities.</summary>
+    public const string InventoryTransferPosted = "inventory.transfer_posted";
+
+    /// <summary>A stock count was applied: count_correction movements for its differences.</summary>
+    public const string InventoryCountPosted = "inventory.count_posted";
+
+    // Warehouse transfer documents (OD-01, #168).
+    public const string StockTransferCreated = "stock_transfer.created";
+    public const string StockTransferDispatched = "stock_transfer.dispatched";
+    public const string StockTransferReceived = "stock_transfer.received";
+
+    /// <summary>The in-transit rest was closed as lost (write-off) or returned to the source; payload: resolution, quantity.</summary>
+    public const string StockTransferClosed = "stock_transfer.closed";
+    public const string StockTransferCancelled = "stock_transfer.cancelled";
+
+    // Stock counts (INV-06, #168).
+    public const string StockCountCreated = "stock_count.created";
+    public const string StockCountSubmitted = "stock_count.submitted";
+    public const string StockCountRecountRequested = "stock_count.recount_requested";
+    public const string StockCountApplied = "stock_count.applied";
+    public const string StockCountCancelled = "stock_count.cancelled";
+
     // Order lifecycle (inventory-and-orders §3.1).
     public const string OrderCreated = "order.created";
     public const string OrderApproved = "order.approved";

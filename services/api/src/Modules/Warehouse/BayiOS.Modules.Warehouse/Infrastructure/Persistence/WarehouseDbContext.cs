@@ -20,6 +20,9 @@ internal sealed class WarehouseDbContext : DbContext, ITenantScopedDbContext
     public const string ActivePickTaskUniqueIndex = "ux_picking_tasks_tenant_id_order_id_active";
     public const string ShipmentNumberUniqueIndex = "ux_shipments_tenant_id_number";
     public const string OpenShipmentUniqueIndex = "ux_shipments_tenant_id_order_id_open";
+    public const string TransferNumberUniqueIndex = "ux_stock_transfers_tenant_id_number";
+    public const string CountNumberUniqueIndex = "ux_stock_counts_tenant_id_number";
+    public const string ActiveCountUniqueIndex = "ux_stock_counts_tenant_id_warehouse_id_active";
 
     private static readonly TenantGuardInterceptor TenantGuard = new();
 
@@ -46,6 +49,14 @@ internal sealed class WarehouseDbContext : DbContext, ITenantScopedDbContext
     public DbSet<ShipmentLine> ShipmentLines => Set<ShipmentLine>();
 
     public DbSet<ShipmentPackage> ShipmentPackages => Set<ShipmentPackage>();
+
+    public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
+
+    public DbSet<StockTransferLine> StockTransferLines => Set<StockTransferLine>();
+
+    public DbSet<StockCount> StockCounts => Set<StockCount>();
+
+    public DbSet<StockCountLine> StockCountLines => Set<StockCountLine>();
 
     public Guid? CurrentTenantId => _requestContext.TenantId;
 
@@ -120,6 +131,134 @@ internal sealed class WarehouseDbContext : DbContext, ITenantScopedDbContext
         });
 
         MapFulfillment(modelBuilder);
+        MapTransfersAndCounts(modelBuilder);
+    }
+
+    /// <summary>Two-stage warehouse transfers (OD-01) and stock counts (INV-06), #168.</summary>
+    private void MapTransfersAndCounts(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<StockTransfer>(transfer =>
+        {
+            transfer.ToTable("stock_transfers", t =>
+            {
+                t.HasCheckConstraint("ck_stock_transfers_status", $"status IN ({Quoted(StockTransferStatuses.All)})");
+                t.HasCheckConstraint("ck_stock_transfers_warehouses", "source_warehouse_id <> destination_warehouse_id");
+                t.HasCheckConstraint(
+                    "ck_stock_transfers_close_resolution",
+                    $"(status = 'closed') = (close_resolution IS NOT NULL) AND (close_resolution IS NULL OR close_resolution IN ({Quoted(TransferResolutions.All)}))");
+                t.HasCheckConstraint(
+                    "ck_stock_transfers_dispatched",
+                    "status IN ('draft', 'cancelled') OR (dispatched_at IS NOT NULL AND dispatched_by IS NOT NULL)");
+            });
+            MapCommon(transfer);
+            transfer.Property(t => t.Number).IsRequired();
+            transfer.Property(t => t.Status).IsRequired();
+            transfer.HasOne<WarehouseModel>().WithMany()
+                .HasForeignKey(t => new { t.TenantId, t.SourceWarehouseId })
+                .HasPrincipalKey(w => new { w.TenantId, w.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            transfer.HasOne<WarehouseModel>().WithMany()
+                .HasForeignKey(t => new { t.TenantId, t.DestinationWarehouseId })
+                .HasPrincipalKey(w => new { w.TenantId, w.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            transfer.HasMany(t => t.Lines).WithOne()
+                .HasForeignKey(l => new { l.TenantId, l.TransferId })
+                .HasPrincipalKey(t => new { t.TenantId, t.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            transfer.HasIndex(t => new { t.TenantId, t.Number }).IsUnique().HasDatabaseName(TransferNumberUniqueIndex);
+            transfer.HasIndex(t => new { t.TenantId, t.CreatedAt, t.Id });
+            transfer.HasIndex(t => new { t.TenantId, t.Status, t.CreatedAt });
+            transfer.HasIndex(t => new { t.TenantId, t.SourceWarehouseId, t.Status });
+            transfer.HasIndex(t => new { t.TenantId, t.DestinationWarehouseId, t.Status });
+            transfer.HasQueryFilter(t => t.TenantId == CurrentTenantId);
+        });
+
+        modelBuilder.Entity<StockTransferLine>(line =>
+        {
+            line.ToTable("stock_transfer_lines", t => t.HasCheckConstraint(
+                "ck_stock_transfer_lines_quantities",
+                "quantity > 0 AND received_quantity >= 0 AND returned_quantity >= 0 AND lost_quantity >= 0 "
+                + "AND received_quantity + returned_quantity + lost_quantity <= quantity"));
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.HasAlternateKey(l => new { l.TenantId, l.Id });
+            line.Property(l => l.Sku).IsRequired();
+            line.Property(l => l.Quantity).HasPrecision(18, 3);
+            line.Property(l => l.ReceivedQuantity).HasPrecision(18, 3);
+            line.Property(l => l.ReturnedQuantity).HasPrecision(18, 3);
+            line.Property(l => l.LostQuantity).HasPrecision(18, 3);
+            line.Ignore(l => l.Outstanding);
+            line.HasOne<WarehouseLocation>().WithMany()
+                .HasForeignKey(l => new { l.TenantId, l.SourceLocationId })
+                .HasPrincipalKey(l => new { l.TenantId, l.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            line.HasOne<WarehouseLocation>().WithMany()
+                .HasForeignKey(l => new { l.TenantId, l.DestinationLocationId })
+                .HasPrincipalKey(l => new { l.TenantId, l.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            line.HasIndex(l => new { l.TenantId, l.TransferId, l.LineNo }).IsUnique();
+            line.HasIndex(l => new { l.TenantId, l.TransferId, l.VariantId, l.SourceLocationId }).IsUnique().AreNullsDistinct(false);
+            line.HasQueryFilter(l => l.TenantId == CurrentTenantId);
+        });
+
+        modelBuilder.Entity<StockCount>(count =>
+        {
+            count.ToTable("stock_counts", t =>
+            {
+                t.HasCheckConstraint("ck_stock_counts_status", $"status IN ({Quoted(StockCountStatuses.All)})");
+                t.HasCheckConstraint("ck_stock_counts_scope", $"scope IN ({Quoted(StockCountScopes.All)})");
+                t.HasCheckConstraint("ck_stock_counts_applied", "status <> 'applied' OR (applied_at IS NOT NULL AND applied_by IS NOT NULL)");
+            });
+            MapCommon(count);
+            count.Property(c => c.Number).IsRequired();
+            count.Property(c => c.Scope).IsRequired();
+            count.Property(c => c.Status).IsRequired();
+            count.Property(c => c.ScopeLocationIds).HasColumnType("uuid[]");
+            count.Property(c => c.ScopeVariantIds).HasColumnType("uuid[]");
+            count.HasOne<WarehouseModel>().WithMany()
+                .HasForeignKey(c => new { c.TenantId, c.WarehouseId })
+                .HasPrincipalKey(w => new { w.TenantId, w.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            count.HasMany(c => c.Lines).WithOne()
+                .HasForeignKey(l => new { l.TenantId, l.StockCountId })
+                .HasPrincipalKey(c => new { c.TenantId, c.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            count.HasIndex(c => new { c.TenantId, c.Number }).IsUnique().HasDatabaseName(CountNumberUniqueIndex);
+            count.HasIndex(c => new { c.TenantId, c.CreatedAt, c.Id });
+            // One active count per warehouse ("sayım açıkken aynı kapsamda ikinci sayım başlatılamaz", AF-06): the
+            // concurrency-safe backstop of the create check.
+            count.HasIndex(c => new { c.TenantId, c.WarehouseId }, ActiveCountUniqueIndex).IsUnique()
+                .HasFilter("status IN ('open', 'submitted')")
+                .HasDatabaseName(ActiveCountUniqueIndex);
+            count.HasQueryFilter(c => c.TenantId == CurrentTenantId);
+        });
+
+        modelBuilder.Entity<StockCountLine>(line =>
+        {
+            line.ToTable("stock_count_lines", t =>
+            {
+                t.HasCheckConstraint("ck_stock_count_lines_status", $"line_status IN ({Quoted(StockCountLineStatuses.All)})");
+                t.HasCheckConstraint(
+                    "ck_stock_count_lines_quantities",
+                    "(counted_quantity IS NULL OR counted_quantity >= 0) "
+                    + "AND (counted_quantity IS NULL) = (counted_at IS NULL) "
+                    + "AND (line_status NOT IN ('counted', 'applied') OR counted_quantity IS NOT NULL)");
+            });
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.HasAlternateKey(l => new { l.TenantId, l.Id });
+            line.Property(l => l.Sku).IsRequired();
+            line.Property(l => l.LineStatus).IsRequired();
+            line.Property(l => l.ExpectedQuantity).HasPrecision(18, 3);
+            line.Property(l => l.CountedQuantity).HasPrecision(18, 3);
+            line.Property(l => l.AppliedDelta).HasPrecision(18, 3);
+            line.HasOne<WarehouseLocation>().WithMany()
+                .HasForeignKey(l => new { l.TenantId, l.LocationId })
+                .HasPrincipalKey(l => new { l.TenantId, l.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            line.HasIndex(l => new { l.TenantId, l.StockCountId, l.VariantId, l.LocationId }).IsUnique().AreNullsDistinct(false);
+            line.HasQueryFilter(l => l.TenantId == CurrentTenantId);
+        });
     }
 
     /// <summary>Picking tasks, shipments and packages (data-model §5.6, JOB 10).</summary>

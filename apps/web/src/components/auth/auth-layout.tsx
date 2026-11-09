@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { CircleAlert, CircleCheck } from "lucide-react";
+import { BrandMark } from "@/components/ui/brand-mark";
 import { cn } from "@/lib/cn";
 
 /** Centered single-column layout for sign-in, sign-up, password and onboarding screens. */
@@ -8,12 +9,7 @@ export function AuthLayout({ children, wide = false }: { children: ReactNode; wi
   return (
     <div className="flex min-h-dvh flex-col items-center bg-sunken px-4 py-10">
       <Link href="/" className="mb-8 flex items-center gap-2 rounded-md text-h3 text-fg">
-        <span
-          aria-hidden="true"
-          className="flex size-8 items-center justify-center rounded-md bg-brand text-caption font-bold text-on-brand"
-        >
-          B
-        </span>
+        <BrandMark />
         BayiOS
       </Link>
       <main id="main" className={cn("w-full", wide ? "max-w-2xl" : "max-w-md")}>

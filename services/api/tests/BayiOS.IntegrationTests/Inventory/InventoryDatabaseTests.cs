@@ -16,7 +16,7 @@ public sealed class InventoryDatabaseTests(ApiFixture fixture) : IAsyncLifetime
 {
     private static readonly string[] InventoryTables = ["inventory_balances", "inventory_movements", "stock_reservations", "stock_thresholds"];
     private static readonly string[] WarehouseTables =
-        ["picking_task_lines", "picking_tasks", "shipment_lines", "shipment_package_items", "shipment_packages", "shipments", "warehouse_locations", "warehouses"];
+        ["picking_task_lines", "picking_tasks", "shipment_lines", "shipment_package_items", "shipment_packages", "shipments", "stock_count_lines", "stock_counts", "stock_transfer_lines", "stock_transfers", "warehouse_locations", "warehouses"];
 
     private readonly Guid _tenantA = Guid.CreateVersion7();
     private readonly Guid _tenantB = Guid.CreateVersion7();

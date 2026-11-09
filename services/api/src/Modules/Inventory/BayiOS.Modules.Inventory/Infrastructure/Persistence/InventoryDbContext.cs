@@ -102,12 +102,17 @@ internal sealed class InventoryDbContext : DbContext, ITenantScopedDbContext
             {
                 t.HasCheckConstraint("ck_inventory_balances_reserved_nonnegative", "reserved >= 0");
                 t.HasCheckConstraint("ck_inventory_balances_no_negative", "allow_negative OR (on_hand >= 0 AND reserved <= on_hand)");
+                // In-transit stock (OD-01) is never negative, never reserved and has no location.
+                t.HasCheckConstraint(
+                    "ck_inventory_balances_transit",
+                    "NOT is_transit OR (on_hand >= 0 AND reserved = 0 AND location_id IS NULL AND NOT allow_negative)");
             });
             balance.HasKey(b => b.Id);
             balance.Property(b => b.Id).ValueGeneratedNever();
             balance.Property(b => b.OnHand).HasPrecision(18, 3).HasDefaultValue(0m);
             balance.Property(b => b.Reserved).HasPrecision(18, 3).HasDefaultValue(0m);
             balance.Property(b => b.AllowNegative).HasDefaultValue(false);
+            balance.Property(b => b.IsTransit).HasDefaultValue(false);
             balance.Property(b => b.Version).HasDefaultValue(0L);
             balance.Property(b => b.CreatedAt).HasDefaultValueSql("now()");
             balance.HasIndex(b => new { b.TenantId, b.VariantId, b.WarehouseId, b.LocationId })

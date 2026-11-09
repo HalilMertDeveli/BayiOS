@@ -70,6 +70,14 @@ internal sealed class FulfillmentLocks(WarehouseDbContext db, UnitOfWork unitOfW
     public Task<bool> LockShipmentAsync(Guid id, CancellationToken cancellationToken) =>
         LockAsync("SELECT 1 FROM warehouse.shipments WHERE tenant_id = @tenant AND id = @id FOR UPDATE", id, cancellationToken);
 
+    /// <summary>Transfer document row (lock hierarchy step 2): serialises dispatch, receipts, close and cancel (#168).</summary>
+    public Task<bool> LockTransferAsync(Guid id, CancellationToken cancellationToken) =>
+        LockAsync("SELECT 1 FROM warehouse.stock_transfers WHERE tenant_id = @tenant AND id = @id FOR UPDATE", id, cancellationToken);
+
+    /// <summary>Count document row (lock hierarchy step 2): serialises entries, submit, recount, apply and cancel (#168).</summary>
+    public Task<bool> LockCountAsync(Guid id, CancellationToken cancellationToken) =>
+        LockAsync("SELECT 1 FROM warehouse.stock_counts WHERE tenant_id = @tenant AND id = @id FOR UPDATE", id, cancellationToken);
+
     /// <summary>Every task, then every shipment of the order, each in id order (deterministic).</summary>
     public async Task LockOrderDocumentsAsync(Guid orderId, CancellationToken cancellationToken)
     {

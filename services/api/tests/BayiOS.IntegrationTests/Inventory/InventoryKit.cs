@@ -46,10 +46,10 @@ internal sealed class InventoryKit
         return new InventoryKit(fixture, owner, unit.Id);
     }
 
-    public async Task<Guid> VariantAsync(string? sku = null)
+    public async Task<Guid> VariantAsync(string? sku = null, string? barcode = null)
     {
         var code = sku ?? $"SKU-{Interlocked.Increment(ref _sku):D4}";
-        var product = await Owner.CreateSimpleProductAsync(_unitId, "Sentetik parça " + code, code);
+        var product = await Owner.CreateSimpleProductAsync(_unitId, "Sentetik parça " + code, code, barcode);
         return Assert.Single(product.Variants).Id;
     }
 

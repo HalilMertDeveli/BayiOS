@@ -74,6 +74,12 @@ internal sealed class InventoryBalance : ITenantOwned
     /// </summary>
     public bool AllowNegative { get; private set; }
 
+    /// <summary>
+    /// In-transit stock of a warehouse transfer (OD-01): <see cref="WarehouseId"/> holds the transfer id, the location
+    /// is null and nothing can be reserved. Excluded from every warehouse and tenant-wide stock figure.
+    /// </summary>
+    public bool IsTransit { get; private set; }
+
     public long Version { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }

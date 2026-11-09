@@ -16,6 +16,7 @@ const MESSAGES: Record<string, string> = {
   session_expired: "Oturumunuzun süresi doldu. Lütfen yeniden giriş yapın.",
   otp_expired: "Bağlantının süresi dolmuş. Lütfen yeni bir bağlantı isteyin.",
   validation_failed: "Girilen bilgiler geçersiz. Lütfen kontrol edip tekrar deneyin.",
+  captcha_failed: "Güvenlik doğrulaması başarısız oldu. Doğrulamayı yeniden tamamlayıp tekrar deneyin.",
 };
 
 export function authErrorMessage(error: AuthErrorLike): string {

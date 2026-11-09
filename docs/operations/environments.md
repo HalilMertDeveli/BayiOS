@@ -47,10 +47,46 @@ Push__Enabled (varsayılan false), Push__ServiceAccountJson (sır; yalnızca Pus
 Push__StaleAfterDays / Push__MaxDevicesPerUser / Push__TimeoutSeconds (opsiyonel; push-notifications.md §2)
 API (henüz uygulanmadı, ad önerisi): SUPABASE_URL, SUPABASE_SECRET_KEY, STORAGE_BUCKET_IMPORTS, ANTHROPIC_API_KEY,
 AI_MODE (mock|live), AI_DAILY_TENANT_QUOTA
-Web: NEXT_PUBLIC_API_BASE_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+Web: NEXT_PUBLIC_API_BASE_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+NEXT_PUBLIC_TURNSTILE_SITE_KEY (opsiyonel; boş = CAPTCHA kapalı, §2.1)
 Mobil (--dart-define): BAYIOS_ENV, BAYIOS_API_BASE_URL, BAYIOS_SUPABASE_URL, BAYIOS_SUPABASE_PUBLISHABLE_KEY, BAYIOS_CLIENT_VERSION,
 BAYIOS_FIREBASE_API_KEY / _PROJECT_ID / _MESSAGING_SENDER_ID / _ANDROID_APP_ID / _IOS_APP_ID / _IOS_BUNDLE_ID (boş = push yok)
 ```
+
+### 2.1 Giriş koruması: Supabase Auth hız limitleri + CAPTCHA (OD-05, #61)
+Ürün sahibi kararı (2026-11-09): özel hesap kilidi **yok**; koruma Supabase Auth'un yerleşik hız limitleri + Cloudflare
+Turnstile CAPTCHA'dır. Token'ı Supabase Auth doğrular; API'de veya web sunucusunda ek kod/sır yoktur.
+
+**Web'in davranışı**
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` **boşsa CAPTCHA kapalıdır**: formlar eskisi gibi çalışır, CSP'de yabancı origin yoktur.
+  Local, CI ve Playwright E2E bu durumda çalışır.
+- Doluysa giriş (`/giris`), kayıt (`/kayit`) ve şifre sıfırlama (`/sifre-sifirla`) formları "Güvenlik doğrulaması" alanını
+  gösterir ve token'ı `options.captchaToken` ile Supabase'e gönderir; her denemeden sonra widget yenilenir (token tek
+  kullanımlık). CSP yalnızca `https://challenges.cloudflare.com`'u `script-src` ve `frame-src`'ye ekler
+  (`apps/web/next.config.ts`). Doğrulanmadan gönderim engellenir; hatalar Türkçe ve ekran okuyucuya duyurulur.
+- Site anahtarı **gizli değildir** (her sayfada görünür); **gizli anahtar** asla repoya, Vercel'e veya `NEXT_PUBLIC_`
+  değişkenine girmez.
+
+**Ürün sahibi adımları (ortam başına: preview, production)**
+1. Cloudflare hesabı (ücretsiz) → **Turnstile** → *Add widget*. Ad: `BayiOS <ortam>`; *Hostname*: o ortamın web alan
+   adı (ör. Vercel preview alias'ı / production alanı); *Widget mode*: **Managed**; *Pre-clearance*: hayır. Turnstile
+   ücretsiz plandır; ödeme bilgisi gerekmez.
+2. **Site key** → Vercel → Project → Settings → Environment Variables → `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (ilgili
+   ortam: Preview / Production). Değişken derleme anında gömülür: kaydettikten sonra **yeniden deploy** edin.
+3. Yeni deploy'da `/giris` sayfasında widget'ın göründüğünü ve girişin çalıştığını doğrulayın.
+4. **Ancak bundan sonra** Supabase Dashboard → Authentication → **Bot and Abuse Protection** (Attack Protection) →
+   *Enable CAPTCHA protection* → Provider: **Turnstile** → **Secret key** (Cloudflare'deki gizli anahtar) → Save.
+   Sıra önemlidir: Supabase'te CAPTCHA, web token göndermeden açılırsa **kimse giriş yapamaz**.
+5. Rate Limits ekranında varsayılanları koruyun veya sıkılaştırın (`infra/supabase/bootstrap/README.md` §3).
+
+**Geri alma:** önce Supabase'te CAPTCHA'yı kapatın, sonra Vercel değişkenini silip yeniden deploy edin.
+
+**Mobil — dikkat:** Flutter uygulaması CAPTCHA göndermez (ürün sahibi kararı: şimdilik gerekmiyor; kayıt/sıfırlama
+ekranı yok). Ancak mobil giriş de Supabase'in `signInWithPassword` uç noktasını kullanır ve Supabase CAPTCHA'yı **proje
+genelinde** (tüm istemciler için) zorunlu kılar. Yani 4. adım uygulandığında **mobil giriş `captcha_failed` ile
+reddedilir**. Mobil personel bu Supabase projesine giriş yapacaksa 4. adımdan önce mobil Turnstile entegrasyonu (ayrı iş)
+gerekir; o zamana kadar 1–3. adımlar (web widget'ı) zararsızdır ama sunucu tarafı doğrulama olmadan koruma sağlamaz.
+4. adımın zamanlaması ürün sahibinin kararıdır.
 
 ## 3. Veri kuralları
 - Preview/dev'e production verisi kopyalanmaz; prod dump'ı alınıp başka ortama yüklenmez.

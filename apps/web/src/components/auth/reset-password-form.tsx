@@ -9,6 +9,7 @@ import { ROUTES } from "@/lib/auth/routes";
 import { validateEmail } from "@/lib/auth/validation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { FormMessage } from "./auth-layout";
+import { CaptchaField, useCaptcha } from "./captcha-field";
 
 /** Requests a password-reset e-mail. The answer never reveals whether the address has an account. */
 export function ResetPasswordForm() {
@@ -17,6 +18,7 @@ export function ResetPasswordForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
+  const captcha = useCaptcha("password-reset");
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -24,11 +26,15 @@ export function ResetPasswordForm() {
     setError(fieldError);
     setFormError(null);
     if (fieldError) return;
+    const captchaToken = captcha.tokenForSubmit();
+    if (captchaToken === null) return;
 
     setSubmitting(true);
     const { error: authError } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${window.location.origin}${ROUTES.authCallback}?next=${encodeURIComponent(ROUTES.updatePassword)}`,
+      captchaToken,
     });
+    captcha.reset();
     setSubmitting(false);
     // Rate limits and network errors are worth showing; "user not found" is never reported by Supabase.
     if (authError) {
@@ -64,6 +70,7 @@ export function ResetPasswordForm() {
         onChange={(e) => setEmail(e.target.value)}
         error={error}
       />
+      {captcha.fieldProps ? <CaptchaField {...captcha.fieldProps} /> : null}
       <Button type="submit" size="lg" loading={submitting}>
         Sıfırlama bağlantısı gönder
       </Button>

@@ -50,6 +50,287 @@ internal sealed class InventoryService(
     public Task<InventoryResult<IssueResult>> IssueAsync(IssueStock command, CancellationToken cancellationToken) =>
         RunAsync(() => IssueCoreAsync(command, cancellationToken), cancellationToken);
 
+    public Task<InventoryResult<TransferResult>> TransferAsync(TransferStock command, CancellationToken cancellationToken) =>
+        RunAsync(() => TransferCoreAsync(command, cancellationToken), cancellationToken);
+
+    public Task<InventoryResult<CountResult>> ApplyCountAsync(ApplyCount command, CancellationToken cancellationToken) =>
+        RunAsync(() => ApplyCountCoreAsync(command, cancellationToken), cancellationToken);
+
+    /// <summary>A stock count may cover more rows than a document (data-model §5.6 stock_count_lines).</summary>
+    public const int MaxCountLines = 5000;
+
+    // ---- §4.7 Transfer legs (two-stage warehouse transfer, OD-01; shelf-to-shelf moves) ----
+
+    private async Task<InventoryResult<TransferResult>> TransferCoreAsync(TransferStock command, CancellationToken cancellationToken)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var moves = command.Moves ?? [];
+        ValidateLineCount(errors, moves.Count);
+        var reason = Clean(command.Reason);
+        if (reason is { Length: > MaxReasonLength })
+        {
+            errors["reason"] = [$"Must be at most {MaxReasonLength} characters."];
+        }
+
+        for (var i = 0; i < moves.Count; i++)
+        {
+            var move = moves[i];
+            ValidateQuantity(errors, $"lines[{i}].quantity", move.Quantity);
+            foreach (var (side, point) in new[] { ("from", move.From), ("to", move.To) })
+            {
+                if (point is { IsTransit: true } && (point.WarehouseId != command.TransferId || point.LocationId is not null))
+                {
+                    errors[$"lines[{i}].{side}"] = ["Only the transfer's own in-transit point can be used."];
+                }
+            }
+
+            if (move.From is null)
+            {
+                errors[$"lines[{i}].from"] = ["Required."];
+            }
+            else if (move.From == move.To)
+            {
+                errors[$"lines[{i}].to"] = ["Source and target must differ."];
+            }
+        }
+
+        if (moves.Select(m => m.MoveId).Distinct().Count() != moves.Count)
+        {
+            errors["lines"] = ["Each move id may appear only once."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return InventoryError.Validation(errors);
+        }
+
+        // Real points: active warehouse, and a valid location for its location mode (§2.6).
+        var sides = moves
+            .SelectMany((m, i) => new[] { ($"lines[{i}].from", m.From), ($"lines[{i}].to", m.To) })
+            .Where(s => s.Item2 is { IsTransit: false })
+            .Select(s => (Field: s.Item1, Point: s.Item2!))
+            .ToList();
+        foreach (var group in sides.GroupBy(s => s.Point.WarehouseId))
+        {
+            var warehouse = await warehouses.FindWarehouseAsync(group.Key, cancellationToken);
+            if (ValidateWarehouse(warehouse) is { } warehouseError)
+            {
+                foreach (var (field, _) in group)
+                {
+                    errors[field + ".warehouseId"] = warehouseError.Errors!["warehouseId"];
+                }
+
+                continue;
+            }
+
+            await ValidateLocationsAsync(errors, warehouse!, [.. group.Select(s => (s.Field + ".locationId", s.Point.LocationId))], cancellationToken);
+        }
+
+        var found = await ValidateVariantsAsync(
+            errors, [.. moves.Select((m, i) => ($"lines[{i}]", m.VariantId, m.Quantity))], requireActive: false, cancellationToken);
+        if (errors.Count > 0)
+        {
+            return InventoryError.Validation(errors);
+        }
+
+        static BalanceKey KeyOf(Guid variantId, StockPoint point) => new(variantId, point.WarehouseId, point.LocationId);
+
+        var keys = moves.SelectMany(m => m.To is null ? [KeyOf(m.VariantId, m.From)] : new[] { KeyOf(m.VariantId, m.From), KeyOf(m.VariantId, m.To) }).ToList();
+        var transit = moves.Any(m => m.From.IsTransit || m.To is { IsTransit: true }) ? new[] { command.TransferId } : [];
+        var rows = Index(await store.LockBalancesAsync(keys, createMissing: true, cancellationToken, transit));
+        if (moves.Any(m => rows[KeyOf(m.VariantId, m.From)].IsTransit != m.From.IsTransit
+            || (m.To is { } to && rows[KeyOf(m.VariantId, to)].IsTransit != to.IsTransit)))
+        {
+            throw new InvalidOperationException("A stock point does not match its balance row kind (transit vs warehouse).");
+        }
+
+        // Check every source before writing anything: a warehouse gives only available stock (reserved never moves,
+        // no negative stock — owner decision OD-09), the in-transit point only what it holds.
+        var shortages = new List<StockShortage>();
+        foreach (var group in moves.GroupBy(m => KeyOf(m.VariantId, m.From)))
+        {
+            var row = rows[group.Key];
+            var free = row.IsTransit ? row.OnHand : row.Available;
+            var need = group.Sum(m => m.Quantity);
+            if (free < need)
+            {
+                shortages.Add(new StockShortage(group.Key.VariantId, found[group.Key.VariantId].Sku, group.Key.WarehouseId, group.Key.LocationId, need, free));
+            }
+        }
+
+        if (shortages.Count > 0)
+        {
+            return new InventoryError(409, "inventory.insufficient_available", "Available stock is insufficient for this transfer", Shortages: shortages);
+        }
+
+        var movements = new List<MovementResult>(moves.Count * 2);
+        foreach (var move in moves)
+        {
+            var from = rows[KeyOf(move.VariantId, move.From)];
+            var group = move.To is null ? (Guid?)null : Guid.CreateVersion7();
+            var fromAfter = await store.UpdateBalanceAsync(
+                from,
+                -move.Quantity,
+                0m,
+                !from.IsTransit && NextAllowNegative(from, from.OnHand - move.Quantity, from.Reserved, worsening: true),
+                cancellationToken);
+            movements.Add(await store.InsertMovementAsync(
+                new NewMovement(from.Key, move.To is null ? MovementTypes.AdjustmentOut : MovementTypes.TransferOut, -move.Quantity, null,
+                    MovementSourceTypes.Transfer, command.TransferId, move.MoveId, reason, command.CorrelationId, group),
+                fromAfter,
+                cancellationToken));
+
+            if (move.To is { } target)
+            {
+                var to = rows[KeyOf(move.VariantId, target)];
+                var toAfter = await store.UpdateBalanceAsync(
+                    to,
+                    move.Quantity,
+                    0m,
+                    !to.IsTransit && NextAllowNegative(to, to.OnHand + move.Quantity, to.Reserved, worsening: false),
+                    cancellationToken);
+                movements.Add(await store.InsertMovementAsync(
+                    new NewMovement(to.Key, MovementTypes.TransferIn, move.Quantity, null,
+                        MovementSourceTypes.Transfer, command.TransferId, move.MoveId, reason, command.CorrelationId, group),
+                    toAfter,
+                    cancellationToken));
+            }
+        }
+
+        await audit.RecordAsync(
+            new AuditEvent(AuditActions.InventoryTransferPosted, "inventory_transfer", command.TransferId, new AuditChanges()
+                .Value("lineCount", moves.Count)
+                .Value("movedQuantity", moves.Where(m => m.To is not null).Sum(m => m.Quantity))
+                .Value("writtenOffQuantity", moves.Where(m => m.To is null).Sum(m => m.Quantity))
+                .ToDictionary()),
+            cancellationToken);
+        return new TransferResult(command.TransferId, movements);
+    }
+
+    // ---- §4.8 Count correction ----
+
+    private async Task<InventoryResult<CountResult>> ApplyCountCoreAsync(ApplyCount command, CancellationToken cancellationToken)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var lines = command.Lines ?? [];
+        if (lines.Count is < 1 or > MaxCountLines)
+        {
+            errors["lines"] = [$"Between 1 and {MaxCountLines} counted lines are required."];
+        }
+
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var counted = lines[i].CountedQuantity;
+            if (counted < 0 || counted > MaxQuantity || decimal.Round(counted, 3) != counted)
+            {
+                errors[$"lines[{i}].countedQuantity"] = ["Must be ≥ 0 with at most 3 decimals."];
+            }
+        }
+
+        if (lines.Select(l => (l.VariantId, l.LocationId)).Distinct().Count() != lines.Count
+            || lines.Select(l => l.CountLineId).Distinct().Count() != lines.Count)
+        {
+            errors["lines"] = ["Each (variant, location) and line id may appear only once."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return InventoryError.Validation(errors);
+        }
+
+        // Counting may close out a deactivated shelf, so locations must belong to the warehouse but need not be active.
+        var warehouse = await warehouses.FindWarehouseAsync(command.WarehouseId, cancellationToken);
+        if (warehouse is null)
+        {
+            return InventoryError.Validation(new Dictionary<string, string[]> { ["warehouseId"] = ["Warehouse not found."] });
+        }
+
+        var locationIds = lines.Where(l => l.LocationId is not null).Select(l => l.LocationId!.Value).Distinct().ToList();
+        var locations = locationIds.Count == 0 ? new Dictionary<Guid, LocationInfo>() : await warehouses.FindLocationsAsync(locationIds, cancellationToken);
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var location = lines[i].LocationId;
+            if (warehouse.UsesLocations != location is not null)
+            {
+                errors[$"lines[{i}].locationId"] = [warehouse.UsesLocations ? "A location is required in this warehouse." : "This warehouse does not use locations."];
+            }
+            else if (location is { } id && (!locations.TryGetValue(id, out var info) || info.WarehouseId != warehouse.Id))
+            {
+                errors[$"lines[{i}].locationId"] = ["Location not found in this warehouse."];
+            }
+        }
+
+        var found = await ValidateVariantsAsync(
+            errors, [.. lines.Select((l, i) => ($"lines[{i}]", l.VariantId, l.CountedQuantity))], requireActive: false, cancellationToken);
+        if (errors.Count > 0)
+        {
+            return InventoryError.Validation(errors);
+        }
+
+        var keyed = lines.Select(l => (Line: l, Key: new BalanceKey(l.VariantId, warehouse.Id, l.LocationId))).ToList();
+        var rows = Index(await store.LockBalancesAsync([.. keyed.Select(k => k.Key)], createMissing: true, cancellationToken));
+
+        // With the rows locked no movement of these keys can appear: on_hand − Σ(after the count) is exactly the system
+        // balance at the moment of counting (snapshot + movements during the count, US-INV-005).
+        var after = await store.SumMovementsAfterAsync([.. keyed.Select(k => (k.Key, k.Line.CountedAt))], cancellationToken);
+        var plan = new List<(CountLine Line, BalanceRow Row, decimal SystemAtCount, decimal Delta)>(keyed.Count);
+        var below = new List<StockShortage>();
+        foreach (var (line, key) in keyed)
+        {
+            var row = rows[key];
+            var systemAtCount = row.OnHand - after.GetValueOrDefault(key);
+            var delta = line.CountedQuantity - systemAtCount;
+            var onHandAfter = row.OnHand + delta;
+            if (delta != 0 && (onHandAfter < 0 || onHandAfter < row.Reserved))
+            {
+                below.Add(new StockShortage(key.VariantId, found[key.VariantId].Sku, key.WarehouseId, key.LocationId, row.Reserved, onHandAfter));
+            }
+
+            plan.Add((line, row, systemAtCount, delta));
+        }
+
+        if (below.Count > 0)
+        {
+            return new InventoryError(
+                409,
+                "count.below_reserved",
+                "The counted quantity would leave less stock than is reserved; reduce the reservations first",
+                Shortages: below);
+        }
+
+        var results = new List<CountLineResult>(plan.Count);
+        var movements = new List<MovementResult>();
+        foreach (var (line, row, systemAtCount, delta) in plan)
+        {
+            var before = row.OnHand;
+            Guid? movementId = null;
+            if (delta != 0)
+            {
+                var balanceAfter = await store.UpdateBalanceAsync(
+                    row, delta, 0m, NextAllowNegative(row, row.OnHand + delta, row.Reserved, worsening: delta < 0), cancellationToken);
+                var movement = await store.InsertMovementAsync(
+                    new NewMovement(row.Key, MovementTypes.CountCorrection, delta, null, MovementSourceTypes.StockCount,
+                        command.StockCountId, line.CountLineId, "stock count", command.CorrelationId),
+                    balanceAfter,
+                    cancellationToken);
+                movements.Add(movement);
+                movementId = movement.Id;
+            }
+
+            results.Add(new CountLineResult(line.CountLineId, systemAtCount, before, delta, movementId));
+        }
+
+        await audit.RecordAsync(
+            new AuditEvent(AuditActions.InventoryCountPosted, "stock_count", command.StockCountId, new AuditChanges()
+                .Value("warehouseId", warehouse.Id)
+                .Value("lineCount", lines.Count)
+                .Value("movementCount", movements.Count)
+                .Value("netDelta", movements.Sum(m => m.Quantity))
+                .ToDictionary()),
+            cancellationToken);
+        return new CountResult(command.StockCountId, results, movements);
+    }
+
     // ---- §4.1 Goods receipt ----
 
     private async Task<InventoryResult<ReceiptResult>> ReceiveCoreAsync(ReceiveStock command, CancellationToken cancellationToken)

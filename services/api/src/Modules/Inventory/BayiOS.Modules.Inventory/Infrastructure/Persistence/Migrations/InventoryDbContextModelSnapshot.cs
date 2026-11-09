@@ -41,6 +41,12 @@ namespace BayiOS.Modules.Inventory.Infrastructure.Persistence.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<bool>("IsTransit")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_transit");
+
                     b.Property<Guid?>("LocationId")
                         .HasColumnType("uuid")
                         .HasColumnName("location_id");
@@ -98,6 +104,8 @@ namespace BayiOS.Modules.Inventory.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_inventory_balances_no_negative", "allow_negative OR (on_hand >= 0 AND reserved <= on_hand)");
 
                             t.HasCheckConstraint("ck_inventory_balances_reserved_nonnegative", "reserved >= 0");
+
+                            t.HasCheckConstraint("ck_inventory_balances_transit", "NOT is_transit OR (on_hand >= 0 AND reserved = 0 AND location_id IS NULL AND NOT allow_negative)");
                         });
                 });
 
