@@ -5,6 +5,8 @@ import 'package:bayios_mobile/app/features.dart';
 import 'package:bayios_mobile/core/api/contract.dart';
 import 'package:bayios_mobile/core/api/endpoint.dart';
 import 'package:bayios_mobile/core/session/identity_api.dart';
+import 'package:bayios_mobile/features/warehouse/warehouse_api.dart';
+import 'package:bayios_mobile/features/warehouse/warehouse_errors.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Contract drift check (ADR 0007 / ADR 0011): every endpoint and model field
@@ -55,6 +57,33 @@ void main() {
         );
         final secured = (op['security'] as List<Object?>?)?.isNotEmpty ?? false;
         expect(secured, endpoint.authenticated, reason: 'Bearer security');
+      });
+    }
+  });
+
+  // Screens gate on these permission ids; the contract's x-permission(s)
+  // must grant them. If the contract stops granting a relocation with
+  // inventory.transfer (#98), this fails: update WarehousePermissions.relocate.
+  group('permissions', () {
+    final gates = <ApiEndpoint, String>{
+      WarehouseEndpoints.receive: WarehousePermissions.receiveTransfer,
+      WarehouseEndpoints.transfers: WarehousePermissions.receiveTransfer,
+      WarehouseEndpoints.transfer: WarehousePermissions.receiveTransfer,
+      WarehouseEndpoints.countEntries: WarehousePermissions.performCount,
+      WarehouseEndpoints.countSubmit: WarehousePermissions.performCount,
+      WarehouseEndpoints.counts: WarehousePermissions.performCount,
+      WarehouseEndpoints.count: WarehousePermissions.performCount,
+      WarehouseEndpoints.relocation: WarehousePermissions.relocate,
+    };
+    for (final MapEntry(key: endpoint, value: permission) in gates.entries) {
+      test('$endpoint ⇐ $permission', () {
+        final item = paths[endpoint.path]! as Map<String, Object?>;
+        final op = item[endpoint.method.name]! as Map<String, Object?>;
+        final declared = <String>{
+          if (op['x-permission'] case final String p) p,
+          ...?(op['x-permission-any-of'] as List<Object?>?)?.cast<String>(),
+        };
+        expect(declared, contains(permission));
       });
     }
   });

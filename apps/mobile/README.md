@@ -49,10 +49,11 @@ Emülatörde gerçek yığına karşı web ↔ mobil akış: `.github/workflows/
 | `test/app/*` | Yönlendirme korumaları, izin bazlı gezinme, uçtan uca uygulama akışı (sahte Auth/API) |
 | `test/features/*` | Giriş formu doğrulama/hata, işletme seçici, pano, dokunma hedefleri ≥ 48 dp (`androidTapTargetGuideline`) |
 | `test/features/picking/*` | Liste durumları/sekmeler, tara eşleşme/yanlış ürün/yanlış raf, adet doğrulama, aynı anahtarla yeniden gönderim, If-Match/412, izin bazlı görünürlük (sahte API sunucusu, idempotent tekrar oynatma) |
-| `test/contract/contract_test.dart` | Kullanılan uç/başlık/alanlar `packages/contracts/openapi.json` ile birebir |
+| `test/contract/contract_test.dart` | Kullanılan uç/başlık/alanlar `packages/contracts/openapi.json` ile birebir; gönderilen istek gövdesi alanları (ör. `ReceiveStockTransferLineRequest.code`); ekranların izin kapısı uçların `x-permission(s)` değerinde var mı |
 | `test/features/stock/*` | Stok sorgulama durumları, mal kabul akışı (okutma eşleşme/eşleşmeme, miktar/raf doğrulama, aynı `Idempotency-Key` ile yeniden deneme, `inventory.busy`), izin bazlı gizleme + 403, düzeltme + negatif stok onayı |
 | `test/core/push/*` | Push kaydı: Firebase yoksa hiçbir şey; izin bir kez; işletmede kayıt; token yenileme; işletme değişimi (eski işletmeden silme); çevrimdışı kayıt aynı anahtarla yeniden; çıkıştan önce silme + FCM token iptali |
 | `test/app/push_coordinator_test.dart` | Bildirime dokunma → `/gorevler/:id` (oturum geri yüklendikten sonra; soğuk başlangıç; başka üyelik işletmesine geçiş; üye olunmayan işletme yok sayılır; ön planda "Aç" bandı) |
+| `test/features/warehouse/*` | Depo (#168): gelen transfer listesi (hedef depo filtresi), raf + adet + ürün okutarak teslim alma (kısmi), `transfer.over_receipt` / `unknown_code` / `wrong_item` / `unknown_location` Türkçe mesajları, `transfer.busy` tek otomatik tekrar (aynı anahtar), kayıp yanıt → aynı `Idempotency-Key` ile "Tekrar gönder", 412 / `invalid_transition` → yeniden yükleme; sayım `add`/`set` (0 yalnızca `set`), kör sayımda sistem miktarı gizli, "Sayımı bitir" `If-Match` + 412; raf taşıma adımları, cihazda raf/ürün/adet doğrulama, izin bazlı gizleme |
 | `test/core/network/connection_errors_test.dart` | Ağ yok → bant; ağ gelince `/meta` yoklaması → bant kalkar, başarısız yükleme kendiliğinden yenilenir; çevrimdışıyken periyodik yoklama; sunucu hatası otomatik yenilenmez |
 
 ## Emülatör smoke (gerçek yerel yığın)
@@ -103,6 +104,19 @@ Gerçek Supabase Auth + API'ye karşı: giriş → işletme → pano → çıkı
      --dart-define-from-file=env/dev.json --dart-define-from-file=env/smoke.json \
      --dart-define=BAYIOS_SMOKE_PUSH_TOKEN=smoke-emulator-<32 hex>
    ```
+
+8. **Transfer teslim alma smoke** (`integration_test/transfer_receive_smoke_test.dart`, #168, **yazar**: ledger
+   `transfer_in`). Önce web'de bir transfer oluşturup gönderin (Depo → Transferler → Yeni → Gönder); hedef depo, smoke
+   kullanıcısının teslim alabileceği bir depo olsun. Depo → Gelen transferler → transfer → raf okut → (varsa) yanlış ürün
+   reddi → adet + ürün → "Kaydedildi":
+   ```bash
+   flutter test integration_test/transfer_receive_smoke_test.dart -d emulator-5554 \
+     --dart-define-from-file=env/dev.json --dart-define-from-file=env/smoke.json \
+     --dart-define=BAYIOS_SMOKE_TRANSFER=<TRF-…> --dart-define=BAYIOS_SMOKE_BARCODE=<transferdeki ürünün barkodu/SKU> \
+     --dart-define=BAYIOS_SMOKE_BIN=<hedef raf kodu> --dart-define=BAYIOS_SMOKE_QTY=1 \
+     --dart-define=BAYIOS_SMOKE_WRONG_CODE=<transferde olmayan bir ürünün kodu>
+   ```
+   API'nin `/api/v1/stock-transfers` uçlarını içeren bir sürümü gerekir (#180).
 
 ## Web ↔ mobil gerçek akış — tek komut (#45)
 `tool/e2e.sh` web → mobil → web akışını gerçek yığın ve gerçek emülatörle koşar; hiçbir şey mock'lanmaz ve her
@@ -185,6 +199,43 @@ push için APNs anahtarı (`docs/operations/push-notifications.md` §3). iOS sim
 - **Kamera:** #43 ile ortak tarayıcı (`lib/features/stock/scanner.dart`, `barcodeScannerProvider`). İzin: Android
   `CAMERA` (zorunlu donanım değil), iOS tek `NSCameraUsageDescription`; reddedilirse, kamera yoksa veya tarayıcı
   kapatılırsa elle giriş alanına odaklanılır.
+
+## Depo işlemleri: transfer teslim alma, sayım, raf taşıma (#168)
+`/depo` sekmesi aşağıdaki izinlerden **herhangi biri** varsa görünür; her işlem kendi iznine göre listelenir
+(`lib/features/warehouse/`, izin sabitleri `WarehousePermissions`). Gönderme/kapatma/iptal (transfer) ve sayım
+başlatma/yeniden saydırma/onaylama (uygulama) **web'de** kalır.
+
+| Ekran | Yol | İzin | Uçlar |
+|---|---|---|---|
+| Gelen transferler | `/depo/transferler` | `inventory.transfer.receive` | `GET /stock-transfers?status=in_transit,partially_received&warehouseId=` (API kaynak **veya** hedef döndürür; ekran yalnızca hedefi seçili depo olanları gösterir, varsayılan depo önce, "Tüm depolar" seçilebilir) |
+| Teslim al | `/depo/transferler/:id` | `inventory.transfer.receive` | `GET /stock-transfers/{id}`, okutma başına `POST …/receive` `{lines:[{code, quantity, locationCode}]}` |
+| Sayımlar | `/depo/sayimlar` | `inventory.count.perform` | `GET /stock-counts?status=open` |
+| Sayım girişi | `/depo/sayimlar/:id` | `inventory.count.perform` | `GET /stock-counts/{id}`, okutma başına `POST …/entries` `{entries:[{code, locationCode, quantity, mode}]}`, `POST …/submit` (`If-Match`) |
+| Raf taşıma | `/depo/raf-tasima` | `inventory.transfer` (şimdilik) | `GET /warehouses`, `/warehouses/{id}/locations`, `/variants/lookup` → `/variants?sku=`, `/inventory/balances` (kaynak raftaki satılabilir), `POST /inventory/relocations` |
+
+- **Okutma akışı (teslim alma ve sayım):** raf okut (sabit kalır) → adet (varsayılan 1, ± düğmeleri) → ürün okut = hemen
+  gönderilir. Raf kodu ve ürün kodu API'de çözülür; cihaz yalnızca depo raf takibi yapıyorsa raf okutulmadan göndermez.
+  Kabul: yeşil not + titreşim/ses; ret (`transfer.over_receipt`, `transfer.unknown_code`, `transfer.wrong_item`,
+  `transfer.unknown_location`, `count.unknown_code`, `count.unknown_location`, `count.out_of_scope`, doğrulama): büyük
+  kırmızı not + uyarı, hiçbir şey değişmez, sonraki okutma yeni bir işlemdir (yeni anahtar).
+- **İdempotens:** her okutma / sayımı bitir / taşı bir `IdempotentAction`. Yanıt gelmezse (ağ, zaman aşımı, 5xx, iki kez
+  meşgul) sonuç "bilinmiyor": okutma alanları kilitlenir, "Tekrar gönder" **aynı anahtar ve gövdeyi** gönderir (API kayıtlı
+  yanıtı tekrar oynatır → "bir kez sayıldı"), "Vazgeç" bırakır. `transfer.busy` / `count.busy` / `inventory.busy` (409 +
+  `Retry-After`) bir kez kendiliğinden, aynı anahtarla tekrar edilir.
+- **Eşzamanlılık:** okutmalar `If-Match`'siz gider (toplama ile aynı gerekçe: API her girişi belge kilidi altında doğrular;
+  paralel bir okutma geçerli okutmayı 412'ye düşürmemeli). "Sayımı bitir" `If-Match: W/"<sürüm>"` gönderir. 412 veya
+  `*.invalid_transition` → belge yeniden yüklenir ve "siz bakarken değişti" mesajı gösterilir (yeniden gönderilmez).
+- **Sayım:** `Ekle` (`add`, okutma başına +adet) / `Sabitle` (`set`, raftaki toplam; 0 = "rafta yok" yalnızca burada).
+  Sayılan satırlar (son girilen üstte) listelenir; sistem miktarı ve fark yalnızca API gönderiyorsa gösterilir —
+  `quantitiesHidden` (kör sayım, `inventory.count.manage` yok) ise hiç gösterilmez. Bitirmeden önce sayılmamış satır
+  sayısıyla onay istenir.
+- **Raf taşıma:** yalnızca raf takibi yapan aktif depolar. Kaynak raf (kod veya etiket barkodu, cihazda eşleşir) → ürün
+  (barkod, sonra SKU) → adet (kaynak raftaki satılabilir gösterilir, "Tümünü taşı"; fazlası cihazda reddedilir) → hedef raf
+  (kaynakla aynı olamaz) → "Taşı". Başarıdan sonra kaynak raf korunur. **İzin notu:** API bugün
+  `POST /inventory/relocations` için `inventory.transfer` istiyor (owner/admin/manager); warehouse_staff için ayrı izin
+  #98'de ekleniyor. Değişince `WarehousePermissions.relocate` sabitini (ve test fikstürünü) güncelleyin;
+  `contract_test.dart` → `permissions` grubu, sözleşme bu ucu artık `inventory.transfer` ile açmazsa kırmızıya döner
+  (yeni izin `x-permission-any-of`a yalnızca eklenirse yeşil kalır; o durumda sabiti bilinçli olarak değiştirin).
 
 ## Push bildirimleri (#44)
 - Firebase **yalnızca bildirim** için; `BAYIOS_FIREBASE_*` tanımları boşsa `NoopPushService` (izin yok, kayıt yok).
