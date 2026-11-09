@@ -27,6 +27,7 @@ import {
   NEGATIVE_STOCK_RULE,
   currencyOptions,
   priceDisplayOptions,
+  DEFAULT_SECTOR,
   sectorOptions,
   slugify,
   taxRateOptions,
@@ -34,10 +35,11 @@ import {
   validateSlug,
   validateTenantName,
 } from "@/lib/onboarding/tenant-form";
+import { SETUP_HREF } from "@/lib/onboarding/setup";
 import { writeActiveTenantId } from "@/lib/session/active-tenant";
 import { useSession } from "@/lib/session/session-context";
 
-const STEPS = ["İşletme bilgileri", "Sektör", "Ticari ayarlar", "Onay"] as const;
+const STEPS = ["İşletme bilgileri", "Ürün şablonu", "Ticari ayarlar", "Onay"] as const;
 
 type Values = {
   name: string;
@@ -53,7 +55,7 @@ type Errors = { name?: string; slug?: string; sector?: string };
 /** Work done after POST /tenants succeeded; each part is retried on its own and never repeated once done. */
 type FollowUp = "template" | "settings" | "currency";
 const FOLLOW_UP_LABELS: Record<FollowUp, string> = {
-  template: "sektör şablonu (birimler, kategoriler, özel alanlar)",
+  template: "ürün şablonu (birimler, kategoriler, özel alanlar)",
   settings: "ticari ayarlar (KDV, fiyat gösterimi, negatif stok)",
   currency: "para birimi",
 };
@@ -85,7 +87,7 @@ export function OnboardingWizard() {
     name: "",
     slug: "",
     slugEdited: false,
-    sector: "",
+    sector: DEFAULT_SECTOR,
     currency: "TRY",
     taxRate: "20",
     priceDisplay: "excluded",
@@ -130,7 +132,7 @@ export function OnboardingWizard() {
       if (slug) result.slug = slug;
       return result;
     }
-    if (index === 1 && !values.sector) return { sector: "Devam etmek için bir sektör seçin." };
+    if (index === 1 && !values.sector) return { sector: "Devam etmek için bir şablon seçin." };
     return {};
   };
 
@@ -183,8 +185,9 @@ export function OnboardingWizard() {
       }
     });
 
-    toast({ tone: "success", title: "İşletmeniz hazır", description: `${values.name.trim()} oluşturuldu.` });
-    router.replace(ROUTES.home);
+    toast({ tone: "success", title: "İşletmeniz hazır", description: `${values.name.trim()} oluşturuldu. Şimdi kurulumu birlikte tamamlayalım.` });
+    // Guided setup (#83): business info, warehouse, products, opening stock, team — every step skippable.
+    router.replace(SETUP_HREF);
   };
 
   const submit = async () => {
@@ -329,7 +332,7 @@ export function OnboardingWizard() {
         {step === 1 ? (
           <fieldset className="flex flex-col gap-3" aria-describedby={errors.sector ? `${uid}-sector-error` : undefined}>
             <legend className="mb-2 text-body text-fg-muted">
-              Sektörünüz hazır birimleri, kategorileri ve ürün özel alanlarını belirler.
+              Başlangıç birimlerini ve isterseniz örnek kategori ve özel alanları belirler. Emin değilseniz sade başlangıçla devam edin; birim, kategori ve özel alanları sonradan değiştirebilirsiniz.
             </legend>
             {sectorOptions.map((option) => (
               <label
@@ -395,7 +398,7 @@ export function OnboardingWizard() {
             <dd className="font-medium text-fg">{values.name.trim()}</dd>
             <dt className="text-fg-muted">İşletme adresi</dt>
             <dd className="font-mono text-fg">{values.slug}</dd>
-            <dt className="text-fg-muted">Sektör</dt>
+            <dt className="text-fg-muted">Ürün şablonu</dt>
             <dd className="text-fg">{label(sectorOptions, values.sector)}</dd>
             <dt className="text-fg-muted">Para birimi</dt>
             <dd className="text-fg">{label(currencyOptions, values.currency)}</dd>

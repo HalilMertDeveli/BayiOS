@@ -44,10 +44,10 @@ test("sign-up → e-mail confirmation → onboarding → dashboard → sign-out 
   await expect(page).toHaveURL(/\/isletme-olustur$/);
   await expect(page.getByRole("heading", { name: "İşletmenizi oluşturun" })).toBeVisible();
 
-  await page.getByLabel("İşletme adı").fill(`Yerel Motor ${stamp}`);
+  await page.getByLabel("İşletme adı").fill(`Yerel İşletme ${stamp}`);
   await page.getByLabel("İşletme adresi (kısa ad)").fill(slug);
   await page.getByRole("button", { name: "Devam" }).click();
-  await page.getByLabel(/Motosiklet yedek parça/).check();
+  await page.getByLabel(/Uyumluluk takipli parçalar/).check(); // optional example template (API code motorcycle_parts)
   await page.getByRole("button", { name: "Devam" }).click();
   await page.getByLabel("Para birimi").selectOption("EUR");
   await page.getByLabel("Varsayılan KDV oranı").selectOption("10");
@@ -72,6 +72,8 @@ test("sign-up → e-mail confirmation → onboarding → dashboard → sign-out 
   expect((await patched).status()).toBe(200);
   expect((await currency).status()).toBe(200);
 
+  await expect(page).toHaveURL(/\/kurulum$/); // #83 guided setup; left for later here (real-stack-setup.spec.ts walks it)
+  await page.getByRole("link", { name: "Daha sonra tamamla" }).click();
   await expect(page).toHaveURL(/\/pano$/);
   await expect(page.getByRole("heading", { level: 1, name: "Pano" })).toBeVisible();
   await expect(page.getByTestId("session-user")).toHaveText("Yerel Test Kullanıcısı");

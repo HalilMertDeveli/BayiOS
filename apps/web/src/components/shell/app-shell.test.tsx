@@ -43,7 +43,7 @@ describe("AppShell", () => {
   it("shows the signed-in user, the active tenant and the role", () => {
     renderShell();
     expect(screen.getByTestId("session-user").textContent).toBe("Ayşe Yılmaz");
-    expect(screen.getByTitle("Aktif işletme").textContent).toBe("Örnek Motor");
+    expect(screen.getByTitle("Aktif işletme").textContent).toBe("Örnek Toptan");
     expect(screen.getByText("İşletme sahibi")).toBeDefined();
   });
 
@@ -56,7 +56,7 @@ describe("AppShell", () => {
   });
 
   it("offers a tenant switcher when the user has several memberships", async () => {
-    const other: Membership = { ...ownerMembership, tenantId: "t-2", tenantName: "Örnek LED", role: "viewer" };
+    const other: Membership = { ...ownerMembership, tenantId: "t-2", tenantName: "Örnek Mağaza", role: "viewer" };
     const selectTenant = vi.fn();
     renderShell("x", session({
       selectTenant,
@@ -115,7 +115,7 @@ describe("AppShell", () => {
   });
 
   it("replaces the page with the suspended/closed notice (tenant.inactive) and offers switch + sign-out", async () => {
-    const other: Membership = { ...ownerMembership, tenantId: "t-2", tenantName: "Örnek LED" };
+    const other: Membership = { ...ownerMembership, tenantId: "t-2", tenantName: "Örnek Mağaza" };
     const signOut = vi.fn().mockResolvedValue(undefined);
     renderShell(
       "Gizli içerik",
@@ -124,7 +124,7 @@ describe("AppShell", () => {
     expect(screen.queryByText("Gizli içerik")).toBeNull();
     const notice = screen.getByRole("alert", { name: "İşletme kullanılamıyor" });
     expect(within(notice).getByRole("heading", { name: "Bu işletme askıya alınmış veya kapatılmış" })).toBeDefined();
-    expect(notice.textContent).toContain("Örnek Motor");
+    expect(notice.textContent).toContain("Örnek Toptan");
     expect(within(notice).getByRole("button", { name: "İşletme değiştir" })).toBeDefined();
     await userEvent.click(within(notice).getByRole("button", { name: "Çıkış yap" }));
     expect(signOut).toHaveBeenCalled();
@@ -138,7 +138,7 @@ describe("AppShell", () => {
   });
 
   it("the mobile menu of a suspended/closed business is not empty: it explains and offers switch + sign-out (#111)", async () => {
-    const other: Membership = { ...ownerMembership, tenantId: "t-2", tenantName: "Örnek LED" };
+    const other: Membership = { ...ownerMembership, tenantId: "t-2", tenantName: "Örnek Mağaza" };
     const signOut = vi.fn().mockResolvedValue(undefined);
     renderShell(
       "x",
@@ -151,7 +151,7 @@ describe("AppShell", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Menüyü aç" }));
     const drawer = document.getElementById("mobile-nav") as HTMLDialogElement;
-    expect(drawer.textContent).toContain("Örnek Motor");
+    expect(drawer.textContent).toContain("Örnek Toptan");
     const actions = within(drawer).getByRole("list", { name: "İşletme işlemleri" });
     expect(within(actions).getByRole("button", { name: "İşletme değiştir" })).toBeDefined();
     await userEvent.click(within(actions).getByRole("button", { name: "Çıkış yap" }));

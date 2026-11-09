@@ -14,7 +14,7 @@ async function expectNoSeriousViolations(page: Page) {
 }
 
 /** Signed-in pages (MOCKED session + API) and public pages (no session). */
-const routes = ["/pano", "/urunler", "/ice-aktarma", "/tasarim-sistemi"];
+const routes = ["/pano", "/kurulum", "/urunler", "/ice-aktarma", "/tasarim-sistemi"];
 const publicRoutes = ["/", "/giris", "/kayit", "/sifre-sifirla"];
 
 for (const [name, viewport] of [

@@ -20,7 +20,7 @@ export default function AyarlarPage() {
           Diğer ayarlar
         </h2>
         <SettingsLinks />
-        <p className="text-caption text-fg-muted">İşletme profili ayarları henüz geliştiriliyor.</p>
+        <p className="text-caption text-fg-muted">İşletme adı, telefon ve vergi bilgileri Kurulum sihirbazının ilk adımında düzenlenir.</p>
       </section>
     </>
   );

@@ -35,12 +35,12 @@ export function newAccount(tag: string): Account {
     email: `e2e-${tag}-${stamp}@example.test`,
     password: `E2e-${tag}-Sifre-1234`,
     fullName: `E2E ${tag.toUpperCase()} Kullanıcısı`,
-    businessName: `E2E Motor ${tag.toUpperCase()} ${stamp}`,
+    businessName: `E2E İşletme ${tag.toUpperCase()} ${stamp}`,
     slug: `e2e-${tag}-${stamp}`,
   };
 }
 
-/** Sign-up → confirmation e-mail (Mailpit) → onboarding with the motorcycle-parts template → /pano. */
+/** Sign-up → confirmation e-mail (Mailpit) → onboarding with the compatibility example template → /kurulum (#83), left via "Daha sonra tamamla" → /pano. */
 export async function signUpAndOnboard(page: Page, account: Account) {
   await page.goto("/kayit");
   await page.getByLabel("Ad soyad").fill(account.fullName);
@@ -57,7 +57,7 @@ export async function signUpAndOnboard(page: Page, account: Account) {
   await page.getByLabel("İşletme adı").fill(account.businessName);
   await page.getByLabel("İşletme adresi (kısa ad)").fill(account.slug);
   await page.getByRole("button", { name: "Devam" }).click();
-  await page.getByLabel(/Motosiklet yedek parça/).check();
+  await page.getByLabel(/Uyumluluk takipli parçalar/).check(); // optional example template (API code motorcycle_parts)
   await page.getByRole("button", { name: "Devam" }).click();
   await page.getByLabel("Para birimi").selectOption("TRY");
   await page.getByLabel("Varsayılan KDV oranı").selectOption("20");
@@ -72,6 +72,9 @@ export async function signUpAndOnboard(page: Page, account: Account) {
   expect(applyResponse.status()).toBe(200);
   expect(((await applyResponse.json()) as { template: string }).template).toBe("motorcycle_parts");
 
+  // #83: the guided setup opens next; these specs prepare their own data, so they leave it for later.
+  await expect(page).toHaveURL(/\/kurulum$/, { timeout: 15_000 });
+  await page.getByRole("link", { name: "Daha sonra tamamla" }).click();
   await expect(page).toHaveURL(/\/pano$/, { timeout: 15_000 });
   await expect(page.getByTestId("session-user")).toHaveText(account.fullName);
 }

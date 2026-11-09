@@ -94,7 +94,7 @@ export function filterableFields(fields: readonly CustomField[]): CustomField[] 
     .sort((a, b) => a.entityType.localeCompare(b.entityType) || Number(a.sortOrder) - Number(b.sortOrder));
 }
 
-/** Categories in tree order with an indented label ("Motor › Piston" is shown as "— Piston" under "Motor"). */
+/** Categories in tree order with an indented label ("Kırtasiye › Kalem" is shown as "— Kalem" under "Kırtasiye"). */
 export function categoryOptions(categories: readonly Category[]): { value: string; label: string }[] {
   const byParent = new Map<string | null, Category[]>();
   for (const c of categories) {

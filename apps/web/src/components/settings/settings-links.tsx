@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ListPlus, Puzzle, SlidersHorizontal, Tags, Users, type LucideIcon } from "lucide-react";
+import { ListPlus, Puzzle, Rocket, SlidersHorizontal, Tags, Users, type LucideIcon } from "lucide-react";
 import { PLAN_PAGE_HREF } from "@/lib/billing/labels";
+import { SETUP_HREF } from "@/lib/onboarding/setup";
 import { useSession } from "@/lib/session/session-context";
 
 function SettingsLink({ href, title, description, Icon }: { href: string; title: string; description: string; Icon: LucideIcon }) {
@@ -29,6 +30,14 @@ export function SettingsLinks() {
     <ul aria-label="Diğer ayarlar" className="grid max-w-3xl gap-3 md:grid-cols-2">
       {access.canSome("members.read") ? (
         <SettingsLink href="/ayarlar/ekip" title="Ekip" description="Kişileri davet edin, rollerini değiştirin, üyeliği askıya alın." Icon={Users} />
+      ) : null}
+      {access.can("tenant.settings.manage") ? (
+        <SettingsLink
+          href={SETUP_HREF}
+          title="Kurulum sihirbazı"
+          description="İşletme bilgileri, depo ve raflar, ürünler, açılış stoğu ve ekip daveti adım adım."
+          Icon={Rocket}
+        />
       ) : null}
       {access.can("tenant.settings.manage") ? (
         <SettingsLink

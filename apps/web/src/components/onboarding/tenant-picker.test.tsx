@@ -25,7 +25,7 @@ describe("TenantPicker — business status (#111)", () => {
       </SessionContext>,
     );
     const list = screen.getByRole("list", { name: "İşletmeleriniz" });
-    const active = within(list).getByRole("button", { name: /Örnek Motor/ });
+    const active = within(list).getByRole("button", { name: /Örnek Toptan/ });
     const suspended = within(list).getByRole("button", { name: /Askıdaki Bayi/ });
     expect(active.textContent).not.toContain("Askıya alındı");
     expect(active.getAttribute("aria-describedby")).toBeNull();

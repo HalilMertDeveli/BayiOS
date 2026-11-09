@@ -3,8 +3,8 @@
 ## Amaç
 Sattığınız ürünleri (SKU, barkod, birim, KDV ve sektörünüze özel bilgilerle) kataloğa eklemek ve kolayca bulmak.
 
-**Ürün** ve **varyant** farkı: Ürün genel kayıttır (ör. "Fren balatası"). Varyant, stokta tutulan ve satılan
-tek çeşittir; kendi **SKU**'su ve **barkodu** vardır (ör. ön/arka, renk). Tek çeşit ürün için bir varyant yeterlidir.
+**Ürün** ve **varyant** farkı: Ürün genel kayıttır (ör. "Tişört"). Varyant, stokta tutulan ve satılan
+tek çeşittir; kendi **SKU**'su ve **barkodu** vardır (ör. beden, renk). Tek çeşit ürün için bir varyant yeterlidir.
 
 ## Adımlar
 
