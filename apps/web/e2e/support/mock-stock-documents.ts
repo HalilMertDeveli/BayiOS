@@ -120,7 +120,7 @@ function balanceRow(inv: MockInventory, variantId: string, warehouseId: string, 
 }
 
 /** Writes one movement; `warehouseId` may be a transfer id (the in-transit point, no balance row in the list). */
-function move(inv: MockInventory, input: { variantId: string; warehouseId: string; locationId: string | null; type: string; quantity: number; sourceType: string; sourceId: string; reason: string | null; balance?: MockBalance; transitAfter?: number }): MockMovement {
+function move(inv: MockInventory, input: { variantId: string; warehouseId: string; locationId: string | null; type: string; quantity: number; sourceType: string; sourceId: string; transferNumber?: string; reason: string | null; balance?: MockBalance; transitAfter?: number }): MockMovement {
   let after = input.transitAfter ?? 0;
   if (input.balance) {
     input.balance.onHand = round(input.balance.onHand + input.quantity);
@@ -145,6 +145,9 @@ function move(inv: MockInventory, input: { variantId: string; warehouseId: strin
     correlationId: null,
     occurredAt: new Date(Date.UTC(2026, 10, 9) + inv.movements.length * 60_000).toISOString(),
     createdBy: null,
+    // #98: the API flags the in-transit point (transfer id in the warehouse slot) and names two-stage transfers.
+    isTransit: input.sourceType === "transfer" && input.warehouseId === input.sourceId,
+    transferNumber: input.transferNumber ?? null,
   };
   inv.movements.push(movement);
   return movement;
@@ -318,7 +321,9 @@ export async function handleStockDocuments(
 
   // ---- Shelf-to-shelf move ----
   if (isRelocation && method === "POST") {
-    if (!has("inventory.transfer")) return forbid("inventory.transfer");
+    // #98: own permission (warehouse staff included); includeReserved also moves reserved stock still on the shelf
+    // (this mock treats every reserved unit as still on the shelf, held for one synthetic order).
+    if (!has("inventory.relocate")) return forbid("inventory.relocate");
     const warehouseId = String(body?.warehouseId ?? "");
     const lines = (body?.lines as Json[] | undefined) ?? [];
     const errors: Record<string, string[]> = {};
@@ -328,24 +333,42 @@ export async function handleStockDocuments(
     if (Object.keys(errors).length > 0) return invalid(errors);
     for (const l of lines) {
       const row = balanceRow(inv, String(l.variantId), warehouseId, String(l.fromLocationId));
-      if (row.available < Number(l.quantity)) {
+      const offered = row.available + (l.includeReserved === true ? row.reserved : 0);
+      if (offered < Number(l.quantity)) {
         const sku = variants.find((v) => v.id === l.variantId)?.sku ?? null;
         return fail(409, "inventory.insufficient_available", {
-          shortages: [{ variantId: l.variantId, sku, warehouseId, locationId: l.fromLocationId, requested: Number(l.quantity), available: row.available }],
+          shortages: [{ variantId: l.variantId, sku, warehouseId, locationId: l.fromLocationId, requested: Number(l.quantity), available: offered }],
         });
       }
     }
     const transferId = docId("9f", 800 + inv.movements.length);
-    const movements = lines.flatMap((l) => {
+    const reservationMoves: Json[] = [];
+    const movements = lines.flatMap((l, i) => {
       const q = Number(l.quantity);
       const from = balanceRow(inv, String(l.variantId), warehouseId, String(l.fromLocationId));
       const to = balanceRow(inv, String(l.variantId), warehouseId, String(l.toLocationId));
+      const reserved = round(Math.max(0, q - from.available));
+      if (reserved > 0) {
+        from.reserved = round(from.reserved - reserved);
+        to.reserved = round(to.reserved + reserved);
+        reservationMoves.push({
+          orderId: docId("6a", 1),
+          orderLineId: docId("6b", i + 1),
+          variantId: l.variantId,
+          warehouseId,
+          fromLocationId: l.fromLocationId,
+          toLocationId: l.toLocationId,
+          quantity: reserved,
+          fromReservationId: docId("6c", i + 1),
+          toReservationId: docId("6d", i + 1),
+        });
+      }
       return [
         move(inv, { variantId: String(l.variantId), warehouseId, locationId: from.locationId, type: "transfer_out", quantity: -q, sourceType: "transfer", sourceId: transferId, reason: (body?.reference as string) ?? null, balance: from }),
         move(inv, { variantId: String(l.variantId), warehouseId, locationId: to.locationId, type: "transfer_in", quantity: q, sourceType: "transfer", sourceId: transferId, reason: (body?.reference as string) ?? null, balance: to }),
       ];
     });
-    return succeed(201, { transferId, movements });
+    return succeed(201, { transferId, movements, reservationMoves });
   }
 
   // ---- Transfers ----
@@ -433,8 +456,8 @@ export async function handleStockDocuments(
         .map(({ l, row }) => ({ variantId: l.variantId, sku: l.sku, warehouseId: t.sourceWarehouseId, locationId: l.sourceLocationId, requested: l.quantity, available: row.available }));
       if (shortages.length > 0) return fail(409, "inventory.insufficient_available", { shortages });
       const movements = t.lines.flatMap((l) => [
-        move(inv, { variantId: l.variantId, warehouseId: t.sourceWarehouseId, locationId: l.sourceLocationId, type: "transfer_out", quantity: -l.quantity, sourceType: "transfer", sourceId: t.id, reason, balance: balanceRow(inv, l.variantId, t.sourceWarehouseId, l.sourceLocationId) }),
-        move(inv, { variantId: l.variantId, warehouseId: t.id, locationId: null, type: "transfer_in", quantity: l.quantity, sourceType: "transfer", sourceId: t.id, reason, transitAfter: l.quantity }),
+        move(inv, { variantId: l.variantId, warehouseId: t.sourceWarehouseId, locationId: l.sourceLocationId, type: "transfer_out", quantity: -l.quantity, sourceType: "transfer", sourceId: t.id, transferNumber: t.number, reason, balance: balanceRow(inv, l.variantId, t.sourceWarehouseId, l.sourceLocationId) }),
+        move(inv, { variantId: l.variantId, warehouseId: t.id, locationId: null, type: "transfer_in", quantity: l.quantity, sourceType: "transfer", sourceId: t.id, transferNumber: t.number, reason, transitAfter: l.quantity }),
       ]);
       t.status = "in_transit";
       t.dispatchedAt = now();
@@ -475,8 +498,8 @@ export async function handleStockDocuments(
       const movements = plan.flatMap(({ line, quantity, shelf }) => {
         line.receivedQuantity = round(line.receivedQuantity + quantity);
         return [
-          move(inv, { variantId: line.variantId, warehouseId: t.id, locationId: null, type: "transfer_out", quantity: -quantity, sourceType: "transfer", sourceId: t.id, reason, transitAfter: outstanding(line) }),
-          move(inv, { variantId: line.variantId, warehouseId: destination.id, locationId: shelf, type: "transfer_in", quantity, sourceType: "transfer", sourceId: t.id, reason, balance: balanceRow(inv, line.variantId, destination.id, shelf) }),
+          move(inv, { variantId: line.variantId, warehouseId: t.id, locationId: null, type: "transfer_out", quantity: -quantity, sourceType: "transfer", sourceId: t.id, transferNumber: t.number, reason, transitAfter: outstanding(line) }),
+          move(inv, { variantId: line.variantId, warehouseId: destination.id, locationId: shelf, type: "transfer_in", quantity, sourceType: "transfer", sourceId: t.id, transferNumber: t.number, reason, balance: balanceRow(inv, line.variantId, destination.id, shelf) }),
         ];
       });
       const left = t.lines.reduce((s, l) => s + outstanding(l), 0);
@@ -496,12 +519,12 @@ export async function handleStockDocuments(
           const q = outstanding(l);
           if (resolution === "lost") {
             l.lostQuantity = round(l.lostQuantity + q);
-            return [move(inv, { variantId: l.variantId, warehouseId: t.id, locationId: null, type: "adjustment_out", quantity: -q, sourceType: "transfer", sourceId: t.id, reason: `${reason}: ${String(body?.reason)}` })];
+            return [move(inv, { variantId: l.variantId, warehouseId: t.id, locationId: null, type: "adjustment_out", quantity: -q, sourceType: "transfer", sourceId: t.id, transferNumber: t.number, reason: `${reason}: ${String(body?.reason)}` })];
           }
           l.returnedQuantity = round(l.returnedQuantity + q);
           return [
-            move(inv, { variantId: l.variantId, warehouseId: t.id, locationId: null, type: "transfer_out", quantity: -q, sourceType: "transfer", sourceId: t.id, reason }),
-            move(inv, { variantId: l.variantId, warehouseId: t.sourceWarehouseId, locationId: l.sourceLocationId, type: "transfer_in", quantity: q, sourceType: "transfer", sourceId: t.id, reason, balance: balanceRow(inv, l.variantId, t.sourceWarehouseId, l.sourceLocationId) }),
+            move(inv, { variantId: l.variantId, warehouseId: t.id, locationId: null, type: "transfer_out", quantity: -q, sourceType: "transfer", sourceId: t.id, transferNumber: t.number, reason }),
+            move(inv, { variantId: l.variantId, warehouseId: t.sourceWarehouseId, locationId: l.sourceLocationId, type: "transfer_in", quantity: q, sourceType: "transfer", sourceId: t.id, transferNumber: t.number, reason, balance: balanceRow(inv, l.variantId, t.sourceWarehouseId, l.sourceLocationId) }),
           ];
         });
       t.status = "closed";

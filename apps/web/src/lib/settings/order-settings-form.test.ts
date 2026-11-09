@@ -56,6 +56,12 @@ describe("settings form ⇄ merge patch", () => {
     expect(buildSettingsPatch(SETTINGS, values)).toEqual({ requireOrderApproval: false, orderNumberPrefix: "WEB", defaultTaxRate: 10 });
   });
 
+  it("sends autoCreatePickingTask only when the toggle changed (#98)", () => {
+    const values = { ...settingsToValues(SETTINGS), autoCreatePickingTask: !SETTINGS.autoCreatePickingTask };
+    expect(buildSettingsPatch(SETTINGS, values)).toEqual({ autoCreatePickingTask: !SETTINGS.autoCreatePickingTask });
+    expect(settingsToValues({ ...SETTINGS, autoCreatePickingTask: false }).autoCreatePickingTask).toBe(false);
+  });
+
   it("never sends negativeStockPolicy: stock never going below zero is a fixed rule (OD-09)", () => {
     expect(settingsToValues(SETTINGS)).not.toHaveProperty("negativeStockPolicy");
     expect(buildSettingsPatch({ ...SETTINGS, negativeStockPolicy: "warn" }, settingsToValues(SETTINGS))).not.toHaveProperty("negativeStockPolicy");

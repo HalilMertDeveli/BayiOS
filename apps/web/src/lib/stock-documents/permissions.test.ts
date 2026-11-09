@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { accessFor } from "@/test/session";
-import { transitLabel, transitTransferId, transferNumberFromId } from "./transit";
+import { movementReference, transitLabel, transitTransferId } from "./transit";
 import { countPermissions, transferPermissions } from "./permissions";
 
 describe("transfer and count permissions (roles-permissions §3.4, MOCK /me fixtures)", () => {
   it("managers create and receive; warehouse staff only receive and count", () => {
     expect(transferPermissions(accessFor("manager"))).toEqual({ read: true, manage: true, receive: true, relocate: true });
-    expect(transferPermissions(accessFor("warehouse_staff"))).toEqual({ read: true, manage: false, receive: true, relocate: false });
+    // #98: shelf moves have their own permission, which warehouse staff hold (inter-warehouse transfers stay managerial).
+    expect(transferPermissions(accessFor("warehouse_staff"))).toEqual({ read: true, manage: false, receive: true, relocate: true });
+    expect(transferPermissions(accessFor("sales")).relocate).toBe(false);
+    expect(transferPermissions(accessFor("viewer")).relocate).toBe(false);
     expect(transferPermissions(accessFor("viewer")).read).toBe(false);
     expect(countPermissions(accessFor("owner"))).toEqual({ read: true, manage: true, perform: true });
     expect(countPermissions(accessFor("warehouse_staff"))).toEqual({ read: true, manage: false, perform: true });
@@ -15,12 +18,15 @@ describe("transfer and count permissions (roles-permissions §3.4, MOCK /me fixt
 });
 
 describe("in-transit movements", () => {
-  it("recognises the transfer's own ledger point and names it", () => {
+  it("uses the API's isTransit flag and transferNumber (no client-side derivation)", () => {
     const id = "01937a2b-0000-7000-8000-00001a2b3c4d";
-    expect(transitTransferId({ warehouseId: id, sourceId: id })).toBe(id);
-    expect(transitTransferId({ warehouseId: "w-1", sourceId: id })).toBeNull();
-    expect(transitTransferId({ warehouseId: "w-1", sourceId: null })).toBeNull();
-    expect(transferNumberFromId(id)).toBe("TRF-1A2B3C4D");
-    expect(transitLabel(id)).toBe("Yolda (Transfer TRF-1A2B3C4D)");
+    expect(transitTransferId({ isTransit: true, sourceId: id })).toBe(id);
+    expect(transitTransferId({ isTransit: false, sourceId: id })).toBeNull();
+    expect(transitTransferId({ isTransit: true, sourceId: null })).toBeNull();
+    expect(transitLabel({ transferNumber: "TRF-0042" })).toBe("Yolda (Transfer TRF-0042)");
+    expect(transitLabel({ transferNumber: null })).toBe("Yolda (transfer)");
+    expect(movementReference({ reason: null, transferNumber: "TRF-0042" })).toBe("Transfer TRF-0042");
+    expect(movementReference({ reason: "Raf düzeni", transferNumber: null })).toBe("Raf düzeni");
+    expect(movementReference({ reason: null, transferNumber: null })).toBeNull();
   });
 });

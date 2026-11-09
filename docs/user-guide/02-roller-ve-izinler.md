@@ -43,7 +43,8 @@ Bir kullanıcının bir işletmede **tek bir rolü** vardır. Roller sabittir; y
 | Siparişi onaylamak (stok ayırmak) | ✓ | ✓ | ✓ | ✓¹ | – | – |
 | Siparişi iptal etmek | ✓ | ✓ | ✓ | ✓² | – | – |
 | WhatsApp siparişi hazırlamak | ✓ | ✓ | ✓ | ✓ | – | – |
-| Toplama görevini personele atamak | ✓ | ✓ | ✓ | – | – | – |
+| Toplama görevini personele atamak, oluşturmak, önceliğini değiştirmek, yeniden dağıtmak | ✓ | ✓ | ✓ | – | – | – |
+| Aynı depoda raf taşıma | ✓ | ✓ | ✓ | – | ✓ | – |
 | Havuzdan görev üstlenmek (**Üstlen**) | – | – | ✓ | – | ✓ | – |
 | Toplama, paket kontrolü, sevk onayı | ✓ | ✓ | ✓ | – | ✓ | – |
 | Raporları görmek ve indirmek | ✓ | ✓ | ✓ | ✓³ | – | ✓ |

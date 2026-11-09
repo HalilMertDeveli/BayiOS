@@ -35,18 +35,20 @@ import {
   isStaleFulfilment,
   isVersionConflict,
 } from "@/lib/fulfilment/errors";
-import { SHORTAGE_REASONS, shortageReasonLabels } from "@/lib/fulfilment/labels";
+import { SHORTAGE_REASONS, formatDeliveryDate, shortageReasonLabels } from "@/lib/fulfilment/labels";
 import { fulfilmentPermissions, type FulfilmentPermissions } from "@/lib/fulfilment/permissions";
 import {
   applyScan,
   clampStep,
   currentLine,
+  inactiveShelfLines,
   isOpenLine,
   keepLocation,
   locationAfterRejection,
   pickStep,
   readScan,
   remaining,
+  scanNeedsReload,
   sortLines,
   taskTotals,
   type ScannedLocation,
@@ -55,8 +57,9 @@ import { withBusyRetry } from "@/lib/inventory/busy-retry";
 import { formatQuantity, parseQuantity, quantityText, toNumber } from "@/lib/inventory/quantity";
 import { useSession } from "@/lib/session/session-context";
 import { useFocusAfterCommit } from "@/lib/use-focus-after-commit";
-import { ProgressBar, TaskStatusBadge } from "./fulfilment-badges";
+import { ProgressBar, TaskPriorityBadge, TaskStatusBadge } from "./fulfilment-badges";
 import { ScanFeedback, ScanField, type Feedback } from "./scan-field";
+import { TaskSupervisorPanel } from "./task-supervisor";
 
 type LoadState = { status: "loading" } | { status: "error"; message: string; notFound: boolean } | { status: "ready"; loaded: LoadedTask };
 
@@ -188,6 +191,9 @@ function PickView({
   const current = currentLine(lines, focusId);
   const totals = taskTotals(lines);
   const nextStep = pickStep(lines, current, location);
+  const inactive = active ? inactiveShelfLines(lines) : [];
+  const delivery = formatDeliveryDate(task.requestedDeliveryDate);
+  const deliveryText = delivery ? `Teslim: ${delivery}` : null;
 
   const focusInput = () => focusAfterCommit(() => inputRef.current);
   useEffect(() => {
@@ -219,6 +225,8 @@ function PickView({
     try {
       const response = await withBusyRetry(() => scanPick(api, task.id, body, key), { isBusy: isFulfilmentBusy, onRetry: () => setRetrying(true) });
       setFailed(null);
+      // Picked on another shelf (#98): the reservation followed, the task has a new line → reload in walking order.
+      const reallocated = scanNeedsReload(detailRef.current, response);
       const next = applyScan(detailRef.current, response);
       commit(next, etagOf(response.version));
       const changed = next.lines.find((l) => response.lines.some((p) => p.id === l.id));
@@ -226,6 +234,16 @@ function PickView({
       updateFocus(following?.id ?? null);
       updateLocation(keepLocation(locationRef.current, following));
       updateStep(1, following);
+      if (reallocated) {
+        const sku = response.lines[0]?.sku;
+        setFeedback({
+          tone: "success",
+          title: `✓ ${sku ?? "Okutma"} +${formatQuantity(toNumber(body.quantity))} (başka raftan)`,
+          text: `Ürün okutulan raftan toplandı; ayırma bu rafa taşındı ve liste güncellendi.${response.openLineCount === 0 ? " Tüm satırlar bitti; görevi tamamlayın." : ""}`,
+        });
+        onReload();
+        return;
+      }
       setFeedback({
         tone: "success",
         title: changed ? `✓ ${changed.sku} +${formatQuantity(toNumber(body.quantity))}` : "✓ Okutma kaydedildi",
@@ -350,8 +368,13 @@ function PickView({
       <BackLink />
       <PageHeader
         title={`Sipariş ${task.orderNumber}`}
-        description={`${lines.length} satır · raf sırasıyla`}
-        actions={<TaskStatusBadge status={task.status} />}
+        description={[task.customerName, deliveryText, `${lines.length} satır · raf sırasıyla`].filter(Boolean).join(" · ")}
+        actions={
+          <span className="flex flex-wrap items-center gap-2">
+            <TaskPriorityBadge priority={task.priority} />
+            <TaskStatusBadge status={task.status} />
+          </span>
+        }
       />
       <ProgressBar
         value={totals.picked + totals.short}
@@ -362,6 +385,14 @@ function PickView({
       {notice ? (
         <FormAlert tone={notice.tone} title={notice.title}>
           {notice.text}
+        </FormAlert>
+      ) : null}
+
+      {inactive.length > 0 ? (
+        <FormAlert tone="warning" title={`${inactive.length} satırın rafı pasif`}>
+          {permissions.assign
+            ? "Bu raflar kullanım dışı. Aşağıdaki “Yeniden dağıt” ile açık miktarı boş stoğu olan aktif raflara taşıyın."
+            : "Bu raflar kullanım dışı. Ürünü bulduğunuz başka bir raftan okutun (önce rafı, sonra ürünü); sistem ayırmayı o rafa taşır. Bulamazsanız eksik bildirin veya yöneticinize haber verin."}
         </FormAlert>
       ) : null}
 
@@ -494,6 +525,10 @@ function PickView({
         </section>
       ) : null}
 
+      {active && task.type === "pick" && permissions.assign ? (
+        <TaskSupervisorPanel loaded={loaded} onLoaded={(next) => commit(next.detail, next.etag)} onReload={onReload} />
+      ) : null}
+
       <section aria-labelledby={`${uid}-pick-lines`} className="flex flex-col gap-2">
         <h2 id={`${uid}-pick-lines`} className="text-h3 text-fg">
           Toplama listesi (raf sırası)
@@ -521,6 +556,11 @@ function PickView({
                 <span className="text-body text-fg">
                   {formatQuantity(line.quantityPicked)} / {formatQuantity(line.quantityToPick)} {line.unit}
                 </span>
+                {line.locationIsActive === false && open ? (
+                  <Badge tone="warning" icon={<TriangleAlert className="size-3.5" aria-hidden="true" />}>
+                    Raf pasif
+                  </Badge>
+                ) : null}
                 {short > 0 ? (
                   <Badge tone="danger">
                     {formatQuantity(short)} eksik{line.shortageReason ? ` · ${shortageReasonLabels[line.shortageReason] ?? line.shortageReason}` : ""}

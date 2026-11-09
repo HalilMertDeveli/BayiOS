@@ -13,6 +13,31 @@ export const taskStatusMeta: Record<string, { label: string; tone: BadgeTone }> 
 
 export const taskTypeLabels: Record<string, string> = { pick: "Toplama", putaway: "Rafa geri koyma" };
 
+/** Task priority (#98): the mobile work list sorts urgent → low; the label always carries the meaning, not the colour. */
+export const TASK_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+
+export const taskPriorityMeta: Record<string, { label: string; tone: BadgeTone }> = {
+  low: { label: "Düşük", tone: "neutral" },
+  normal: { label: "Normal", tone: "info" },
+  high: { label: "Yüksek", tone: "warning" },
+  urgent: { label: "Acil", tone: "danger" },
+};
+
+export const isTaskPriority = (value: string | null | undefined): value is TaskPriority =>
+  typeof value === "string" && (TASK_PRIORITIES as readonly string[]).includes(value);
+
+/** Select options, most urgent first (how supervisors think about it). */
+export const taskPriorityOptions = [...TASK_PRIORITIES].reverse().map((value) => ({ value, label: taskPriorityMeta[value].label }));
+
+const dateOnly = new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeZone: "UTC" });
+
+/** The order's requested delivery date ("2026-11-12" → "12 Kas 2026"); a calendar date, so formatted in UTC. */
+export function formatDeliveryDate(value: string | null | undefined): string | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  return dateOnly.format(new Date(`${value}T00:00:00Z`));
+}
+
 export const SHIPMENT_OPEN_STATUSES = ["draft", "packed"] as const;
 
 export const shipmentStatusMeta: Record<string, { label: string; tone: BadgeTone }> = {

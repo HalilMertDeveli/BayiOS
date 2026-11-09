@@ -1,9 +1,21 @@
 import { Badge } from "@/components/ui/badge";
-import { shipmentStatusMeta, statusMeta, taskStatusMeta } from "@/lib/fulfilment/labels";
+import { Flag } from "lucide-react";
+import { shipmentStatusMeta, statusMeta, taskPriorityMeta, taskStatusMeta } from "@/lib/fulfilment/labels";
 
 export function TaskStatusBadge({ status }: { status: string }) {
   const meta = statusMeta(taskStatusMeta, status);
   return <Badge tone={meta.tone}>{meta.label}</Badge>;
+}
+
+/** Task priority as text ("Öncelik: Acil", #98): the tone and flag only reinforce it, never carry it alone (WCAG 1.4.1). */
+export function TaskPriorityBadge({ priority }: { priority: string | null | undefined }) {
+  const value = priority ?? "normal";
+  const meta = statusMeta(taskPriorityMeta, value);
+  return (
+    <Badge tone={meta.tone} icon={value === "high" || value === "urgent" ? <Flag className="size-3.5" aria-hidden="true" /> : undefined}>
+      Öncelik: {meta.label}
+    </Badge>
+  );
 }
 
 export function ShipmentStatusBadge({ status }: { status: string }) {

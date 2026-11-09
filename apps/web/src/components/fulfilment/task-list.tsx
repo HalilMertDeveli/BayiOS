@@ -19,13 +19,15 @@ import {
   etagOf,
   listMyTasks,
   listTasks,
+  setTaskPriority,
   taskCommand,
   taskHref,
   taskListQuery,
+  type TaskListFilter,
   type TaskSummary,
 } from "@/lib/fulfilment/api";
 import { BUSY_FINAL_MESSAGE, fulfilmentErrorMessage, isFulfilmentBusy, isVersionConflict } from "@/lib/fulfilment/errors";
-import { TASK_ACTIVE_STATUSES, TASK_DONE_STATUSES, taskTypeLabels } from "@/lib/fulfilment/labels";
+import { TASK_ACTIVE_STATUSES, TASK_DONE_STATUSES, formatDeliveryDate, taskPriorityMeta, taskPriorityOptions, taskTypeLabels } from "@/lib/fulfilment/labels";
 import { fulfilmentPermissions, type FulfilmentPermissions } from "@/lib/fulfilment/permissions";
 import { withBusyRetry } from "@/lib/inventory/busy-retry";
 import { formatDateTime } from "@/lib/inventory/labels";
@@ -34,7 +36,8 @@ import { listActiveMembers, memberLabel, type Member } from "@/lib/api/identity"
 import { roleLabels } from "@/lib/navigation";
 import { toRole } from "@/lib/session/active-tenant";
 import { useSession } from "@/lib/session/session-context";
-import { ProgressBar, TaskStatusBadge } from "./fulfilment-badges";
+import { ProgressBar, TaskPriorityBadge, TaskStatusBadge } from "./fulfilment-badges";
+import { PriorityDialog } from "./task-supervisor";
 
 type Tab = "mine" | "pool" | "all";
 type AllFilter = "active" | "done" | "any";
@@ -89,22 +92,27 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
   const [filter, setFilter] = useState<AllFilter>("active");
   const [attempt, setAttempt] = useState(0);
   const [keyed, setKeyed] = useState<Keyed | null>(null);
-  const currentKey = `${tab}|${filter}|${attempt}`;
+  const [priorityFilter, setPriorityFilter] = useState("");
+  const currentKey = `${tab}|${filter}|${priorityFilter}|${attempt}`;
   const data: ListData = keyed?.key === currentKey ? keyed.value : { status: "loading" };
   const setData = (value: ListData) => setKeyed({ key: currentKey, value });
   const [more, setMore] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "error" | "warning"; title: string; text: string } | null>(null);
   const [assignFor, setAssignFor] = useState<TaskSummary | null>(null);
+  const [priorityFor, setPriorityFor] = useState<TaskSummary | null>(null);
+  const [priorityError, setPriorityError] = useState<string | null>(null);
+  const [savingPriority, setSavingPriority] = useState(false);
+  const allFilter: TaskListFilter = { statuses: FILTER_STATUSES[filter], priority: priorityFilter || null };
 
   const refresh = useCallback(() => setAttempt((n) => n + 1), []);
 
   useEffect(() => {
-    const key = `${tab}|${filter}|${attempt}`;
+    const key = `${tab}|${filter}|${priorityFilter}|${attempt}`;
     const controller = new AbortController();
     const load =
       tab === "all"
-        ? listTasks(api, taskListQuery({ statuses: FILTER_STATUSES[filter] }), controller.signal).then((page) => ({
+        ? listTasks(api, taskListQuery({ statuses: FILTER_STATUSES[filter], priority: priorityFilter || null }), controller.signal).then((page) => ({
             items: page.items,
             nextCursor: page.page.nextCursor ?? null,
             hasMore: page.page.hasMore,
@@ -118,13 +126,13 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
         if (!controller.signal.aborted) setKeyed({ key, value: { status: "error", message: fulfilmentErrorMessage(error) } });
       });
     return () => controller.abort();
-  }, [api, tab, filter, attempt]);
+  }, [api, tab, filter, priorityFilter, attempt]);
 
   const loadMore = async () => {
     if (data.status !== "ready" || !data.nextCursor || more) return;
     setMore(true);
     try {
-      const page = await listTasks(api, taskListQuery({ statuses: FILTER_STATUSES[filter] }, data.nextCursor));
+      const page = await listTasks(api, taskListQuery(allFilter, data.nextCursor));
       setData({ status: "ready", items: [...data.items, ...page.items], nextCursor: page.page.nextCursor ?? null, hasMore: page.page.hasMore });
     } catch (error) {
       setNotice({ tone: "error", title: "Devamı yüklenemedi", text: fulfilmentErrorMessage(error) });
@@ -170,6 +178,31 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
       return false;
     } finally {
       setPending(null);
+    }
+  };
+
+  /** tasks.assign: POST /picking-tasks/{id}/priority with If-Match on the shown version (412 → list reloads). */
+  const savePriority = async (value: string) => {
+    const task = priorityFor;
+    if (!task || savingPriority) return;
+    setSavingPriority(true);
+    setPriorityError(null);
+    const key = crypto.randomUUID();
+    try {
+      await withBusyRetry(() => setTaskPriority(api, task.id, value, { idempotencyKey: key, etag: etagOf(task.version) }), { isBusy: isFulfilmentBusy });
+      toast({ tone: "success", title: `${task.orderNumber}: öncelik ${taskPriorityMeta[value]?.label ?? value}` });
+      setPriorityFor(null);
+      refresh();
+    } catch (error) {
+      if (isVersionConflict(error)) {
+        setPriorityFor(null);
+        setNotice({ tone: "warning", title: "Görev değişmiş", text: "Görev siz bakarken güncellendi; liste yenilendi. Tekrar deneyin." });
+        refresh();
+      } else {
+        setPriorityError(isFulfilmentBusy(error) ? BUSY_FINAL_MESSAGE : fulfilmentErrorMessage(error));
+      }
+    } finally {
+      setSavingPriority(false);
     }
   };
 
@@ -223,18 +256,26 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
 
       <div id={`${uid}-task-panel`} role={tabs.length > 1 ? "tabpanel" : undefined} aria-labelledby={tabs.length > 1 ? `${uid}-tab-${tab}` : undefined} className="flex flex-col gap-3">
         {tab === "all" ? (
-          <Select
-            label="Durum"
-            size="lg"
-            className="sm:max-w-xs"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as AllFilter)}
-            options={[
-              { value: "active", label: "Aktif (bekleyen + toplanan)" },
-              { value: "done", label: "Biten (tamamlanan + iptal)" },
-              { value: "any", label: "Tümü" },
-            ]}
-          />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-2xl">
+            <Select
+              label="Durum"
+              size="lg"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as AllFilter)}
+              options={[
+                { value: "active", label: "Aktif (bekleyen + toplanan)" },
+                { value: "done", label: "Biten (tamamlanan + iptal)" },
+                { value: "any", label: "Tümü" },
+              ]}
+            />
+            <Select
+              label="Öncelik"
+              size="lg"
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              options={[{ value: "", label: "Tüm öncelikler" }, ...taskPriorityOptions]}
+            />
+          </div>
         ) : null}
 
         {notice ? (
@@ -282,11 +323,18 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
                           `Sipariş ${task.orderNumber}`
                         )}
                       </h2>
+                      {task.customerName ? <span className="text-body text-fg-secondary">{task.customerName}</span> : null}
                       <span className="text-caption text-fg-muted">
                         {taskTypeLabels[task.type] ?? task.type} · {formatQuantity(task.lineCount)} satır · {formatDateTime(task.createdAt)}
                       </span>
+                      {formatDeliveryDate(task.requestedDeliveryDate) ? (
+                        <span className="text-caption text-fg-secondary">İstenen teslim: {formatDeliveryDate(task.requestedDeliveryDate)}</span>
+                      ) : null}
                     </div>
-                    <TaskStatusBadge status={task.status} />
+                    <span className="flex flex-wrap items-center gap-2">
+                      <TaskPriorityBadge priority={task.priority} />
+                      <TaskStatusBadge status={task.status} />
+                    </span>
                   </div>
                   <ProgressBar
                     value={picked + short}
@@ -322,6 +370,21 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
                           Havuza bırak
                         </Button>
                       ) : null}
+                      {permissions.assign && task.type === "pick" ? (
+                        <Button
+                          size="lg"
+                          variant="secondary"
+                          className="min-h-12"
+                          aria-label={`Önceliği değiştir: Sipariş ${task.orderNumber}`}
+                          disabled={pending !== null}
+                          onClick={() => {
+                            setPriorityError(null);
+                            setPriorityFor(task);
+                          }}
+                        >
+                          Önceliği değiştir
+                        </Button>
+                      ) : null}
                     </div>
                   ) : null}
                 </li>
@@ -335,6 +398,15 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
           </Button>
         ) : null}
       </div>
+
+      <PriorityDialog
+        key={priorityFor ? `${priorityFor.id}:${priorityFor.version}` : "closed"}
+        task={priorityFor}
+        busy={savingPriority}
+        error={priorityError}
+        onClose={() => setPriorityFor(null)}
+        onSave={(value) => void savePriority(value)}
+      />
 
       <AssignDialog
         key={assignFor?.id ?? "closed"}

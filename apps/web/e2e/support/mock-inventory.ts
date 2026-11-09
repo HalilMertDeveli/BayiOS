@@ -66,6 +66,10 @@ export type MockMovement = {
   correlationId: string | null;
   occurredAt: string;
   createdBy: string | null;
+  /** #98: in-transit leg of a two-stage transfer (default false). */
+  isTransit?: boolean;
+  /** #98: the two-stage transfer's document number; null for shelf moves and other sources. */
+  transferNumber?: string | null;
 };
 
 export type InventoryOverride = (route: Route, body: Json | null) => Promise<unknown> | unknown;
@@ -440,7 +444,8 @@ export async function handleInventory(route: Route, inv: MockInventory, catalog:
     const items = inv.movements
       .filter((m) => (!p.get("variantId") || m.variantId === p.get("variantId")) && (!p.get("warehouseId") || m.warehouseId === p.get("warehouseId")))
       .filter((m) => (!p.get("type") || m.type === p.get("type")) && (!p.get("sourceId") || m.sourceId === p.get("sourceId")))
-      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+      .map((m) => ({ isTransit: false, transferNumber: null, ...m }));
     await json(route, 200, page(items, p));
     return true;
   }

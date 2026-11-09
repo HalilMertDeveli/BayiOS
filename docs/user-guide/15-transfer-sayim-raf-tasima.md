@@ -10,7 +10,7 @@ stoğa işlemek.
 |---|---|---|
 | Transfer oluşturma, gönderme, farkı kapatma, iptal | ✓ | – |
 | Transferi teslim alma | ✓ | ✓ |
-| Raf taşıma | ✓ | – |
+| Raf taşıma | ✓ | ✓ |
 | Sayım başlatma, yeniden saydırma, onaylama, iptal | ✓ | – |
 | Sayım girme ve sayımı bitirme | ✓ | ✓ |
 
@@ -41,7 +41,12 @@ Stok hareket geçmişinde yoldaki miktar "Yolda (Transfer TRF-…)" olarak gör�
 Aynı depoda bir raftan diğerine anında taşıma (yolda aşaması yoktur).
 1. **Stok** sayfasında **Raf taşı** düğmesine veya bir satırdaki **Taşı** bağlantısına basın.
 2. Depo, ürün, **Kaynak raf**, **Hedef raf** ve **Miktar** girin; **Taşı**.
-Yalnızca satılabilir miktar taşınır; siparişlere ayrılmış miktar rafta kalır.
+
+Varsayılan olarak yalnızca satılabilir miktar taşınır; siparişlere ayrılmış miktar rafta kalır. Rafı tümüyle boşaltmak
+için **Ayrılmış (rezerve) ürünleri de taşı** kutusunu işaretleyin: satılabilir stok yetmezse kalan, siparişlere ayrılmış
+ve hâlâ rafta duran üründen alınır; o siparişlerin ayırması ve açık toplama görevleri hedef rafa yönlendirilir. Sonuçta
+"Bunun N birimi M siparişe ayrılmıştı …" yazar. Toplanmış, paketlenmiş veya eksik bildirilmiş ürün taşınmaz.
+Raf taşımayı depo personeli de yapabilir.
 
 ### Stok sayımı (`/depo/sayimlar`)
 1. **Sayımlar → Yeni sayım**. Depoyu ve kapsamı seçin: **Tüm depo**, **Seçili raflar** (raf takipli depolarda) veya
@@ -68,6 +73,9 @@ Yalnızca satılabilir miktar taşınır; siparişlere ayrılmış miktar rafta 
 | "Bazı satırların stoğu sayımdan sonra değişti" | Sayım sırasında satış/mal kabul olmuş. Satırları kontrol edin; düzeltme sayım anındaki bakiyeye göre hesaplanır. Uygunsa **Yine de uygula**. |
 | "Sayılan miktar … ayrılmış (rezerve) miktarın altında kalıyor" | Önce ilgili siparişlerin ayrılmış miktarını azaltın, sonra tekrar onaylayın. |
 | "Henüz hiçbir satır sayılmadı" | En az bir satırı sayın. |
+| "Bu rafta satılabilir yalnızca …" (raf taşıma) | Miktarı azaltın veya **Ayrılmış (rezerve) ürünleri de taşı**'yı işaretleyin. |
+| "Kaynak rafta taşınabilecek stok yetersiz (satılabilir + rafta duran ayrılmış ürün)" | Toplanmış, paketlenmiş veya eksik bildirilmiş ürün taşınmaz; miktarı listelenen değere indirin. |
+| "Ayrılmış ürünün bir kısmı artık rafta değil …" | Bu arada toplama yapılmış; miktarı azaltıp tekrar deneyin. |
 
 ## İpuçları
 - Telefonda tarayıcıdan sayım yapabilirsiniz; okuyucu Enter gönderdiğinde okutma kaydedilir.

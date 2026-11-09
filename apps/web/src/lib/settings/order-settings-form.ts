@@ -13,6 +13,8 @@ export type OrderSettingsValues = {
   /** Default VAT rate in percent, as text ("20", "10", "1", "0" or any 0–100 value with ≤ 2 decimals). */
   defaultTaxRate: string;
   pricesIncludeTaxDisplay: boolean;
+  /** #98: approval creates the pick task at once (default); off → a supervisor creates it from the order. */
+  autoCreatePickingTask: boolean;
 };
 
 /** Same rule as the API (TenantSettings.IsValidOrderNumberPrefix): 1–10 of A–Z and 0–9, starting with a letter. */
@@ -27,6 +29,7 @@ export function settingsToValues(s: TenantSettings): OrderSettingsValues {
     orderNumberPrefix: s.orderNumberPrefix,
     defaultTaxRate: toDecimalInput(s.defaultTaxRate),
     pricesIncludeTaxDisplay: s.pricesIncludeTaxDisplay,
+    autoCreatePickingTask: s.autoCreatePickingTask,
   };
 }
 
@@ -67,6 +70,7 @@ export function buildSettingsPatch(original: TenantSettings, values: OrderSettin
   const tax = parseDecimalInput(values.defaultTaxRate, 2);
   if (tax.ok && Number(tax.value) !== Number(original.defaultTaxRate)) patch.defaultTaxRate = Number(tax.value);
   if (values.pricesIncludeTaxDisplay !== original.pricesIncludeTaxDisplay) patch.pricesIncludeTaxDisplay = values.pricesIncludeTaxDisplay;
+  if (values.autoCreatePickingTask !== original.autoCreatePickingTask) patch.autoCreatePickingTask = values.autoCreatePickingTask;
   return patch;
 }
 

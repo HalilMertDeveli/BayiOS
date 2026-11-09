@@ -222,14 +222,14 @@ test.describe("raf taşıma (mock)", () => {
     // Reserved stock does not move: only 6 of 8.
     await page.getByRole("textbox", { name: "Miktar" }).fill("7");
     await page.getByRole("button", { name: "Taşı", exact: true }).click();
-    await expect(page.getByText("Bu rafta satılabilir yalnızca 6. Ayrılmış stok taşınamaz.")).toBeVisible();
+    await expect(page.getByText(/^Bu rafta satılabilir yalnızca 6\. Ayrılmış stoğu da taşımak için/)).toBeVisible();
     await page.getByRole("textbox", { name: "Miktar" }).fill("5");
     await page.getByRole("button", { name: "Taşı", exact: true }).click();
     await expect(page.getByText("MOCK-001-1: 5 birim A-01 rafından A-02 rafına taşındı.")).toBeVisible();
     expect(posts(api, "/api/v1/inventory/relocations")[0].body).toEqual({
       warehouseId: WAREHOUSE_IDS.raf,
       reference: null,
-      lines: [{ variantId: variant.id, fromLocationId: LOCATION_IDS.a01, toLocationId: LOCATION_IDS.a02, quantity: 5 }],
+      lines: [{ variantId: variant.id, fromLocationId: LOCATION_IDS.a01, toLocationId: LOCATION_IDS.a02, quantity: 5, includeReserved: false }],
     });
     expect(onHand(api, "MOCK-001-1", WAREHOUSE_IDS.raf, LOCATION_IDS.a02)).toBe(5);
     await expectNoSeriousViolations(page);

@@ -1,6 +1,7 @@
 import type { ApiClient } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { etagOf } from "@/lib/catalog/api";
+import { toNumber } from "@/lib/inventory/quantity";
 
 type S = components["schemas"];
 
@@ -19,6 +20,7 @@ export type ShipmentPage = S["ShipmentPageResponse"];
 export type PackShipmentRequest = S["PackShipmentRequest"];
 export type ConfirmShipmentRequest = S["ConfirmShipmentRequest"];
 export type ConfirmShipmentResponse = S["ConfirmShipmentResponse"];
+export type ReallocateResponse = S["ReallocatePickingTaskResponse"];
 
 export { etagOf };
 
@@ -46,10 +48,22 @@ export async function listMyTasks(api: ApiClient, scope: "assigned" | "pool" | "
   return (await api.request<MyTasks>(`/api/v1/picking-tasks/mine?${query}`, { tenant: true, signal })).data.items;
 }
 
+export type TaskListFilter = {
+  statuses?: readonly string[];
+  assignedTo?: string | null;
+  /** low | normal | high | urgent (#98); empty = every priority. */
+  priority?: string | null;
+  orderId?: string | null;
+  type?: string | null;
+};
+
 /** Every task (tasks.read.all), oldest first, keyset paged. `statuses` is a comma list on the wire. */
-export function taskListQuery(filter: { statuses?: readonly string[]; assignedTo?: string | null }, cursor?: string | null): string {
+export function taskListQuery(filter: TaskListFilter, cursor?: string | null): string {
   const params = new URLSearchParams();
   if (filter.statuses?.length) params.set("status", filter.statuses.join(","));
+  if (filter.type) params.set("type", filter.type);
+  if (filter.priority) params.set("priority", filter.priority);
+  if (filter.orderId) params.set("orderId", filter.orderId);
   if (filter.assignedTo) params.set("assignedTo", filter.assignedTo);
   params.set("limit", String(FULFILMENT_PAGE_SIZE));
   if (cursor) params.set("cursor", cursor);
@@ -97,6 +111,59 @@ export async function assignTask(api: ApiClient, id: string, userId: string, opt
     ifMatch: options.etag ?? undefined,
   });
   return loadedTask(response.data, response.etag);
+}
+
+/**
+ * POST /picking-tasks (tasks.assign): the pick task for what is still open and reserved on an approved order — used when
+ * the tenant turned off `autoCreatePickingTask` (#98). 409 picking.fulfillment_in_progress when one already exists.
+ */
+export async function createPickingTask(api: ApiClient, body: { orderId: string; priority: string }, idempotencyKey: string): Promise<LoadedTask> {
+  const response = await api.request<TaskDetail>("/api/v1/picking-tasks", { method: "POST", tenant: true, body, idempotencyKey });
+  return loadedTask(response.data, response.etag);
+}
+
+/** POST /picking-tasks/{id}/priority (tasks.assign) with If-Match: changes an active task's priority. */
+export async function setTaskPriority(
+  api: ApiClient,
+  id: string,
+  priority: string,
+  options: { idempotencyKey: string; etag?: string | null },
+): Promise<LoadedTask> {
+  const response = await api.request<TaskDetail>(taskPath(id, "/priority"), {
+    method: "POST",
+    tenant: true,
+    body: { priority },
+    idempotencyKey: options.idempotencyKey,
+    ifMatch: options.etag ?? undefined,
+  });
+  return loadedTask(response.data, response.etag);
+}
+
+export type ReallocateResult = { loaded: LoadedTask; moved: number; unmoved: number };
+
+/**
+ * POST /picking-tasks/{id}/reallocate (tasks.assign) with If-Match: moves the task's open quantity off inactive shelves
+ * (or off `fromLocationId`) onto active shelves with free stock; the reservation moves in the same transaction. What
+ * cannot move stays on its line and comes back as `unmoved`.
+ */
+export async function reallocateTask(
+  api: ApiClient,
+  id: string,
+  fromLocationId: string | null,
+  options: { idempotencyKey: string; etag?: string | null },
+): Promise<ReallocateResult> {
+  const response = await api.request<ReallocateResponse>(taskPath(id, "/reallocate"), {
+    method: "POST",
+    tenant: true,
+    body: { fromLocationId },
+    idempotencyKey: options.idempotencyKey,
+    ifMatch: options.etag ?? undefined,
+  });
+  return {
+    loaded: loadedTask(response.data.task, response.etag),
+    moved: toNumber(response.data.movedQuantity),
+    unmoved: toNumber(response.data.unmovedQuantity),
+  };
 }
 
 /**

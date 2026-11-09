@@ -32,6 +32,8 @@ export type MockTaskLine = {
   quantityPicked: number;
   quantityShort: number;
   shortageReason: string | null;
+  /** #98: false when the shelf was deactivated (the line needs a re-allocation); default true. */
+  locationIsActive?: boolean;
 };
 
 export type MockTask = {
@@ -48,6 +50,10 @@ export type MockTask = {
   version: number;
   lines: MockTaskLine[];
   shipmentId: string | null;
+  /** #98: low | normal | high | urgent. */
+  priority: string;
+  customerName: string | null;
+  requestedDeliveryDate: string | null;
 };
 
 export type MockShipmentLine = {
@@ -99,6 +105,13 @@ export type MockFulfilment = {
   overrides: Map<string, FulfilmentOverride>;
   idempotency: Map<string, { status: number; body: unknown }>;
   movements: Json[];
+  /**
+   * #98 re-allocation: free stock on the spare shelf (Z-99) that open quantity can move to; what does not fit stays
+   * (unmovedQuantity). Default: plenty.
+   */
+  spareShelfStock: number;
+  /** Orders a supervisor may create a pick task for (POST /picking-tasks); mock-backend wires it to the orders mock. */
+  orderOf?: (orderId: string) => { number: string; status: string; customerName: string | null; requestedDeliveryDate: string | null } | null;
 };
 
 const uuid = (prefix: string, n: number) => `00000000-0000-4000-8000-${prefix}${String(n).padStart(12 - prefix.length, "0")}`;
@@ -144,6 +157,9 @@ export function makeTask(n: number, overrides: Partial<MockTask> = {}): MockTask
     version: 1,
     lines: [makeLine(1), makeLine(2, { quantityToPick: 1 })],
     shipmentId: null,
+    priority: "normal",
+    customerName: `Mock Bayi ${n}`,
+    requestedDeliveryDate: null,
     ...overrides,
   };
 }
@@ -197,6 +213,7 @@ export function createMockFulfilment(options: Partial<Pick<MockFulfilment, "task
     overrides: new Map(),
     idempotency: new Map(),
     movements: [],
+    spareShelfStock: Number.POSITIVE_INFINITY,
   };
 }
 
@@ -239,7 +256,7 @@ function summary(t: MockTask) {
     warehouseId: t.warehouseId,
     assignedTo: t.assignedTo,
     assigneeName: t.assignedTo ? (MOCK_MEMBER_NAMES[t.assignedTo] ?? null) : null,
-    lineCount: t.lines.length,
+    lineCount: t.lines.filter((l) => l.quantityToPick > 0).length,
     quantityToPick: sum("quantityToPick"),
     quantityPicked: sum("quantityPicked"),
     quantityShort: sum("quantityShort"),
@@ -247,11 +264,26 @@ function summary(t: MockTask) {
     startedAt: t.startedAt,
     completedAt: t.completedAt,
     version: t.version,
+    priority: t.priority,
+    customerName: t.customerName,
+    requestedDeliveryDate: t.requestedDeliveryDate,
   };
 }
 
-const lineBody = (l: MockTaskLine) => ({ ...l, quantityRemaining: remainingOf(l) });
-const taskBody = (t: MockTask) => ({ task: summary(t), lines: [...t.lines].sort((a, b) => a.sequence - b.sequence).map(lineBody), shipmentId: t.shipmentId });
+const lineBody = (l: MockTaskLine) => ({ ...l, locationIsActive: l.locationId ? (l.locationIsActive ?? true) : null, quantityRemaining: remainingOf(l) });
+/**
+ * Lines in walking order on their current shelves (shelf code, then sequence) as the API sends them; re-allocated lines
+ * join their new shelf's place, emptied lines (nothing to pick) are hidden.
+ */
+const taskBody = (t: MockTask) => ({
+  task: summary(t),
+  lines: t.lines
+    .filter((l) => l.quantityToPick > 0)
+    .sort((a, b) => (a.locationCode ?? "").localeCompare(b.locationCode ?? "") || a.sequence - b.sequence)
+    .map(lineBody),
+  shipmentId: t.shipmentId,
+});
+const PRIORITIES = ["low", "normal", "high", "urgent"];
 
 function shipmentSummary(s: MockShipment) {
   return {
@@ -328,8 +360,41 @@ export async function handleFulfilment(route: Route, mock: MockFulfilment, role:
   if (path === "/api/v1/picking-tasks" && method === "GET") {
     if (!can("readAll")) return forbidden("tasks.read.all");
     const statuses = (url.searchParams.get("status") ?? "").split(",").filter(Boolean);
-    const items = mock.tasks.filter((t) => !statuses.length || statuses.includes(t.status));
+    const priority = url.searchParams.get("priority");
+    if (priority !== null && !PRIORITIES.includes(priority)) return done(json(route, 400, problemBody(400, "request.malformed")));
+    const orderFilter = url.searchParams.get("orderId");
+    const typeFilter = url.searchParams.get("type");
+    const items = mock.tasks.filter(
+      (t) =>
+        (!statuses.length || statuses.includes(t.status)) &&
+        (!priority || t.priority === priority) &&
+        (!orderFilter || t.orderId === orderFilter) &&
+        (!typeFilter || t.type === typeFilter),
+    );
     return done(json(route, 200, { items: items.map(summary), page: { nextCursor: null, hasMore: false, limit: 50 } }));
+  }
+  if (path === "/api/v1/picking-tasks" && method === "POST") {
+    // #98: a supervisor creates the pick task of an approved order (auto-create off).
+    if (!can("assign")) return forbidden("tasks.assign");
+    const priority = (body?.priority as string | null | undefined) ?? "normal";
+    if (!PRIORITIES.includes(priority)) return fail(422, "validation.failed", { errors: { priority: ["Must be one of: low, normal, high, urgent."] } });
+    const orderIdValue = String(body?.orderId ?? "");
+    const order = mock.orderOf?.(orderIdValue) ?? null;
+    if (!order) return fail(404, "resource.not_found");
+    if (!["approved", "picking", "packed"].includes(order.status)) return fail(409, "picking.order_not_fulfillable");
+    if (mock.tasks.some((t) => t.orderId === orderIdValue && t.type === "pick" && active(t))) return fail(409, "picking.fulfillment_in_progress");
+    const n = mock.tasks.length + 50;
+    const task = makeTask(n, {
+      orderId: orderIdValue,
+      orderNumber: order.number,
+      customerName: order.customerName,
+      requestedDeliveryDate: order.requestedDeliveryDate,
+      priority,
+      createdAt: "2026-11-09T09:00:00Z",
+      lines: [makeLine(1, { id: uuid("7e", n * 10 + 1) }), makeLine(2, { id: uuid("7e", n * 10 + 2), quantityToPick: 1 })],
+    });
+    mock.tasks.push(task);
+    return reply(201, taskBody(task), task.version);
   }
   const taskMatch = /^\/api\/v1\/picking-tasks\/([^/]+)(?:\/(.+))?$/.exec(path);
   if (taskMatch) {
@@ -359,6 +424,58 @@ export async function handleFulfilment(route: Route, mock: MockFulfilment, role:
       task.assignedTo = action === "assign" ? String(body?.userId) : null;
       touch();
       return reply(200, taskBody(task), task.version);
+    }
+    if (action === "priority") {
+      if (!can("assign")) return forbidden("tasks.assign");
+      const priority = String(body?.priority ?? "");
+      if (!PRIORITIES.includes(priority)) return fail(422, "validation.failed", { errors: { priority: ["Must be one of: low, normal, high, urgent."] } });
+      if (!active(task)) return fail(409, "picking.invalid_transition");
+      if (task.priority !== priority) {
+        task.priority = priority;
+        touch();
+      }
+      return reply(200, taskBody(task), task.version);
+    }
+    if (action === "reallocate") {
+      // #98: open quantity on inactive shelves (or on fromLocationId) moves to the spare shelf Z-99 as far as its free
+      // stock goes; picked / short quantities never move; emptied lines stay with nothing to pick (hidden).
+      if (!can("assign")) return forbidden("tasks.assign");
+      if (task.type !== "pick" || !active(task)) return fail(409, "picking.invalid_transition");
+      const from = (body?.fromLocationId as string | null | undefined) ?? null;
+      const known = [...task.lines.map((l) => l.locationId), ...mock.shelves.map((s) => s.id)];
+      if (from && !known.includes(from)) return fail(422, "validation.failed", { errors: { fromLocationId: ["Location not found in this task's warehouse."] } });
+      const spare = mock.shelves[0];
+      let moved = 0;
+      let unmoved = 0;
+      for (const line of [...task.lines]) {
+        const open = remainingOf(line);
+        const source = from ? line.locationId === from : line.locationId !== null && line.locationIsActive === false;
+        if (!source || open <= 0 || line.locationId === spare.id) continue;
+        const take = Math.min(open, mock.spareShelfStock);
+        unmoved = round(unmoved + open - take);
+        if (take <= 0) continue;
+        mock.spareShelfStock = round(mock.spareShelfStock - take);
+        moved = round(moved + take);
+        line.quantityToPick = round(line.quantityToPick - take);
+        const target = task.lines.find((l) => l.orderLineId === line.orderLineId && l.locationId === spare.id);
+        if (target) target.quantityToPick = round(target.quantityToPick + take);
+        else
+          task.lines.push({
+            ...line,
+            id: uuid("7e", 900 + task.lines.length),
+            sequence: task.lines.length + 1,
+            locationId: spare.id,
+            locationCode: spare.code,
+            locationBarcode: spare.barcode,
+            locationIsActive: true,
+            quantityToPick: take,
+            quantityPicked: 0,
+            quantityShort: 0,
+            shortageReason: null,
+          });
+      }
+      if (moved > 0) touch();
+      return reply(200, { task: taskBody(task), movedQuantity: moved, unmovedQuantity: unmoved }, task.version);
     }
     if (!can("pick")) return forbidden("tasks.pick");
     if (!ownWork()) return fail(403, "picking.not_assignee");
