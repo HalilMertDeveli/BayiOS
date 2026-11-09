@@ -399,7 +399,7 @@ export interface paths {
         put?: never;
         /**
          * Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants)
-         * @description 403 `entitlement.limit_exceeded` when the plan's product limit (`max_products`, Basic: 999 non-archived products) is reached.
+         * @description 403 `entitlement.limit_exceeded` when a product limit (`max_products`, non-archived products; unlimited on every plan, OD-02 — only an operator override sets one) is reached.
          */
         post: operations["Catalog_CreateProduct"];
         delete?: never;

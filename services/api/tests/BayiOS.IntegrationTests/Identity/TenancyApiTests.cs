@@ -214,6 +214,8 @@ public class TenancyApiTests(ApiFixture fixture)
 
         var saved = await (await Send(client, HttpMethod.Get, "/api/v1/tenant/settings", tenant.Id)).Content.ReadFromJsonAsync<TenantSettingsResponse>(Ct);
         Assert.Equal(("block", 5m), (saved!.NegativeStockPolicy, saved.SalesMaxDiscountPercent));
+        // OD-09 (2026-11-09): sales may approve orders by default on a new tenant; owner/admin can turn it off.
+        Assert.True(saved.SalesCanApproveOrders);
     }
 
     private static async Task<TenantResponse> CreateTenant(HttpClient client, string? slug = null)

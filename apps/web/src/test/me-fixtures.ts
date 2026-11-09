@@ -171,12 +171,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function entitlementsFor(plan: FixturePlan, options: { trialDaysLeft?: number; now?: number } = {}): FixtureEntitlements {
   const now = options.now ?? Date.now();
-  const catalogVersion = "2026-11-09.1";
-  // Mirrors services/api BillingCatalog (OD-02: Basic 999 users / warehouses / products).
+  const catalogVersion = "2026-11-09.2";
+  // Mirrors services/api BillingCatalog (OD-02: Basic 999 users / warehouses, unlimited products, barcode / mobile scanning;
+  // OD-08: AI 300 parses a month).
   const basicLimits = [
     { code: "max_warehouses", value: 999 },
     { code: "max_users", value: 999 },
-    { code: "max_products", value: 999 },
+    { code: "max_products", value: null },
   ];
   switch (plan) {
     case "trial":
@@ -191,7 +192,7 @@ export function entitlementsFor(plan: FixturePlan, options: { trialDaysLeft?: nu
           { code: "max_warehouses", value: null },
           { code: "max_users", value: 999 },
           { code: "max_products", value: null },
-          { code: "ai_parses_per_month", value: 1000 },
+          { code: "ai_parses_per_month", value: 300 },
         ],
       };
     case "professional":
@@ -208,14 +209,14 @@ export function entitlementsFor(plan: FixturePlan, options: { trialDaysLeft?: nu
         ],
       };
     case "basic":
-      return { plan: "basic", status: "active", trialEndsAt: null, catalogVersion, features: [], limits: basicLimits };
+      return { plan: "basic", status: "active", trialEndsAt: null, catalogVersion, features: ["barcode_operations"], limits: basicLimits };
     case "expired":
       return {
         plan: "basic",
         status: "expired",
         trialEndsAt: new Date(now - 2 * DAY_MS).toISOString(),
         catalogVersion,
-        features: [],
+        features: ["barcode_operations"],
         limits: basicLimits,
       };
   }

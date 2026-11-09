@@ -54,12 +54,17 @@ public sealed class BillingApiTests(ApiFixture fixture)
         Assert.Equal(["basic", "professional"], catalog.Plans.Select(p => p.Code));
         Assert.Equal((30, "professional", "basic"), (catalog.TrialDays, catalog.TrialPlan, catalog.FallbackPlan));
         Assert.Contains(catalog.Modules, m => m is { Code: BillingKit.AiModule, Available: true });
-        // OD-02 (2026-11-09): Basic = 999 users, 999 warehouses, 999 products.
-        var basic = catalog.Plans.Single(p => p.Code == "basic").Limits;
-        foreach (var code in new[] { "max_users", "max_warehouses", "max_products" })
+        // OD-02 (2026-11-09): Basic = 999 users, 999 warehouses, unlimited products, barcode / mobile scanning included.
+        var basicPlan = catalog.Plans.Single(p => p.Code == "basic");
+        foreach (var code in new[] { "max_users", "max_warehouses" })
         {
-            Assert.Contains(basic, l => l.Code == code && l.Value == 999);
+            Assert.Contains(basicPlan.Limits, l => l.Code == code && l.Value == 999);
         }
+
+        Assert.Contains(basicPlan.Limits, l => l is { Code: "max_products", Value: null });
+        Assert.Contains("barcode_operations", basicPlan.Features);
+        // OD-08: the AI add-on allows 300 parses a month.
+        Assert.Contains(catalog.Modules.Single(m => m.Code == BillingKit.AiModule).Limits, l => l is { Code: "ai_parses_per_month", Value: 300 });
     }
 
     [Fact]
@@ -110,7 +115,7 @@ public sealed class BillingApiTests(ApiFixture fixture)
         var warehouses = Assert.Single(usage.Items, i => i.Code == "max_warehouses");
         Assert.Equal((1L, 1L, 0L), (warehouses.Limit, warehouses.Current, warehouses.Remaining));
         Assert.Contains(usage.Items, i => i is { Code: "max_users", Limit: 999, Current: 1 });
-        Assert.Contains(usage.Items, i => i is { Code: "max_products", Limit: 999, Current: 1 });
+        Assert.Contains(usage.Items, i => i is { Code: "max_products", Limit: null, Current: 1, Remaining: null }); // unlimited (OD-02)
     }
 
     [Fact]

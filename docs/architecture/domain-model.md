@@ -47,7 +47,7 @@ Genel kurallar:
 ## 2. Billing & Entitlements
 
 ### Aggregate: `SubscriptionPlan` (platform, tenant'sız)
-- `Code`, `Name`, `Features` (ör. `ai_order_parsing`, `multi_warehouse`, `mobile_scanning`), `Limits` (`max_users`, `max_products`, `max_warehouses`, `ai_parses_per_month`; Temel 999/999/999 — OD-02).
+- `Code`, `Name`, `Features` (ör. `ai_order_parsing`, `multi_warehouse`, `mobile_scanning`), `Limits` (`max_users`, `max_products`, `max_warehouses`, `ai_parses_per_month`; Temel 999 kullanıcı, 999 depo, ürün sınırsız — OD-02; AI 300/ay — OD-08).
 
 ### Aggregate: `TenantSubscription`
 - `PlanCode`, `Status (trialing|active|past_due|cancelled)`, `CurrentPeriodStart/End`.

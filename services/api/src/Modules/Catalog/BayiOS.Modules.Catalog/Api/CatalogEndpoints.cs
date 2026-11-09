@@ -85,7 +85,7 @@ internal static class CatalogEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
         Write(group.MapPost("/products", CreateProduct).WithName("Catalog_CreateProduct")
             .WithSummary("Ürün oluşturur (basit ürün: sku/barcode; varyantlı: variants)").RequirePermission(Permissions.CatalogWrite)
-            .WithDescription("403 `entitlement.limit_exceeded` when the plan's product limit (`max_products`, Basic: 999 non-archived products) is reached.")
+            .WithDescription("403 `entitlement.limit_exceeded` when a product limit (`max_products`, non-archived products; unlimited on every plan, OD-02 — only an operator override sets one) is reached.")
             .EnforcesEntitlementLimit(EntitlementCodes.MaxProducts)
             .WithMetadata(new ConflictDetailMetadata()));
         Update(group.MapPatch("/products/{id:guid}", UpdateProduct).WithName("Catalog_UpdateProduct")

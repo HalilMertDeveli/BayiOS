@@ -38,7 +38,8 @@ test("owner on the trial: plan, trial end, usage vs limits, module store, 'ödem
   await expect(usage).toContainText("Aktif depo sayısı");
   await expect(usage).toContainText("2 / sınırsız");
   await expect(usage).toContainText("Aylık AI ayrıştırma (bu ay)");
-  await expect(usage).toContainText("12 / 1.000");
+  await expect(usage).toContainText("12 / 300"); // OD-08
+  await expect(usage.getByRole("listitem").filter({ hasText: "Ürün sayısı" })).toContainText("3 / sınırsız"); // OD-02: no product cap
   const modules = page.getByRole("list", { name: "Ek modüller" });
   await expect(modules.getByRole("listitem").filter({ hasText: "AI WhatsApp asistanı" })).toContainText("Denemeye dahil");
   await expect(modules.getByRole("listitem").filter({ hasText: "Bayi portalı" })).toContainText("Yakında");

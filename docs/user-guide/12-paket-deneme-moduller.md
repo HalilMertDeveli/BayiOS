@@ -15,16 +15,17 @@ Ekranda görünen sınırlar (Temel değerleri ürün sahibi kararıdır, 2026-1
 | | Temel | Profesyonel |
 |---|---|---|
 | Aktif depo sayısı | 999 | Sınırsız |
-| Ürün sayısı (arşivlenmiş ürünler sayılmaz) | 999 | Sınırsız |
+| Ürün sayısı | Sınırsız | Sınırsız |
+| Barkod okutma ve mobil toplama | ✓ | ✓ |
 | Raf/göz (lokasyon) takibi | – | ✓ |
 | Kullanıcı sayısı | 999 | 999 |
 
-**AI WhatsApp asistanı** ek modülü: aylık 1.000 AI ayrıştırma.
+**AI WhatsApp asistanı** ek modülü: aylık 300 AI ayrıştırma (işletme sahibi AI'ı açana kadar kapalıdır).
 
 ## Deneme bitince ne olur?
 - Ürün, stok hareketleri (mal kabul, düzeltme, sevkiyat), sipariş, toplama, raporlar ve dışa aktarma **tam çalışmaya devam eder**.
 - Mevcut tüm depolar ve raflar görünür ve kullanılır.
-- Sınırdaysanız **yeni** aktif depo veya **yeni** ürün eklenemez; **yeni** raf/lokasyon eklenemez veya düzenlenemez,
+- Sınırdaysanız **yeni** aktif depo eklenemez; **yeni** raf/lokasyon eklenemez veya düzenlenemez,
   **yeni** WhatsApp mesajı ayrıştırılamaz. Bu yerlerde kilit simgesiyle "… mevcut paketinizde yok." ve
   "Profesyonel pakette" / "AI WhatsApp asistanı modülünde" etiketi görünür.
 - Daha önce ayrıştırılmış WhatsApp mesajları incelenip onaylanabilir veya reddedilebilir.

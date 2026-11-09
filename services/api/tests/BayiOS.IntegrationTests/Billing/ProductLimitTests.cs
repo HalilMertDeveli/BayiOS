@@ -11,7 +11,7 @@ using BayiOS.TestSupport.BulkImport;
 namespace BayiOS.IntegrationTests.Billing;
 
 /// <summary>
-/// <c>max_products</c> (owner decision OD-02, Basic 999): non-archived products count; create and restore are refused at
+/// <c>max_products</c> (unlimited on every plan, OD-02; only an operator override sets a value): non-archived products count; create and restore are refused at
 /// the limit (403 <c>entitlement.limit_exceeded</c>), archiving frees a slot, concurrent creates cannot overshoot and an
 /// import fails only the rows over the limit. The limit is lowered with an operator override to keep tests small.
 /// </summary>
@@ -28,12 +28,12 @@ public sealed class ProductLimitTests(ApiFixture fixture)
     };
 
     [Fact]
-    public async Task Basic_counts_non_archived_products_and_archiving_frees_a_slot()
+    public async Task Basic_has_no_product_limit_and_an_override_counts_non_archived_products()
     {
         var owner = await CatalogClient.NewTenantOwnerAsync(fixture);
         await BillingKit.SetPlanAsync(fixture, owner.TenantId, BillingKit.Basic);
         var unit = await owner.CreateUnitAsync();
-        Assert.Contains((await BillingKit.SubscriptionAsync(owner)).Limits, l => l is { Code: EntitlementCodes.MaxProducts, Value: 999 });
+        Assert.Contains((await BillingKit.SubscriptionAsync(owner)).Limits, l => l is { Code: EntitlementCodes.MaxProducts, Value: null });
 
         await BillingKit.OverrideAsync(fixture, owner.TenantId, EntitlementCodes.MaxProducts, limit: 2);
         var first = await owner.CreateSimpleProductAsync(unit.Id, "Ürün 1", "LIM-1");

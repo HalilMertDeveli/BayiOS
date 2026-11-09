@@ -261,7 +261,7 @@ Ayrıntı: `personas.md`.
 | SUB-06 | Abonelik bittiğinde/düşürüldüğünde veri silinmez; ilgili özellik salt okunur olur; dışa aktarma her zaman açık. | P0 |
 | SUB-07 | Ücret duvarı dışı (her pakette): güvenlik (2FA, audit), temel stok doğruluğu (ledger, rezervasyon), veri dışa aktarma, işlem geçmişi. | P0 |
 | SUB-08 | Platform yöneticisi (iç kullanım) tenant entitlement'ını değiştirebilir; değişiklik denetim kaydına yazılır. | P0 |
-| SUB-09 | Paket limitleri: Temel 999 kullanıcı, 999 aktif depo, 999 ürün (ürün sahibi kararı OD-02, 2026-11-09); limit aşımında depoyu boşaltmak için transfer/düzeltme açık kalır (OD-03). | P1 |
+| SUB-09 | Paket limitleri: Temel 999 kullanıcı, 999 aktif depo, sınırsız ürün; barkod okutma ve mobil toplama Temel pakette (ürün sahibi kararı OD-02, 2026-11-09); AI ek modülü ayda 300 ayrıştırma (OD-08); limit aşımında depoyu boşaltmak için transfer/düzeltme açık kalır (OD-03). | P1 |
 
 ### 5.11 Platform & Güvenlik (PLT / SEC)
 | ID | Gereksinim | Öncelik |
@@ -370,13 +370,13 @@ Ayrıntı: `personas.md`.
 ## 9. Ürün sahibine açık sorular
 | ID | Soru | Etki |
 |---|---|---|
-| AQ-01 | **Kısmen karar verildi (OD-02, 2026-11-09):** Temel 999 kullanıcı / 999 depo / 999 ürün. Profesyonel limitleri ve fiyat aralığı açık. | SUB-09, modül mağazası metinleri |
-| AQ-02 | `sales` rolü kendi oluşturduğu siparişi onaylayabilsin mi (varsayılan öneri: tenant ayarı, varsayılan **evet**)? | ORD-10, yetki matrisi |
+| AQ-01 | **Kısmen karar verildi (OD-02, 2026-11-09):** Temel 999 kullanıcı / 999 depo / sınırsız ürün, barkod/mobil toplama dahil. Profesyonel limitleri ve fiyat aralığı açık. | SUB-09, modül mağazası metinleri |
+| AQ-02 | **Karar verildi (OD-09, 2026-11-09):** evet — `sales` kendi siparişini onaylayabilir; tenant ayarı `sales_can_approve_orders` yeni tenant'ta varsayılan **açık**, sahip/yönetici Ayarlar → İş kuralları'ndan kapatabilir (mevcut tenant'ların kayıtlı değeri değişmez). | ORD-10, yetki matrisi |
 | AQ-03 | LED pilotu için seri numarası takibi MVP'de mi (sevkte seri no okutma)? Öneri: MVP'de opsiyonel serbest alan, tam modül P2. | Kapsam, WHT, veri modeli |
 | AQ-04 | **Karar verildi (OD-09, 2026-11-09):** stok eksiye düşmez; "uyar" / "izin ver" yoktur. "Rafta var ama sisteme girilmedi" durumu mal kabul veya sayım/düzeltme ile çözülür. | INV-12, onboarding |
 | AQ-05 | Veri barındırma bölgesi (AB — Frankfurt vs. Türkiye) ve KVKK yurt dışı aktarım yaklaşımı? | Altyapı, sözleşmeler |
-| AQ-06 | AI sağlayıcı seçimi ve aylık AI bütçesi / tenant başı kota? | WAI-09, WAI-11, maliyet |
+| AQ-06 | AI sağlayıcı seçimi ve aylık AI bütçesi / tenant başı kota? **Kota karar verildi (OD-08, 2026-11-09):** tenant başına ayda 300 ayrıştırma (`ai_parses_per_month`); AI, tenant açıkça açana kadar kapalı. | WAI-09, WAI-11, maliyet |
 | AQ-07 | Pilot işletmelerin gerçek (anonimleştirilmiş) ürün dosyası örneği test için alınabilir mi, yoksa tamamen sentetik mi çalışılacak? | IMP doğrulaması, AI eşleşme kalitesi |
 | AQ-08 | Deneme süresi 30 gün mü, pilot tenant'lar için süresiz mi? | SUB-05 |
 | AQ-09 | Fiyatlar KDV dahil mi gösterilsin (sektör alışkanlığı) yoksa hariç mi? Öneri: tenant ayarı, varsayılan hariç. | TEN-05, ORD-04 |
-| AQ-10 | Kısmi onay (stokta olan kadarını onayla, kalanı bekleyen sipariş) MVP'ye alınsın mı? | ORD-06, ORD-08 |
+| AQ-10 | **Karar verildi (OD-09, 2026-11-09):** kısmi onay MVP'de **yok**; onay ya hep ya hiç (stok yetmezse reddedilir). | ORD-06, ORD-08 |

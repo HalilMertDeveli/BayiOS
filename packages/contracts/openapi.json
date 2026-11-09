@@ -3345,7 +3345,7 @@
           "Catalog"
         ],
         "summary": "\u00DCr\u00FCn olu\u015Fturur (basit \u00FCr\u00FCn: sku/barcode; varyantl\u0131: variants)",
-        "description": "403 \u0060entitlement.limit_exceeded\u0060 when the plan\u0027s product limit (\u0060max_products\u0060, Basic: 999 non-archived products) is reached.",
+        "description": "403 \u0060entitlement.limit_exceeded\u0060 when a product limit (\u0060max_products\u0060, non-archived products; unlimited on every plan, OD-02 \u2014 only an operator override sets one) is reached.",
         "operationId": "Catalog_CreateProduct",
         "parameters": [
           {

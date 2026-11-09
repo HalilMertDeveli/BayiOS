@@ -4,8 +4,8 @@
  * Stand-in for /api/v1/billing/* and the `activeTenant.entitlements` of GET /me, following the contract shapes in
  * packages/contracts/openapi.json and the as-built rules of api-strategy §12.2: reads need billing.read (owner, admin),
  * store changes billing.manage (owner) + Idempotency-Key; 409 billing.module_unavailable / module_already_active /
- * trial_used / module_not_active; activation is free and time-limited. The catalog mirrors BillingCatalog 2026-11-09.1
- * (names, features, limits — Basic 999 users / warehouses / products, OD-02); `overrides` stand in for operator limit
+ * trial_used / module_not_active; activation is free and time-limited. The catalog mirrors BillingCatalog 2026-11-09.2
+ * (names, features, limits — Basic 999 users / warehouses, unlimited products, barcode included, OD-02; AI 300, OD-08); `overrides` stand in for operator limit
  * overrides (billing.tenant_entitlements) so limit states stay testable. A simplified model, not the real resolver.
  */
 import type { Route } from "@playwright/test";
@@ -43,7 +43,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const iso = (offsetDays: number) => new Date(Date.now() + offsetDays * DAY_MS).toISOString();
 
 const CATALOG = {
-  catalogVersion: "2026-11-09.1",
+  catalogVersion: "2026-11-09.2",
   trialPlan: "professional",
   fallbackPlan: "basic",
   trialDays: 30,
@@ -52,18 +52,18 @@ const CATALOG = {
     {
       code: "basic",
       name: "Temel",
-      description: "Ürün, temel stok, sipariş, temel rapor. Dışa aktarma, audit, 2FA ve stok doğruluğu her pakette açıktır.",
-      features: [],
+      description: "Ürün, temel stok, sipariş, barkod okutma ve mobil toplama, temel rapor. Dışa aktarma, audit, 2FA ve stok doğruluğu her pakette açıktır.",
+      features: ["barcode_operations"],
       limits: [
         { code: "max_warehouses", value: 999 },
         { code: "max_users", value: 999 },
-        { code: "max_products", value: 999 },
+        { code: "max_products", value: null },
       ],
     },
     {
       code: "professional",
       name: "Profesyonel",
-      description: "Gelişmiş depo: sınırsız depo ve ürün, raf/lokasyon, barkod operasyonları.",
+      description: "Gelişmiş depo: sınırsız depo, raf/lokasyon ve barkodlu raf işlemleri.",
       features: ["warehouse_locations", "barcode_operations"],
       limits: [
         { code: "max_warehouses", value: null },
@@ -79,7 +79,7 @@ const CATALOG = {
       description: "WhatsApp sipariş metnini ayrıştırır, katalogla eşleştirir; sipariş her zaman insan onayıyla kesinleşir.",
       available: true,
       features: ["ai_order_parsing"],
-      limits: [{ code: "ai_parses_per_month", value: 1000 }],
+      limits: [{ code: "ai_parses_per_month", value: 300 }],
     },
     { code: "dealer_portal", name: "Bayi portalı", description: "Bayilerin kendi siparişlerini girdiği portal.", available: false, features: ["dealer_portal"], limits: [] },
     { code: "erp_integrations", name: "ERP entegrasyonları", description: "Muhasebe/ERP sistemleriyle senkronizasyon.", available: false, features: ["erp_integrations"], limits: [] },
@@ -183,7 +183,7 @@ export async function handleBilling(route: Route, billing: MockBilling, role: st
       const limit = limitOf(code);
       return { code, limit, current, remaining: limit === null ? null : Math.max(0, limit - current), period };
     };
-    const items = [item("max_warehouses", billing.activeWarehouses()), item("max_users", billing.activeUsers)];
+    const items = [item("max_warehouses", billing.activeWarehouses()), item("max_users", billing.activeUsers), item("max_products", 3)];
     if (ent.features.includes("ai_order_parsing")) items.push(item("ai_parses_per_month", billing.aiParsesThisMonth, "month"));
     return json(route, 200, { plan: ent.plan, status: ent.status, items }).then(() => true);
   }

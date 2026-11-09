@@ -20,7 +20,7 @@ public static class EntitlementCodes
     /// <summary>Shelf/bin locations in a warehouse (PRD INV-04, Professional).</summary>
     public const string WarehouseLocations = "warehouse_locations";
 
-    /// <summary>Barcode operations on shelves/picking (Professional). Defined; no endpoint gates it yet.</summary>
+    /// <summary>Barcode scanning / mobile picking (every plan since OD-02, 2026-11-09). Defined; no endpoint gates it.</summary>
     public const string BarcodeOperations = "barcode_operations";
 
     /// <summary>AI WhatsApp order assistant (add-on, PRD WAI, api-strategy §12.10).</summary>
@@ -57,7 +57,8 @@ public static class EntitlementCodes
 
     /// <summary>
     /// Products that are not archived (archiving frees a slot; restoring takes one). Enforced on product create and on
-    /// restoring an archived product, interactive and import alike (OD-02: Basic 999).
+    /// restoring an archived product, interactive and import alike, when a limit is set (operator override); every plan is
+    /// unlimited (OD-02, 2026-11-09).
     /// </summary>
     public const string MaxProducts = "max_products";
 
