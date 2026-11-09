@@ -1,0 +1,10 @@
+apiVersion: v2
+name: bayios
+description: BayiOS API (ASP.NET Core) + web (Next.js) on Kubernetes, with an optional in-cluster PostgreSQL for kind/dev.
+type: application
+# Chart version; bump on every chart change. appVersion is informational (images are tagged per git SHA in CI).
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.29.0-0"
+home: https://github.com/HalilMertDeveli/BayiOS
+keywords: [bayios, aspnetcore, nextjs, postgresql]

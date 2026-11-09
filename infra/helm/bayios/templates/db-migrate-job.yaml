@@ -1,0 +1,56 @@
+{{- if .Values.dbMigrate.enabled }}
+{{- if not .Values.postgres.enabled }}
+{{- fail "dbMigrate.enabled=true requires postgres.enabled=true: hosted databases are migrated by the deploy pipeline (infra/deploy/apply-migrations.sh), not from the cluster" }}
+{{- end }}
+{{- $m := .Values.dbMigrate }}
+# Bootstrap + EF Core migrations for the in-cluster database, using the repo's own scripts
+# (infra/k8s/db-migrate/db-migrate.sh -> bootstrap.sh -> apply-migrations.sh). Both are idempotent, so running it on
+# every Helm revision is safe. Jobs are immutable, hence one Job name per revision; finished Jobs are garbage
+# collected after ttlSecondsAfterFinished.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "bayios.fullname" . }}-db-migrate-{{ .Release.Revision }}
+  labels:
+    {{- include "bayios.labels" (dict "root" $ "component" "db-migrate") | nindent 4 }}
+spec:
+  backoffLimit: {{ $m.backoffLimit }}
+  ttlSecondsAfterFinished: {{ $m.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "bayios.selectorLabels" (dict "root" $ "component" "db-migrate") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: db-migrate
+          image: {{ include "bayios.image" (dict "root" $ "image" $m.image) | quote }}
+          imagePullPolicy: {{ $m.image.pullPolicy }}
+          env:
+            - name: PGHOST
+              value: {{ include "bayios.postgres.host" . }}
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: {{ .Values.postgres.database | quote }}
+          envFrom:
+            - secretRef:
+                name: {{ include "bayios.postgres.secretName" . }}
+          resources:
+            {{- toYaml $m.resources | nindent 12 }}
+          securityContext:
+            {{- include "bayios.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

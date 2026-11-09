@@ -1,0 +1,127 @@
+# BayiOS Helm chart — default values. NO SECRETS HERE (the repo is public).
+# Production-like defaults: external PostgreSQL (Supabase) and the API's DB secret created out of band.
+# kind/dev overrides: values-kind.yaml. How-to: docs/operations/kubernetes.md.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ---------------------------------------------------------------- API (services/api, ASP.NET Core .NET 10)
+api:
+  image:
+    repository: bayios-api
+    tag: ""            # required in practice: CI sets the git-SHA tag. Empty => .Chart.AppVersion
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  # ASPNETCORE_ENVIRONMENT; reported by GET /api/v1/meta (the smoke test checks it).
+  environment: Production
+  auth:
+    # Supabase Auth issuer, e.g. https://<ref>.supabase.co/auth/v1 (ADR 0003). Not a secret.
+    # Empty => the API still starts, but /health/ready is 503 (fail closed) — see DatabaseSetup/Authentication.
+    authority: ""
+    audience: authenticated
+    jwksUrl: ""
+    requireHttpsMetadata: true
+  # Browser origins allowed by CORS (Cors__AllowedOrigins__N). Not needed when web and API share a host via Ingress.
+  corsAllowedOrigins: []
+  # Extra non-secret settings, rendered into the API ConfigMap as-is (e.g. Health__QueueLagDegradedAfter: "00:05:00").
+  extraEnv: {}
+  database:
+    # Name of an existing Secret holding key `ConnectionStrings__Default` (role bayios_app, NOBYPASSRLS — never
+    # postgres/service-role). Ignored when postgres.enabled=true (the chart then builds it for the in-cluster DB).
+    existingSecret: bayios-api-db
+  containerPort: 8080
+  service:
+    type: ClusterIP
+    port: 8080
+  # GET /health is dependency-free (liveness). GET /health/ready checks database, auth config and job-queue lag.
+  probes:
+    startup:   { path: /health,       periodSeconds: 2,  failureThreshold: 30, timeoutSeconds: 2 }
+    liveness:  { path: /health,       periodSeconds: 10, failureThreshold: 3,  timeoutSeconds: 2 }
+    readiness: { path: /health/ready, periodSeconds: 5,  failureThreshold: 3,  timeoutSeconds: 6 }
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits:   { cpu: "1",  memory: 512Mi }
+  autoscaling:
+    enabled: false     # needs metrics-server
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------- Web (apps/web, Next.js standalone)
+# NEXT_PUBLIC_* (API URL, Supabase URL/publishable key) are baked into the image at build time (apps/web/Dockerfile).
+web:
+  enabled: true
+  image:
+    repository: bayios-web
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  containerPort: 3000
+  service:
+    type: ClusterIP
+    port: 3000
+  probes:
+    startup:   { path: /, periodSeconds: 2,  failureThreshold: 30, timeoutSeconds: 3 }
+    liveness:  { path: /, periodSeconds: 15, failureThreshold: 3,  timeoutSeconds: 3 }
+    readiness: { path: /, periodSeconds: 5,  failureThreshold: 3,  timeoutSeconds: 3 }
+  resources:
+    requests: { cpu: 50m,  memory: 128Mi }
+    limits:   { cpu: 500m, memory: 384Mi }
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------- Ingress (one host: /api + /health -> API, / -> web)
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  host: ""             # empty = any host
+  tls: []              # e.g. [{ secretName: bayios-tls, hosts: [bayios.example.com] }]
+
+# ---------------------------------------------------------------- In-cluster PostgreSQL — kind/dev ONLY
+# A single-replica StatefulSet with a PVC. Not HA, no backups: hosted environments use Supabase (ADR 0002/0005).
+postgres:
+  enabled: false
+  image:
+    repository: postgres
+    tag: "17-bookworm"
+    pullPolicy: IfNotPresent
+  database: bayios
+  # Dev-only passwords; required when enabled (values-kind.yaml sets throwaway values). Never put real ones in git.
+  auth:
+    postgresPassword: ""
+    appPassword: ""
+    migratorPassword: ""
+  storage:
+    size: 1Gi
+    storageClassName: ""   # "" = cluster default (kind: standard / local-path)
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: "1",  memory: 512Mi }
+
+# ---------------------------------------------------------------- DB bootstrap + EF migrations Job (in-cluster DB only)
+# Image: infra/k8s/db-migrate/Dockerfile (bootstrap.sh + apply-migrations.sh + generated EF scripts).
+# A new Job per Helm revision; `helm upgrade --wait --wait-for-jobs` waits for it. The API turns Ready only after
+# the schema exists (readiness checks the job queue table), so the order migration -> API holds without hooks.
+dbMigrate:
+  enabled: false
+  image:
+    repository: bayios-db-migrate
+    tag: ""
+    pullPolicy: IfNotPresent
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  resources:
+    requests: { cpu: 50m,  memory: 64Mi }
+    limits:   { cpu: 500m, memory: 256Mi }
