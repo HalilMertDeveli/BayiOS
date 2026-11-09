@@ -143,6 +143,20 @@ Ciddiyet: **BLOCKER** = düzeltilmeden kapı geçilemez · **MAJOR** = ilgili ha
 | OD-12 | **Yalnızca ücretsiz kaynaklar:** Supabase Free, Vercel Hobby, ücretsiz API barındırma (Fly.io ücretsiz değil → alternatif seçilir), Firebase Spark, Cloudflare Turnstile. Ücretli plan açılmaz. | #138 |
 | Marka rengi | Ürün sahibi seçimi bize bıraktı: güven veren, sıradan maviden farklı bir renk. | Tasarım token'ları |
 
+### 5.2 Ürün sahibinin ikinci tur cevapları (2026-11-09)
+
+| Konu | Karar |
+|---|---|
+| OD-02 (düzeltme) | Temel paket: **999 kullanıcı, 999 depo, ürün sınırsız**. Barkod okutma / mobil toplama **temel pakette**. |
+| OD-09 | Satışçı kendi siparişini **onaylayabilir** (yeni tenant varsayılanı açık); işletme sahibi ayarlardan kapatabilir. **Kısmi onay MVP'de yok** (pilot sonrası); stok yoksa sipariş bekler. |
+| OD-08 | AI ek paketi kotası **ayda 300 ayrıştırma** / tenant; tenant açmadıkça AI kapalı. |
+| Alarm kanalı | **E-posta** (ücretsiz). |
+| #98 depo görevleri | Sipariş onayında toplama görevi **otomatik** açılır; görevde **öncelik ve müşteri adı** görünür; raf değişiminde görev **yeniden dağıtılır**. |
+| OD-12 | Pilot için ücretsiz barındırma yeterli (API: Render Free, web: Vercel Hobby); satış başlayınca ücretli plana geçilir. |
+| OD-04 | `.xls` **yok**; `.xlsx` ve `.csv` yeterli. |
+| Mobil CAPTCHA | Cevaplanmadı → öneri uygulanır: pilot sonrası. Supabase'te CAPTCHA o zamana kadar kapalı kalır (`environments.md` §2.1). |
+| Ürün yönü | **Sektörden bağımsız self-servis:** müşteri kendi alanını (işletme/tenant) kendisi oluşturur; hiç depo sistemi olmayan biri girip kurulumu kendi başına, otomatik yönlendirmelerle tamamlayabilmeli. LED ve motosiklet yalnızca örnek senaryolardır; ürün, metinler ve demo bunlara bağlı kalmaz. |
+
 ## 6. Karar
 
 **KOŞULLU GEÇTİ.**
