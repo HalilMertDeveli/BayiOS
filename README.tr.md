@@ -29,6 +29,81 @@ paneli, depo için bir mobil uygulama ve aynı anda kaç kişi çalışırsa ça
 
 ---
 
+## Bir bakışta
+
+### Mimari
+
+```mermaid
+flowchart LR
+    subgraph clients["İstemciler"]
+        web["Web paneli (ofis)<br/>Next.js 16 · React 19 · TypeScript"]
+        mob["Mobil uygulama (depo)<br/>Flutter · Android / iOS"]
+    end
+    subgraph api["ASP.NET Core API (.NET 10) — modüler monolit, 13 modül"]
+        direction TB
+        pipe["JWT → tenant üyeliği ve rol → yetki → paket hakkı<br/>Unit of Work: istek başına tek bağlantı + tek transaction"]
+        mods["Identity · Catalog · Pricing · Customers · Orders<br/>Inventory · Warehouse · Imports · Integrations<br/>Reports · Billing · Notifications · Platform"]
+        worker["Arka plan işçisi: iş kuyruğu + outbox<br/>FOR UPDATE SKIP LOCKED"]
+        pipe --> mods
+    end
+    subgraph data["Supabase"]
+        auth["Auth<br/>giriş, JWT üretir"]
+        db[("PostgreSQL 17<br/>her tenant tablosunda RLS<br/>yalnızca eklenen stok defteri (ledger)")]
+        st["Storage<br/>içe aktarma dosyaları, ekler"]
+    end
+    ai["Claude API<br/>WhatsApp sipariş ayrıştırma<br/>(isteğe bağlı, insan onaylar)"]
+    fcm["Firebase Cloud Messaging<br/>yalnızca bildirim"]
+    web -- "HTTPS + JWT" --> pipe
+    mob -- "HTTPS + JWT" --> pipe
+    web & mob -. "giriş" .-> auth
+    pipe -. "JWKS" .-> auth
+    mods -- "bayios_app · NOBYPASSRLS<br/>set_config('app.tenant_id')" --> db
+    worker --> db
+    mods --> st
+    mods --> ai
+    mods --> fcm
+```
+
+Veriyi yazan tek yer API'dir: web ve mobil veritabanına doğrudan dokunmaz. Kurulum seçenekleri: Fly.io + Vercel (mevcut preview hattı), Kubernetes (Helm chart, `infra/k8s`) veya Nginx + systemd ile tek bir Ubuntu VPS (`infra/linux`).
+
+### Ekran görüntüleri
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="apps/web/docs/screenshots/ui-polish/after/desktop-light-pano.jpg" alt="Pano">
+      <p align="center"><b>Pano</b> — onay bekleyen siparişler, bugünkü siparişler, kritik stok, görevlerim.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="apps/web/docs/screenshots/ui-polish/after/desktop-light-siparis-detay.jpg" alt="Sipariş ayrıntısı">
+      <p align="center"><b>Sipariş ayrıntısı</b> — onayla ve stok ayır; fiyatsız satır onayı engeller.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="apps/web/docs/screenshots/ui-polish/after/desktop-light-whatsapp-inceleme.jpg" alt="WhatsApp sipariş incelemesi">
+      <p align="center"><b>WhatsApp sipariş incelemesi</b> — ayrıştırılan her satır katalogla eşleşir ve bir kişi onaylar.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="apps/web/docs/screenshots/ui-polish/after/desktop-dark-stok.jpg" alt="Stok bakiyeleri, koyu tema">
+      <p align="center"><b>Stok</b> — depo ve raf bazında rafta, ayrılmış ve satılabilir (koyu tema).</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="apps/web/docs/screenshots/ui-polish/after/desktop-dark-transfer-detay.jpg" alt="İki aşamalı transfer, koyu tema">
+      <p align="center"><b>İki aşamalı transfer</b> — yoldaki stok, okutarak teslim alma, fark raporu.</p>
+    </td>
+    <td width="50%" valign="top">
+      <p align="center"><img src="apps/web/docs/screenshots/ui-polish/after/mobile-light-pano.jpg" alt="Telefonda pano" width="45%"></p>
+      <p align="center"><b>Duyarlı tasarım</b> — aynı panel telefon genişliğinde.</p>
+    </td>
+  </tr>
+</table>
+
+<sub>Tüm ekran görüntülerinde sentetik *mock* veri kullanılır (gerçek işletme, müşteri veya fiyat yok). Playwright ekran görüntüsü düzeneği `apps/web/e2e/screenshots/` ile üretilir. Daha fazla ekran: [Ekran görüntüleri](#ekran-görüntüleri) · ayrıntılı mimari: [Mimari](#mimari).</sub>
+
+---
 ## İçindekiler
 
 1. [Neden BayiOS?](#neden-bayios)
@@ -111,6 +186,7 @@ BayiOS üç söz üzerine kuruludur:
 
 > Görüntüler otomatik Playwright test takımından alınır ve sentetik *mock* veri kullanır.
 > `npm --prefix apps/web run test:e2e:local` ile yenilenir.
+> Bir kısmı son arayüz güncellemesindeki gruplu menüden öncesine aittir; güncel ekranlar [Bir bakışta](#bir-bakışta) bölümündedir.
 
 <table>
   <tr>

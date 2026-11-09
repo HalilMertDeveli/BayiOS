@@ -30,6 +30,81 @@ no matter how many people work at the same time.
 
 ---
 
+## At a glance
+
+### Architecture
+
+```mermaid
+flowchart LR
+    subgraph clients["Clients"]
+        web["Web panel (office)<br/>Next.js 16 · React 19 · TypeScript"]
+        mob["Mobile app (warehouse)<br/>Flutter · Android / iOS"]
+    end
+    subgraph api["ASP.NET Core API (.NET 10) — modular monolith, 13 modules"]
+        direction TB
+        pipe["JWT → tenant membership & role → permission → plan entitlement<br/>Unit of Work: one connection + one transaction per request"]
+        mods["Identity · Catalog · Pricing · Customers · Orders<br/>Inventory · Warehouse · Imports · Integrations<br/>Reports · Billing · Notifications · Platform"]
+        worker["Background worker: job queue + outbox<br/>FOR UPDATE SKIP LOCKED"]
+        pipe --> mods
+    end
+    subgraph data["Supabase"]
+        auth["Auth<br/>sign-in, JWT issuer"]
+        db[("PostgreSQL 17<br/>RLS on every tenant table<br/>append-only stock ledger")]
+        st["Storage<br/>import files, attachments"]
+    end
+    ai["Claude API<br/>WhatsApp order parsing<br/>(opt-in, human confirms)"]
+    fcm["Firebase Cloud Messaging<br/>push only"]
+    web -- "HTTPS + JWT" --> pipe
+    mob -- "HTTPS + JWT" --> pipe
+    web & mob -. "sign-in" .-> auth
+    pipe -. "JWKS" .-> auth
+    mods -- "bayios_app · NOBYPASSRLS<br/>set_config('app.tenant_id')" --> db
+    worker --> db
+    mods --> st
+    mods --> ai
+    mods --> fcm
+```
+
+One API is the only writer: web and mobile never touch the database directly. Deployment options: Fly.io + Vercel (current preview pipeline), Kubernetes (Helm chart, `infra/k8s`) or a single Ubuntu VPS with Nginx + systemd (`infra/linux`).
+
+### Screenshots
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="apps/web/docs/screenshots/ui-polish/after/desktop-light-pano.jpg" alt="Dashboard">
+      <p align="center"><b>Dashboard</b> — orders waiting for approval, today's orders, critical stock, my tasks.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="apps/web/docs/screenshots/ui-polish/after/desktop-light-siparis-detay.jpg" alt="Order detail">
+      <p align="center"><b>Order detail</b> — approve &amp; reserve stock; lines without a price block approval.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="apps/web/docs/screenshots/ui-polish/after/desktop-light-whatsapp-inceleme.jpg" alt="WhatsApp order review">
+      <p align="center"><b>WhatsApp order review</b> — every parsed line is matched to the catalog and confirmed by a person.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="apps/web/docs/screenshots/ui-polish/after/desktop-dark-stok.jpg" alt="Stock balances, dark mode">
+      <p align="center"><b>Stock</b> — on shelf, reserved and sellable per warehouse and bin (dark mode).</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="apps/web/docs/screenshots/ui-polish/after/desktop-dark-transfer-detay.jpg" alt="Two-stage transfer, dark mode">
+      <p align="center"><b>Two-stage transfer</b> — in-transit stock, receive by scanning, difference report.</p>
+    </td>
+    <td width="50%" valign="top">
+      <p align="center"><img src="apps/web/docs/screenshots/ui-polish/after/mobile-light-pano.jpg" alt="Dashboard on a phone" width="45%"></p>
+      <p align="center"><b>Responsive</b> — the same panel at phone width.</p>
+    </td>
+  </tr>
+</table>
+
+<sub>All screenshots use synthetic *mock* data (no real business, customer or price). They are produced by the Playwright screenshot harness `apps/web/e2e/screenshots/`. More screens: [Screenshots](#screenshots) · full architecture: [Architecture](#architecture).</sub>
+
+---
 ## Table of contents
 
 1. [Why BayiOS?](#why-bayios)
@@ -111,6 +186,7 @@ ago. BayiOS is built around three promises:
 
 > The screenshots come from the automated Playwright suite and use synthetic *mock* data. They are refreshed by
 > `npm --prefix apps/web run test:e2e:local`.
+> Some of them predate the grouped navigation of the latest UI update; the current screens are in [At a glance](#at-a-glance).
 
 <table>
   <tr>
