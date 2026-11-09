@@ -147,14 +147,16 @@ emülatör (`ReactiveCircus/android-emulator-runner`, SHA sabit, API 34 x86_64; 
 aynı `tool/e2e.sh`. Path filtreli (`apps/mobile/**`, `apps/web/e2e-local/**`, `packages/contracts/**`,
 `services/api/**`, yığın betikleri); `ci gate` çalıştığında bekler. Ekran görüntüleri her koşuda artefakt olarak yüklenir.
 
-## iOS — BLOCKED
-iOS derlemesi macOS + Xcode ister; geliştirme makinesi Windows'tur. GitHub'ın `macos-latest` runner'ı public repoda
-ücretsiz olsa da `docs/operations/ci-cd.md` §1 ("iOS derlemesi gerekirse macOS runner — ücretli dakika çarpanı, onay
-gerekir") ve `docs/operations/connectors.md` gereği macOS runner **ürün sahibi onayı** ister; bu yüzden
-`flutter build ios --no-codesign` işi eklenmedi. Durum: **BLOCKED — sahip kararı** (macOS runner onayı; TestFlight /
-cihaz dağıtımı için ayrıca Apple Developer hesabı). Onay gelirse önerilen iş: `macos-latest`, Flutter 3.47.9,
-`flutter pub get --enforce-lockfile` → `flutter build ios --debug --no-codesign` (yalnızca `apps/mobile/**` değişince).
-Kod tarafı hazır: `ios/` projesi, `NSCameraUsageDescription`; Dart kodu platformdan bağımsızdır ve aynı testlerden geçer.
+## iOS
+iOS derlemesi macOS + Xcode ister; geliştirme makinesi Windows'tur. Ürün sahibi 2026-11-09'da macOS runner'ı onayladı
+(GitHub'ın macOS dakikaları public repoda ücretsiz). CI: `.github/workflows/ci-mobile-ios.yml`
+(`mobile ios build (unsigned)`, `macos-latest`, Flutter 3.47.9): `flutter pub get --enforce-lockfile` →
+`flutter build ios --debug --no-codesign` → `flutter build ios --release --no-codesign`. Yalnızca `apps/mobile/**`
+değişince çalışır; `ci gate` bekler. İmza, Apple hesabı ve sır yoktur; hiçbir şey dağıtılmaz — yalnızca uygulamanın iOS
+için derlendiğini kanıtlar. `ios/Podfile` ilk derlemede Flutter tarafından üretilir; bir Mac'te üretilip `Podfile.lock`
+ile birlikte commit edilince pod sürümleri de sabitlenir.
+Hâlâ **BLOCKED — sahip adımı:** TestFlight / cihaz dağıtımı için Apple Developer hesabı (ücretli), imza sertifikası ve
+push için APNs anahtarı (`docs/operations/push-notifications.md` §3). iOS simülatöründe smoke testi henüz yok.
 
 ## Stok ve mal kabul (#43)
 - `/stok` (`inventory.read`): barkod/SKU/ad ile arama; depo/raf bazında eldeki, rezerve, satılabilir ve minimum stok.
