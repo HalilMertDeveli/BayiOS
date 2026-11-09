@@ -1,6 +1,6 @@
 # STATUS — Gerçek proje durumu
 
-> Yalnızca doğrulanmış durum. Son güncelleme: 2026-11-08 (Faz C mobil tamam — iOS ve canlı push sahip adımı bekliyor; Faz B kalanları sahip kararında).
+> Yalnızca doğrulanmış durum. Son güncelleme: 2026-11-09 (Faz C mobil tamam; iOS imzasız derleme CI'da (#172) — Apple hesabı ve canlı push sahip adımı bekliyor; Faz B kalanları sahip kararında).
 > İş emirleri, bağımlılık grafiği ve aktif atamalar: `docs/operations/work-orders.md`. Yol haritası: #148.
 
 ## Mevcut faz
@@ -9,7 +9,7 @@
   listesi, barkodlu toplama (#41, #42) · #167 mal kabul, stok sorgu, düzeltme (#43) · #169 web↔mobil gerçek akış testi + CI
   Android emülatör işi (#45) · #170 Notifications modülü, cihaz kaydı, görev atamasında FCM (varsayılan kapalı), çevrimdışı
   yönetimi (#44). #7, #15, #41–#44 kapandı.
-- Sahip adımı bekleyen: iOS (#45: macOS runner onayı + Apple Developer hesabı) · push'u açmak için Firebase projesi
+- Sahip adımı bekleyen: iOS dağıtımı (#45: Apple Developer hesabı, imza, APNs; imzasız derleme CI'da #172) · push'u açmak için Firebase projesi
   (`docs/operations/push-notifications.md` §3) · gerçek cihazda kamera okutma denemesi.
 - Açık iş: #168 stok transferi + sayım (API'de uç yok).
 
@@ -57,7 +57,7 @@ Son ölçüm (`preview` @ `1955dbd`, PR #163 CI): API 989 test · 988 geçti · 
 | Bağımlılık açıkları | NuGet 0 (16 proje, transitive dahil) · npm production 0 · npm dev 8 orta |
 | Migration (12 modül, 24 migration) | idempotent, iki kez uygulama, drift yok (ci-migrations) |
 | API container (Trivy) | HIGH/CRITICAL 0 |
-| Flutter | analyze temiz · 283 test · web↔mobil gerçek akış (Android emülatör, CI) geçti · iOS BLOCKED (macOS) |
+| Flutter | analyze temiz · 283 test · web↔mobil gerçek akış (Android emülatör, CI) geçti · iOS imzasız debug+release derleme (macOS CI, #172) geçti |
 
 ## Bilinen kısıtlar
 - `main` onayı "0 zorunlu onay + PR" ile korunuyor (tek kişilik hesap); sahip onayı süreç kuralı, ajan `main`'e merge etmez.
