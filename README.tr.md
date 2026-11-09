@@ -725,7 +725,8 @@ BayiOS/
 ### Seçenek A — tek komutla tam yerel yığın (önerilen)
 
 Yerel Supabase Auth ve PostgreSQL 17'yi başlatır, tüm EF Core migration'larını uygular, API'yi `:5280`'de, web'i
-`:3200`'de çalıştırır; ardından tamamen **sentetik** iki demo işletme (motosiklet yedek parça ve LED elektronik) kurar:
+`:3200`'de çalıştırır; ardından varsayılan, tamamen **sentetik** demo işletmeyi "Demo Toptan Ticaret" (ekibi,
+transferleri ve açık sayımıyla genel bir toptancı; `-- --demo all` motor yedek parça ve LED örneklerini de ekler) kurar:
 
 ```bash
 bash infra/ci/e2e-stack.sh up

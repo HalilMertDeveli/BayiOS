@@ -1,18 +1,24 @@
 import { Api, ensureUser, etagOf, sleep } from "./stack.mjs";
 import { buildXlsx } from "./xlsx.mjs";
+import { genelDemo } from "./data-genel.mjs";
 import { ledDemo } from "./data-led.mjs";
 import { motorDemo } from "./data-motor.mjs";
 
 /**
- * Pilot demo seeder (#56/#57). Builds a fully synthetic business ONLY through the public BayiOS API, as its owner (a
- * real Supabase Auth user): tenant + sector template, warehouses and shelves, catalog with variants, custom-field
- * attributes and barcodes, price lists (default + dealer list with tiers), dealer groups, customers with addresses, an
- * XLSX catalog import, goods receipts, orders driven through the real flows (submit/approve → pick scans → pack check
- * → shipment confirm, shortage + short-close, cancel) and one WhatsApp message parsed by the deterministic rules
- * parser into a draft. Re-running against an already complete demo tenant (same slug) changes nothing.
+ * Demo seeder (#56/#57 + the generic default demo). Builds a fully synthetic business ONLY through the public BayiOS
+ * API, as its owner (a real Supabase Auth user): tenant + template (plus own units, categories and custom fields where
+ * the template has none), warehouses and shelves, catalog with variants, custom-field attributes and barcodes, price
+ * lists (default + dealer lists with tiers), dealer groups, customers with addresses, team members invited through the
+ * Members API (each signs up and accepts), an XLSX catalog import, goods receipts, orders driven through the real flows
+ * (submit/approve → prioritised and assigned pick tasks → pick scans → pack check → shipment confirm, shortage +
+ * short-close, cancel), one WhatsApp message parsed by the deterministic rules parser into a draft, shelf moves,
+ * two-stage warehouse transfers, an open stock count and minimum-stock thresholds. Re-running against an already
+ * complete demo tenant (same slug) changes nothing.
  */
 
-export const DEMOS = { motor: motorDemo, led: ledDemo };
+/** `genel` (Demo Toptan Ticaret, general template) is the default demo; motor and led are optional sector examples. */
+export const DEMOS = { genel: genelDemo, motor: motorDemo, led: ledDemo };
+export const DEFAULT_DEMO = "genel";
 
 const ORDER_TARGETS = ["draft", "pending", "approved", "picking", "packed", "partial_closed", "shipped", "completed", "cancelled", "cancelled_draft"];
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -46,6 +52,14 @@ export async function summarize(api) {
   const thresholds = await api.all("/api/v1/inventory/thresholds");
   const critical = await api.all("/api/v1/reports/critical-stock");
   const criticalWithOutOfStock = await api.all("/api/v1/reports/critical-stock?includeOutOfStock=true");
+  // Team, picking work queue, two-stage transfers and stock counts (#129, #98, #168).
+  const [members, tasks, transfers, stockCounts] = await Promise.all([
+    api.all("/api/v1/members"),
+    api.all("/api/v1/picking-tasks"),
+    api.all("/api/v1/stock-transfers"),
+    api.all("/api/v1/stock-counts"),
+  ]);
+  const activeTasks = tasks.filter((t) => ["open", "in_progress"].includes(t.status));
   return {
     products: products.length,
     variants: products.reduce((n, p) => n + p.variants.length, 0),
@@ -65,7 +79,20 @@ export async function summarize(api) {
     criticalStock: critical.length,
     criticalStockWithOutOfStock: criticalWithOutOfStock.length,
     whatsappOrders: orders.filter((o) => o.source === "whatsapp_ai").length,
+    membersByRole: tally(members.filter((m) => m.status === "active"), (m) => m.role),
+    activeTasksByPriority: tally(activeTasks, (t) => t.priority),
+    assignedActiveTasks: activeTasks.filter((t) => t.assignedTo).length,
+    transfersByStatus: tally(transfers, (t) => t.status),
+    transfersWithDiscrepancy: transfers.filter((t) => t.hasDiscrepancy).length,
+    stockCountsByStatus: tally(stockCounts, (c) => c.status),
   };
+}
+
+/** { key → count }, keys sorted (stable JSON for the idempotency comparison in CI). */
+function tally(items, key) {
+  const out = {};
+  for (const k of items.map(key).sort()) out[k] = (out[k] ?? 0) + 1;
+  return out;
 }
 
 /**
@@ -132,14 +159,16 @@ export async function signInOwner(cfg, owner) {
 /**
  * @param {object} p
  * @param {any} p.cfg stackConfig()
- * @param {"motor" | "led"} p.demo
+ * @param {"genel" | "motor" | "led"} p.demo
  * @param {"full" | "small"} [p.size]
  * @param {{ email: string, password: string, fullName: string }} p.owner
+ * @param {{ role: string, email: string, password: string, fullName: string }[]} [p.team] invited members (signed up
+ *   through Supabase Auth + Mailpit, then accept); without it picking tasks go to the owner
  * @param {{ name: string, slug: string }} [p.tenant] overrides the demo's own name/slug (E2E: unique per run)
  * @param {{ importCatalog?: boolean, orders?: boolean, whatsapp?: boolean }} [p.include]
  * @param {(line: string) => void} [p.log]
  */
-export async function seedDemo({ cfg, demo, size = "full", owner, tenant, include = {}, log = () => {} }) {
+export async function seedDemo({ cfg, demo, size = "full", owner, team = [], tenant, include = {}, log = () => {} }) {
   const def = DEMOS[demo](size);
   const tenantDef = tenant ?? def.tenant;
   const want = { importCatalog: true, orders: true, whatsapp: true, ...include };
@@ -167,21 +196,34 @@ export async function seedDemo({ cfg, demo, size = "full", owner, tenant, includ
   await api.post(`/api/v1/sector-templates/${def.sector}/apply`);
   await api.patch("/api/v1/tenant/settings", { negativeStockPolicy: "block", defaultTaxRate: def.taxRate, pricesIncludeTaxDisplay: false });
 
-  // ---- Warehouses and shelves (the first one becomes the default warehouse).
+  // ---- Team (#129): the owner invites each member, who signs up, confirms the e-mail and accepts the invitation.
+  const members = await addTeam(cfg, api, team, created.id, log);
+
+  // ---- Warehouses and shelves (the first one becomes the default warehouse). Shelves are keyed by category (or key).
   const warehouses = {};
   for (const w of def.warehouses) {
     const wh = await api.post("/api/v1/warehouses", { code: w.code, name: w.name, usesLocations: w.usesLocations });
     const locations = {};
     for (const l of w.locations) {
-      locations[l.category] = { code: l.code, id: (await api.post(`/api/v1/warehouses/${wh.id}/locations`, { code: l.code, barcode: null, pickSequence: l.pickSequence })).id };
+      locations[l.category ?? l.key] = { code: l.code, id: (await api.post(`/api/v1/warehouses/${wh.id}/locations`, { code: l.code, barcode: null, pickSequence: l.pickSequence })).id };
     }
     warehouses[w.code] = { id: wh.id, name: w.name, usesLocations: w.usesLocations, locations };
   }
   const [mainCode, shopCode] = def.warehouses.map((w) => w.code);
 
-  // ---- Reference data from the sector template + brands.
+  // ---- Reference data from the template, plus the demo's own units / categories / custom fields (the general
+  // template ships only adet, koli and kg) + brands.
   const units = Object.fromEntries((await api.get("/api/v1/units")).items.map((u) => [u.code, u.id]));
+  for (const u of def.units ?? []) {
+    if (!units[u.code]) units[u.code] = (await api.post("/api/v1/units", { code: u.code, name: u.name, allowsFraction: u.allowsFraction })).id;
+  }
   const categories = Object.fromEntries((await api.get("/api/v1/categories")).items.map((c) => [c.name, c.id]));
+  for (const [i, name] of (def.categories ?? []).entries()) {
+    if (!categories[name]) categories[name] = (await api.post("/api/v1/categories", { name, parentId: null, sortOrder: (i + 1) * 10 })).id;
+  }
+  for (const [i, f] of (def.customFields ?? []).entries()) {
+    await api.post("/api/v1/custom-fields", { ...f, required: false, sortOrder: (i + 1) * 10 });
+  }
   const brands = {};
   for (const name of def.brands) brands[name] = (await api.post("/api/v1/brands", { name })).id;
   const unitId = (code) => units[code] ?? (() => { throw new Error(`Unit ${code} missing from the ${def.sector} template`); })();
@@ -306,7 +348,7 @@ export async function seedDemo({ cfg, demo, size = "full", owner, tenant, includ
   if (shopCode && shopLines.length) await receive(shopCode, shopLines, "IRS-DEMO-SUBE");
   log(`  stock received: ${Object.keys(stock).length} variants in ${mainCode}${shopLines.length ? `, ${shopLines.length} in ${shopCode}` : ""}`);
 
-  const refs = { def, api, tenantId: created.id, userId: me.userId, warehouses, variants, stock, customers, priceLists: { default: defaultList.id, dealer: dealerLists }, dealerGroups, importJob };
+  const refs = { def, api, tenantId: created.id, userId: me.userId, members, warehouses, variants, stock, demand, customers, priceLists: { default: defaultList.id, dealer: dealerLists }, dealerGroups, importJob };
 
   // ---- Orders in every state, through the real flows.
   const orders = [];
@@ -326,16 +368,145 @@ export async function seedDemo({ cfg, demo, size = "full", owner, tenant, includ
     log(`  whatsapp: parse ${whatsapp.parseId} (${whatsapp.parser}) → draft ${whatsapp.orderNumber}`);
   }
 
+  // ---- Warehouse documents (#168): shelf moves, two-stage transfers, an open stock count. Before the thresholds, so
+  // the critical-stock report reflects the final balances.
+  const relocations = await seedRelocations(refs);
+  if (relocations.length) log(`  shelf moves: ${relocations.map((r) => `${r.sku} ${r.quantity} → ${r.to}`).join(", ")}`);
+  const transfers = await seedTransfers(refs);
+  if (transfers.length) log(`  transfers: ${transfers.map((t) => `${t.number}=${t.status}${t.hasDiscrepancy ? " (fark)" : ""}`).join(", ")}`);
+  const stockCount = await seedStockCount(refs);
+  if (stockCount) log(`  stock count ${stockCount.number} (${stockCount.status}) on ${stockCount.shelf}: ${stockCount.counted}/${stockCount.lines} lines counted`);
+
   // ---- Minimum stock thresholds (#137): a meaningful critical-stock tile and report.
   const thresholds = await seedThresholds(refs);
   log(`  thresholds: ${thresholds.critical.map((c) => `${c.sku} ${c.available}≤${c.min}`).join(", ")}; override ${thresholds.override.sku} @${thresholds.override.warehouse} → ${thresholds.override.min}; no threshold, 0 stock: ${def.outOfStock?.join(", ") ?? "—"}`);
 
   const counts = await summarize(api);
-  return { skipped: false, ...refs, orders, whatsapp, thresholds, counts, seconds: (Date.now() - started) / 1000 };
+  return { skipped: false, ...refs, orders, whatsapp, relocations, transfers, stockCount, thresholds, counts, seconds: (Date.now() - started) / 1000 };
 }
 
-/** Units without fractions in both sector templates (thresholds are whole numbers there). */
-const WHOLE_UNITS = new Set(["adet", "takim", "kutu", "paket", "koli", "set", "cift"]);
+/**
+ * Invites every team member (Members API; the response carries the one-time token), signs the member up through
+ * Supabase Auth (confirmation via Mailpit, or a plain sign-in when the user already exists) and accepts the
+ * invitation with the member's own token. Returns role → member.
+ */
+export async function addTeam(cfg, ownerApi, team, tenantId, log = () => {}) {
+  const members = {};
+  for (const m of team) {
+    const issued = await ownerApi.post("/api/v1/members/invitations", { email: m.email, role: m.role });
+    const userApi = new Api(cfg, await ensureUser(cfg, m));
+    await userApi.post("/api/v1/invitations/accept", { token: issued.token });
+    const self = await userApi.get("/api/v1/me");
+    members[m.role] = { userId: self.userId, email: m.email, fullName: m.fullName, role: m.role, api: userApi.withTenant(tenantId) };
+  }
+  if (team.length) log(`  team: ${team.map((m) => `${m.role} ${m.email}`).join(", ")}`);
+  return members;
+}
+
+const isoDateInDays = (days) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+
+/** Main-warehouse shelf of a variant (its category shelf), or null in a warehouse without locations. */
+function shelfOf(refs, sku) {
+  const main = refs.warehouses[refs.def.warehouses[0].code];
+  if (!main.usesLocations) return null;
+  return main.locations[refs.variants[sku].category] ?? Object.values(main.locations)[0];
+}
+
+/** Stock documents only use products no order needs, and never more than was received. */
+function assertFreeStock(refs, sku, quantity, what) {
+  if (!refs.variants[sku]) throw new Error(`${what}: SKU ${sku} is not in the demo catalog`);
+  if (refs.demand[sku]) throw new Error(`${what}: ${sku} is also ordered; pick a product without orders`);
+  if (quantity > (refs.stock[sku]?.main ?? 0)) throw new Error(`${what}: ${sku} ${quantity} > ${refs.stock[sku]?.main ?? 0} received`);
+}
+
+/** Shelf-to-shelf moves in the main warehouse (#168): category shelf → the overflow shelf. */
+export async function seedRelocations(refs) {
+  const { api, def, variants, warehouses } = refs;
+  if (!def.relocations?.length) return [];
+  const main = warehouses[def.warehouses[0].code];
+  const to = main.locations.overflow;
+  if (!to) throw new Error("Shelf moves need an overflow shelf (key: overflow) in the main warehouse");
+  const done = [];
+  for (const [sku, quantity] of def.relocations) assertFreeStock(refs, sku, quantity, "Shelf move");
+  await api.post("/api/v1/inventory/relocations", {
+    warehouseId: main.id,
+    reference: "Taşma rafına aktarım (sentetik)",
+    lines: def.relocations.map(([sku, quantity]) => {
+      done.push({ sku, quantity, from: shelfOf(refs, sku).code, to: to.code });
+      return { variantId: variants[sku].id, fromLocationId: shelfOf(refs, sku).id, toLocationId: to.id, quantity, includeReserved: false };
+    }),
+  });
+  return done;
+}
+
+/**
+ * Two-stage transfers main → second warehouse (OD-01): create → dispatch ("Yolda"); optionally receive (per line, in
+ * line order) and close the rest with a resolution (lost / return_to_source) → "Farkla kapatıldı".
+ */
+export async function seedTransfers(refs) {
+  const { api, def, variants, warehouses } = refs;
+  const out = [];
+  if (!def.transfers?.length) return out;
+  const [source, destination] = def.warehouses.map((w) => warehouses[w.code]);
+  const committed = {};
+  for (const [sku, quantity] of [...(def.relocations ?? []), ...def.transfers.flatMap((t) => t.lines)]) committed[sku] = (committed[sku] ?? 0) + quantity;
+  for (const [sku, quantity] of Object.entries(committed)) assertFreeStock(refs, sku, quantity, "Transfer");
+  for (const t of def.transfers) {
+    let detail = await api.post("/api/v1/stock-transfers", {
+      sourceWarehouseId: source.id,
+      destinationWarehouseId: destination.id,
+      note: t.note,
+      lines: t.lines.map(([sku, quantity]) => ({ variantId: variants[sku].id, quantity, sourceLocationId: shelfOf(refs, sku)?.id ?? null, destinationLocationId: null })),
+    });
+    const act = async (action, body) => {
+      detail = (await api.post(`/api/v1/stock-transfers/${detail.transfer.id}/${action}`, body, { ifMatch: etagOf(detail.transfer.version) })).transfer;
+    };
+    await act("dispatch");
+    if (t.receive) {
+      const lines = [...detail.lines].sort((a, b) => a.lineNo - b.lineNo);
+      const received = lines
+        .map((l, i) => ({ lineId: l.id, variantId: null, code: null, quantity: t.receive[i] ?? 0, locationId: null, locationCode: null }))
+        .filter((l) => l.quantity > 0);
+      await act("receive", { lines: received });
+    }
+    if (t.close) await act("close", { resolution: t.close.resolution, reason: t.close.reason });
+    if (detail.transfer.status !== t.target) throw new Error(`Transfer ${detail.transfer.number} is ${detail.transfer.status}, expected ${t.target}`);
+    out.push({ id: detail.transfer.id, number: detail.transfer.number, status: detail.transfer.status, hasDiscrepancy: detail.transfer.hasDiscrepancy });
+  }
+  return out;
+}
+
+/** One open count on a main-warehouse shelf: the first lines counted (deltas against the system quantity), rest pending. */
+export async function seedStockCount(refs) {
+  const { api, def, warehouses } = refs;
+  const spec = def.stockCount;
+  if (!spec) return null;
+  const main = warehouses[def.warehouses[0].code];
+  const shelf = main.locations[spec.shelf];
+  if (!shelf) throw new Error(`Stock count shelf ${spec.shelf} not found in ${def.warehouses[0].code}`);
+  let count = await api.post("/api/v1/stock-counts", { warehouseId: main.id, scope: "locations", locationIds: [shelf.id], variantIds: null, blind: false, note: spec.note });
+  const lines = count.lines.slice(0, spec.counted.length);
+  if (lines.length < spec.counted.length) throw new Error(`Stock count on ${shelf.code} has only ${count.lines.length} lines`);
+  count = await api.post(
+    `/api/v1/stock-counts/${count.count.id}/entries`,
+    {
+      entries: lines.map((l, i) => ({
+        lineId: l.id,
+        variantId: null,
+        code: null,
+        locationId: null,
+        locationCode: null,
+        quantity: Math.max(0, Number(l.expectedQuantity) + spec.counted[i]),
+        mode: "set",
+      })),
+    },
+    { ifMatch: etagOf(count.count.version) },
+  );
+  return { id: count.count.id, number: count.count.number, status: count.count.status, shelf: shelf.code, lines: count.lines.length, counted: count.count.countedLineCount };
+}
+
+/** Units without fractions in the templates and demos (thresholds are whole numbers there). */
+const WHOLE_UNITS = new Set(["adet", "takim", "kutu", "paket", "koli", "set", "cift", "rulo"]);
 
 /**
  * Minimum stock thresholds from the stock as it stands after the scripted orders (deterministic: same seed → same
@@ -397,7 +568,7 @@ export async function driveOrder(refs, spec, index = 0) {
     sourceReferenceId: null,
     currency: null,
     pricesIncludeTax: null,
-    requestedDeliveryDate: null,
+    requestedDeliveryDate: spec.deliveryInDays == null ? null : isoDateInDays(spec.deliveryInDays),
     notes: spec.notes ?? "Sentetik demo siparişi.",
     lines: spec.lines.map(([sku, quantity]) => {
       if (!variants[sku]) throw new Error(`Order line SKU ${sku} is not in the demo catalog`);
@@ -417,8 +588,14 @@ export async function driveOrder(refs, spec, index = 0) {
   if (["approved", "picking", "packed", "partial_closed", "shipped", "completed", "cancelled"].includes(spec.target)) await act("approve", { confirmNegativeStock: false });
   if (spec.target === "cancelled") await act("cancel", { reason: spec.reason });
 
+  // Approved and waiting: the supervisor sets the task's priority (WHT-03) and may assign it to a team member.
+  if (spec.target === "approved" && (spec.priority || spec.assignTo)) {
+    const { summary, assignee } = await prepareTask(refs, id, spec);
+    if (assignee) await api.post(`/api/v1/picking-tasks/${summary.id}/assign`, { userId: assignee });
+  }
+
   if (["picking", "packed", "partial_closed", "shipped", "completed"].includes(spec.target)) {
-    const task = await startPickTask(refs, id);
+    const task = await startPickTask(refs, id, spec);
     if (spec.target === "picking") {
       const first = task.lines[0];
       await api.post(`/api/v1/picking-tasks/${task.task.id}/scans`, { code: first.barcode ?? first.sku, location: first.locationCode, quantity: Math.max(1, Math.floor(Number(first.quantityToPick) / 2)), lineId: first.id });
@@ -447,18 +624,33 @@ export async function driveOrder(refs, spec, index = 0) {
   return { target: spec.target, id, number: detail.order.number, status: detail.order.status, fulfillmentStatus: detail.order.fulfillmentStatus };
 }
 
-/** Approval creates the pick task; the owner (a supervisor) assigns it to himself and starts it. */
-export async function startPickTask(refs, orderId) {
-  const { api, userId } = refs;
+/** The order's active pick task (approval creates it in the background). */
+export async function findPickTask(refs, orderId) {
   let summary = null;
   for (let i = 0; i < 60 && !summary; i++) {
-    summary = (await api.get(`/api/v1/picking-tasks?orderId=${orderId}`)).items.find((t) => t.type === "pick" && ["open", "in_progress"].includes(t.status)) ?? null;
+    summary = (await refs.api.get(`/api/v1/picking-tasks?orderId=${orderId}`)).items.find((t) => t.type === "pick" && ["open", "in_progress"].includes(t.status)) ?? null;
     if (!summary) await sleep(500);
   }
   if (!summary) throw new Error(`No pick task appeared for order ${orderId}`);
-  await api.post(`/api/v1/picking-tasks/${summary.id}/assign`, { userId });
-  await api.post(`/api/v1/picking-tasks/${summary.id}/start`);
-  return api.get(`/api/v1/picking-tasks/${summary.id}`);
+  return summary;
+}
+
+/** Finds the task, sets the spec's priority (low/normal/high/urgent) and resolves spec.assignTo (a team role) to a user id. */
+async function prepareTask(refs, orderId, spec = {}) {
+  const summary = await findPickTask(refs, orderId);
+  if (spec.priority && spec.priority !== summary.priority) await refs.api.post(`/api/v1/picking-tasks/${summary.id}/priority`, { priority: spec.priority });
+  return { summary, assignee: (spec.assignTo && refs.members?.[spec.assignTo]?.userId) || null };
+}
+
+/**
+ * Approval creates the pick task; the owner (a supervisor, who may act on any task) assigns it — to the spec's team
+ * member when there is one, else to himself — and starts it.
+ */
+export async function startPickTask(refs, orderId, spec = {}) {
+  const { summary, assignee } = await prepareTask(refs, orderId, spec);
+  await refs.api.post(`/api/v1/picking-tasks/${summary.id}/assign`, { userId: assignee ?? refs.userId });
+  await refs.api.post(`/api/v1/picking-tasks/${summary.id}/start`);
+  return refs.api.get(`/api/v1/picking-tasks/${summary.id}`);
 }
 
 /** Parses the demo's WhatsApp message (rules parser) and confirms the lines a reviewer would confirm. */

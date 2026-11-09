@@ -1,6 +1,6 @@
 name: demo-seed
 
-# Pilot demos (#56/#57): seeds BOTH full synthetic demos ("Demo Motor Yedek Parça", "Demo LED Elektronik") through
+# Demos: seeds ALL full synthetic demos ("Demo Toptan Ticaret" (default, generic), "Demo Motor Yedek Parça", "Demo LED Elektronik") through
 # the public API against the real local stack (infra/ci/e2e-stack.sh, API-only), then runs the seeder a second time
 # and requires it to change nothing (idempotent re-run). The demo UI stories themselves run in the `e2e real stack`
 # job (apps/web/e2e-local/demo-*.spec.ts). No secrets: passwords are generated inside the runner and never uploaded.
@@ -48,11 +48,11 @@ jobs:
       - name: Start the real stack (Supabase Auth, Postgres 17 + migrations, API)
         run: bash infra/ci/e2e-stack.sh up
 
-      - name: Seed both demos (first run)
-        run: node apps/web/e2e-local/demo/seed.mjs --summary "$RUNNER_TEMP/demo-seed-1.json"
+      - name: Seed all demos (first run)
+        run: node apps/web/e2e-local/demo/seed.mjs --demo all --summary "$RUNNER_TEMP/demo-seed-1.json"
 
       - name: Seed again (must be a no-op)
-        run: node apps/web/e2e-local/demo/seed.mjs --summary "$RUNNER_TEMP/demo-seed-2.json"
+        run: node apps/web/e2e-local/demo/seed.mjs --demo all --summary "$RUNNER_TEMP/demo-seed-2.json"
 
       - name: Verify the re-run changed nothing and report counts
         run: |
@@ -64,6 +64,18 @@ jobs:
             if (r.error || r.skipped) problems.push(`${demo}: first run ${r.error ?? "skipped"}`);
             if (!second[demo]?.skipped) problems.push(`${demo}: second run was not a no-op`);
             if (JSON.stringify(second[demo]?.counts) !== JSON.stringify(r.counts)) problems.push(`${demo}: counts changed on re-run`);
+          }
+          // The default generic demo must showcase every feature (docs/operations/demo.md).
+          const g = first.genel?.counts;
+          if (!g) problems.push("genel: missing from the summary");
+          else {
+            const expect = (ok, what) => { if (!ok) problems.push(`genel: ${what}`); };
+            expect(["owner", "manager", "sales", "warehouse_staff"].every((r) => g.membersByRole?.[r] >= 1), `team ${JSON.stringify(g.membersByRole)}`);
+            expect(g.activeTasksByPriority?.urgent >= 1 && g.assignedActiveTasks >= 1, `tasks ${JSON.stringify(g.activeTasksByPriority)}`);
+            expect(g.transfersByStatus?.in_transit >= 1 && g.transfersWithDiscrepancy >= 1, `transfers ${JSON.stringify(g.transfersByStatus)}`);
+            expect(g.stockCountsByStatus?.open === 1, `stock counts ${JSON.stringify(g.stockCountsByStatus)}`);
+            expect(g.criticalStock >= 1 && g.warehouses === 2, `critical ${g.criticalStock}, warehouses ${g.warehouses}`);
+            expect(["draft", "approved", "picking", "packed", "shipped"].every((s) => g.ordersByStatus?.[s] >= 1), `orders ${JSON.stringify(g.ordersByStatus)}`);
           }
           console.log("## Demo seed\n\n| Demo | Slug | s | Products | Variants | Customers | Orders | By status |\n|---|---|---|---|---|---|---|---|");
           for (const [demo, r] of Object.entries(first)) {
