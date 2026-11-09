@@ -478,7 +478,9 @@ export async function handleCatalog(route: Route, catalog: MockCatalog): Promise
       attributes: (input.attributes as Json) ?? {},
       createdAt: new Date().toISOString(),
     });
-    product.variants = ((input.variants as Json[]) ?? []).map((v, i) =>
+    // A simple product passes `sku` (and `barcode`) at product level instead of `variants` — one variant, as the API does.
+    const variantInputs = ((input.variants as Json[] | null) ?? []).length > 0 || !input.sku ? ((input.variants as Json[]) ?? []) : [{ sku: input.sku, barcode: input.barcode ?? null }];
+    product.variants = variantInputs.map((v, i) =>
       makeVariant(product.id, n, i + 1, {
         sku: String(v.sku),
         barcode: (v.barcode as string) ?? null,

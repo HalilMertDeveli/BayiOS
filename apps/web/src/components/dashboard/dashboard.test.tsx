@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError, type ApiClient } from "@/lib/api/client";
 import { SessionContext } from "@/lib/session/session-context";
@@ -100,11 +100,12 @@ describe("Dashboard per role (MOCK /me permissions, MOCK API)", () => {
     expect(await within(tile("İncelenecek WhatsApp siparişleri")).findByText("İnceleme bekleyen ayrıştırma yok.")).toBeTruthy();
     expect(within(tile("Paket")).getByText("Profesyonel")).toBeTruthy();
     expect(within(tile("Paket")).getByText(/Ödeme alınmaz/)).toBeTruthy();
-    // One request per tile, nothing else.
-    expect(paths.map((p) => p.split("?")[0]).sort()).toEqual(
-      ["/api/v1/ai/order-parses", "/api/v1/orders", "/api/v1/picking-tasks/mine", "/api/v1/reports/critical-stock", "/api/v1/reports/orders"].sort(),
-    );
-    expect(paths.find((p) => p.startsWith("/api/v1/orders?"))).toContain("status=pending_approval");
+    // One request per tile, plus the owner's "İlk adımlar" progress reads (#83: one row each), nothing else.
+    const tileReads = ["/api/v1/ai/order-parses", "/api/v1/orders", "/api/v1/picking-tasks/mine", "/api/v1/reports/critical-stock", "/api/v1/reports/orders"];
+    const setupReads = ["/api/v1/warehouses", "/api/v1/products", "/api/v1/inventory/balances", "/api/v1/members/invitations", "/api/v1/members", "/api/v1/orders"];
+    await waitFor(() => expect(paths).toHaveLength(tileReads.length + setupReads.length));
+    expect(paths.map((p) => p.split("?")[0]).sort()).toEqual([...tileReads, ...setupReads].sort());
+    expect(paths.filter((p) => p.startsWith("/api/v1/orders?")).some((p) => p.includes("status=pending_approval"))).toBe(true);
   });
 
   it("sales: no critical stock / tasks / plan tiles and no request for them", async () => {

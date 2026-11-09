@@ -5,6 +5,10 @@ Yüzlerce ürünü veya fiyatı tek tek girmek yerine bir Excel (`.xlsx`) ya da 
 Ekran: menüde **İçe aktarma**. Bugün iki tür desteklenir: **Ürünler** ve **Fiyat listesi kalemleri**.
 Stok ve müşteri aktarma henüz kullanıma açılmadı.
 
+Hazır bir dosyanız yoksa **Kurulum sihirbazı → Ürünler** adımındaki **Şablonu indir (CSV)** ile boş bir şablon alın
+(`bayios-urun-sablonu.csv`: Stok Kodu, Barkod, Ürün Adı, Açıklama, Birim, KDV Oranı, Marka, Kategori, Durum). İki örnek
+satırı silip kendi ürünlerinizi yazın; kolonlar yüklemede otomatik eşlenir. Birim, katalogdaki birim kodudur (ör. `adet`).
+
 ## Kimler yapabilir?
 | İş | Sahip | Yönetici | Op. müdürü | Diğerleri |
 |---|---|---|---|---|

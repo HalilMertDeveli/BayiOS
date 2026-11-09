@@ -41,16 +41,16 @@ export const USER = { id: "00000000-0000-4000-8000-000000000001", email: "mock.k
 
 export const TENANT_A: MockMembership = {
   tenantId: "00000000-0000-4000-8000-0000000000a1",
-  tenantName: "Örnek Motor (mock)",
-  tenantSlug: "ornek-motor",
+  tenantName: "Örnek Toptan (mock)",
+  tenantSlug: "ornek-toptan",
   role: "owner",
   status: "active",
 };
 
 export const TENANT_B: MockMembership = {
   tenantId: "00000000-0000-4000-8000-0000000000b2",
-  tenantName: "Örnek LED (mock)",
-  tenantSlug: "ornek-led",
+  tenantName: "Örnek Mağaza (mock)",
+  tenantSlug: "ornek-magaza",
   role: "warehouse_staff",
   status: "active",
 };

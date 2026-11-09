@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Bot, ChevronRight, CircleAlert, ClipboardCheck, ClipboardList, LayoutDashboard, PackageMinus, ShoppingCart, Sparkles, type LucideIcon } from "lucide-react";
+import { SetupChecklist } from "@/components/onboarding/setup-checklist";
 import { OrderStatus } from "@/components/orders/order-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -63,6 +64,7 @@ export function Dashboard() {
   return (
     <>
       <PageHeader title="Pano" description={name ? `Hoş geldiniz, ${name}. İşletmenizin bugünkü özeti.` : "İşletmenizin bugünkü özeti."} />
+      <SetupChecklist />
       {links.length > 0 ? (
         <nav aria-label="Hızlı işlemler">
           <ul className="flex flex-wrap gap-2">

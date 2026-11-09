@@ -5,7 +5,7 @@ export const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
 
 const TURKISH_MAP: Record<string, string> = { ç: "c", ğ: "g", ı: "i", İ: "i", ö: "o", ş: "s", ü: "u", â: "a", î: "i", û: "u" };
 
-/** "Yılmaz Motor Yedek Parça Ltd. Şti." → "yilmaz-motor-yedek-parca-ltd-sti" */
+/** "Yıldız Toptan Gıda Ltd. Şti." → "yildiz-toptan-gida-ltd-sti" */
 export function slugify(value: string): string {
   return value
     .replace(/[çğıİöşüâîû]/gi, (ch) => TURKISH_MAP[ch] ?? TURKISH_MAP[ch.toLowerCase()] ?? ch)
@@ -34,23 +34,31 @@ export function validateSlug(value: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Starter templates (API sector codes). BayiOS is sector-agnostic (owner direction 2026-11-09): the plain start is the
+ * default and fits any business; the other two are optional *examples* of what custom fields can do, described by what
+ * they add rather than by an industry. Everything they add can be archived later.
+ */
 export const sectorOptions: readonly { value: Sector; label: string; description: string }[] = [
   {
+    value: "general",
+    label: "Sade başlangıç (önerilen)",
+    description: "Her işletmeye uygun: adet, koli ve kilogram birimleri. Kategorileri ve özel alanları sonra kendinize göre eklersiniz.",
+  },
+  {
     value: "motorcycle_parts",
-    label: "Motosiklet yedek parça",
-    description: "Model/yıl uyumluluğu, OEM ve muadil parça kodları, adet bazlı satış.",
+    label: "Örnek şablon: Uyumluluk takipli parçalar",
+    description: "Uyumlu marka/model, model yılı, orijinal parça no gibi alanlar ve örnek kategoriler; takım, kutu, litre, metre birimleri.",
   },
   {
     value: "led_electronics",
-    label: "LED ve elektronik",
-    description: "Watt, renk sıcaklığı, voltaj gibi teknik özellikler; metre ve adet birimleri.",
-  },
-  {
-    value: "general",
-    label: "Genel toptan / dağıtım",
-    description: "Sektöre özel alan olmadan sade ürün kataloğu ve stok yönetimi.",
+    label: "Örnek şablon: Teknik özellikli ürünler",
+    description: "Güç, voltaj, IP sınıfı gibi teknik alanlar ve örnek kategoriler; kutu, koli, metre birimleri.",
   },
 ];
+
+/** Pre-selected starter template: the plain one, so a new business never has to pick an industry. */
+export const DEFAULT_SECTOR: Sector = "general";
 
 /**
  * Owner decision OD-09 (2026-11-09): stock never goes below zero. Not a setting any more — shown as a fixed rule in
@@ -92,7 +100,7 @@ export function tenantFieldMessage(field: string): string {
     case "slug":
       return "İşletme adresi geçersiz. Yalnızca küçük harf, rakam ve tire kullanın (3–63 karakter).";
     case "sector":
-      return "Lütfen listeden bir sektör seçin.";
+      return "Lütfen listeden bir şablon seçin.";
     default:
       return "Bu alan geçersiz.";
   }

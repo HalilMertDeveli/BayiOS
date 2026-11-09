@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { SLUG_PATTERN, slugify, validateSlug, validateTenantName } from "./tenant-form";
+import { DEFAULT_SECTOR, SLUG_PATTERN, sectorOptions, slugify, validateSlug, validateTenantName } from "./tenant-form";
+
+describe("starter templates (sector-agnostic, owner direction 2026-11-09)", () => {
+  it("pre-selects the plain start and lists it first", () => {
+    expect(DEFAULT_SECTOR).toBe("general");
+    expect(sectorOptions[0].value).toBe("general");
+  });
+
+  it("names no industry in the options shown to a new business", () => {
+    const text = sectorOptions.map((o) => `${o.label} ${o.description}`).join(" ");
+    expect(text).not.toMatch(/motosiklet|motor|\bLED\b|yedek parça|elektronik/i);
+  });
+});
 
 describe("slugify", () => {
   it.each([
-    ["Yılmaz Motor Yedek Parça Ltd. Şti.", "yilmaz-motor-yedek-parca-ltd-sti"],
-    ["İSTANBUL LED & Elektronik", "istanbul-led-elektronik"],
+    ["Yıldız Toptan Gıda Ltd. Şti.", "yildiz-toptan-gida-ltd-sti"],
+    ["İSTANBUL Kırtasiye & Ofis", "istanbul-kirtasiye-ofis"],
     ["  Çağrı Öztürk  ", "cagri-ozturk"],
     ["---", ""],
   ])("%s → %s", (input, expected) => {

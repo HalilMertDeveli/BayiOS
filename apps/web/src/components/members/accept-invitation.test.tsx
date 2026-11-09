@@ -53,7 +53,7 @@ afterEach(() => {
 describe("AcceptInvitation", () => {
   it("strips the fragment, accepts with the token in the body only, switches tenant and clears the token", async () => {
     const calls = stubAccept(() =>
-      Response.json({ tenantId: "t-9", tenantName: "Örnek LED", tenantSlug: "ornek-led", role: "sales", status: "active" }),
+      Response.json({ tenantId: "t-9", tenantName: "Örnek Mağaza", tenantSlug: "ornek-magaza", role: "sales", status: "active" }),
     );
     render(<AcceptInvitation />);
     const button = await screen.findByRole("button", { name: "Daveti kabul et" });

@@ -152,7 +152,7 @@ export function CustomFieldsSettings() {
       </Link>
       <PageHeader
         title="Özel alanlar"
-        description="Ürün ve varyantlarınıza işletmenize özel bilgiler ekleyin (ör. güç, renk sıcaklığı, uyumlu model)."
+        description="Ürün ve varyantlarınıza işletmenize özel bilgiler ekleyin (ör. renk, ölçü, malzeme, garanti süresi)."
         actions={
           canManage ? (
             <Button icon={<Plus className="size-4" />} onClick={() => setEditing({ mode: "create" })}>
@@ -400,7 +400,7 @@ function CustomFieldDialog({
               maxLength={20}
               onChange={(e) => set("unit", e.target.value)}
               error={errors.unit}
-              hint="İsteğe bağlı, ör. W, mm, K"
+              hint="İsteğe bağlı, ör. cm, kg, ay"
               autoComplete="off"
             />
           ) : null}

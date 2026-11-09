@@ -36,7 +36,12 @@ sırlar asla buraya konmaz.
 - Onboarding (`/isletme-olustur`): `POST /tenants` → yeni tenant ile sektör şablonu
   (`POST /sector-templates/{code}/apply`), ticari ayarlar (`PATCH /tenant/settings`) ve para birimi
   (`PATCH /tenant`). Her adım için deneme başına sabit `Idempotency-Key`; başarısız alt adımlar tenant
-  yeniden oluşturulmadan tekrar denenir.
+  yeniden oluşturulmadan tekrar denenir. Varsayılan şablon sektörden bağımsız "Sade başlangıç"tır (`general`).
+- Kurulum sihirbazı (`/kurulum?adim=…`, #83): işletme bilgileri (`PATCH /tenant`), ilk depo + basit raf düzeni
+  (`POST /warehouses`, `/warehouses/{id}/locations`), ürünler (CSV şablonu + `/ice-aktarma/yeni` veya `POST /products`),
+  açılış stoğu (`POST /inventory/receipts`), ekip daveti (`POST /members/invitations`). Her adım atlanabilir; ilerleme
+  bayrak olarak saklanmaz, veriden okunur (`src/lib/onboarding/facts.ts`). Panodaki "İlk adımlar" listesi aynı veriyi
+  kullanır; kapatılması yalnızca kullanıcı + işletme başına yerel bir tercih (localStorage).
 
 ## Gerçek yığın E2E (Supabase Auth + API + PostgreSQL 17 + web, mock yok)
 CI'da `.github/workflows/e2e-real.yml` (`e2e real stack`) ile her ilgili PR'da koşar. Yerelde aynı betik, repo kökünden

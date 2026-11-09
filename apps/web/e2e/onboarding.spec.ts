@@ -11,8 +11,8 @@ test.use({ viewport: DESKTOP });
 
 const NEW_TENANT: MockMembership = {
   tenantId: "00000000-0000-4000-8000-0000000000c3",
-  tenantName: "Yılmaz Motor Yedek Parça",
-  tenantSlug: "yilmaz-motor-yedek-parca",
+  tenantName: "Yıldız Toptan Gıda",
+  tenantSlug: "yildiz-toptan-gida",
   role: "owner",
   status: "active",
 };
@@ -27,7 +27,7 @@ const created = (route: Route) =>
       name: NEW_TENANT.tenantName,
       slug: NEW_TENANT.tenantSlug,
       status: "active",
-      sector: "motorcycle_parts",
+      sector: "led_electronics",
       defaultCurrency: "TRY",
       locale: "tr-TR",
       timeZone: "Europe/Istanbul",
@@ -68,15 +68,15 @@ test("kayıt → onboarding → pano (mock): slug conflict is retried with the s
   // Step 1 — validation, then name; the slug is derived with Turkish transliteration.
   await page.getByRole("button", { name: "Devam" }).click();
   await expect(page.getByText("İşletme adını girin.")).toBeVisible();
-  await page.getByLabel("İşletme adı").fill("Yılmaz Motor Yedek Parça");
-  await expect(page.getByLabel("İşletme adresi (kısa ad)")).toHaveValue("yilmaz-motor-yedek-parca");
+  await page.getByLabel("İşletme adı").fill("Yıldız Toptan Gıda");
+  await expect(page.getByLabel("İşletme adresi (kısa ad)")).toHaveValue("yildiz-toptan-gida");
   await page.getByRole("button", { name: "Devam" }).click();
 
-  // Step 2 — sector is required.
-  await expect(page.getByRole("heading", { level: 2, name: "Sektör" })).toBeFocused();
-  await page.getByRole("button", { name: "Devam" }).click();
-  await expect(page.getByText("Devam etmek için bir sektör seçin.")).toBeVisible();
-  await page.getByLabel(/Motosiklet yedek parça/).check();
+  // Step 2 — starter template: sector-agnostic, the plain start is pre-selected; an example template is optional.
+  await expect(page.getByRole("heading", { level: 2, name: "Ürün şablonu" })).toBeFocused();
+  await expect(page.getByLabel(/Sade başlangıç/)).toBeChecked();
+  await expect(page.getByText(/motosiklet|LED/i)).toHaveCount(0);
+  await page.getByLabel(/Teknik özellikli ürünler/).check();
   await page.getByRole("button", { name: "Devam" }).click();
 
   // Step 3 — commercial settings.
@@ -91,17 +91,18 @@ test("kayıt → onboarding → pano (mock): slug conflict is retried with the s
   await page.getByRole("button", { name: "Devam" }).click();
 
   // Step 4 — summary and create (first attempt: slug taken).
-  await expect(page.getByText("yilmaz-motor-yedek-parca")).toBeVisible();
+  await expect(page.getByText("yildiz-toptan-gida")).toBeVisible();
   await page.getByRole("button", { name: "İşletmeyi oluştur" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "İşletme bilgileri" })).toBeVisible();
   await expect(page.getByText("Bu işletme adresi başka bir işletme tarafından kullanılıyor.", { exact: false })).toBeVisible();
 
-  await page.getByLabel("İşletme adresi (kısa ad)").fill("yilmaz-motor-2");
+  await page.getByLabel("İşletme adresi (kısa ad)").fill("yildiz-toptan-2");
   for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Devam" }).click();
   await page.getByRole("button", { name: "İşletmeyi oluştur" }).click();
 
-  await expect(page).toHaveURL("/pano");
-  await expect(page.getByRole("heading", { level: 1, name: "Pano" })).toBeVisible();
+  // #83: the guided setup follows the business creation.
+  await expect(page).toHaveURL("/kurulum");
+  await expect(page.getByRole("heading", { level: 1, name: "İşletmenizi kuralım" })).toBeVisible();
   await expect(page.getByTitle("Aktif işletme")).toHaveText(NEW_TENANT.tenantName);
 
   const posts = api.requests.filter((r) => r.method === "POST" && r.path === "/api/v1/tenants");
@@ -109,10 +110,10 @@ test("kayıt → onboarding → pano (mock): slug conflict is retried with the s
   expect(posts[0].headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
   expect(posts[1].headers["idempotency-key"]).toBe(posts[0].headers["idempotency-key"]);
   expect(posts[0].headers["authorization"]).toMatch(/^Bearer /);
-  expect(posts[1].body).toEqual({ name: "Yılmaz Motor Yedek Parça", slug: "yilmaz-motor-2", sector: "motorcycle_parts" });
+  expect(posts[1].body).toEqual({ name: "Yıldız Toptan Gıda", slug: "yildiz-toptan-2", sector: "led_electronics" });
 
   // Sector template applied by the client right after creation, as the new owner (Identity cannot call Catalog).
-  const apply = api.requests.filter((r) => r.method === "POST" && r.path === "/api/v1/sector-templates/motorcycle_parts/apply");
+  const apply = api.requests.filter((r) => r.method === "POST" && r.path === "/api/v1/sector-templates/led_electronics/apply");
   expect(apply).toHaveLength(1);
   expect(apply[0].headers["x-tenant-id"]).toBe(NEW_TENANT.tenantId);
   expect(apply[0].headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
@@ -149,14 +150,14 @@ test("a failed template apply is retried with the same key, without creating a s
   await page.goto("/isletme-olustur");
   await page.getByLabel("İşletme adı").fill("Deneme Toptan");
   await page.getByRole("button", { name: "Devam" }).click();
-  await page.getByLabel(/Genel toptan/).check();
+  await expect(page.getByLabel(/Sade başlangıç/)).toBeChecked(); // default: no industry to pick
   await page.getByRole("button", { name: "Devam" }).click();
   await page.getByRole("button", { name: "Devam" }).click();
   await page.getByRole("button", { name: "İşletmeyi oluştur" }).click();
 
-  await expect(page.getByRole("alert").filter({ hasText: "İşletmeniz oluşturuldu, ancak sektör şablonu" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "İşletmeniz oluşturuldu, ancak ürün şablonu" })).toBeVisible();
   await page.getByRole("button", { name: "Kalan adımları tamamla" }).click();
-  await expect(page).toHaveURL("/pano");
+  await expect(page).toHaveURL("/kurulum");
 
   expect(api.requests.filter((r) => r.method === "POST" && r.path === "/api/v1/tenants")).toHaveLength(1);
   const applies = api.requests.filter((r) => r.path.endsWith("/apply"));

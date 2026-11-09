@@ -18,7 +18,7 @@ Son kontrol: 2026-11-07, `preview` `ba83e85` (release candidate raporu: `docs/op
 | **İki adımlı doğrulama (2FA)** | Yok. **Ayarlar → İş kuralları**'ndaki seçenek "Yakında · henüz uygulanmıyor" olarak görünür; işaretlemek giriş akışını değiştirmez. |
 | **Üyeliği askıya alınan kişinin oturumu** | Askıya alınan kişi bir sonraki işleminde işletmeye erişemez; ancak oturumu kapatılmaz (başka işletmelerine erişmeye devam eder). |
 | **Ürün görseli, tedarikçi kartı** | Ürüne görsel eklenemez. Tedarikçi bilgisi yalnızca mal kabulde **Referans (irsaliye / fatura no)** alanına yazılabilir; ürün kartında tedarikçi alanı yoktur. |
-| **Seri numarası / garanti takibi** | Yok. LED şablonundaki "Seri no takibi" yalnızca Evet/Hayır bilgisidir. Kapsam ürün sahibi kararı bekliyor. |
+| **Seri numarası / garanti takibi** | Yok. "Teknik özellikli ürünler" örnek şablonundaki "Seri no takibi" yalnızca Evet/Hayır bilgisidir. Kapsam ürün sahibi kararı bekliyor. |
 | **Ekrandan demo verisi yükleme** | Yok. Pilot öncesi demo işletmeler BayiOS ekibi tarafından hazırlanır. |
 | **Ödeme, fatura, paket değişikliği** | Yok. Her şey ücretsiz denemedir; kart bilgisi istenmez. |
 | **Bayi portalı** (bayilerin kendi siparişini girmesi) | Yok ("Yakında"). |

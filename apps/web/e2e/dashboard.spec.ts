@@ -84,11 +84,17 @@ test.describe("pano — masaüstü (mock)", () => {
     await expect(tile(page, "Paket")).toContainText("Ödeme alınmaz");
     await expect(page.getByRole("navigation", { name: "Hızlı işlemler" }).getByRole("link")).toHaveText(["Sipariş oluştur", "WhatsApp'tan sipariş", "Ürün ekle", "Mal girişi"]);
 
-    // Exactly one request per tile (the plan comes from /me).
-    const calls = tenantCalls(api).filter((p) => !p.startsWith("/api/v1/tenant"));
-    expect(calls.sort()).toEqual(["/api/v1/ai/order-parses", "/api/v1/orders", "/api/v1/picking-tasks/mine", "/api/v1/reports/critical-stock", "/api/v1/reports/orders"].sort());
-    const orderCall = api.requests.find((r) => r.path === "/api/v1/orders")!;
-    expect(new URLSearchParams(orderCall.search).get("status")).toBe("pending_approval");
+    // Exactly one request per tile (the plan comes from /me), plus the owner's "İlk adımlar" progress reads (#83, one
+    // row each; /members is answered by the shared mock, /members/invitations is not mocked here → that fact is unknown).
+    const tileReads = ["/api/v1/ai/order-parses", "/api/v1/orders", "/api/v1/picking-tasks/mine", "/api/v1/reports/critical-stock", "/api/v1/reports/orders"];
+    const setupReads = ["/api/v1/warehouses", "/api/v1/products", "/api/v1/inventory/balances", "/api/v1/members/invitations", "/api/v1/members", "/api/v1/orders"];
+    await expect(page.getByRole("region", { name: "İlk adımlar" })).toBeVisible();
+    const calls = () => tenantCalls(api).filter((p) => !p.startsWith("/api/v1/tenant"));
+    await expect.poll(() => calls().length).toBe(tileReads.length + setupReads.length);
+    expect(calls().sort()).toEqual([...tileReads, ...setupReads].sort());
+    const orderCalls = api.requests.filter((r) => r.path === "/api/v1/orders").map((r) => new URLSearchParams(r.search));
+    expect(orderCalls.some((q) => q.get("status") === "pending_approval")).toBe(true);
+    expect(orderCalls.some((q) => q.get("limit") === "1" && !q.get("status"))).toBe(true);
 
     await pending.getByRole("link", { name: "Tümünü gör" }).click();
     await expect(page).toHaveURL(/\/siparisler\?durum=pending_approval$/);

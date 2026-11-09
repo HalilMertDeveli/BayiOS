@@ -132,6 +132,7 @@ const routes: RouteCase[] = [
     "/ayarlar/is-kurallari",
     "/ayarlar/ozel-alanlar",
     "/ayarlar/paket",
+    "/kurulum",
     "/tasarim-sistemi",
   ].map((route) => ({ name: route, open: visit(route) })),
   {

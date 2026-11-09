@@ -33,9 +33,9 @@ test("auth and onboarding screenshots", async ({ page }) => {
   };
   const message = (await (await fetch(`${MAILPIT}/api/v1/message/${messages[0].ID}`)).json()) as { Text: string };
   await page.goto(message.Text.match(/https?:\/\/\S+\/verify\?\S+/)![0].replace(/&amp;/g, "&"));
-  await page.getByLabel("İşletme adı").fill("Ekran Motor Yedek Parça");
+  await page.getByLabel("İşletme adı").fill("Ekran Örnek Toptan");
   await page.getByRole("button", { name: "Devam" }).click();
-  await page.getByLabel(/Motosiklet yedek parça/).check();
+  await page.getByLabel(/Uyumluluk takipli parçalar/).check(); // optional example template (API code motorcycle_parts)
   await page.screenshot({ path: "docs/screenshots/desktop-onboarding-sektor.png", fullPage: true });
   await page.getByRole("button", { name: "Devam" }).click();
   await page.setViewportSize(MOBILE);
