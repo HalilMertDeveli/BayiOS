@@ -19,6 +19,7 @@ import { inventoryPermissions } from "@/lib/inventory/permissions";
 import { addQuantities, formatQuantity, formatSignedQuantity, toNumber } from "@/lib/inventory/quantity";
 import { useSession } from "@/lib/session/session-context";
 import { AvailableQuantity, MinimumCell } from "./quantity-cells";
+import { MovementPlace } from "@/components/stock-documents/movement-place";
 import { useLocationNames, useWarehouseNames, useWarehouses } from "./use-inventory-data";
 import { VariantThresholds } from "./variant-thresholds";
 
@@ -242,7 +243,7 @@ function MovementHistory({
   const columns: TableColumn<Movement>[] = [
     { key: "date", header: "Tarih", width: "10rem", cell: (m) => <span className="tabular-nums">{formatDateTime(m.occurredAt)}</span> },
     { key: "type", header: "Hareket", cell: (m) => <Badge tone={movementTypeTone(m.type)}>{movementTypeLabel(m.type)}</Badge> },
-    { key: "warehouse", header: "Depo", cell: (m) => warehouseLabel(m.warehouseId) },
+    { key: "warehouse", header: "Depo", cell: (m) => <MovementPlace movement={m} warehouseLabel={warehouseLabel} /> },
     { key: "location", header: "Raf/göz", cell: (m) => <span className="font-mono text-caption">{m.locationId ? (locationNames.get(m.locationId) ?? "…") : "—"}</span> },
     { key: "quantity", header: "Miktar", numeric: true, cell: (m) => <span className="font-semibold">{formatSignedQuantity(m.quantity)}</span> },
     { key: "after", header: "Sonraki bakiye", numeric: true, cell: (m) => formatQuantity(m.balanceAfter) },
@@ -323,7 +324,7 @@ function MovementHistory({
                       <span className="text-h3 tabular-nums text-fg">{formatSignedQuantity(m.quantity)}</span>
                     </div>
                     <p className="mt-1 text-caption text-fg-muted">
-                      {formatDateTime(m.occurredAt)} · {warehouseLabel(m.warehouseId)}
+                      {formatDateTime(m.occurredAt)} · <MovementPlace movement={m} warehouseLabel={warehouseLabel} />
                       {m.locationId ? ` · ${locationNames.get(m.locationId) ?? "…"}` : ""} · bakiye {formatQuantity(m.balanceAfter)}
                     </p>
                     {m.reason ? <p className="mt-1 text-body text-fg-secondary">{m.reason}</p> : null}

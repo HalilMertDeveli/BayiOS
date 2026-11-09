@@ -1,5 +1,7 @@
 import {
+  ArrowLeftRight,
   ChartColumn,
+  ClipboardCheck,
   ClipboardList,
   FileUp,
   LayoutDashboard,
@@ -47,7 +49,8 @@ const tasks = (a: Access) => a.canSome("tasks.read.all") || a.canSome("tasks.rea
  * grant still opens the screen, the API filters the records):
  * Pano → orders.read (unconditional) or reports.read; Siparişler → orders.read; Ürünler → catalog.read;
  * Stok → inventory.read; Depo → inventory.read or tasks; Görevler and Sevkiyatlar → tasks.read.all | tasks.read.own
- * (x-permission-any-of); Müşteriler → customers.read; Fiyat listeleri → prices.read.sell; Raporlar → reports.read;
+ * (x-permission-any-of); Transferler → inventory.transfer | inventory.transfer.receive; Sayımlar →
+ * inventory.count.manage | inventory.count.perform; Müşteriler → customers.read; Fiyat listeleri → prices.read.sell; Raporlar → reports.read;
  * İçe aktarma → imports.run | imports.run.stock; Ayarlar → tenant.settings.manage | members.read | billing.read.
  */
 export const navSections: readonly NavSection[] = [
@@ -103,6 +106,20 @@ export const navSections: readonly NavSection[] = [
         description: "Taslak sevkiyatlar, paket kontrolü ve sevk onayı.",
         Icon: Truck,
         visible: tasks,
+      },
+      {
+        href: "/depo/transferler",
+        label: "Transferler",
+        description: "Depolar arası iki aşamalı transfer: gönder, yolda, teslim al ve fark raporu.",
+        Icon: ArrowLeftRight,
+        visible: (a) => a.canSome("inventory.transfer") || a.canSome("inventory.transfer.receive"),
+      },
+      {
+        href: "/depo/sayimlar",
+        label: "Sayımlar",
+        description: "Stok sayımı: kapsam, kör sayım, okutarak sayım, fark raporu ve onay.",
+        Icon: ClipboardCheck,
+        visible: (a) => a.canSome("inventory.count.manage") || a.canSome("inventory.count.perform"),
       },
       {
         href: "/musteriler",

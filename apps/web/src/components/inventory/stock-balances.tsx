@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
-import { Boxes, CircleAlert, PackagePlus, Rows3, Rows4, ScanBarcode, SearchX, SlidersHorizontal } from "lucide-react";
+import { ArrowRightLeft, Boxes, CircleAlert, PackagePlus, Rows3, Rows4, ScanBarcode, SearchX, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,6 +16,8 @@ import { inventoryErrorMessage, isSearchTooBroad } from "@/lib/inventory/errors"
 import { inventoryPermissions } from "@/lib/inventory/permissions";
 import { formatQuantity } from "@/lib/inventory/quantity";
 import { useSession } from "@/lib/session/session-context";
+import { relocationHref } from "@/lib/stock-documents/api";
+import { transferPermissions } from "@/lib/stock-documents/permissions";
 import { useUrlQuery } from "@/lib/use-url-query";
 import { usePersistentBoolean } from "@/lib/use-persistent-boolean";
 import { AvailableQuantity, CriticalBadge, MinimumCell } from "./quantity-cells";
@@ -40,6 +42,7 @@ export function StockBalances() {
   const uid = useId();
   const { api, access } = useSession();
   const permissions = inventoryPermissions(access);
+  const canRelocate = transferPermissions(access).relocate;
   // Filters change through navigate / setFilter only: they build on the URL just requested, not the stale one (#152).
   const { query, latest, navigate } = useUrlQuery(parseBalanceQuery, toBalanceSearch);
   /** One filter changed: applied on top of the latest requested query. */
@@ -155,20 +158,33 @@ export function StockBalances() {
       width: "9rem",
       cell: (b) => <MinimumCell minQuantity={b.minQuantity} belowMinimum={b.belowMinimum} />,
     },
-    ...(permissions.adjust
+    ...(permissions.adjust || canRelocate
       ? [
           {
             key: "actions",
             header: <span className="sr-only">İşlemler</span>,
-            width: "6rem",
+            width: "8rem",
             cell: (b: Balance) => (
-              <Link
-                href={adjustmentHref({ variantId: b.variantId, warehouseId: b.warehouseId, locationId: b.locationId })}
-                className="text-caption font-medium text-brand-fg underline-offset-2 hover:underline"
-                aria-label={`${skuOf(b)?.sku ?? "Ürün"} stoğunu düzelt`}
-              >
-                Düzelt
-              </Link>
+              <span className="flex flex-wrap gap-x-3">
+                {permissions.adjust ? (
+                  <Link
+                    href={adjustmentHref({ variantId: b.variantId, warehouseId: b.warehouseId, locationId: b.locationId })}
+                    className="text-caption font-medium text-brand-fg underline-offset-2 hover:underline"
+                    aria-label={`${skuOf(b)?.sku ?? "Ürün"} stoğunu düzelt`}
+                  >
+                    Düzelt
+                  </Link>
+                ) : null}
+                {canRelocate && b.locationId ? (
+                  <Link
+                    href={relocationHref({ variantId: b.variantId, warehouseId: b.warehouseId, locationId: b.locationId })}
+                    className="text-caption font-medium text-brand-fg underline-offset-2 hover:underline"
+                    aria-label={`${skuOf(b)?.sku ?? "Ürün"} ürününü başka rafa taşı`}
+                  >
+                    Taşı
+                  </Link>
+                ) : null}
+              </span>
             ),
           },
         ]
@@ -236,6 +252,12 @@ export function StockBalances() {
         description="Depo ve raf bazında rafta, ayrılmış ve satılabilir miktarlar."
         actions={
           <>
+            {canRelocate ? (
+              <Link href={relocationHref()} className={buttonClasses("secondary")}>
+                <ArrowRightLeft className="size-4" aria-hidden="true" />
+                Raf taşı
+              </Link>
+            ) : null}
             {permissions.adjust ? (
               <Link href={adjustmentHref()} className={buttonClasses("secondary")}>
                 <SlidersHorizontal className="size-4" aria-hidden="true" />
