@@ -5,6 +5,7 @@ using BayiOS.IntegrationTests.Infrastructure;
 using BayiOS.Modules.Inventory.Contracts;
 using BayiOS.Modules.Warehouse.Contracts;
 using BayiOS.SharedKernel.Authorization;
+using Npgsql;
 
 namespace BayiOS.IntegrationTests.Inventory;
 
@@ -97,52 +98,61 @@ public class InventoryApiTests(ApiFixture fixture)
     }
 
     [Fact]
-    public async Task Negative_stock_policy_is_applied_per_tenant()
+    public async Task Stock_never_goes_below_zero_and_the_old_confirmation_flag_changes_nothing()
     {
-        var blocking = await InventoryKit.CreateAsync(fixture);
-        var warning = await InventoryKit.CreateAsync(fixture);
-        var allowing = await InventoryKit.CreateAsync(fixture);
-        await warning.SetNegativeStockPolicyAsync(NegativeStockPolicies.Warn);
-        await allowing.SetNegativeStockPolicyAsync(NegativeStockPolicies.Allow);
+        // OD-09 (2026-11-09): no negative-stock policy; the former warn/allow cannot even be stored.
+        var kit = await InventoryKit.CreateAsync(fixture);
+        var variant = await kit.VariantAsync();
+        var warehouse = await kit.WarehouseAsync("W1");
+        await kit.ReceiveAsync(warehouse.Id, (variant, 2m, null));
 
-        foreach (var kit in new[] { blocking, warning, allowing })
+        foreach (var confirm in new bool?[] { null, false, true })
         {
-            var variant = await kit.VariantAsync();
-            var warehouse = await kit.WarehouseAsync("W1");
-            await kit.ReceiveAsync(warehouse.Id, (variant, 2m, null));
-            var response = await kit.AdjustAsync(kit.Owner, variant, warehouse.Id, MovementTypes.AdjustmentOut, 5m);
-
-            if (kit == blocking)
-            {
-                await HttpAssert.ProblemAsync(response, HttpStatusCode.Conflict, "inventory.insufficient_available");
-                Assert.Equal((2m, 0m), await kit.BalanceAsync(variant, warehouse.Id));
-                var reserve = await kit.ReserveAsync(warehouse.Id, (variant, 3m));
-                Assert.Equal("inventory.insufficient_stock", reserve.Error?.Code);
-                await kit.AssertInvariantsAsync();
-            }
-            else if (kit == warning)
-            {
-                await HttpAssert.ProblemAsync(response, HttpStatusCode.Conflict, "inventory.insufficient_stock");
-                using (var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)))
-                {
-                    Assert.True(body.RootElement.GetProperty("confirmationRequired").GetBoolean());
-                }
-
-                var confirmed = await kit.AdjustAsync(kit.Owner, variant, warehouse.Id, MovementTypes.AdjustmentOut, 5m, confirm: true);
-                Assert.Equal(HttpStatusCode.Created, confirmed.StatusCode);
-                Assert.Equal((-3m, 0m), await kit.BalanceAsync(variant, warehouse.Id));
-                await kit.AssertInvariantsAsync(negativeAllowed: true);
-            }
-            else
-            {
-                Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-                Assert.Equal((-3m, 0m), await kit.BalanceAsync(variant, warehouse.Id));
-                var reserve = await kit.ReserveAsync(warehouse.Id, (variant, 2m));
-                Assert.True(reserve.Succeeded);
-                Assert.Equal((-3m, 2m), await kit.BalanceAsync(variant, warehouse.Id));
-                await kit.AssertInvariantsAsync(negativeAllowed: true);
-            }
+            var response = await kit.AdjustAsync(kit.Owner, variant, warehouse.Id, MovementTypes.AdjustmentOut, 5m, confirm: confirm);
+            await HttpAssert.ProblemAsync(response, HttpStatusCode.Conflict, "inventory.insufficient_available");
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
+            Assert.False(body.RootElement.TryGetProperty("confirmationRequired", out _));
         }
+
+        Assert.Equal((2m, 0m), await kit.BalanceAsync(variant, warehouse.Id));
+        var reserve = await kit.ReserveAsync(warehouse.Id, (variant, 3m));
+        Assert.Equal("inventory.insufficient_stock", reserve.Error?.Code);
+        Assert.Equal(0L, await kit.CountAsync("SELECT count(*) FROM inventory.inventory_balances WHERE tenant_id = $1 AND allow_negative"));
+        await kit.AssertInvariantsAsync();
+
+        foreach (var policy in new[] { "warn", "allow" })
+        {
+            var refused = await Assert.ThrowsAsync<PostgresException>(() => kit.ExecuteAsSuperuserAsync(
+                $"UPDATE identity.tenant_settings SET negative_stock_policy = '{policy}' WHERE tenant_id = $1"));
+            Assert.Equal(PostgresErrorCodes.CheckViolation, refused.SqlState);
+        }
+    }
+
+    [Fact]
+    public async Task A_balance_still_negative_from_before_OD_09_only_heals_and_then_the_database_check_applies()
+    {
+        var kit = await InventoryKit.CreateAsync(fixture);
+        var variant = await kit.VariantAsync();
+        var warehouse = await kit.WarehouseAsync("W1");
+        await kit.ReceiveAsync(warehouse.Id, (variant, 1m, null));
+
+        // A row left at -3 by the former warn/allow policies (simulated directly; the ledger is not consulted here).
+        Assert.Equal(1, await kit.ExecuteAsSuperuserAsync(
+            "UPDATE inventory.inventory_balances SET on_hand = -3, allow_negative = true WHERE tenant_id = $1"));
+
+        // Making it worse is refused; a receipt that leaves it negative keeps the exemption; reaching zero clears it.
+        await HttpAssert.ProblemAsync(
+            await kit.AdjustAsync(kit.Owner, variant, warehouse.Id, MovementTypes.AdjustmentOut, 1m), HttpStatusCode.Conflict, "inventory.insufficient_available");
+        await kit.ReceiveAsync(warehouse.Id, (variant, 1m, null));
+        Assert.Equal((-2m, 0m), await kit.BalanceAsync(variant, warehouse.Id));
+        Assert.Equal(1L, await kit.CountAsync("SELECT count(*) FROM inventory.inventory_balances WHERE tenant_id = $1 AND allow_negative"));
+        await kit.ReceiveAsync(warehouse.Id, (variant, 5m, null));
+        Assert.Equal((3m, 0m), await kit.BalanceAsync(variant, warehouse.Id));
+        Assert.Equal(0L, await kit.CountAsync("SELECT count(*) FROM inventory.inventory_balances WHERE tenant_id = $1 AND allow_negative"));
+
+        var backstop = await Assert.ThrowsAsync<PostgresException>(() => kit.ExecuteAsSuperuserAsync(
+            "UPDATE inventory.inventory_balances SET on_hand = -1 WHERE tenant_id = $1"));
+        Assert.Equal(PostgresErrorCodes.CheckViolation, backstop.SqlState);
     }
 
     [Fact]

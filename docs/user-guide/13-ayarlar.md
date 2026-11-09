@@ -16,8 +16,7 @@ diğer roller "Ayarları değiştirme yetkiniz yok" mesajını görür.
   `SIP-2026-000123` biçiminde numaralanır; mevcut numaralar değişmez.
 
 ### Stok ve KDV
-- **Stok yetmediğinde** — İzin verme (önerilen) / Uyar, devam etmeye izin ver / İzin ver.
-  Onay ve stok çıkışında satılabilir stok eksiye düşecekse uygulanır. Ayrıntı: [Stok düzeltme ve negatif stok](06-stok-duzeltme-negatif-stok.md).
+- **Stok eksiye düşmez** — sabit kural, değiştirilemez. Onay, stok çıkışı ve sevkiyat satılabilir stoğun altına inemez. Ayrıntı: [Stok düzeltme ve negatif stok](06-stok-duzeltme-negatif-stok.md).
 - **Varsayılan KDV oranı** — yeni ürünlerde önerilir; ürün kartından değiştirilebilir.
 - **Fiyat gösterimi** — ekranlarda fiyatların KDV dahil mi hariç mi gösterileceği.
 
@@ -29,7 +28,7 @@ ya da **Değişiklikleri geri al** ile vazgeçin. Başarılıysa "Sipariş ayarl
 - **Paket ve modüller** (sahip ve yönetici) — bkz. [Paket, deneme süresi ve modüller](12-paket-deneme-moduller.md).
 - **Ekip** — çalışan daveti, rol değiştirme, askıya alma, sahiplik devri; bkz. [Roller ve izinler](02-roller-ve-izinler.md).
 - **İş kuralları** (sahip ve yönetici) — satış personeli onayı ve iskonto sınırı, alış fiyatı görünürlüğü, depo personeli
-  barkod atama / mal kabul onayı, stok yetmediğinde davranış. İki adımlı doğrulama seçeneği "Yakında" olarak görünür ve
+  barkod atama / mal kabul onayı; "Stok eksiye düşmez" sabit kural olarak gösterilir (değiştirilemez, OD-09). İki adımlı doğrulama seçeneği "Yakında" olarak görünür ve
   henüz uygulanmaz.
 - **Marka, kategori ve birimler** — bkz. [Ürünler ve özel alanlar](03-urunler-ve-ozel-alanlar.md).
 - İşletme profili (logo, vergi no, adres, telefon) ayarları **henüz geliştiriliyor**.

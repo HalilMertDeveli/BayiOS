@@ -10,24 +10,27 @@
 - **Profesyonel** — yeni işletmeler ücretsiz denemeye Profesyonel paket ve tüm ek modüllerle başlar (varsayılan 30 gün).
 - **Temel** — deneme bitince işletme Temel pakete geçer.
 
-Ekranda görünen sınırlar (pilot için geçici değerlerdir):
+Ekranda görünen sınırlar (Temel değerleri ürün sahibi kararıdır, 2026-11-09):
 
 | | Temel | Profesyonel |
 |---|---|---|
-| Aktif depo sayısı | 1 | Sınırsız |
+| Aktif depo sayısı | 999 | Sınırsız |
+| Ürün sayısı | Sınırsız | Sınırsız |
+| Barkod okutma ve mobil toplama | ✓ | ✓ |
 | Raf/göz (lokasyon) takibi | – | ✓ |
-| Kullanıcı sayısı | 5 | 25 |
+| Kullanıcı sayısı | 999 | 999 |
 
-**AI WhatsApp asistanı** ek modülü: aylık 1.000 AI ayrıştırma.
+**AI WhatsApp asistanı** ek modülü: aylık 300 AI ayrıştırma (işletme sahibi AI'ı açana kadar kapalıdır).
 
 ## Deneme bitince ne olur?
 - Ürün, stok hareketleri (mal kabul, düzeltme, sevkiyat), sipariş, toplama, raporlar ve dışa aktarma **tam çalışmaya devam eder**.
 - Mevcut tüm depolar ve raflar görünür ve kullanılır.
-- **Yeni** aktif depo eklenemez (1'den fazlaysa), **yeni** raf/lokasyon eklenemez veya düzenlenemez,
+- Sınırdaysanız **yeni** aktif depo eklenemez; **yeni** raf/lokasyon eklenemez veya düzenlenemez,
   **yeni** WhatsApp mesajı ayrıştırılamaz. Bu yerlerde kilit simgesiyle "… mevcut paketinizde yok." ve
   "Profesyonel pakette" / "AI WhatsApp asistanı modülünde" etiketi görünür.
 - Daha önce ayrıştırılmış WhatsApp mesajları incelenip onaylanabilir veya reddedilebilir.
 - Depo adı değiştirme, depoyu pasif yapma, raf takibini kapatma (depo boşken) her pakette açıktır.
+- Depo sınırının üstünde kalsanız bile, fazla depoları boşaltmak için **stok düzeltme ve depolar arası transfer** her zaman yapılabilir; boşalan depoyu pasif yapın.
 
 Deneme bitmesine **7 gün veya daha az** kalınca ekranın üstünde uyarı çıkar
 ("Ücretsiz deneme süreniz … sonra bitiyor (…). Ödeme alınmaz; …"). Bitince

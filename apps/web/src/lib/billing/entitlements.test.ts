@@ -15,7 +15,13 @@ describe("createEntitlements (MOCK /me entitlements)", () => {
     expect(trial.has(FEATURES.aiOrderParsing)).toBe(true);
     expect(trial.limit(LIMITS.maxWarehouses)).toBeNull();
     expect(basic.has(FEATURES.warehouseLocations)).toBe(false);
-    expect(basic.limit(LIMITS.maxWarehouses)).toBe(1);
+    // OD-02 (2026-11-09): Basic 999 users and warehouses, unlimited products.
+    expect(basic.limit(LIMITS.maxWarehouses)).toBe(999);
+    expect(basic.limit(LIMITS.maxUsers)).toBe(999);
+    expect(basic.limit(LIMITS.maxProducts)).toBeNull(); // unlimited (OD-02)
+    expect(basic.has("barcode_operations")).toBe(true); // barcode / mobile scanning in Basic (OD-02)
+    expect(trial.limit(LIMITS.aiParsesPerMonth)).toBe(300); // OD-08
+    expect(trial.limit(LIMITS.maxProducts)).toBeNull();
     expect(basic.limit(LIMITS.aiParsesPerMonth)).toBe(0);
   });
 
@@ -48,7 +54,10 @@ describe("gates", () => {
     expect(featureGate(trial, FEATURES.aiOrderParsing)).toEqual({ locked: false });
   });
 
-  it("Temel: the first active warehouse is allowed, a second one is locked; inactive ones do not count", () => {
+  it("at the warehouse limit a further active warehouse is locked; inactive ones do not count", () => {
+    // Basic allows 999 (OD-02); an operator limit of 1 keeps the case small.
+    const basic = createEntitlements({ ...entitlementsFor("basic"), limits: [{ code: "max_warehouses", value: 1 }] });
+    expect(warehouseGate(createEntitlements(entitlementsFor("basic")), [active, active, active])).toEqual({ locked: false });
     expect(warehouseGate(basic, [])).toEqual({ locked: false });
     expect(warehouseGate(basic, [inactive, inactive])).toEqual({ locked: false });
     expect(warehouseGate(basic, [active, inactive])).toEqual({

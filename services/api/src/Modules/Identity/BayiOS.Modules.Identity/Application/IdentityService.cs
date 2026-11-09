@@ -171,7 +171,7 @@ internal sealed partial class IdentityService(
         var errors = new Dictionary<string, string[]>();
         if (request.NegativeStockPolicy is { } policy && !NegativeStockPolicies.All.Contains(policy))
         {
-            errors["negativeStockPolicy"] = [$"Must be one of: {string.Join(", ", NegativeStockPolicies.All)}."];
+            errors["negativeStockPolicy"] = ["Must be block: stock never goes below zero (fixed rule)."];
         }
 
         if (request.SalesMaxDiscountPercent is < 0 or > 100)
@@ -207,7 +207,7 @@ internal sealed partial class IdentityService(
         }
 
         var before = ToResponse(settings);
-        settings.NegativeStockPolicy = request.NegativeStockPolicy ?? settings.NegativeStockPolicy;
+        settings.NegativeStockPolicy = NegativeStockPolicies.Block; // OD-09: the only accepted value (validated above)
         settings.SalesCanApproveOrders = request.SalesCanApproveOrders ?? settings.SalesCanApproveOrders;
         settings.SalesMaxDiscountPercent = request.SalesMaxDiscountPercent ?? settings.SalesMaxDiscountPercent;
         settings.ShowCostToManager = request.ShowCostToManager ?? settings.ShowCostToManager;

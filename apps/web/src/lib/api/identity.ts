@@ -14,9 +14,6 @@ export type ApplySectorTemplateResponse = components["schemas"]["ApplySectorTemp
 export const SECTORS = ["motorcycle_parts", "led_electronics", "general"] as const;
 export type Sector = (typeof SECTORS)[number];
 
-export const NEGATIVE_STOCK_POLICIES = ["block", "warn", "allow"] as const;
-export type NegativeStockPolicy = (typeof NEGATIVE_STOCK_POLICIES)[number];
-
 /**
  * GET /api/v1/me. With `tenantId` the optional X-Tenant-Id header is sent and `activeTenant` carries that membership's
  * role and effective permissions; it is null when the header is absent, or the tenant is foreign or not active.

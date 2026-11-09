@@ -27,12 +27,14 @@ public sealed record ModuleDefinition(
 /// <summary>
 /// The versioned plan / add-on catalog (PRD SUB-01, SUB-02, SUB-05, SUB-09; roles-permissions §5). Code, not a table:
 /// it ships and is reviewed with the code that enforces it, and every tenant resolves against the same version.
-/// Change <see cref="Version"/> with every edit. Limit numbers are provisional until the owner decides (AQ-01, AQ-06).
+/// Change <see cref="Version"/> with every edit. Owner decisions 2026-11-09: Basic = 999 users, 999 warehouses,
+/// unlimited products, barcode operations / mobile scanning included (OD-02); AI add-on 300 parses per month (OD-08).
+/// Professional is never below Basic.
 /// </summary>
 public static class BillingCatalog
 {
     /// <summary>Recorded on each subscription when it is created or changes.</summary>
-    public const string Version = "2026-11-05.1";
+    public const string Version = "2026-11-09.2";
 
     public const string Basic = "basic";
     public const string Professional = "professional";
@@ -40,28 +42,34 @@ public static class BillingCatalog
     /// <summary>The AI WhatsApp assistant add-on (WAI).</summary>
     public const string AiAssistantModule = "ai_assistant";
 
+    /// <summary>Basic users and active warehouses (owner decision OD-02, 2026-11-09).</summary>
+    public const long BasicLimit = 999;
+
     public static readonly PlanDefinition BasicPlan = new(
         Basic,
         "Temel",
-        "Ürün, temel stok, sipariş, tek depo, temel rapor. Dışa aktarma, audit, 2FA ve stok doğruluğu her pakette açıktır.",
+        "Ürün, temel stok, sipariş, barkod okutma ve mobil toplama, temel rapor. Dışa aktarma, audit, 2FA ve stok doğruluğu her pakette açıktır.",
         1,
-        [],
+        [EntitlementCodes.BarcodeOperations], // OD-02: barcode scanning / mobile picking in Basic
         new Dictionary<string, long?>
         {
-            [EntitlementCodes.MaxWarehouses] = 1,
-            [EntitlementCodes.MaxUsers] = 5, // provisional (AQ-01)
+            [EntitlementCodes.MaxWarehouses] = BasicLimit, // OD-02
+            [EntitlementCodes.MaxUsers] = BasicLimit, // OD-02
+            [EntitlementCodes.MaxProducts] = null, // OD-02: unlimited (no product cap)
         });
 
     public static readonly PlanDefinition ProfessionalPlan = new(
         Professional,
         "Profesyonel",
-        "Gelişmiş depo: çoklu depo, raf/lokasyon, barkod operasyonları, çoklu personel.",
+        "Gelişmiş depo: sınırsız depo, raf/lokasyon ve barkodlu raf işlemleri.",
         2,
         [EntitlementCodes.WarehouseLocations, EntitlementCodes.BarcodeOperations],
         new Dictionary<string, long?>
         {
             [EntitlementCodes.MaxWarehouses] = null,
-            [EntitlementCodes.MaxUsers] = 25, // provisional (AQ-01)
+            // OD-02 set Basic only; Professional users kept equal to Basic (an upgrade never lowers a limit).
+            [EntitlementCodes.MaxUsers] = BasicLimit,
+            [EntitlementCodes.MaxProducts] = null,
         });
 
     public static readonly IReadOnlyList<PlanDefinition> Plans = [BasicPlan, ProfessionalPlan];
@@ -75,7 +83,7 @@ public static class BillingCatalog
             1,
             true,
             [EntitlementCodes.AiOrderParsing],
-            new Dictionary<string, long?> { [EntitlementCodes.AiParsesPerMonth] = 1000 }), // provisional (AQ-06)
+            new Dictionary<string, long?> { [EntitlementCodes.AiParsesPerMonth] = 300 }), // OD-08 (2026-11-09)
         new("dealer_portal", "Bayi portalı", "Bayilerin kendi siparişlerini girdiği portal.", 2, false, [EntitlementCodes.DealerPortal], Empty),
         new("serial_warranty", "Seri/Garanti takibi", "Seri numarası ve garanti kayıtları.", 3, false, [EntitlementCodes.SerialWarranty], Empty),
         new("erp_integrations", "ERP entegrasyonları", "Muhasebe/ERP sistemleriyle senkronizasyon.", 4, false, [EntitlementCodes.ErpIntegrations], Empty),

@@ -12,7 +12,8 @@ public static class InventoryModule
 {
     /// <summary>
     /// Registers the stock engine. The host must also provide the ports <see cref="IWarehouseDirectory"/> (Warehouse
-    /// module), <see cref="IVariantDirectory"/> (Catalog) and <see cref="INegativeStockPolicyProvider"/> (tenant settings).
+    /// module) and <see cref="IVariantDirectory"/> (Catalog). There is no negative-stock policy port: stock never goes
+    /// below zero (owner decision OD-09).
     /// </summary>
     public static IServiceCollection AddInventoryModule(this IServiceCollection services)
     {

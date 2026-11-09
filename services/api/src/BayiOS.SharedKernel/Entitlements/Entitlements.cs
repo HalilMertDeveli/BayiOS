@@ -20,7 +20,7 @@ public static class EntitlementCodes
     /// <summary>Shelf/bin locations in a warehouse (PRD INV-04, Professional).</summary>
     public const string WarehouseLocations = "warehouse_locations";
 
-    /// <summary>Barcode operations on shelves/picking (Professional). Defined; no endpoint gates it yet.</summary>
+    /// <summary>Barcode scanning / mobile picking (every plan since OD-02, 2026-11-09). Defined; no endpoint gates it.</summary>
     public const string BarcodeOperations = "barcode_operations";
 
     /// <summary>AI WhatsApp order assistant (add-on, PRD WAI, api-strategy §12.10).</summary>
@@ -49,16 +49,23 @@ public static class EntitlementCodes
 
     // ---- Numeric limits (null = unlimited) ----
 
-    /// <summary>Active warehouses (Basic: one warehouse; Professional: multi-warehouse).</summary>
+    /// <summary>Active warehouses (Basic: 999, OD-02; Professional: unlimited).</summary>
     public const string MaxWarehouses = "max_warehouses";
 
     /// <summary>User seats: active members plus open invitations; enforced on invite, resend, accept and re-enable (#129).</summary>
     public const string MaxUsers = "max_users";
 
+    /// <summary>
+    /// Products that are not archived (archiving frees a slot; restoring takes one). Enforced on product create and on
+    /// restoring an archived product, interactive and import alike, when a limit is set (operator override); every plan is
+    /// unlimited (OD-02, 2026-11-09).
+    /// </summary>
+    public const string MaxProducts = "max_products";
+
     /// <summary>WhatsApp parse requests per calendar month (Europe/Istanbul), on top of the hourly rate limit (WAI-11).</summary>
     public const string AiParsesPerMonth = "ai_parses_per_month";
 
-    public static readonly IReadOnlyList<string> Limits = [MaxWarehouses, MaxUsers, AiParsesPerMonth];
+    public static readonly IReadOnlyList<string> Limits = [MaxWarehouses, MaxUsers, MaxProducts, AiParsesPerMonth];
 }
 
 /// <summary>Stable 403 problem codes of the entitlement model (api-strategy §6).</summary>

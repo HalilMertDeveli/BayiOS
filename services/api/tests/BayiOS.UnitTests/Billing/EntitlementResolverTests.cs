@@ -23,20 +23,20 @@ public class EntitlementResolverTests
         Assert.True(running.Has(EntitlementCodes.WarehouseLocations));
         Assert.True(running.Has(EntitlementCodes.AiOrderParsing));
         Assert.Null(running.LimitOf(EntitlementCodes.MaxWarehouses));
-        Assert.Equal(1000, running.LimitOf(EntitlementCodes.AiParsesPerMonth));
+        Assert.Equal(300, running.LimitOf(EntitlementCodes.AiParsesPerMonth)); // OD-08
 
         // The end instant itself is already over (fail-closed), without any job having run.
         var ended = Resolve(Trial(Now));
         Assert.Equal((BillingCatalog.Basic, SubscriptionStatuses.Expired, (DateTimeOffset?)null), (ended.Plan, ended.Status, ended.TrialEndsAt));
-        Assert.Empty(ended.Features);
-        Assert.Equal(1, ended.LimitOf(EntitlementCodes.MaxWarehouses));
+        Assert.Equal(EntitlementCodes.BarcodeOperations, Assert.Single(ended.Features)); // OD-02: barcode / mobile scanning in Basic
+        Assert.Equal(999, ended.LimitOf(EntitlementCodes.MaxWarehouses));
         Assert.Equal(0, ended.LimitOf(EntitlementCodes.AiParsesPerMonth));
     }
 
     [Theory]
-    [InlineData(BillingCatalog.Basic, false, 1L)]
+    [InlineData(BillingCatalog.Basic, false, 999L)]
     [InlineData(BillingCatalog.Professional, true, null)]
-    [InlineData("platinum", false, 1L)] // unknown plan → fallback (fail-closed)
+    [InlineData("platinum", false, 999L)] // unknown plan → fallback (fail-closed)
     public void Active_plan_applies_its_features_and_limits(string plan, bool locations, long? maxWarehouses)
     {
         var snapshot = Resolve(Active(plan));
@@ -73,7 +73,7 @@ public class EntitlementResolverTests
         var module = new ModuleFacts(BillingCatalog.AiAssistantModule, status, expiresInDays is { } days ? Now.AddDays(days) : null);
         var snapshot = Resolve(Active(BillingCatalog.Basic), [module]);
         Assert.Equal(on, snapshot.Has(EntitlementCodes.AiOrderParsing));
-        Assert.Equal(on ? 1000 : 0, snapshot.LimitOf(EntitlementCodes.AiParsesPerMonth));
+        Assert.Equal(on ? 300 : 0, snapshot.LimitOf(EntitlementCodes.AiParsesPerMonth));
         Assert.False(snapshot.Has(EntitlementCodes.WarehouseLocations)); // an add-on never grants plan features
     }
 
@@ -87,10 +87,10 @@ public class EntitlementResolverTests
                 new OverrideFacts(EntitlementCodes.WarehouseLocations, true, null, null),
                 new OverrideFacts(EntitlementCodes.MaxWarehouses, false, 3, null),
                 new OverrideFacts(EntitlementCodes.MaxUsers, false, null, null),
-                new OverrideFacts(EntitlementCodes.BarcodeOperations, true, null, Now), // expired at this instant
+                new OverrideFacts(EntitlementCodes.AiOrderParsing, true, null, Now), // expired at this instant
             ]);
         Assert.True(snapshot.Has(EntitlementCodes.WarehouseLocations));
-        Assert.False(snapshot.Has(EntitlementCodes.BarcodeOperations));
+        Assert.False(snapshot.Has(EntitlementCodes.AiOrderParsing));
         Assert.Equal(3, snapshot.LimitOf(EntitlementCodes.MaxWarehouses));
         Assert.Null(snapshot.LimitOf(EntitlementCodes.MaxUsers));
 
@@ -107,7 +107,8 @@ public class EntitlementResolverTests
     [Theory]
     [InlineData(EntitlementCodes.WarehouseLocations, BillingCatalog.Professional, null)]
     [InlineData(EntitlementCodes.MaxWarehouses, BillingCatalog.Professional, null)]
-    [InlineData(EntitlementCodes.MaxUsers, BillingCatalog.Professional, null)]
+    [InlineData(EntitlementCodes.MaxUsers, null, null)] // Professional is not higher than Basic (OD-02)
+    [InlineData(EntitlementCodes.MaxProducts, null, null)] // unlimited everywhere (OD-02)
     [InlineData(EntitlementCodes.AiOrderParsing, null, BillingCatalog.AiAssistantModule)]
     [InlineData(EntitlementCodes.AiParsesPerMonth, null, BillingCatalog.AiAssistantModule)]
     [InlineData(EntitlementCodes.DealerPortal, null, null)] // announced, not available
@@ -139,6 +140,28 @@ public class EntitlementResolverTests
         Assert.Equal(BillingCatalog.Plans.Count, BillingCatalog.Plans.Select(p => p.Code).Distinct().Count());
         Assert.Equal(BillingCatalog.Modules.Count, BillingCatalog.Modules.Select(m => m.Code).Distinct().Count());
         Assert.Matches(@"^\d{4}-\d{2}-\d{2}\.\d+$", BillingCatalog.Version);
+    }
+
+    [Fact]
+    public void Basic_limits_follow_owner_decision_OD_02_and_professional_is_never_lower()
+    {
+        // 2026-11-09: 999 users, 999 warehouses, unlimited products; barcode scanning / mobile picking included.
+        Assert.Equal(
+            new Dictionary<string, long?> { [EntitlementCodes.MaxUsers] = 999, [EntitlementCodes.MaxWarehouses] = 999, [EntitlementCodes.MaxProducts] = null },
+            BillingCatalog.BasicPlan.Limits);
+        Assert.Contains(EntitlementCodes.BarcodeOperations, BillingCatalog.BasicPlan.Features);
+        Assert.Contains(EntitlementCodes.BarcodeOperations, BillingCatalog.ProfessionalPlan.Features);
+        Assert.Equal(EntitlementSuggestion.None, BillingCatalog.Suggest(EntitlementCodes.BarcodeOperations));
+        foreach (var (code, basic) in BillingCatalog.BasicPlan.Limits)
+        {
+            var professional = BillingCatalog.ProfessionalPlan.Limits[code];
+            Assert.True(professional == basic || BillingCatalog.IsHigher(professional, basic), code);
+        }
+
+        var fallback = Resolve(Active(BillingCatalog.Basic));
+        Assert.Null(fallback.LimitOf(EntitlementCodes.MaxProducts));
+        Assert.True(fallback.Has(EntitlementCodes.BarcodeOperations));
+        Assert.Equal(300, BillingCatalog.FindModule(BillingCatalog.AiAssistantModule)!.Limits[EntitlementCodes.AiParsesPerMonth]); // OD-08
     }
 
     [Fact]

@@ -136,14 +136,6 @@ public static class MovementSourceTypes
     public static readonly IReadOnlyList<string> All = [Receipt, Adjustment, StockCount, Transfer, Shipment, Return, Import];
 }
 
-/// <summary>Tenant setting <c>negative_stock_policy</c> (PRD TEN-12): block (default) / warn / allow.</summary>
-public static class NegativeStockPolicies
-{
-    public const string Block = "block";
-    public const string Warn = "warn";
-    public const string Allow = "allow";
-}
-
 // ---- Commands ----
 
 /// <param name="WarehouseId">Null = the tenant's default warehouse (created on first use).</param>
@@ -160,7 +152,6 @@ public sealed record ReceiveStock(
 public sealed record ReceiveLine(Guid VariantId, Guid? LocationId, decimal Quantity, decimal? UnitCost = null, Guid? LineId = null);
 
 /// <param name="Quantity">Positive; the direction comes from <paramref name="Type"/>.</param>
-/// <param name="ConfirmNegativeStock">Explicit user confirmation under the <c>warn</c> policy (§2.4).</param>
 public sealed record AdjustStock(
     Guid VariantId,
     Guid WarehouseId,
@@ -168,14 +159,12 @@ public sealed record AdjustStock(
     string Type,
     decimal Quantity,
     string Reason,
-    bool ConfirmNegativeStock = false,
     string? CorrelationId = null);
 
 public sealed record ReserveStock(
     Guid OrderId,
     Guid WarehouseId,
     IReadOnlyList<ReserveLine> Lines,
-    bool ConfirmNegativeStock = false,
     string? CorrelationId = null);
 
 public sealed record ReserveLine(Guid OrderLineId, Guid VariantId, decimal Quantity);
@@ -235,8 +224,7 @@ public sealed record InventoryError(
     string Code,
     string Title,
     IDictionary<string, string[]>? Errors = null,
-    IReadOnlyList<StockShortage>? Shortages = null,
-    bool ConfirmationRequired = false)
+    IReadOnlyList<StockShortage>? Shortages = null)
 {
     public static InventoryError Validation(IDictionary<string, string[]> errors) =>
         new(422, "validation.failed", "Validation failed", errors);
@@ -324,12 +312,6 @@ public interface IVariantDirectory
     /// (callers pass their limit + 1 to detect an over-broad term).
     /// </summary>
     Task<IReadOnlyList<Guid>> SearchVariantIdsAsync(string term, int max, CancellationToken cancellationToken);
-}
-
-/// <summary>Implemented over the tenant settings (Identity). Returns one of <see cref="NegativeStockPolicies"/>.</summary>
-public interface INegativeStockPolicyProvider
-{
-    Task<string> GetPolicyAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>

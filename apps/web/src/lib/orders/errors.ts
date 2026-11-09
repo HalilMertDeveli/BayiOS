@@ -83,11 +83,6 @@ export function isInsufficientStock(error: unknown): boolean {
   return error instanceof ApiError && error.code === "inventory.insufficient_stock";
 }
 
-/** Tenant policy `warn`: the approve can be repeated with `confirmNegativeStock: true` as a new request. */
-export function needsStockConfirmation(error: unknown): boolean {
-  return isInsufficientStock(error) && (error as ApiError).problem?.confirmationRequired === true;
-}
-
 export function isPriceMissing(error: unknown): boolean {
   return error instanceof ApiError && error.code === "order.price_missing";
 }

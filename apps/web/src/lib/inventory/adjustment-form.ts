@@ -38,13 +38,10 @@ export function validateAdjustment(values: AdjustmentFormValues, options: { uses
   return errors;
 }
 
-/**
- * Request body. `confirmNegativeStock` is false on the first attempt; it is set to true only after the user
- * explicitly confirmed the `warn`-policy dialog (inventory.insufficient_stock + confirmationRequired).
- */
+/** Request body. No negative-stock confirmation exists any more: stock never goes below zero (OD-09). */
 export function buildAdjustmentRequest(
   values: AdjustmentFormValues,
-  options: { usesLocations: boolean; confirmNegativeStock: boolean },
+  options: { usesLocations: boolean },
 ): CreateAdjustmentRequest {
   const q = parseQuantity(values.quantity);
   return {
@@ -54,6 +51,5 @@ export function buildAdjustmentRequest(
     type: values.type || null,
     quantity: q.ok ? q.value : null,
     reason: values.reason.trim() || null,
-    confirmNegativeStock: options.confirmNegativeStock,
   };
 }

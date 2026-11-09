@@ -2,11 +2,14 @@ namespace BayiOS.Modules.Imports.Parsing;
 
 /// <summary>
 /// Upload and parsing limits (threat-model §6.2). File size and row count follow the MVP job contract
-/// (10 MB / 10,000 data rows); the zip limits guard xlsx decompression.
+/// (20 MB — owner decision OD-04, 2026-11-09 — / 10,000 data rows); the zip limits guard xlsx decompression. The
+/// decompressed limits deliberately do not grow with the upload size: they bound the work of parsing at most
+/// 10,000 rows × 100 columns, and an .xlsx that is legitimately large is so because of already-compressed parts
+/// (images), which decompress to about their own size.
 /// </summary>
 internal static class ImportLimits
 {
-    public const long MaxFileBytes = 10L * 1024 * 1024;
+    public const long MaxFileBytes = 20L * 1024 * 1024;
     public const int MaxDataRows = 10_000;
     public const int MaxColumns = 100;
     public const int MaxCellLength = 4_000;

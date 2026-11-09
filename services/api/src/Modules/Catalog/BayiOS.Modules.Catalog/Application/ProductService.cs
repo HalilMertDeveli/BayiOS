@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using BayiOS.Modules.Catalog.Contracts;
 using BayiOS.Modules.Catalog.Domain;
 using BayiOS.Modules.Catalog.Infrastructure.Persistence;
+using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
@@ -46,8 +47,12 @@ internal sealed record VariantPatch(
     Optional<string?> Status,
     Optional<JsonObject?> Attributes);
 
-/// <summary>Products and their variants (domain-model §3, aggregate <c>Product</c>).</summary>
-internal sealed class ProductService(CatalogDbContext db, IRequestContext requestContext, TimeProvider clock)
+/// <summary>
+/// Products and their variants (domain-model §3, aggregate <c>Product</c>). Products that are not archived count
+/// against the plan limit <c>max_products</c> (OD-02): creating one, or restoring an archived one, answers 403
+/// <c>entitlement.limit_exceeded</c> (thrown, the unit of work rolls back) when the limit is reached.
+/// </summary>
+internal sealed class ProductService(CatalogDbContext db, IEntitlements entitlements, IRequestContext requestContext, TimeProvider clock)
 {
     public const string SortCreatedDesc = "-createdAt";
     public const string SortName = "name";
@@ -297,6 +302,7 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
             return AppError.Validation(errors);
         }
 
+        await EnsureProductCapacityAsync(cancellationToken);
         var now = CatalogText.Now(clock);
         var userId = UserId;
         var product = Product.Create(TenantId, name!, description, request.CategoryId, request.BrandId, defaultUnitId, request.TaxRate!.Value, status, userId, now);
@@ -372,6 +378,12 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
         if (product.RowVersion != expectedVersion)
         {
             return AppError.VersionMismatch();
+        }
+
+        // Restoring an archived product takes a max_products slot again (OD-02).
+        if (product.Status == CatalogStatuses.Archived && patch.Status.IsSet && patch.Status.Value != CatalogStatuses.Archived)
+        {
+            await EnsureProductCapacityAsync(cancellationToken);
         }
 
         var now = CatalogText.Now(clock);
@@ -691,6 +703,26 @@ internal sealed class ProductService(CatalogDbContext db, IRequestContext reques
 
         var fields = await FieldSet.LoadAsync(db, cancellationToken);
         return CustomFieldValidator.Merge(fields, entityType, patch.Value is null ? "{}" : current, patch.Value ?? [], "attributes", errors);
+    }
+
+    /// <summary>
+    /// 403 <c>entitlement.limit_exceeded</c> when one more non-archived product would exceed <c>max_products</c>. A
+    /// per-tenant transaction lock serializes concurrent creates/restores so the count cannot be overshot; nothing is
+    /// counted while the limit is unlimited.
+    /// </summary>
+    private async Task EnsureProductCapacityAsync(CancellationToken cancellationToken)
+    {
+        if ((await entitlements.CurrentAsync(cancellationToken)).LimitOf(EntitlementCodes.MaxProducts) is null)
+        {
+            return;
+        }
+
+        await db.JoinTransactionAsync(cancellationToken);
+        var tenant = TenantId.ToString();
+        await db.Database.ExecuteSqlAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended('catalog.products.capacity:' || {tenant}, 0))", cancellationToken);
+        var current = await db.Products.CountAsync(p => p.Status != CatalogStatuses.Archived, cancellationToken);
+        await entitlements.EnsureCapacityAsync(EntitlementCodes.MaxProducts, current, cancellationToken);
     }
 
     private async Task<AppError?> SaveAsync(CancellationToken cancellationToken)

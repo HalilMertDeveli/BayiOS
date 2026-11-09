@@ -70,7 +70,7 @@ export async function updateOrder(api: ApiClient, id: string, patch: Partial<Upd
  */
 export type OrderTransition = "submit" | "withdraw" | "reject" | "approve" | "cancel" | "close-remaining" | "complete";
 
-export type TransitionBody = { reason: string } | { confirmNegativeStock: boolean } | undefined;
+export type TransitionBody = { reason: string } | undefined;
 
 /** POST /api/v1/orders/{id}/{action} with If-Match and an Idempotency-Key (required by every transition). */
 export async function transitionOrder(

@@ -76,6 +76,13 @@ describe("BusinessRules", () => {
     expect(reload).toHaveBeenCalled();
   });
 
+  it("shows 'stock never goes below zero' as a fixed rule without a choice (OD-09)", async () => {
+    renderRules("owner", fakeApi().api);
+    expect(await screen.findByText("Stok eksiye düşmez")).toBeTruthy();
+    expect(screen.getByText("Sabit kural")).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Stok yetmediğinde" })).toBeNull();
+  });
+
   it("2FA is labelled as not enforced", async () => {
     renderRules("admin", fakeApi().api);
     expect(await screen.findByText("Yakında · henüz uygulanmıyor")).toBeTruthy();

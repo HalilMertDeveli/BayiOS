@@ -28,7 +28,7 @@ Yeni bir aktarma için **Yeni içe aktarma** düğmesine basın. Ekranın üstü
 1. **Tür** — *Ürünler* veya *Fiyat listesi kalemleri*ni seçin. Fiyat listesi aktarıyorsanız fiyatların yazılacağı
    **hedef fiyat listesini** de burada seçin. Yetkiniz olmayan tür seçilemez ve nedeni altında yazar.
 2. **Dosya** — dosyayı kutuya sürükleyip bırakın veya **bilgisayarınızdan seçin**.
-   - Yalnızca `.xlsx` ve `.csv`; en fazla **10 MB** ve **10.000 satır**; ilk satır kolon başlıkları olmalı.
+   - Yalnızca `.xlsx` ve `.csv`; en fazla **20 MB** ve **10.000 satır**; ilk satır kolon başlıkları olmalı.
    - Eski Excel (`.xls`) ve makrolu (`.xlsm`) dosyalar kabul edilmez; Excel'de **Excel Çalışma Kitabı (.xlsx)** olarak kaydedin.
    - Ekran bu kontrolleri yüklemeden önce yapar; son kararı sunucu verir (dosya içeriği, makro, bozuk dosya, satır sınırı).
    - Bir işletme saatte en fazla **10 dosya** yükleyebilir. Sınıra ulaşıldığında ekran ne kadar beklemeniz gerektiğini
@@ -79,7 +79,7 @@ düzeltebilirsiniz. Geri alma yarıda kalırsa (**Geri alma durdu**) **Geri alma
 ## Ekranda görebileceğiniz mesajlar
 | Mesaj | Ne yapmalı |
 |---|---|
-| "Dosya 10 MB sınırını aşıyor." | Dosyayı parçalara bölüp ayrı ayrı yükleyin. |
+| "Dosya 20 MB sınırını aşıyor." | Dosyayı parçalara bölüp ayrı ayrı yükleyin. |
 | "Dosyada 10.000'den fazla satır var." | Dosyayı parçalara bölün. |
 | "Eski Excel biçimi (.xls) desteklenmiyor." / "Makro içeren Excel dosyaları (.xlsm) kabul edilmez." | Excel'de `.xlsx` olarak kaydedin. |
 | "Dosyanın içeriği uzantısıyla uyuşmuyor." / "Dosya okunamadı; bozuk olabilir." | Dosyayı Excel'de açıp yeniden kaydedin. |

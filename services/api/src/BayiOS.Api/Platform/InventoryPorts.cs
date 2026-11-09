@@ -1,22 +1,20 @@
 using BayiOS.Modules.Catalog.Application;
 using BayiOS.Modules.Catalog.Infrastructure.Persistence;
-using BayiOS.Modules.Identity.Infrastructure.Persistence;
 using BayiOS.Modules.Inventory.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace BayiOS.Api.Platform;
 
 /// <summary>
-/// Composition-root adapters for the Inventory ports that Catalog and Identity do not (yet) expose as contracts.
-/// They read through those modules' own DbContexts — tenant query filters plus RLS, same request connection and
-/// transaction — and are the only place the host couples to them. Replace with module contracts when available.
+/// Composition-root adapter for the Inventory port that Catalog does not (yet) expose as a contract.
+/// It reads through Catalog's own DbContext — tenant query filters plus RLS, same request connection and
+/// transaction — and is the only place the host couples to it. Replace with a module contract when available.
 /// </summary>
 internal static class InventoryPorts
 {
     public static IServiceCollection AddInventoryPorts(this IServiceCollection services)
     {
         services.AddScoped<IVariantDirectory, CatalogVariantDirectory>();
-        services.AddScoped<INegativeStockPolicyProvider, TenantSettingsNegativeStockPolicy>();
         return services;
     }
 }
@@ -47,14 +45,4 @@ internal sealed class CatalogVariantDirectory(CatalogDbContext catalog) : IVaria
             .Take(max)
             .ToListAsync(cancellationToken);
     }
-}
-
-/// <summary>Tenant setting <c>negative_stock_policy</c> (PRD TEN-12); <c>block</c> when the tenant has no settings row.</summary>
-internal sealed class TenantSettingsNegativeStockPolicy(IdentityDbContext identity) : INegativeStockPolicyProvider
-{
-    public async Task<string> GetPolicyAsync(CancellationToken cancellationToken) =>
-        await identity.TenantSettings.AsNoTracking()
-            .Select(s => s.NegativeStockPolicy)
-            .SingleOrDefaultAsync(cancellationToken)
-        ?? NegativeStockPolicies.Block;
 }

@@ -161,6 +161,7 @@ public sealed record UpdateTenantRequest(
     string? TaxOffice,
     string? Phone);
 
+/// <param name="NegativeStockPolicy">Always <c>block</c>: stock never goes below zero (owner decision OD-09).</param>
 public sealed record TenantSettingsResponse(
     string NegativeStockPolicy,
     bool SalesCanApproveOrders,
@@ -176,6 +177,10 @@ public sealed record TenantSettingsResponse(
     string OrderNumberPrefix);
 
 /// <summary>JSON merge patch: omitted (null) fields are left unchanged.</summary>
+/// <param name="NegativeStockPolicy">
+/// Fixed rule (owner decision OD-09): only <c>block</c> is accepted — stock never goes below zero; <c>warn</c> and
+/// <c>allow</c> answer 422 <c>validation.failed</c>. Kept for compatibility; clients need not send it.
+/// </param>
 /// <param name="RequireOrderApproval">
 /// False: a submitted order is approved (and reserved) at once when the submitter may approve and the source is not
 /// whatsapp_ai; otherwise it waits in pending_approval as with true (default).

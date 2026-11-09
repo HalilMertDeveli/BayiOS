@@ -50,7 +50,6 @@ tarih ve müşteriye göre süzün. Sipariş sayfasında zaman çizelgesi, satı
 | Fiyatı olmayan satırlar var. Fiyat listesine fiyat ekleyin veya yetkili bir kullanıcıdan manuel fiyat girmesini isteyin. | Fiyat listesini tamamlayın. |
 | Önce taslaktaki değişiklikleri kaydedin. | **Taslağı kaydet**, sonra gönderin. |
 | Stok yetersiz: siparişteki hiçbir satır için stok ayrılmadı (ya hep ya hiç). | Ekranda "Stoğu yetmeyen satırlar" listelenir. Mal kabul yapın veya siparişi reddedip miktarları düzenleyin. |
-| Stok eksiye düşecek → **Yine de onayla** / **Yine de gönder ve onayla** | Negatif stok ayarı "Uyar" ise çıkar; onaylarsanız satılabilir stok eksiye düşer. |
 | Bu müşteri aktif değil; pasif veya arşivlenmiş müşteriye sipariş verilemez. | Müşteriyi aktif yapın. |
 | Bu ürün aktif değil; siparişe eklenemez. | Ürünü aktif yapın. |
 | İskontoyu ya oran ya tutar olarak girin, ikisini birden değil. | Birini silin. |

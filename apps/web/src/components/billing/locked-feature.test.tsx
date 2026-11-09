@@ -9,7 +9,8 @@ import { LockedFeature, gateBadgeText, gateDescription } from "./locked-feature"
 const basic = createEntitlements(entitlementsFor("basic"));
 const locations = featureGate(basic, "warehouse_locations");
 const ai = featureGate(createEntitlements(entitlementsFor("professional")), "ai_order_parsing");
-const warehouses = warehouseGate(basic, [{ status: "active" }]);
+// Basic allows 999 warehouses (OD-02); an operator limit of 1 shows the locked state.
+const warehouses = warehouseGate(createEntitlements({ ...entitlementsFor("basic"), limits: [{ code: "max_warehouses", value: 1 }] }), [{ status: "active" }]);
 
 function renderLocked(role: FixtureRole) {
   if (!locations.locked) throw new Error("expected a locked gate");

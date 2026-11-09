@@ -26,7 +26,7 @@ Genel kurallar:
 ## 1. Identity & Tenancy
 
 ### Aggregate: `Tenant`
-- Alanlar: `Id`, `Name`, `Slug`, `Status (active|suspended|closed)`, `DefaultCurrency`, `Locale`, `TimeZone`, `Settings` (VO: `NegativeStockPolicy (block|warn|allow)`, `RequireOrderApproval`, `OrderNumberPrefix` ve roles-permissions.md §4'teki ayarlanabilir kurallar).
+- Alanlar: `Id`, `Name`, `Slug`, `Status (active|suspended|closed)`, `DefaultCurrency`, `Locale`, `TimeZone`, `Settings` (VO: `NegativeStockPolicy` — yalnızca `block`, OD-09: stok eksiye düşmez; `RequireOrderApproval`, `OrderNumberPrefix` ve roles-permissions.md §4'teki ayarlanabilir kurallar).
 - Invariant'lar: `Slug` global benzersiz; `suspended` tenant'ta yazma komutları reddedilir (okuma serbest); en az bir aktif `owner` üyeliği bulunur.
 - Event'ler: `TenantCreated`, `TenantSuspended`, `TenantSettingsChanged`.
 
@@ -47,7 +47,7 @@ Genel kurallar:
 ## 2. Billing & Entitlements
 
 ### Aggregate: `SubscriptionPlan` (platform, tenant'sız)
-- `Code`, `Name`, `Features` (ör. `ai_order_parsing`, `multi_warehouse`, `mobile_scanning`), `Limits` (ör. `max_users`, `max_skus`, `max_warehouses`, `ai_parses_per_month`).
+- `Code`, `Name`, `Features` (ör. `ai_order_parsing`, `multi_warehouse`, `mobile_scanning`), `Limits` (`max_users`, `max_products`, `max_warehouses`, `ai_parses_per_month`; Temel 999 kullanıcı, 999 depo, ürün sınırsız — OD-02; AI 300/ay — OD-08).
 
 ### Aggregate: `TenantSubscription`
 - `PlanCode`, `Status (trialing|active|past_due|cancelled)`, `CurrentPeriodStart/End`.
@@ -138,7 +138,7 @@ Genel kurallar:
 
 ### Aggregate: `InventoryBalance` (türetilmiş, ledger ile aynı transaction'da)
 - Anahtar: (TenantId, VariantId, WarehouseId, LocationId?). Alanlar: `OnHand`, `Reserved`, `Version`. `Available = OnHand − Reserved`.
-- Invariant'lar: `Reserved ≥ 0`; negatif stok kapalıysa `OnHand ≥ 0` ve `Reserved ≤ OnHand`; `OnHand = Σ ledger.Quantity` (mutabakat job'ı ile doğrulanır).
+- Invariant'lar: `Reserved ≥ 0`; `OnHand ≥ 0` ve `Reserved ≤ OnHand` (OD-09: stok eksiye düşmez; tek istisna OD-09 öncesinden kalmış, yalnızca iyileşebilen negatif satır); `OnHand = Σ ledger.Quantity` (mutabakat job'ı ile doğrulanır).
 
 ### Aggregate: `StockReservation`
 - `OrderId`, `OrderLineId`, `VariantId`, `WarehouseId`, `LocationId?`, `Quantity`, `Status (active|consumed|released)`, `ConsumedQuantity`.

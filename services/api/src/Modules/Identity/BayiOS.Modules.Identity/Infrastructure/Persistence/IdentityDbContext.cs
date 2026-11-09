@@ -126,7 +126,7 @@ internal sealed class IdentityDbContext : DbContext, ITenantScopedDbContext
         {
             settings.ToTable("tenant_settings", t =>
             {
-                t.HasCheckConstraint("ck_tenant_settings_negative_stock_policy", "negative_stock_policy IN ('block', 'warn', 'allow')");
+                t.HasCheckConstraint("ck_tenant_settings_negative_stock_policy", "negative_stock_policy = 'block'"); // OD-09
                 t.HasCheckConstraint("ck_tenant_settings_sales_max_discount", "sales_max_discount_percent BETWEEN 0 AND 100");
                 t.HasCheckConstraint("ck_tenant_settings_default_tax_rate", "default_tax_rate BETWEEN 0 AND 100");
                 t.HasCheckConstraint("ck_tenant_settings_order_number_prefix", $"order_number_prefix ~ '{Domain.TenantSettings.OrderNumberPrefixPattern}'");

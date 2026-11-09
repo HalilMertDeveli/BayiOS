@@ -51,8 +51,13 @@ describe("settings form ⇄ merge patch", () => {
   });
 
   it("sends only what changed; the prefix upper-cased and trimmed", () => {
-    const values = { ...settingsToValues(SETTINGS), requireOrderApproval: false, orderNumberPrefix: " web ", defaultTaxRate: "10", negativeStockPolicy: "warn" as const };
-    expect(buildSettingsPatch(SETTINGS, values)).toEqual({ requireOrderApproval: false, orderNumberPrefix: "WEB", defaultTaxRate: 10, negativeStockPolicy: "warn" });
+    const values = { ...settingsToValues(SETTINGS), requireOrderApproval: false, orderNumberPrefix: " web ", defaultTaxRate: "10" };
+    expect(buildSettingsPatch(SETTINGS, values)).toEqual({ requireOrderApproval: false, orderNumberPrefix: "WEB", defaultTaxRate: 10 });
+  });
+
+  it("never sends negativeStockPolicy: stock never going below zero is a fixed rule (OD-09)", () => {
+    expect(settingsToValues(SETTINGS)).not.toHaveProperty("negativeStockPolicy");
+    expect(buildSettingsPatch({ ...SETTINGS, negativeStockPolicy: "warn" }, settingsToValues(SETTINGS))).not.toHaveProperty("negativeStockPolicy");
   });
 
   it("validates the prefix and the VAT rate", () => {

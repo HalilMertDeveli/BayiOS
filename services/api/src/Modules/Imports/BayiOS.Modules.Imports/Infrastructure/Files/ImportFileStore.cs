@@ -6,7 +6,7 @@ namespace BayiOS.Modules.Imports.Infrastructure.Files;
 
 /// <summary>
 /// Raw upload storage. The MVP has no hosted object storage yet, so <see cref="DatabaseImportFileStore"/> keeps the
-/// (≤ 10 MB) bytes in <c>imports.import_files</c> (bytea, RLS) on the request/job transaction. A Supabase Storage
+/// (≤ 20 MB) bytes in <c>imports.import_files</c> (bytea, RLS) on the request/job transaction. A Supabase Storage
 /// implementation (private bucket, path <c>{tenant}/{import}</c>) can replace it without touching callers.
 /// </summary>
 internal interface IImportFileStore

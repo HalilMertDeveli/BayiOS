@@ -36,14 +36,14 @@ Her işlem kilitleri **şu sırayla** alır; ters yönde kilit almak yasaktır:
 - `CHECK (allow_negative OR (on_hand >= 0 AND reserved <= on_hand))`
 - Ledger `UPDATE/DELETE` trigger ile engelli; kaynak satırı tekrar işleme benzersizlik kısıtı.
 Uygulama kontrolü atlanırsa bile DB, tutarsız durumu commit ettirmez (`23514 check_violation` → `409 inventory.insufficient_stock`).
-- Negatif stok politikası `warn` ise bakiyelerde `allow_negative = true`'dur; kullanıcı teyidi uygulama katmanında alınır (istekte açık `confirmNegativeStock=true`, yoksa `409 inventory.insufficient_stock` + teyit gerektiğini belirten alan) ve audit'e `inventory.negative_stock_confirmed` yazılır (US-TEN-006).
+- **Stok eksiye düşmez (ürün sahibi kararı OD-09, 2026-11-09):** negatif stok politikası yoktur. Yeni bakiye satırları ve kötüleştiren her değişiklik `allow_negative = false` yazar; satılabilirin altına inen düzeltme `409 inventory.insufficient_available`, rezervasyon `409 inventory.insufficient_stock` ile reddedilir. Eski `confirmNegativeStock` istek alanı geriye uyumluluk için kabul edilir ve yok sayılır; `confirmationRequired` hiç gönderilmez; `inventory.negative_stock_confirmed` audit olayı artık yazılmaz. `allow_negative = true` yalnızca OD-09 öncesinden kalmış negatif bir satırda, satır sıfır veya üstüne dönene kadar (yalnızca iyileştiren değişikliklerle) kalabilir.
 
 ### 2.5 Ortak yardımcı: bakiye satırlarını kilitle
 
 ```sql
 -- keys: (variant_id, warehouse_id, location_id) listesi, uygulamada aynı sırayla sıralanmış
 INSERT INTO inventory.inventory_balances (id, tenant_id, variant_id, warehouse_id, location_id, allow_negative)
-SELECT uuidv7_from_app, :tenant, k.variant_id, k.warehouse_id, k.location_id, :allow_negative
+SELECT uuidv7_from_app, :tenant, k.variant_id, k.warehouse_id, k.location_id, false  -- OD-09
 FROM unnest(:variant_ids, :warehouse_ids, :location_ids) AS k(variant_id, warehouse_id, location_id)
 ORDER BY k.variant_id, k.warehouse_id, k.location_id NULLS FIRST
 ON CONFLICT ON CONSTRAINT uq_inventory_balances_key DO NOTHING;
@@ -185,7 +185,7 @@ IF shortages not empty: ROLLBACK; RETURN 409 inventory.insufficient_stock { shor
 FOR each line ORDER BY variant_id, line_no:
    remaining = line.quantity
    FOR each balance row of variant ORDER BY pick_sequence, location_id NULLS FIRST:
-      take = min(remaining, row.on_hand - row.reserved)   -- allow_negative ise son satıra kalan eklenir
+      take = min(remaining, row.on_hand - row.reserved)   -- stok eksiye düşmez (OD-09): yeterlilik yukarıda doğrulandı
       IF take > 0:
          UPDATE inventory.inventory_balances SET reserved = reserved + :take, version = version + 1 WHERE id = row.id;
          INSERT INTO inventory.stock_reservations (id, tenant_id, order_id, order_line_id, variant_id, warehouse_id,
@@ -331,7 +331,7 @@ FOR each line:
    delta = line.counted_qty - balance.on_hand          -- fark UYGULAMA ANINDAKİ bakiyeye göre
    IF delta = 0 CONTINUE
    IF NOT allow_negative AND line.counted_qty < balance.reserved:
-        → 409 count.below_reserved (satır listesiyle; yönetici rezervasyonu azaltmalı veya negatif stok izni)
+        → 409 count.below_reserved (satır listesiyle; yönetici rezervasyonu azaltmalı — negatif stok izni yok, OD-09)
    UPDATE balances SET on_hand = on_hand + :delta, version = version + 1 … RETURNING on_hand;
    INSERT movements (type='count_correction', quantity=:delta, source_type='stock_count', source_id=:count, source_line_id=line.id, reason='stock count', balance_after=…);
 UPDATE warehouse.stock_counts SET status = 'applied', applied_at = now(), applied_by = :user;
@@ -398,8 +398,8 @@ Kod: `services/api/src/Modules/Inventory`, `services/api/src/Modules/Warehouse`.
 - **Bakiye metin araması (#86):** `GET /inventory/balances?q=` — SKU, varyant adı veya ürün adı içinde geçen (büyük/küçük harf duyarsız, LIKE jokerleri düz metin) ya da tam barkod; diğer filtreler ve `id` keyset sayfalaması aynen. Terim Catalog portu `IVariantDirectory.SearchVariantIdsAsync` ile varyant kimliklerine çözülür (şemalar arası join yok, ADR 0005; pg_trgm GIN indeksleri) ve bakiyeler tek dizi parametresiyle süzülür. 10.000'den fazla varyant eşleşirse kesilmez, `422 inventory.search_too_broad` döner; `q` ≤ 100 karakter. 10k sentetik katalogda (tek bakiye/aktif varyant) p95 ≈ 18–20 ms (`CatalogPerformanceTests`).
 - **Savepoint:** her komut bir savepoint altında çalışır; hata dönerse savepoint'e geri alınır, çağıran transaction'ı commit etse bile komuttan iz kalmaz (I6). Komut başında `SET LOCAL lock_timeout = '5s'`.
 - **Kilit sırası:** `LOCK_BALANCES` §2.5'teki gibi tek ifadede `ORDER BY variant_id, warehouse_id, location_id NULLS FIRST … FOR UPDATE`; sıralama PostgreSQL'de yapılır (uygulamadaki GUID sıralaması kullanılmaz). Rezervasyon: lokasyonsuz depoda `(v, wh, NULL)` satırı yoksa oluşturulur, ardından varyantın o depodaki tüm satırları kilitlenir; rezervasyon satırları bakiyelerden sonra kilitlenir (§2.2 adım 3 → 4).
-- **Hata kodları:** `inventory.insufficient_stock` (rezervasyon, `shortages` ile; `warn` politikasında `confirmationRequired: true`), `inventory.insufficient_available` (düzeltme, `block`), `inventory.not_reserved` (sevk edilen miktar o satır+lokasyon için rezerve değil), `inventory.already_reserved`, `inventory.duplicate_source` (kaynak satır benzersizliği), `inventory.busy` (`55P03`/`40P01`, `Retry-After: 1`). DB `23514` → `inventory.insufficient_stock`. UnitOfWork düzeyinde otomatik yeniden deneme (§2.3) **henüz yok**; istemci aynı `Idempotency-Key` ile tekrar dener.
-- **Negatif stok politikası:** tenant ayarı `identity.tenant_settings.negative_stock_policy` her komutta okunur (host adaptörü). `allow_negative` bakiye satırına her güncellemede yazılır: politika `block` değilse `true`; `block` iken yalnızca zaten negatif olan bir satır, durumu kötüleştirmeyen bir değişiklikte (mal kabul, iade, rezervasyon iadesi, sevkiyat) bayrağını korur — kötüleştiren değişikliklerde `false` yazılır, böylece CHECK son savunma olarak kalır. Politika değişince toplu güncelleme job'ı henüz yoktur; satırlar ilk güncellemede yeni politikaya geçer. `inventory.negative_stock_confirmed` audit olayı audit modülü gelince yazılacak.
+- **Hata kodları:** `inventory.insufficient_stock` (rezervasyon, `shortages` ile; teyitle geçme yok — OD-09), `inventory.insufficient_available` (düzeltme), `inventory.not_reserved` (sevk edilen miktar o satır+lokasyon için rezerve değil), `inventory.already_reserved`, `inventory.duplicate_source` (kaynak satır benzersizliği), `inventory.busy` (`55P03`/`40P01`, `Retry-After: 1`). DB `23514` → `inventory.insufficient_stock`. UnitOfWork düzeyinde otomatik yeniden deneme (§2.3) **henüz yok**; istemci aynı `Idempotency-Key` ile tekrar dener.
+- **Negatif stok (OD-09, 2026-11-09):** politika portu (`INegativeStockPolicyProvider`) ve `warn`/`allow` yolları kaldırıldı; `identity.tenant_settings.negative_stock_policy` yalnızca `block` olabilir (CHECK; migration `NegativeStockBlockOnly` mevcut satırları `block` yaptı). `allow_negative` bakiye satırına her güncellemede yazılır: yeni satırda ve kötüleştiren değişiklikte `false`; yalnızca OD-09 öncesinden kalmış negatif bir satır, durumu kötüleştirmeyen bir değişiklikte (mal kabul, iade, rezervasyon iadesi, sevkiyat) bayrağını sıfıra dönene kadar korur — böylece CHECK son savunma olarak kalır.
 - **Varsayılan depo:** tenant'ın ilk oluşturduğu depo varsayılandır. `warehouseId` verilmeyen ilk mal kabulde tenant'ın hiç deposu yoksa `MAIN / Ana Depo` aynı transaction'da oluşturulur (`INSERT … WHERE NOT EXISTS … ON CONFLICT DO NOTHING`; eşzamanlı ilk kabuller tek varsayılanda birleşir). Varsayılan depo pasifleştirilemez; `uses_locations` yalnızca depoda stok yokken değişir.
 - **Tahsis:** lokasyonlu depoda rezervasyon aktif lokasyonlara `(pick_sequence, location_id)` sırasıyla dağıtılır; yeterlilik `Σ (on_hand − reserved)` ile ölçülür. Negatif stok izinliyse kalan son aday satıra yazılır.
 - **Denetim izi:** her hareket `created_by` (aktör), `reason` (düzeltmede zorunlu; mal kabulde referans), `source_type/source_id/source_line_id` ve `correlation_id` (istek `X-Correlation-Id`) taşır; rezervasyonlar `created_by/updated_by/correlation_id` taşır. `audit.audit_events` tablosu henüz yok.

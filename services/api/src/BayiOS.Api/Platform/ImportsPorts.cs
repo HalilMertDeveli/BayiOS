@@ -15,6 +15,7 @@ using BayiOS.Modules.Imports.Parsing;
 using BayiOS.Modules.Pricing.Application;
 using BayiOS.Modules.Pricing.Contracts;
 using BayiOS.Modules.Pricing.Infrastructure.Persistence;
+using BayiOS.SharedKernel.Entitlements;
 using BayiOS.SharedKernel.Persistence;
 using BayiOS.SharedKernel.Platform.Jobs;
 using Microsoft.EntityFrameworkCore;
@@ -93,21 +94,32 @@ internal sealed class CatalogImportGateway(CatalogDbContext catalog, ProductServ
     public async Task<CatalogWriteResult> CreateProductAsync(ImportProductValues values, CancellationToken cancellationToken)
     {
         var (productAttributes, variantAttributes) = await SplitAttributesAsync(values.Attributes, cancellationToken);
-        var result = await products.CreateProductAsync(
-            new CreateProductRequest(
-                values.Name,
-                values.Description,
-                values.CategoryId,
-                values.BrandId,
-                values.UnitId,
-                values.TaxRate,
-                values.Status,
-                values.Sku,
-                values.Barcode,
-                null,
-                productAttributes,
-                variantAttributes),
-            cancellationToken);
+        BayiOS.Modules.Catalog.Application.AppResult<ProductResponse> result;
+        try
+        {
+            result = await products.CreateProductAsync(
+                new CreateProductRequest(
+                    values.Name,
+                    values.Description,
+                    values.CategoryId,
+                    values.BrandId,
+                    values.UnitId,
+                    values.TaxRate,
+                    values.Status,
+                    values.Sku,
+                    values.Barcode,
+                    null,
+                    productAttributes,
+                    variantAttributes),
+                cancellationToken);
+        }
+        catch (EntitlementException ex)
+        {
+            // max_products reached (OD-02): this row fails with the entitlement code, the job goes on (nothing written).
+            catalog.ChangeTracker.Clear();
+            return LimitReached(ex);
+        }
+
         // Each row is its own command: a rejected row must not leave entities behind for the next SaveChanges.
         catalog.ChangeTracker.Clear();
         if (result.Error is { } error)
@@ -244,7 +256,16 @@ internal sealed class CatalogImportGateway(CatalogDbContext catalog, ProductServ
             if (productPatch.Name.IsSet || productPatch.Description.IsSet || productPatch.CategoryId.IsSet || productPatch.BrandId.IsSet
                 || productPatch.TaxRate.IsSet || productPatch.Status.IsSet || productPatch.Attributes.IsSet)
             {
-                var result = await products.UpdateProductAsync(current.ProductId, productPatch, current.ProductVersion, cancellationToken);
+                BayiOS.Modules.Catalog.Application.AppResult<ProductResponse> result;
+                try
+                {
+                    result = await products.UpdateProductAsync(current.ProductId, productPatch, current.ProductVersion, cancellationToken);
+                }
+                catch (EntitlementException ex)
+                {
+                    return LimitReached(ex); // restoring an archived product over max_products (OD-02)
+                }
+
                 if (result.Error is { } error)
                 {
                     return Failed(error);
@@ -317,6 +338,9 @@ internal sealed class CatalogImportGateway(CatalogDbContext catalog, ProductServ
                     product.Attributes,
                     variant.Attributes))
             .ToListAsync(cancellationToken);
+
+    private static CatalogWriteResult LimitReached(EntitlementException ex) =>
+        new("failed", null, null, null, new Dictionary<string, string[]> { [string.Empty] = [ex.Message] }, ex.Code);
 
     private static CatalogWriteResult Failed(BayiOS.Modules.Catalog.Application.AppError error) =>
         new("failed", null, null, null, error.Errors is { } errors ? errors.ToDictionary() : new Dictionary<string, string[]> { [string.Empty] = [error.Title] }, error.Code);

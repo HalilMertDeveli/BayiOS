@@ -45,15 +45,17 @@ test("sahip: onay zorunluluğu ve sipariş numarası öneki kaydedilir (merge pa
   await expect(form.getByText(/WEB-\d{4}-000123/)).toBeVisible();
   await form.getByRole("checkbox", { name: "Siparişler onaydan geçsin" }).uncheck();
   await expect(form.getByText(/hemen onaylanır ve stok ayrılır/)).toBeVisible();
-  await form.getByRole("combobox", { name: "Stok yetmediğinde" }).selectOption("warn");
+  // OD-09: stock never goes below zero — a fixed rule, not a choice.
+  await expect(form.getByText("Stok eksiye düşmez")).toBeVisible();
+  await expect(form.getByRole("combobox", { name: "Stok yetmediğinde" })).toHaveCount(0);
   await form.getByRole("button", { name: "Ayarları kaydet" }).click();
   await expect(page.getByText("Sipariş ayarları kaydedildi")).toBeVisible();
 
   const [patch] = patches(api);
   expect(patch.headers["if-match"]).toBe('W/"0"');
   expect(patch.headers["content-type"]).toContain("application/merge-patch+json");
-  expect(patch.body).toEqual({ requireOrderApproval: false, orderNumberPrefix: "WEB", negativeStockPolicy: "warn" });
-  expect(api.settings).toMatchObject({ requireOrderApproval: false, orderNumberPrefix: "WEB", negativeStockPolicy: "warn" });
+  expect(patch.body).toEqual({ requireOrderApproval: false, orderNumberPrefix: "WEB" });
+  expect(api.settings).toMatchObject({ requireOrderApproval: false, orderNumberPrefix: "WEB", negativeStockPolicy: "block" });
   await expect(form.getByRole("button", { name: "Ayarları kaydet" })).toBeDisabled();
 
   // A second save uses the new ETag.

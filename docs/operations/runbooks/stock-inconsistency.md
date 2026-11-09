@@ -20,7 +20,7 @@ Her satır bir tutarsızlıktır: `kind=on_hand` → `balance.on_hand ≠ Σ mov
 | Mutabakat **boş**, kullanıcı farkı görüyor | Fiziksel fark (sayılmamış giriş, kayıp, yanlış raf) veya beklenen rezervasyon (`available = on_hand − reserved`) | Hareket geçmişini göster (`GET /api/v1/inventory/movements?variantId=…`); sayım yap; fark **sayım düzeltmesi/adjustment** ile girilir (audit'li) |
 | `on_hand` uyumsuz | Bakiyeyi defter dışı değiştiren kod/SQL (hata), yarım kalmış elle müdahale, restore sonrası eksik tablo | **SEV1.** Yazmayı durdurmayı değerlendir; son deploy'u kontrol et (`rollback.md` §1); kök neden bulunmadan bakiyeye dokunma |
 | `reserved` uyumsuz | Rezervasyon bırakma/tüketme hatası, iptal/kısmi sevk akışında hata | **SEV1/2.** Etkilenen siparişleri bul (aşağıdaki sorgu); kod düzeltmesi + testi |
-| Mutabakat boş ama beklenmedik **eksi** bakiye | Tenant politikası `warn`/`allow` ve eksi stok onaylandı | Audit: `inventory.negative_stock_confirmed` olayları; politika doğru mu (`identity.tenant_settings.negative_stock_policy`)? Gerekirse tenant ile `block`'a geçiş |
+| Mutabakat boş ama beklenmedik **eksi** bakiye | OD-09 öncesinden (eski `warn`/`allow`) kalmış satır — yeni eksi bakiye oluşamaz (OD-09, CHECK) | `SELECT … FROM inventory.inventory_balances WHERE allow_negative`; bu satırlar yalnızca mal kabul/düzeltme girişiyle sıfıra döner. `allow_negative = false` iken eksi bakiye görülürse kritik hata (incident) |
 | Rezervasyon reddi artışı | Gerçek stok yok (mal kabul gecikti), içe aktarma başarısız, politika değişti | `bayios_imports_failed_total`, son `inventory.receipt_posted` audit'leri; tenant ile konuş |
 
 ## 3. İnceleme sorguları (admin, `BEGIN READ ONLY`)

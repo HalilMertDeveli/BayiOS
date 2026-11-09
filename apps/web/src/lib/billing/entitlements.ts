@@ -13,6 +13,7 @@ export const FEATURES = {
 export const LIMITS = {
   maxWarehouses: "max_warehouses",
   maxUsers: "max_users",
+  maxProducts: "max_products",
   aiParsesPerMonth: "ai_parses_per_month",
 } as const;
 

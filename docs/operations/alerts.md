@@ -16,7 +16,7 @@ Eşikler 1–2 tenant'lı pilot hacmi içindir; ilk iki haftanın gerçek trafi�
 | Alarm | Sinyal | Eşik | Önem | Runbook |
 |---|---|---|---|---|
 | Rezervasyon reddi artışı | `bayios_inventory_reservation_shortages_total` | 15 dk'da > 10 **ve** aynı sürede onaylanan siparişin 3 katından fazla | uyarı | `runbooks/stock-inconsistency.md` |
-| Eksi stok onayı | `bayios_inventory_negative_stock_confirmed_total` | 1 saatte > 0 (uyarı), ≥ 5 (kritik) | uyarı / kritik | `runbooks/stock-inconsistency.md` |
+| Eksi stok onayı (OD-09 sonrası tetikleyici: stok eksiye düşmez, sayaç hiç artmamalı) | `bayios_inventory_negative_stock_confirmed_total` | 1 saatte > 0 (kritik — hata) | kritik | `runbooks/stock-inconsistency.md` |
 | Defter tutarsızlığı | `infra/ops/sql/ledger-reconciliation.sql` sonucu | > 0 satır (günlük çalıştırma önerisi; zamanlanmış job ileride) | kritik (AUTOPILOT §5 durdurma koşulu) | `runbooks/stock-inconsistency.md` |
 | Dead job | `bayios_jobs_dead_lettered_total` (job tipine göre) | 15 dk'da > 0 | uyarı | `runbooks/job-queue-stuck.md` |
 | Kuyruk gecikmesi | `bayios_jobs_queue_lag_seconds` / readiness `degraded` | > 5 dk (5 dk sürerse) uyarı; > 30 dk kritik | uyarı / kritik | `runbooks/job-queue-stuck.md` |

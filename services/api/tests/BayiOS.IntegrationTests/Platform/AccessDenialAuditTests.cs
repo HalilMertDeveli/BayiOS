@@ -150,6 +150,7 @@ public sealed class AccessDenialAuditTests(ApiFixture fixture)
         var kit = await InventoryKit.CreateAsync(fixture);
         var shelf = await kit.WarehouseAsync("RAF", usesLocations: true);
         await BillingKit.SetPlanAsync(fixture, kit.TenantId, BillingKit.Basic);
+        await BillingKit.OverrideAsync(fixture, kit.TenantId, "max_warehouses", limit: 1); // Basic is 999 (OD-02)
 
         await HttpAssert.ProblemAsync(
             await kit.Owner.PostAsync($"/api/v1/warehouses/{shelf.Id}/locations", new { code = "A-02" }), HttpStatusCode.Forbidden, "entitlement.required");

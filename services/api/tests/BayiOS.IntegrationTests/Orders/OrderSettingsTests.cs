@@ -95,22 +95,25 @@ public sealed class OrderSettingsTests(ApiFixture fixture)
     }
 
     [Fact]
-    public async Task Approve_on_submit_honours_the_warn_policy_confirmation()
+    public async Task Approve_on_submit_never_reserves_beyond_stock_even_with_the_old_confirmation_flag()
     {
+        // OD-09: stock never goes below zero; confirmNegativeStock is accepted for compatibility and ignored.
         var kit = await OrdersKit.CreateAsync(fixture);
         var variant = await kit.VariantAsync(10m);
         await kit.ReceiveAsync(variant, 1m);
-        await SetSettingsAsync(kit.Owner, new { requireOrderApproval = false, negativeStockPolicy = "warn" });
+        await SetSettingsAsync(kit.Owner, new { requireOrderApproval = false });
         var order = await kit.CreateOrderAsync(OrdersKit.Line(variant, 2m));
 
-        var unconfirmed = await HttpAssert.ProblemJsonAsync(
-            await OrdersKit.ActAsync(kit.Owner, order, "submit"), HttpStatusCode.Conflict, "inventory.insufficient_stock");
-        Assert.True(unconfirmed.GetProperty("confirmationRequired").GetBoolean());
-        Assert.Equal("draft", (await kit.GetAsync(order.Order.Id)).Order.Status);
+        foreach (var body in new object?[] { null, new { confirmNegativeStock = true } })
+        {
+            var refused = await HttpAssert.ProblemJsonAsync(
+                await OrdersKit.ActAsync(kit.Owner, order, "submit", body), HttpStatusCode.Conflict, "inventory.insufficient_stock");
+            Assert.False(refused.TryGetProperty("confirmationRequired", out _));
+            Assert.Equal("draft", (await kit.GetAsync(order.Order.Id)).Order.Status);
+        }
 
-        var confirmed = await OrdersKit.ReadAsync(await OrdersKit.ActAsync(kit.Owner, order, "submit", new { confirmNegativeStock = true }));
-        Assert.Equal("approved", confirmed.Order.Status);
-        Assert.Equal((1m, 2m), await kit.BalanceAsync(variant));
+        Assert.Equal((1m, 0m), await kit.BalanceAsync(variant));
+        await kit.AssertConsistentAsync();
     }
 
     [Fact]

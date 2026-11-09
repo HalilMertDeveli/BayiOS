@@ -82,10 +82,10 @@ internal static class OpenApiContract
                 ("requested", Number()),
                 ("available", Number()));
             schemas[StockProblem] = Problem(document,
-                "Stock problem: shortages per line (insufficient stock) and confirmationRequired (negative-stock policy 'warn' — retry with the confirmation flag).",
+                "Stock problem: shortages per line (insufficient stock). confirmationRequired is deprecated and never sent: stock never goes below zero (owner decision OD-09).",
                 ("code", String()),
                 ("shortages", new OpenApiSchema { Type = JsonSchemaType.Array, Items = new OpenApiSchemaReference("StockShortage", document) }),
-                ("confirmationRequired", new OpenApiSchema { Type = JsonSchemaType.Boolean }));
+                ("confirmationRequired", new OpenApiSchema { Type = JsonSchemaType.Boolean, Deprecated = true }));
             var field = String();
             field.Enum = [JsonValue.Create("sku"), JsonValue.Create("barcode")];
             schemas["CodeConflict"] = Object(

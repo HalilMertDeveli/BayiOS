@@ -145,7 +145,7 @@ Ciddiyet: C=Critical, H=High, M=Medium, L=Low.
 | I | Public bucket ile dosya sızıntısı | H | Tüm bucket'lar private | Ortam kontrol scripti: `public=false` |
 | I | Signed URL'nin loglarda/Referer'da sızması | M | Kısa TTL (≤ 5 dk indirme, ≤ 15 dk yükleme), URL loglanmaz, `Referrer-Policy: no-referrer` | Log redaction testi |
 | T | Yol manipülasyonu ile başka tenant klasörüne yazma | H | Yol sunucuda üretilir: `{tenant_id}/{uuid}`; istemci dosya adı yalnızca metadata | Unit: path builder; integration: `../` içeren ad |
-| D | Büyük dosya ile depolama/egress tüketimi | M | Boyut limiti (import: 10 MB), tenant kotası | Integration: limit üstü → 413 |
+| D | Büyük dosya ile depolama/egress tüketimi | M | Boyut limiti (import: 20 MB, OD-04), tenant kotası | Integration: limit üstü → 413 |
 
 ### 3.6 Job worker (Postgres kuyruk + outbox)
 | STRIDE | Tehdit | Ciddiyet | Önlem | Doğrulama testi |
@@ -252,8 +252,8 @@ Test: `JwtValidationTests` — yanlış imza, yanlış issuer, yanlış audience
 
 ### 6.2 Zip bomb / xlsx açma limitleri
 xlsx bir ZIP arşividir. Limitler (başlangıç değerleri, ölçümle ayarlanır):
-- Yüklenen dosya ≤ 10 MB; MIME + uzantı + magic byte (`PK\x03\x04`) kontrolü.
-- Açılmış toplam boyut ≤ 100 MB; tek giriş ≤ 50 MB; sıkıştırma oranı ≤ 100:1; giriş sayısı ≤ 1.000.
+- Yüklenen dosya ≤ 20 MB (ürün sahibi kararı OD-04, 2026-11-09; yalnızca `.xlsx/.csv`, `.xls` onaylanmadı); MIME + uzantı + magic byte (`PK\x03\x04`) kontrolü.
+- Açılmış toplam boyut ≤ 100 MB; tek giriş ≤ 50 MB; sıkıştırma oranı ≤ 100:1; giriş sayısı ≤ 1.000. Bu sınırlar 20 MB'a geçişte bilerek büyütülmedi: 10.000 satır × 100 kolonu ayrıştırma işini sınırlarlar; meşru büyük bir `.xlsx` çoğunlukla zaten sıkıştırılmış parçalar (görseller) yüzünden büyüktür ve açıldığında boyutu pek değişmez.
 - Satır ≤ 50.000, sütun ≤ 100 (tenant planına göre); hücre metni ≤ 4.000 karakter.
 - XML dış varlıkları (XXE) kapalı; makro içeren `.xlsm` reddedilir.
 - Ayrıştırma arka plan işinde, zaman aşımı (ör. 120 sn) ve bellek sınırıyla.
@@ -303,7 +303,7 @@ Her olay: `id, tenant_id, actor_user_id, actor_role, action, entity_type, entity
 | Kimlik/üyelik | `member.invited`, `member.invite_resent`, `member.invite_revoked`, `member.joined`, `member.role_changed`, `member.disabled`, `member.enabled`, `member.ownership_transferred`, `member.removed`, `tenant.created`, `tenant.settings_changed`, `tenant.rules_changed` |
 | Erişim | `auth.membership_denied` (başka/askıdaki tenant denemesi; eski taslak adı `auth.forbidden_tenant_access`), `auth.access_denied` (izin/K-O reddi; eski taslak adı `auth.rbac_denied`), `auth.entitlement_denied` (plan/limit reddi), `rate_limit.exceeded` |
 | Katalog/fiyat | `product.created/updated/archived`, `price_list.updated`, `price_list.imported` |
-| Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.negative_stock_confirmed` (`warn` politikasında açık onayla eksiye düşüş), `inventory.threshold_set`, `inventory.threshold_removed` (minimum stok eşiği), `inventory.transfer_posted` (transfer bacağı veya raf taşıma), `inventory.count_posted` (sayım düzeltmesi) |
+| Stok | `inventory.receipt_posted`, `inventory.adjustment_posted`, `inventory.negative_stock_confirmed` (eski `warn` politikası; OD-09 ile stok eksiye düşmediğinden artık yazılmaz, eski kayıtlar okunur), `inventory.threshold_set`, `inventory.threshold_removed` (minimum stok eşiği), `inventory.transfer_posted` (transfer bacağı veya raf taşıma), `inventory.count_posted` (sayım düzeltmesi) |
 | Transfer/sayım (#168) | `stock_transfer.created`, `stock_transfer.dispatched`, `stock_transfer.received`, `stock_transfer.closed` (kayıp / kaynağa iade + sebep), `stock_transfer.cancelled`; `stock_count.created`, `stock_count.submitted`, `stock_count.recount_requested`, `stock_count.applied`, `stock_count.cancelled` |
 | Sipariş | `order.created`, `order.approved` (rezervasyon), `order.cancelled` (release), `order.pick_progress`, `order.shipped`, `order.remaining_closed` (short-close, kalan rezervasyonlar bırakılır), `order.price_overridden` (liste fiyatı dışı fiyat/iskonto) |
 | Depo hazırlama/sevkiyat | `picking.task_created`, `picking.task_assigned`, `picking.task_cancelled`, `picking.shortage_reported`, `shipment.packed`, `shipment.confirmed` (stok çıkışı), `shipment.cancelled` (onaylanmamış sevkiyat iptali; stok hareketi yok, toplananlar putaway'e) |
@@ -332,7 +332,7 @@ rapor, biçim ve satır sayısı — dışa aktarılan veri yoktur), **üyelik (
 id), `member.role_changed` (kullanıcı id, rol from/to), `member.disabled` / `member.enabled` (kullanıcı id, rol, durum
 from/to), `member.ownership_transferred` (eski/yeni owner kullanıcı id'leri) — **e-posta adresi ve token hiçbir olayda
 yoktur** (data-policy §8); `tenant.rules_changed` (roles-permissions §4 kuralları: satış onayı, iskonto sınırı, maliyet
-görünürlüğü, depo barkod/mal kabul, negatif stok, 2FA bayrağı; diğer iş ayarları `tenant.settings_changed`'de kalır),
+görünürlüğü, depo barkod/mal kabul, 2FA bayrağı (negatif stok artık ayar değil, OD-09); diğer iş ayarları `tenant.settings_changed`'de kalır),
 `billing.trial_shortened` (operatör aracı `infra/ops/shorten-trial.sql`, `actor_role = 'operator'`). Kaynak:
 `SharedKernel/Platform/Audit/AuditLog.cs` (`AuditActions`) ve modül sabitleri (`BillingAuditActions`,
 `ImportAuditActions`, `CustomerAuditActions`, `AssistantAuditActions`, `OrderAuditActions`, `ReportAuditActions`).

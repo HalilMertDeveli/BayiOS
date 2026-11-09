@@ -73,7 +73,10 @@ public sealed record ReceiptLineRequest(Guid? VariantId, Guid? LocationId, decim
 /// <param name="Type">adjustment_in, adjustment_out, damage_out or return_in.</param>
 /// <param name="Quantity">Positive; the direction comes from the type.</param>
 /// <param name="Reason">Mandatory audit reason.</param>
-/// <param name="ConfirmNegativeStock">Confirms going below available under the tenant's <c>warn</c> policy.</param>
+/// <param name="ConfirmNegativeStock">
+/// Deprecated and ignored: stock never goes below zero (owner decision OD-09), so there is nothing to confirm. Kept so
+/// existing clients that still send it are not rejected.
+/// </param>
 public sealed record CreateAdjustmentRequest(
     Guid? VariantId,
     Guid? WarehouseId,
@@ -81,7 +84,7 @@ public sealed record CreateAdjustmentRequest(
     string? Type,
     decimal? Quantity,
     string? Reason,
-    bool? ConfirmNegativeStock);
+    bool? ConfirmNegativeStock = null);
 
 /// <summary>
 /// Shelf-to-shelf move inside one located warehouse (#168): instant and atomic — per line one <c>transfer_out</c> and one

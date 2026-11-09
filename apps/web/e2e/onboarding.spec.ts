@@ -85,7 +85,9 @@ test("kayıt → onboarding → pano (mock): slug conflict is retried with the s
   await page.getByLabel("Para birimi").selectOption("EUR");
   await page.getByLabel("Varsayılan KDV oranı").selectOption("10");
   await page.getByLabel("Fiyat gösterimi").selectOption("included");
-  await page.getByLabel("Negatif stok").selectOption("warn");
+  // OD-09: negative stock is a fixed rule, shown but not selectable.
+  await expect(page.getByText("Stok eksiye düşmez")).toBeVisible();
+  await expect(page.getByLabel("Negatif stok")).toHaveCount(0);
   await page.getByRole("button", { name: "Devam" }).click();
 
   // Step 4 — summary and create (first attempt: slug taken).
@@ -118,7 +120,7 @@ test("kayıt → onboarding → pano (mock): slug conflict is retried with the s
   const patch = api.requests.find((r) => r.method === "PATCH" && r.path === "/api/v1/tenant/settings");
   expect(patch?.headers["x-tenant-id"]).toBe(NEW_TENANT.tenantId);
   expect(patch?.headers["if-match"]).toBe('W/"0"');
-  expect(patch?.body).toEqual({ negativeStockPolicy: "warn", defaultTaxRate: 10, pricesIncludeTaxDisplay: true });
+  expect(patch?.body).toEqual({ defaultTaxRate: 10, pricesIncludeTaxDisplay: true });
 
   const currency = api.requests.find((r) => r.method === "PATCH" && r.path === "/api/v1/tenant");
   expect(currency?.headers["if-match"]).toBe('W/"0"');

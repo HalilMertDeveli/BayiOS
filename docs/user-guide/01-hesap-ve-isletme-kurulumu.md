@@ -39,7 +39,7 @@ Kendinize bir kullanıcı hesabı açmak ve işletmenizi (sektörünüze uygun h
    - **Para birimi**: Türk lirası (TRY), ABD doları (USD) veya Euro (EUR). Varsayılan TRY.
    - **Varsayılan KDV oranı**: %20, %10, %1, %0 (KDV'siz). Yeni ürünlere önerilir.
    - **Fiyat gösterimi**: KDV hariç / KDV dahil.
-   - **Negatif stok**: İzin verme (önerilen) / Uyar, devam etmeye izin ver / İzin ver.
+   - **Negatif stok**: seçim yoktur — "Stok eksiye düşmez" sabit kuraldır ve bu adımda bilgi olarak gösterilir.
      Ayrıntı: [Stok düzeltme ve negatif stok](06-stok-duzeltme-negatif-stok.md).
 4. **Onay** — özeti kontrol edip **İşletmeyi oluştur** düğmesine basın.
    "İşletmeniz hazır" bildirimi çıkar ve ana ekrana geçersiniz.
@@ -68,7 +68,7 @@ Birden çok işletmenin üyesiyseniz girişten sonra **İşletme seç** ekranı 
 
 ## İpuçları
 - Sektörü yanlış seçtiyseniz endişelenmeyin: özel alanları **Ayarlar → Özel alanlar** ekranından ekleyip arşivleyebilirsiniz.
-- KDV, fiyat gösterimi ve negatif stok ayarları sonradan **Ayarlar** sayfasından değiştirilebilir. Para birimi sonradan ekrandan değiştirilemez.
+- KDV ve fiyat gösterimi ayarları sonradan **Ayarlar** sayfasından değiştirilebilir ("Stok eksiye düşmez" kuralı değiştirilemez). Para birimi sonradan ekrandan değiştirilemez.
 - LED şablonundaki "Seri no takibi" yalnızca Evet/Hayır bilgisidir; BayiOS henüz seri numarası takibi yapmaz.
 - Çalışma arkadaşlarınızı **Ayarlar → Ekip** ekranından davet edersiniz; davet bağlantısını kişiye siz iletirsiniz
   (e-posta gönderilmez). Bkz. [Roller ve izinler](02-roller-ve-izinler.md).

@@ -43,7 +43,10 @@ public static class AuditActions
     /// <summary>A minimum stock threshold was removed (#137).</summary>
     public const string InventoryThresholdRemoved = "inventory.threshold_removed";
 
-    /// <summary>A stock change that went below zero after an explicit confirmation under the <c>warn</c> policy.</summary>
+    /// <summary>
+    /// A stock change that went below zero after an explicit confirmation under the former <c>warn</c> policy. No longer
+    /// recorded (OD-09: stock never goes below zero); kept so existing audit rows stay readable and filterable.
+    /// </summary>
     public const string InventoryNegativeStockConfirmed = "inventory.negative_stock_confirmed";
 
     /// <summary>Transfer legs were posted (dispatch, receipt, return, write-off or a shelf move); payload: counts and quantities.</summary>

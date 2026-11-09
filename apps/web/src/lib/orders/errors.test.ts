@@ -8,7 +8,6 @@ import {
   isOrderVersionConflict,
   isPriceMissing,
   isStaleState,
-  needsStockConfirmation,
   orderErrorMessage,
   orderFieldErrors,
   readShortages,
@@ -38,15 +37,12 @@ describe("order error classification", () => {
     expect(isOrderBusy(new Error("x"))).toBe(false);
   });
 
-  it("insufficient stock: block policy shows shortages, warn policy asks for confirmation", () => {
+  it("insufficient stock shows the shortages (OD-09: never below zero, nothing to confirm)", () => {
     const block = apiError(409, {
       code: "inventory.insufficient_stock",
       shortages: [{ variantId: "v1", sku: "LED-1", warehouseId: "w1", locationId: null, requested: 10, available: 3 }],
     });
-    const warn = apiError(409, { code: "inventory.insufficient_stock", confirmationRequired: true, shortages: [] });
     expect(isInsufficientStock(block)).toBe(true);
-    expect(needsStockConfirmation(block)).toBe(false);
-    expect(needsStockConfirmation(warn)).toBe(true);
     expect(readShortages(block)).toEqual([{ variantId: "v1", sku: "LED-1", warehouseId: "w1", locationId: null, requested: 10, available: 3 }]);
   });
 

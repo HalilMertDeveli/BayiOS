@@ -33,19 +33,17 @@ describe("validateAdjustment", () => {
 });
 
 describe("buildAdjustmentRequest", () => {
-  it("sends confirmNegativeStock=false first and true only after explicit confirmation", () => {
-    expect(buildAdjustmentRequest(filled, { usesLocations: true, confirmNegativeStock: false })).toEqual({
+  it("builds the body without any negative-stock confirmation (OD-09: stock never goes below zero)", () => {
+    expect(buildAdjustmentRequest(filled, { usesLocations: true })).toEqual({
       variantId: "v-1",
       warehouseId: "wh-1",
       locationId: "loc-1",
       type: "damage_out",
       quantity: 2.5,
       reason: "Kırık geldi",
-      confirmNegativeStock: false,
     });
-    expect(buildAdjustmentRequest(filled, { usesLocations: false, confirmNegativeStock: true })).toMatchObject({
-      locationId: null,
-      confirmNegativeStock: true,
-    });
+    const located = buildAdjustmentRequest(filled, { usesLocations: false });
+    expect(located.locationId).toBeNull();
+    expect(located).not.toHaveProperty("confirmNegativeStock");
   });
 });

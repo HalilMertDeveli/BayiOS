@@ -103,7 +103,6 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
     /// created with <c>is_transit</c> and <c>allow_negative = false</c>.</param>
     public async Task<IReadOnlyList<BalanceRow>> LockBalancesAsync(
         IReadOnlyCollection<BalanceKey> keys,
-        bool allowNegative,
         bool createMissing,
         CancellationToken cancellationToken,
         IReadOnlyCollection<Guid>? transitIds = null)
@@ -125,7 +124,7 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
                 INSERT INTO inventory.inventory_balances
                     (id, tenant_id, variant_id, warehouse_id, location_id, on_hand, reserved, allow_negative, is_transit, version, created_at)
                 SELECT k.id, @tenant, k.variant_id, k.warehouse_id, k.location_id, 0, 0,
-                       @allow_negative AND NOT (k.warehouse_id = ANY(@transit)), k.warehouse_id = ANY(@transit), 0, now()
+                       false, k.warehouse_id = ANY(@transit), 0, now() -- OD-09: never negative
                 FROM unnest(@ids, @variants, @warehouses, @locations) AS k(id, variant_id, warehouse_id, location_id)
                 ORDER BY k.{Order.Replace(", ", ", k.", StringComparison.Ordinal)}
                 ON CONFLICT (tenant_id, variant_id, warehouse_id, location_id) DO NOTHING
@@ -135,7 +134,6 @@ internal sealed class StockStore(UnitOfWork unitOfWork, IRequestContext requestC
             insert.Parameters.Add(Uuids("variants", variants.Select(v => (Guid?)v).ToArray()));
             insert.Parameters.Add(Uuids("warehouses", warehouses.Select(w => (Guid?)w).ToArray()));
             insert.Parameters.Add(Uuids("locations", locations));
-            insert.Parameters.Add(new NpgsqlParameter<bool>("allow_negative", allowNegative));
             insert.Parameters.Add(Uuids("transit", [.. (transitIds ?? []).Select(t => (Guid?)t)]));
             await insert.ExecuteNonQueryAsync(cancellationToken);
         }

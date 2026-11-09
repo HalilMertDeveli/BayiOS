@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState, useId } from "react";
 import Link from "next/link";
 import { ArrowLeft, CircleAlert, Lock, RotateCcw } from "lucide-react";
 import { FormAlert } from "@/components/catalog/form-alert";
-import { NegativeStockDialog } from "@/components/inventory/negative-stock-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -22,7 +21,6 @@ import {
   isOrderVersionConflict,
   isPriceMissing,
   isStaleState,
-  needsStockConfirmation,
   addressErrorText,
   isAutoApproved,
   orderErrorMessage,
@@ -182,7 +180,6 @@ function OrderView({
   const [notice, setNotice] = useState<Notice>(null);
   const [conflict, setConflict] = useState(false);
   const [shortages, setShortages] = useState<{ action: StockAction; items: Shortage[] } | null>(null);
-  const [confirmShortages, setConfirmShortages] = useState<{ action: StockAction; items: Shortage[] } | null>(null);
   const [reasonFor, setReasonFor] = useState<ReasonAction | null>(null);
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [unpriced, setUnpriced] = useState<number[]>([]);
@@ -224,7 +221,6 @@ function OrderView({
       });
       keys.reset();
       setShortages(null);
-      setConfirmShortages(null);
       setReasonFor(null);
       setUnpriced([]);
       setConflict(false);
@@ -245,11 +241,7 @@ function OrderView({
 
   const handleError = (action: OrderTransition, error: unknown) => {
     // Approve, and a submit the API approves at once (no approval required, #92), reserve stock all or nothing.
-    if ((action === "approve" || action === "submit") && needsStockConfirmation(error)) {
-      setConfirmShortages({ action, items: readShortages(error) });
-      return;
-    }
-    setConfirmShortages(null);
+    // Stock never goes below zero (OD-09): a shortage is shown, nothing is reserved and there is nothing to confirm.
     if (isInsufficientStock(error)) {
       setShortages({ action: action === "submit" ? "submit" : "approve", items: readShortages(error) });
       focusAfterCommit(() => shortagesRef.current?.querySelector("h2"));
@@ -288,10 +280,9 @@ function OrderView({
       setReasonFor(a.action);
       return;
     }
-    void run(a.action, a.action === "approve" ? { confirmNegativeStock: false } : undefined);
+    void run(a.action);
   };
 
-  const skuOf = (variantId: string, fallback: string | null) => loaded.detail.lines.find((l) => l.variantId === variantId)?.sku ?? fallback ?? variantId;
   // Names come with the order (#86); customerName is null for readers without customers.read (warehouse staff).
   const customerName = order.customerName ?? null;
   const personName = (id: string | null, name: string | null) => (id && id === currentUserId ? `${name ?? "Siz"} (siz)` : (name ?? "—"));
@@ -455,21 +446,6 @@ function OrderView({
         error={reasonError}
         onCancel={() => setReasonFor(null)}
         onConfirm={(reason) => reasonFor && void run(reasonFor, { reason })}
-      />
-      <NegativeStockDialog
-        open={confirmShortages !== null}
-        shortages={confirmShortages?.items ?? []}
-        skuOf={skuOf}
-        confirming={pending !== null && pending === confirmShortages?.action}
-        onCancel={() => setConfirmShortages(null)}
-        onConfirm={() => confirmShortages && void run(confirmShortages.action, { confirmNegativeStock: true })}
-        description={
-          confirmShortages?.action === "submit"
-            ? "İşletmenizde sipariş onayı zorunlu olmadığından sipariş gönderilince hemen onaylanır ve stok ayrılır. Bazı satırlarda satılabilir stok yetmiyor; negatif stok ayarı “uyar” olduğu için bu ancak açık teyidinizle yapılır."
-            : "Bazı satırlarda satılabilir stok yetmiyor. İşletmenizin negatif stok ayarı “uyar” olduğu için onay ancak açık teyidinizle yapılır."
-        }
-        confirmLabel={confirmShortages?.action === "submit" ? "Yine de gönder ve onayla" : "Yine de onayla"}
-        footnote="Onaylarsanız tüm satırlar için stok ayrılır ve satılabilir stok eksiye düşer."
       />
     </>
   );

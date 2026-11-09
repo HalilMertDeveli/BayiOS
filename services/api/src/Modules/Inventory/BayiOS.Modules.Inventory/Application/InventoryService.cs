@@ -15,13 +15,16 @@ namespace BayiOS.Modules.Inventory.Application;
 /// movements and reservations,</item>
 /// <item>on any error rolls back to the savepoint, so a failed command leaves no partial change behind.</item>
 /// </list>
-/// Receipts, adjustments and confirmed negative stock are audited inside the same savepoint (threat-model §7).
+/// Receipts and adjustments are audited inside the same savepoint (threat-model §7).
+/// <para>
+/// Stock never goes below zero (owner decision OD-09, 2026-11-09): there is no negative-stock policy any more — every
+/// change that would leave available &lt; 0 is refused, and the DB CHECK on <c>inventory_balances</c> is the backstop.
+/// </para>
 /// </summary>
 internal sealed class InventoryService(
     StockStore store,
     IWarehouseDirectory warehouses,
     IVariantDirectory variants,
-    INegativeStockPolicyProvider policies,
     IAuditLog audit) : IInventoryService
 {
     public const int MaxLines = 500;
@@ -132,10 +135,9 @@ internal sealed class InventoryService(
 
         static BalanceKey KeyOf(Guid variantId, StockPoint point) => new(variantId, point.WarehouseId, point.LocationId);
 
-        var allowNegative = await AllowsNegativeAsync(cancellationToken);
         var keys = moves.SelectMany(m => m.To is null ? [KeyOf(m.VariantId, m.From)] : new[] { KeyOf(m.VariantId, m.From), KeyOf(m.VariantId, m.To) }).ToList();
         var transit = moves.Any(m => m.From.IsTransit || m.To is { IsTransit: true }) ? new[] { command.TransferId } : [];
-        var rows = Index(await store.LockBalancesAsync(keys, allowNegative, createMissing: true, cancellationToken, transit));
+        var rows = Index(await store.LockBalancesAsync(keys, createMissing: true, cancellationToken, transit));
         if (moves.Any(m => rows[KeyOf(m.VariantId, m.From)].IsTransit != m.From.IsTransit
             || (m.To is { } to && rows[KeyOf(m.VariantId, to)].IsTransit != to.IsTransit)))
         {
@@ -143,7 +145,7 @@ internal sealed class InventoryService(
         }
 
         // Check every source before writing anything: a warehouse gives only available stock (reserved never moves,
-        // no negative stock under any policy — owner decision), the in-transit point only what it holds.
+        // no negative stock — owner decision OD-09), the in-transit point only what it holds.
         var shortages = new List<StockShortage>();
         foreach (var group in moves.GroupBy(m => KeyOf(m.VariantId, m.From)))
         {
@@ -170,7 +172,7 @@ internal sealed class InventoryService(
                 from,
                 -move.Quantity,
                 0m,
-                !from.IsTransit && NextAllowNegative(from, allowNegative, from.OnHand - move.Quantity, from.Reserved, worsening: true),
+                !from.IsTransit && NextAllowNegative(from, from.OnHand - move.Quantity, from.Reserved, worsening: true),
                 cancellationToken);
             movements.Add(await store.InsertMovementAsync(
                 new NewMovement(from.Key, move.To is null ? MovementTypes.AdjustmentOut : MovementTypes.TransferOut, -move.Quantity, null,
@@ -185,7 +187,7 @@ internal sealed class InventoryService(
                     to,
                     move.Quantity,
                     0m,
-                    !to.IsTransit && NextAllowNegative(to, allowNegative, to.OnHand + move.Quantity, to.Reserved, worsening: false),
+                    !to.IsTransit && NextAllowNegative(to, to.OnHand + move.Quantity, to.Reserved, worsening: false),
                     cancellationToken);
                 movements.Add(await store.InsertMovementAsync(
                     new NewMovement(to.Key, MovementTypes.TransferIn, move.Quantity, null,
@@ -265,9 +267,8 @@ internal sealed class InventoryService(
             return InventoryError.Validation(errors);
         }
 
-        var allowNegative = await AllowsNegativeAsync(cancellationToken);
         var keyed = lines.Select(l => (Line: l, Key: new BalanceKey(l.VariantId, warehouse.Id, l.LocationId))).ToList();
-        var rows = Index(await store.LockBalancesAsync([.. keyed.Select(k => k.Key)], allowNegative, createMissing: true, cancellationToken));
+        var rows = Index(await store.LockBalancesAsync([.. keyed.Select(k => k.Key)], createMissing: true, cancellationToken));
 
         // With the rows locked no movement of these keys can appear: on_hand − Σ(after the count) is exactly the system
         // balance at the moment of counting (snapshot + movements during the count, US-INV-005).
@@ -306,7 +307,7 @@ internal sealed class InventoryService(
             if (delta != 0)
             {
                 var balanceAfter = await store.UpdateBalanceAsync(
-                    row, delta, 0m, NextAllowNegative(row, allowNegative, row.OnHand + delta, row.Reserved, worsening: delta < 0), cancellationToken);
+                    row, delta, 0m, NextAllowNegative(row, row.OnHand + delta, row.Reserved, worsening: delta < 0), cancellationToken);
                 var movement = await store.InsertMovementAsync(
                     new NewMovement(row.Key, MovementTypes.CountCorrection, delta, null, MovementSourceTypes.StockCount,
                         command.StockCountId, line.CountLineId, "stock count", command.CorrelationId),
@@ -373,9 +374,8 @@ internal sealed class InventoryService(
             return InventoryError.Validation(errors);
         }
 
-        var allowNegative = await AllowsNegativeAsync(cancellationToken);
         var keyed = lines.Select(l => (Line: l, Key: new BalanceKey(l.VariantId, warehouse!.Id, l.LocationId))).ToList();
-        var rows = Index(await store.LockBalancesAsync([.. keyed.Select(k => k.Key)], allowNegative, createMissing: true, cancellationToken));
+        var rows = Index(await store.LockBalancesAsync([.. keyed.Select(k => k.Key)], createMissing: true, cancellationToken));
 
         var receiptId = command.ReceiptId ?? Guid.CreateVersion7();
         var movements = new List<MovementResult>(keyed.Count);
@@ -383,7 +383,7 @@ internal sealed class InventoryService(
         {
             var row = rows[key];
             var after = await store.UpdateBalanceAsync(
-                row, line.Quantity, 0m, NextAllowNegative(row, allowNegative, row.OnHand + line.Quantity, row.Reserved, worsening: false), cancellationToken);
+                row, line.Quantity, 0m, NextAllowNegative(row, row.OnHand + line.Quantity, row.Reserved, worsening: false), cancellationToken);
             movements.Add(await store.InsertMovementAsync(
                 new NewMovement(key, MovementTypes.Receipt, line.Quantity, line.UnitCost, MovementSourceTypes.Receipt,
                     receiptId, line.LineId ?? Guid.CreateVersion7(), reference, command.CorrelationId),
@@ -436,29 +436,20 @@ internal sealed class InventoryService(
             return InventoryError.Validation(errors);
         }
 
-        var policy = await policies.GetPolicyAsync(cancellationToken);
-        var allowNegative = policy != NegativeStockPolicies.Block;
         var key = new BalanceKey(command.VariantId, warehouse!.Id, command.LocationId);
-        var row = (await store.LockBalancesAsync([key], allowNegative, createMissing: true, cancellationToken)).Single();
+        var row = (await store.LockBalancesAsync([key], createMissing: true, cancellationToken)).Single();
 
         var outbound = MovementTypes.Outbound.Contains(command.Type);
         var delta = outbound ? -command.Quantity : command.Quantity;
-        StockShortage? confirmedShortage = null;
         if (outbound && row.Available < command.Quantity)
         {
             // Reserved stock cannot be adjusted away (§4.2): the check is against available, not on_hand.
             var shortage = new StockShortage(key.VariantId, found[key.VariantId].Sku, key.WarehouseId, key.LocationId, command.Quantity, row.Available);
-            var blocked = new InventoryError(409, "inventory.insufficient_available", "Available stock is insufficient for this adjustment", Shortages: [shortage]);
-            if (NegativeStockDecision(policy, command.ConfirmNegativeStock, [shortage], blocked) is { } decision)
-            {
-                return decision;
-            }
-
-            confirmedShortage = policy == NegativeStockPolicies.Warn ? shortage : null;
+            return new InventoryError(409, "inventory.insufficient_available", "Available stock is insufficient for this adjustment", Shortages: [shortage]);
         }
 
         var after = await store.UpdateBalanceAsync(
-            row, delta, 0m, NextAllowNegative(row, allowNegative, row.OnHand + delta, row.Reserved, worsening: outbound), cancellationToken);
+            row, delta, 0m, NextAllowNegative(row, row.OnHand + delta, row.Reserved, worsening: outbound), cancellationToken);
         var movement = await store.InsertMovementAsync(
             new NewMovement(key, command.Type, delta, null, MovementSourceTypes.Adjustment, Guid.CreateVersion7(), null, reason, command.CorrelationId),
             after,
@@ -475,29 +466,9 @@ internal sealed class InventoryService(
                 .Value("balanceAfter", movement.BalanceAfter)
                 .ToDictionary()),
             cancellationToken);
-        if (confirmedShortage is not null)
-        {
-            await AuditNegativeStockConfirmedAsync("inventory_movement", movement.Id, [confirmedShortage], cancellationToken);
-        }
 
         return movement;
     }
-
-    /// <summary>The caller explicitly confirmed going below zero under the <c>warn</c> policy (PRD TEN-12).</summary>
-    private Task AuditNegativeStockConfirmedAsync(
-        string entityType, Guid entityId, IReadOnlyList<StockShortage> shortages, CancellationToken cancellationToken) =>
-        audit.RecordAsync(
-            new AuditEvent(AuditActions.InventoryNegativeStockConfirmed, entityType, entityId, new AuditChanges()
-                .Value("shortages", shortages.Select(s => new
-                {
-                    variantId = s.VariantId,
-                    warehouseId = s.WarehouseId,
-                    locationId = s.LocationId,
-                    requested = s.Requested,
-                    available = s.Available,
-                }).ToList())
-                .ToDictionary()),
-            cancellationToken);
 
     // ---- §4.3 Reservation on order approval (all or nothing) ----
 
@@ -540,15 +511,13 @@ internal sealed class InventoryService(
             return AlreadyReserved();
         }
 
-        var policy = await policies.GetPolicyAsync(cancellationToken);
-        var allowNegative = policy != NegativeStockPolicies.Block;
         var variantIds = lines.Select(l => l.VariantId).Distinct().ToList();
 
         // Location-less warehouses keep one (variant, warehouse, NULL) row per variant: make sure it exists.
         if (!warehouse!.UsesLocations)
         {
             await store.LockBalancesAsync(
-                [.. variantIds.Select(v => new BalanceKey(v, warehouse.Id, null))], allowNegative, createMissing: true, cancellationToken);
+                [.. variantIds.Select(v => new BalanceKey(v, warehouse.Id, null))], createMissing: true, cancellationToken);
         }
 
         var locked = await store.LockVariantBalancesAsync(warehouse.Id, variantIds, cancellationToken);
@@ -579,13 +548,13 @@ internal sealed class InventoryService(
         }
 
         var insufficient = new InventoryError(409, "inventory.insufficient_stock", "Available stock is insufficient for one or more lines", Shortages: shortages);
-        if (NegativeStockDecision(policy, command.ConfirmNegativeStock, shortages, insufficient) is { } decision)
+        if (shortages.Count > 0)
         {
-            CountReservationShortage(decision);
-            return decision;
+            CountReservationShortage();
+            return insufficient;
         }
 
-        // Allocate deterministically; with negative stock allowed the remainder goes to the last candidate row.
+        // Allocate deterministically (every variant has enough available stock, checked above).
         var allocations = new List<(ReserveLine Line, BalanceRow Row, decimal Quantity)>();
         var taken = new Dictionary<Guid, decimal>();
         foreach (var line in lines.Select((l, i) => (Line: l, Index: i)).OrderBy(x => x.Line.VariantId).ThenBy(x => x.Index).Select(x => x.Line))
@@ -593,7 +562,7 @@ internal sealed class InventoryService(
             var rows = candidates.GetValueOrDefault(line.VariantId) ?? [];
             if (rows.Count == 0)
             {
-                CountReservationShortage(insufficient);
+                CountReservationShortage();
                 return insufficient with { Shortages = [new StockShortage(line.VariantId, found[line.VariantId].Sku, warehouse.Id, null, line.Quantity, 0m)] };
             }
 
@@ -617,9 +586,12 @@ internal sealed class InventoryService(
 
             if (remaining > 0)
             {
-                var last = rows[^1];
-                allocations.Add((line, last, remaining));
-                taken[last.Id] = taken.GetValueOrDefault(last.Id) + remaining;
+                // Unreachable after the shortage check above; never reserve beyond available (OD-09).
+                CountReservationShortage();
+                return insufficient with
+                {
+                    Shortages = [new StockShortage(line.VariantId, found[line.VariantId].Sku, warehouse.Id, null, line.Quantity, line.Quantity - remaining)],
+                };
             }
         }
 
@@ -627,7 +599,7 @@ internal sealed class InventoryService(
         {
             var reservedAfter = row.Reserved + taken[row.Id];
             await store.UpdateBalanceAsync(
-                row, 0m, taken[row.Id], NextAllowNegative(row, allowNegative, row.OnHand, reservedAfter, worsening: true), cancellationToken);
+                row, 0m, taken[row.Id], NextAllowNegative(row, row.OnHand, reservedAfter, worsening: true), cancellationToken);
         }
 
         var result = new List<ReservationAllocation>(allocations.Count);
@@ -638,11 +610,6 @@ internal sealed class InventoryService(
             var id = Guid.CreateVersion7();
             await store.InsertReservationAsync(id, command.OrderId, line.OrderLineId, row.Key, quantity, command.CorrelationId, cancellationToken);
             result.Add(new ReservationAllocation(id, line.OrderLineId, line.VariantId, row.Key.WarehouseId, row.Key.LocationId, quantity, "active"));
-        }
-
-        if (shortages.Count > 0 && policy == NegativeStockPolicies.Warn)
-        {
-            await AuditNegativeStockConfirmedAsync("order", command.OrderId, shortages, cancellationToken);
         }
 
         return new ReservationResult(command.OrderId, result);
@@ -658,8 +625,7 @@ internal sealed class InventoryService(
             return new ReservationResult(command.OrderId, []);
         }
 
-        var allowNegative = await AllowsNegativeAsync(cancellationToken);
-        var rows = Index(await store.LockBalancesAsync([.. candidates.Select(r => r.Key)], allowNegative, createMissing: false, cancellationToken));
+        var rows = Index(await store.LockBalancesAsync([.. candidates.Select(r => r.Key)], createMissing: false, cancellationToken));
         var reservations = await store.LockActiveReservationsAsync(command.OrderId, command.OrderLineIds, cancellationToken);
 
         var released = new List<ReservationAllocation>();
@@ -673,7 +639,7 @@ internal sealed class InventoryService(
             }
 
             await store.UpdateBalanceAsync(
-                row, 0m, -open, NextAllowNegative(row, allowNegative, row.OnHand, row.Reserved - open, worsening: false), cancellationToken);
+                row, 0m, -open, NextAllowNegative(row, row.OnHand, row.Reserved - open, worsening: false), cancellationToken);
             var status = await store.ProgressReservationAsync(reservation.Id, 0m, open, cancellationToken);
             released.Add(new ReservationAllocation(
                 reservation.Id, reservation.OrderLineId, reservation.VariantId, reservation.WarehouseId, reservation.LocationId, open, status));
@@ -713,8 +679,7 @@ internal sealed class InventoryService(
         var orderLineIds = lines.Select(l => l.OrderLineId).Distinct().ToList();
         var candidates = await store.FindActiveReservationsAsync(null, orderLineIds, cancellationToken);
         var keys = lines.Select(l => new BalanceKey(l.VariantId, warehouse.Id, l.LocationId)).ToList();
-        var allowNegative = await AllowsNegativeAsync(cancellationToken);
-        var rows = Index(await store.LockBalancesAsync(keys, allowNegative, createMissing: false, cancellationToken));
+        var rows = Index(await store.LockBalancesAsync(keys, createMissing: false, cancellationToken));
         var reservations = candidates.Count == 0 ? [] : await store.LockActiveReservationsAsync(null, orderLineIds, cancellationToken);
 
         var plan = new List<(IssueLine Line, BalanceRow Row, ReservationRow Reservation)>();
@@ -736,7 +701,7 @@ internal sealed class InventoryService(
             // on_hand and reserved drop together: available is unchanged (I5).
             var after = await store.UpdateBalanceAsync(
                 row, -line.Quantity, -line.Quantity,
-                NextAllowNegative(row, allowNegative, row.OnHand - line.Quantity, row.Reserved - line.Quantity, worsening: false),
+                NextAllowNegative(row, row.OnHand - line.Quantity, row.Reserved - line.Quantity, worsening: false),
                 cancellationToken);
             movements.Add(await store.InsertMovementAsync(
                 new NewMovement(row.Key, MovementTypes.ShipmentOut, -line.Quantity, null, MovementSourceTypes.Shipment,
@@ -810,46 +775,17 @@ internal sealed class InventoryService(
         new(409, "inventory.already_reserved", "An order line already has an active reservation");
 
     /// <summary>Operational signal (#55): a reservation refused for shortage. Tag only, no tenant or variant id.</summary>
-    private static void CountReservationShortage(InventoryError error) =>
-        BayiOsMetrics.ReservationShortages.Add(
-            1, new KeyValuePair<string, object?>("decision", error.ConfirmationRequired ? "confirmation_required" : "blocked"));
+    private static void CountReservationShortage() =>
+        BayiOsMetrics.ReservationShortages.Add(1, new KeyValuePair<string, object?>("decision", "blocked"));
 
     /// <summary>
-    /// Negative-stock policy (§2.4, PRD TEN-12): <c>block</c> → the given error; <c>warn</c> → 409 asking for explicit
-    /// confirmation unless the caller confirmed; <c>allow</c> → proceed.
+    /// The row's <c>allow_negative</c> after a change. New rows and every worsening change write <c>false</c> (OD-09:
+    /// stock never goes below zero), so the DB CHECK is a real backstop. Only a row that is still negative from before
+    /// OD-09 (the former warn/allow policies) keeps the flag for changes that do not make it worse — e.g. a receipt —
+    /// until it is back at zero or above.
     /// </summary>
-    private static InventoryError? NegativeStockDecision(
-        string policy, bool confirmed, List<StockShortage> shortages, InventoryError blocked)
-    {
-        if (shortages.Count == 0)
-        {
-            return null;
-        }
-
-        return policy switch
-        {
-            NegativeStockPolicies.Allow => null,
-            NegativeStockPolicies.Warn when confirmed => null,
-            NegativeStockPolicies.Warn => new InventoryError(
-                409,
-                "inventory.insufficient_stock",
-                "Stock would go negative; repeat with confirmNegativeStock=true to proceed",
-                Shortages: shortages,
-                ConfirmationRequired: true),
-            _ => blocked,
-        };
-    }
-
-    /// <summary>
-    /// The row's <c>allow_negative</c> after a change: the tenant policy, except that a row that is already negative
-    /// (left over from a laxer policy) may keep the flag for changes that do not make it worse — e.g. a receipt.
-    /// Worsening changes under <c>block</c> always write <c>false</c>, so the DB CHECK stays a real backstop.
-    /// </summary>
-    private static bool NextAllowNegative(BalanceRow row, bool policyAllows, decimal onHandAfter, decimal reservedAfter, bool worsening) =>
-        policyAllows || (!worsening && row.AllowNegative && !(onHandAfter >= 0 && reservedAfter <= onHandAfter));
-
-    private async Task<bool> AllowsNegativeAsync(CancellationToken cancellationToken) =>
-        await policies.GetPolicyAsync(cancellationToken) != NegativeStockPolicies.Block;
+    private static bool NextAllowNegative(BalanceRow row, decimal onHandAfter, decimal reservedAfter, bool worsening) =>
+        !worsening && row.AllowNegative && !(onHandAfter >= 0 && reservedAfter <= onHandAfter);
 
     private static InventoryError? ValidateWarehouse(WarehouseInfo? warehouse) => warehouse switch
     {

@@ -438,7 +438,6 @@ internal static class InventoryEndpoints
             request.Type ?? string.Empty,
             request.Quantity!.Value,
             request.Reason ?? string.Empty,
-            request.ConfirmNegativeStock ?? false,
             http.TraceIdentifier);
         var result = await inventory.AdjustAsync(command, cancellationToken);
         return result.Error is { } error
@@ -494,7 +493,7 @@ internal static class InventoryEndpoints
         }
     }
 
-    /// <summary>Maps an engine error to RFC 9457, with <c>shortages</c> / <c>confirmationRequired</c> extensions.</summary>
+    /// <summary>Maps an engine error to RFC 9457, with the <c>shortages</c> extension.</summary>
     private static ProblemHttpResult Problem(HttpContext http, InventoryError error)
     {
         var problem = error.Errors is null
@@ -511,11 +510,6 @@ internal static class InventoryEndpoints
                 requested = s.Requested,
                 available = s.Available,
             }).ToList();
-        }
-
-        if (error.ConfirmationRequired)
-        {
-            problem.Extensions["confirmationRequired"] = true;
         }
 
         if (error.Code == InventoryError.Busy().Code)

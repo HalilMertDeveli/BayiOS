@@ -34,7 +34,7 @@ internal sealed record AppResult<T>(T? Value, AppError? Error)
 /// <summary>
 /// Warehouses and shelf/bin locations (data-model §5.6). The first warehouse of a tenant becomes its default;
 /// receipts without a warehouse create the default ("Ana Depo", MAIN) on first use (<see cref="WarehouseDirectory"/>).
-/// Entitlements (#51): active warehouses are capped by <c>max_warehouses</c> (Basic: 1; counted under a per-tenant
+/// Entitlements (#51): active warehouses are capped by <c>max_warehouses</c> (Basic: 999, OD-02; counted under a per-tenant
 /// lock) and turning locations on needs <c>warehouse_locations</c> (Professional). Reads, renames, deactivation and
 /// stock operations on existing warehouses are never gated, so a downgraded tenant keeps working with what it has.
 /// </summary>

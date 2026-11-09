@@ -73,7 +73,7 @@ elle iletilir. Pilot öncesi BayiOS ekibi kullanıcıları hazırlayabilir. Her 
 | UAT-30 | mudur | M | Menüden **İçe aktarma**'ya girin | "İçe aktarma için yetkiniz yok" (op. müdürü yalnızca stok aktarabilir; stok aktarma henüz yok) | Negatif (yetkisiz rol) | | |
 | UAT-31 | sahip | M, sentetik 200 satırlık `.xlsx` (5 hatalı satır, 2 tekrar SKU) | **İçe aktarma → Yeni içe aktarma** → Ürünler → dosya → kolon eşleme (önerileri kontrol edin) → **Kaydet ve önizle** → **Hata raporunu indir (CSV)** → "N satırı aktar" | Önizlemede Hatalı = 7 (5 hata + 2 tekrar SKU); hata CSV'si Excel'de Türkçe karakterlerle açılır; yalnızca geçerli satırlar aktarılır; geçmiş listesinde görünür | Motor | | Gerçek yığın E2E: `real-stack-imports.spec.ts` |
 | UAT-32 | sahip | UAT-31 | Bir ürünü elle değiştirin; sonuç ekranında **Geri al**; sonra tekrar geri almayı deneyin | Eklenen ürünler arşivlenir; elle değiştirilen satır "Çakışma (dokunulmadı)"; ikinci geri alma "Bu aktarma zaten geri alındı …" ile reddedilir | Negatif | | |
-| UAT-33 | sahip | M | 10 MB üstü dosya; 10.000 satır üstü dosya; `.xlsm` dosya | "Dosya 10 MB sınırını aşıyor." / "Dosyada 10.000'den fazla satır var." / "Makro içeren Excel dosyaları (.xlsm) kabul edilmez." | Negatif | | |
+| UAT-33 | sahip | M | 20 MB üstü dosya (OD-04); 10.000 satır üstü dosya; `.xlsm` dosya | "Dosya 20 MB sınırını aşıyor." / "Dosyada 10.000'den fazla satır var." / "Makro içeren Excel dosyaları (.xlsm) kabul edilmez." | Negatif | | |
 | UAT-34 | sahip | M, fiyat listesi Perakende | Fiyat listesi kalemleri aktarması, hedef liste Perakende; eşlemeyi şablon olarak kaydedin; aynı başlıklı ikinci dosyada **Şablonu uygula** | Fiyatlar listeye yazılır; şablon eşlemeyi tek seferde doldurur | Motor | | |
 
 ### 2.5 Depo, raf ve mal kabul
@@ -93,8 +93,8 @@ elle iletilir. Pilot öncesi BayiOS ekibi kullanıcıları hazırlayabilir. Her 
 | UAT-50 | mudur | P1 | **Stok düzelt** → ürün okut → Hasar / fire çıkışı, 1, sebep "Kırık ambalaj" → **Düzeltmeyi kaydet** | "Stok düzeltildi"; stok kartında "Hasar / fire" hareketi ve sebep görünür | Motor | | |
 | UAT-51 | mudur | P1 | Sebep boş bırakıp kaydedin | "Düzeltme sebebini yazın (en fazla 500 karakter)." | Negatif | | |
 | UAT-52 | mudur | Ürünün tüm stoğu onaylı siparişe ayrılmış | Stok düş (düzeltme çıkışı) 1 | "Satılabilir stok yetersiz. Siparişler için ayrılmış (rezerve) stok düzeltmeyle düşülemez." | Negatif (stok yetersiz) | | |
-| UAT-53 | sahip, sonra mudur | Politika **Uyar**; satılabilir 2 | Stok düş 5 → pencere → önce **Vazgeç**, sonra tekrar **Yine de kaydet** | Vazgeç: "Düzeltme kaydedilmedi: eksi stok onaylanmadı."; Yine de kaydet: stok −3, hareket geçmişinde görünür | Negatif stok | | |
-| UAT-54 | mudur | Politika **İzin verme**; satılabilir 2 | Stok düş 5 | "Stok yetersiz: işlem negatif stok kuralına takıldı." | Negatif (stok yetersiz) | | |
+| UAT-53 | sahip | — | **Ayarlar → Sipariş ayarları** ve **İş kuralları** | "Stok eksiye düşmez" **Sabit kural** olarak görünür; seçim kutusu yok (OD-09) | Negatif stok | | |
+| UAT-54 | mudur | Satılabilir 2 | Stok düş 5 (onay penceresi çıkmaz) | "Stok yetersiz: işlem negatif stok kuralına takıldı." | Negatif (stok yetersiz) | | |
 | UAT-55 | mudur | P1, ürünün satılabilir stoğu 4 | Ürünü açın → **Minimum stok** 5 → **Minimum stoku kaydet**; **Stok** listesi ve **Pano**'ya bakın | Stok hareketi oluşmaz; Stok'ta **Min. stok** 5 ve **Kritik** rozeti; panoda **Kritik stok** kutusu ürünü sayar | Motor | | |
 | UAT-56 | mudur | UAT-55, iki depo | **Stok** → ürünün SKU'su → **Minimum stok** bölümünde ikinci depoya 1 girin; kritik stok raporunda depo filtresiyle bakın | İkinci depoda depo eşiği (1), diğer depoda genel eşik (5) geçerli; satış veya depo personeli değer giremez | Motor / yetki | | |
 
@@ -117,14 +117,14 @@ elle iletilir. Pilot öncesi BayiOS ekibi kullanıcıları hazırlayabilir. Her 
 | UAT-71 | mudur | UAT-70, satılabilir 14 | **Onayla ve stok ayır** | Durum Onaylandı; Stok'ta Ayrılmış +3, Satılabilir 14 → 11; Görevler'de toplama görevi oluşur | Motor | | |
 | UAT-72 | mudur | Satılabilir 2, sipariş 5 adet, politika İzin verme | Onayla | "Stok yetersiz: siparişteki hiçbir satır için stok ayrılmadı (ya hep ya hiç)."; "Stoğu yetmeyen satırlar" listesi; hiçbir satıra rezervasyon yok | Negatif (stok yetersiz) | | |
 | UAT-73 | mudur | M-09: ürün rafta var ama tamamı başka siparişe ayrılmış | Yeni siparişi onaylayın | Onay engellenir; satır Ayrılmış/Satılabilir bilgisini gösterir | Motor / negatif | | |
-| UAT-74 | mudur | Politika Uyar, stok yetersiz | Onayla → **Yine de onayla** | Onaylanır; satılabilir eksiye düşer | Negatif stok | | |
+| UAT-74 | mudur | Stok yetersiz | Onayla | Onaylanmaz; eksik satırlar listelenir, "Yine de onayla" yok (OD-09: stok eksiye düşmez) | Negatif stok | | |
 | UAT-75 | mudur | Fiyat listesinde fiyatı olmayan ürünle taslak | **Onaya gönder** | Gönder düğmesi engelli: "Fiyatı olmayan satırlar var; fiyatlanmadan onaya gönderilemez." | Negatif | | |
 | UAT-76 | mudur | Onay Bekliyor sipariş | **Reddet** (sebep yazın) | Taslağa döner; zaman çizelgesinde "Reddedildi (taslağa döndü)" ve sebep | Motor | | |
 | UAT-77 | mudur | UAT-71 (onaylı, sevk yok) | **Siparişi iptal et** → sebep "Müşteri vazgeçti" + açıklama | İptal; ayrılan stok serbest; toplama görevi iptal olur | Motor | | |
 | UAT-78 | sahip | "Siparişler onaydan geçsin" kapalı | mudur ile sipariş gönderin; satis ile sipariş gönderin | mudur: "Sipariş otomatik onaylandı; stok ayrıldı". satis (kural açık): otomatik onaylanır | Ayarlar | | |
 | UAT-79 | satis | Satış iskonto sınırı %0 (varsayılan) | Taslakta satıra %5 iskonto girip kaydedin | "İşletmenizde satış personeli için iskonto sınırı %0; …" | Negatif (yetkisiz) | | |
 | UAT-80 | mudur ×2 | Onay Bekliyor sipariş, satılabilir tam 3 | İki tarayıcıda iki farklı 3 adetlik siparişi aynı anda onaylayın | Yalnızca biri onaylanır; diğeri "Stok yetersiz" — stok asla çift ayrılmaz | Eşzamanlılık (kritik) | | |
-| UAT-81 | mudur | L, `KAB-P391-IC-500` satılabilir 18 | 24 adetlik kabinet siparişi onayı | Politikaya göre engellenir veya uyarılır; ekranda eksik satır gösterilir | LED / negatif | | |
+| UAT-81 | mudur | L, `KAB-P391-IC-500` satılabilir 18 | 24 adetlik kabinet siparişi onayı | Engellenir (OD-09); ekranda eksik satır gösterilir | LED / negatif | | |
 | UAT-82 | mudur | UAT-114 sonrası kısmi sevk edilmiş sipariş | Sipariş sayfasında **Kalanı kapat** → sebep seçin | Kalan rezervasyon serbest bırakılır (Stok'ta Ayrılmış azalır); zaman çizelgesinde kalanın kapatıldığı görünür | Motor | | Gerçek yığın E2E: `demo-led.spec.ts` |
 | UAT-83 | mudur | Sevk edilmiş sipariş | **Tamamla** | "Sipariş tamamlandı"; durum Tamamlandı; tamamlanma zamanı görünür | Motor | | |
 

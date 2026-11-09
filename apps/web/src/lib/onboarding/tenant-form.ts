@@ -1,4 +1,4 @@
-import type { NegativeStockPolicy, Sector } from "@/lib/api/identity";
+import type { Sector } from "@/lib/api/identity";
 
 /** Same rule as the API (IdentityService.SlugPattern): 3–63 chars of a-z, 0-9, '-', alphanumeric at both ends. */
 export const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
@@ -52,11 +52,14 @@ export const sectorOptions: readonly { value: Sector; label: string; description
   },
 ];
 
-export const negativeStockOptions: readonly { value: NegativeStockPolicy; label: string }[] = [
-  { value: "block", label: "İzin verme (önerilen)" },
-  { value: "warn", label: "Uyar, devam etmeye izin ver" },
-  { value: "allow", label: "İzin ver" },
-];
+/**
+ * Owner decision OD-09 (2026-11-09): stock never goes below zero. Not a setting any more — shown as a fixed rule in
+ * onboarding and settings. The API accepts only `negativeStockPolicy: "block"`.
+ */
+export const NEGATIVE_STOCK_RULE = {
+  title: "Stok eksiye düşmez",
+  text: "Satılabilir stoktan fazlası onaylanamaz, düzeltmeyle düşülemez ve sevk edilemez. Bu sabit bir kuraldır; değiştirilemez.",
+} as const;
 
 /** ISO 4217 codes offered in the wizard (the API accepts any 3-letter code). TRY is the tenant default. */
 export const currencyOptions: readonly { value: string; label: string }[] = [

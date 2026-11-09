@@ -52,7 +52,7 @@ test("sign-up → e-mail confirmation → onboarding → dashboard → sign-out 
   await page.getByLabel("Para birimi").selectOption("EUR");
   await page.getByLabel("Varsayılan KDV oranı").selectOption("10");
   await page.getByLabel("Fiyat gösterimi").selectOption("included");
-  await page.getByLabel("Negatif stok").selectOption("warn");
+  await expect(page.getByText("Stok eksiye düşmez")).toBeVisible(); // OD-09: fixed rule, no choice
   await page.getByRole("button", { name: "Devam" }).click();
   await expect(page.getByText(slug)).toBeVisible();
 

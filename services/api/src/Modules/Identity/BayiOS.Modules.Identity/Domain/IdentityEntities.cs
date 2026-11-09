@@ -26,9 +26,16 @@ internal static class Sectors
     public static readonly IReadOnlyList<string> All = [MotorcycleParts, LedElectronics, General];
 }
 
+/// <summary>
+/// Owner decision OD-09 (2026-11-09): stock never goes below zero, so <c>block</c> is the only policy. The former
+/// <c>warn</c>/<c>allow</c> values are refused on update and were converted by migration <c>NegativeStockBlockOnly</c>
+/// (the DB CHECK allows only <c>block</c>). The field stays in the settings contract as a fixed, read-only rule.
+/// </summary>
 internal static class NegativeStockPolicies
 {
-    public static readonly IReadOnlyList<string> All = ["block", "warn", "allow"];
+    public const string Block = "block";
+
+    public static readonly IReadOnlyList<string> All = [Block];
 }
 
 /// <summary>identity.tenants — RLS exception (data-model §2.3): visible to its members and inside its own context.</summary>
@@ -410,7 +417,7 @@ internal sealed class TenantSettings : ITenantOwned
 
     public Guid TenantId { get; private set; }
 
-    public string NegativeStockPolicy { get; set; } = "block";
+    public string NegativeStockPolicy { get; set; } = NegativeStockPolicies.Block;
 
     public bool SalesCanApproveOrders { get; set; } = true;
 

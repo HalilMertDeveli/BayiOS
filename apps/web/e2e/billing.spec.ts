@@ -38,7 +38,8 @@ test("owner on the trial: plan, trial end, usage vs limits, module store, 'ödem
   await expect(usage).toContainText("Aktif depo sayısı");
   await expect(usage).toContainText("2 / sınırsız");
   await expect(usage).toContainText("Aylık AI ayrıştırma (bu ay)");
-  await expect(usage).toContainText("12 / 1.000");
+  await expect(usage).toContainText("12 / 300"); // OD-08
+  await expect(usage.getByRole("listitem").filter({ hasText: "Ürün sayısı" })).toContainText("3 / sınırsız"); // OD-02: no product cap
   const modules = page.getByRole("list", { name: "Ek modüller" });
   await expect(modules.getByRole("listitem").filter({ hasText: "AI WhatsApp asistanı" })).toContainText("Denemeye dahil");
   await expect(modules.getByRole("listitem").filter({ hasText: "Bayi portalı" })).toContainText("Yakında");
@@ -114,8 +115,9 @@ test("trial banner: shown when the trial ends within a week, dismissible for the
   await expect(page.getByRole("region", { name: "Deneme süresi" })).toHaveCount(0);
 });
 
-test("Temel plan: second active warehouse and new locations are locked; existing ones stay visible (MOCK)", async ({ page }) => {
-  await signedIn(page, { billing: createMockBilling({ plan: "basic" }) });
+test("Temel plan at its warehouse limit: a further active warehouse and new locations are locked; existing ones stay visible (MOCK)", async ({ page }) => {
+  // Basic allows 999 warehouses (OD-02); an operator limit of 1 puts the tenant at its limit.
+  await signedIn(page, { billing: createMockBilling({ plan: "basic", overrides: { max_warehouses: 1 } }) });
   await page.goto("/depo");
   await expect(page.getByRole("cell", { name: "Ana Depo (mock) Varsayılan" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Raflı Depo (mock)", exact: true })).toBeVisible();

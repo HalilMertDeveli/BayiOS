@@ -5,7 +5,7 @@
  * §7: keyset-style `page.nextCursor` (newest first), status/customer/source/date/number filters, ETag/If-Match → 412,
  * Idempotency-Key required on create and transitions (replayed on reuse), draft-only PATCH (409 order.not_editable),
  * the order-desk transitions with 409 order.invalid_transition, 422 order.price_missing on submit/approve, all-or-nothing
- * approve with 409 inventory.insufficient_stock + `shortages` (+ `confirmationRequired` under the warn policy), and the
+ * approve with 409 inventory.insufficient_stock + `shortages` (stock never below zero, OD-09: nothing to confirm), and the
  * permission gates from the same MOCK /me grants the web receives (src/test/me-fixtures.ts) with the API's dedicated 403
  * codes (#111): orders.not_owner, orders.cancel_not_allowed_in_status, orders.discount_limit_exceeded /
  * orders.manual_price_not_allowed (limitPercent), auth.disabled_by_tenant_rule; warehouse staff read only task-linked
@@ -98,8 +98,6 @@ export type MockOrders = {
   orders: MockOrder[];
   /** Satılabilir stock per variant for approve (missing = plenty). */
   available: Map<string, number>;
-  /** Tenant negative_stock_policy. */
-  policy: "block" | "warn";
   overrides: Map<string, OrderOverride>;
   idempotency: Map<string, { status: number; body: unknown }>;
 };
@@ -416,11 +414,10 @@ function buildLine(ctx: Ctx, order: MockOrder, index: number, input: Json, exist
   return line;
 }
 
-export function createMockOrders(options: { orders?: MockOrder[]; policy?: MockOrders["policy"]; available?: [string, number][] } = {}): MockOrders {
+export function createMockOrders(options: { orders?: MockOrder[]; available?: [string, number][] } = {}): MockOrders {
   return {
     orders: options.orders ?? [],
     available: new Map(options.available ?? []),
-    policy: options.policy ?? "block",
     overrides: new Map(),
     idempotency: new Map(),
   };
@@ -691,11 +688,7 @@ export async function handleOrders(route: Route, mock: MockOrders, ctx: Ctx, rol
     const shortages = order.lines
       .filter((l) => mock.available.has(l.variantId) && l.quantity > mock.available.get(l.variantId)!)
       .map((l) => ({ variantId: l.variantId, sku: l.sku, warehouseId: order.warehouseId, locationId: null, requested: l.quantity, available: mock.available.get(l.variantId)! }));
-    if (shortages.length && !(mock.policy === "warn" && body?.confirmNegativeStock === true)) {
-      return done(
-        json(route, 409, problemBody(409, "inventory.insufficient_stock", { shortages, ...(mock.policy === "warn" ? { confirmationRequired: true } : {}) })),
-      );
-    }
+    if (shortages.length) return done(json(route, 409, problemBody(409, "inventory.insufficient_stock", { shortages })));
     for (const l of order.lines) {
       l.reservedQuantity = l.quantity;
       if (mock.available.has(l.variantId)) mock.available.set(l.variantId, mock.available.get(l.variantId)! - l.quantity);

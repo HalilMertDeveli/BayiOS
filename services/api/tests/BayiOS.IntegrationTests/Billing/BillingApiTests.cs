@@ -54,7 +54,17 @@ public sealed class BillingApiTests(ApiFixture fixture)
         Assert.Equal(["basic", "professional"], catalog.Plans.Select(p => p.Code));
         Assert.Equal((30, "professional", "basic"), (catalog.TrialDays, catalog.TrialPlan, catalog.FallbackPlan));
         Assert.Contains(catalog.Modules, m => m is { Code: BillingKit.AiModule, Available: true });
-        Assert.Contains(catalog.Plans.Single(p => p.Code == "basic").Limits, l => l is { Code: "max_warehouses", Value: 1 });
+        // OD-02 (2026-11-09): Basic = 999 users, 999 warehouses, unlimited products, barcode / mobile scanning included.
+        var basicPlan = catalog.Plans.Single(p => p.Code == "basic");
+        foreach (var code in new[] { "max_users", "max_warehouses" })
+        {
+            Assert.Contains(basicPlan.Limits, l => l.Code == code && l.Value == 999);
+        }
+
+        Assert.Contains(basicPlan.Limits, l => l is { Code: "max_products", Value: null });
+        Assert.Contains("barcode_operations", basicPlan.Features);
+        // OD-08: the AI add-on allows 300 parses a month.
+        Assert.Contains(catalog.Modules.Single(m => m.Code == BillingKit.AiModule).Limits, l => l is { Code: "ai_parses_per_month", Value: 300 });
     }
 
     [Fact]
@@ -70,8 +80,10 @@ public sealed class BillingApiTests(ApiFixture fixture)
         var location = await kit.LocationAsync(shelf.Id, "A-01");
         var variant = await kit.VariantAsync();
 
-        // Downgrade to Basic: nothing is deleted, configuration of Pro features becomes read-only.
+        // Downgrade to Basic: nothing is deleted, configuration of Pro features becomes read-only. Basic allows 999
+        // warehouses (OD-02), so an operator limit of 1 stands in for "over the warehouse limit after the downgrade".
         await BillingKit.SetPlanAsync(fixture, owner.TenantId, BillingKit.Basic);
+        await BillingKit.OverrideAsync(fixture, owner.TenantId, "max_warehouses", limit: 1);
         var tooMany = await HttpAssert.ProblemJsonAsync(
             await owner.PostAsync("/api/v1/warehouses", new { code = "IZM", name = "İzmir" }), HttpStatusCode.Forbidden, "entitlement.limit_exceeded");
         Assert.Equal(("max_warehouses", 1L, 2L, "professional"), (
@@ -102,7 +114,8 @@ public sealed class BillingApiTests(ApiFixture fixture)
         Assert.Equal(("basic", "active"), (usage.Plan, usage.Status));
         var warehouses = Assert.Single(usage.Items, i => i.Code == "max_warehouses");
         Assert.Equal((1L, 1L, 0L), (warehouses.Limit, warehouses.Current, warehouses.Remaining));
-        Assert.Contains(usage.Items, i => i is { Code: "max_users", Limit: 5, Current: 1 });
+        Assert.Contains(usage.Items, i => i is { Code: "max_users", Limit: 999, Current: 1 });
+        Assert.Contains(usage.Items, i => i is { Code: "max_products", Limit: null, Current: 1, Remaining: null }); // unlimited (OD-02)
     }
 
     [Fact]
@@ -226,7 +239,7 @@ public sealed class BillingApiTests(ApiFixture fixture)
         Assert.Equal(("basic", "expired", (DateTimeOffset?)null), (expired.Plan, expired.Status, expired.TrialEndsAt));
         Assert.DoesNotContain("ai_order_parsing", expired.Features);
         Assert.Equal("basic", (await owner.OkAsync<MeResponse>(await owner.GetAsync("/api/v1/me"))).ActiveTenant!.Entitlements.Plan);
-        await BillingKit.AssertProblemAsync(await owner.PostAsync("/api/v1/warehouses", new { code = "IZM", name = "İzmir" }), "entitlement.limit_exceeded", "max_warehouses");
+        Assert.Contains(expired.Limits, l => l is { Code: "max_warehouses", Value: 999 }); // OD-02
         await BillingKit.AssertProblemAsync(await owner.PostAsync($"/api/v1/warehouses/{shelf.Id}/locations", new { code = "A-02" }), "entitlement.required", "warehouse_locations");
         await BillingKit.AssertProblemAsync(await owner.PostAsync("/api/v1/ai/order-parses", new { text = Message }), "entitlement.required", "ai_order_parsing");
 
@@ -316,6 +329,7 @@ public sealed class BillingApiTests(ApiFixture fixture)
     {
         var owner = await CatalogClient.NewTenantOwnerAsync(fixture);
         await BillingKit.SetPlanAsync(fixture, owner.TenantId, BillingKit.Basic);
+        await BillingKit.OverrideAsync(fixture, owner.TenantId, "max_warehouses", limit: 1); // Basic is 999 (OD-02)
 
         var creates = await Task.WhenAll(Enumerable.Range(1, 4).Select(i => owner.PostAsync("/api/v1/warehouses", new { code = $"D{i}", name = $"Depo {i}" })));
         Assert.Single(creates, r => r.StatusCode == HttpStatusCode.Created);

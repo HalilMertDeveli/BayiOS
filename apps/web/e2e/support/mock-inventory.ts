@@ -4,9 +4,9 @@
  * Stand-in for /api/v1/warehouses, /api/v1/locations, /api/v1/inventory/* following the contract shapes in
  * packages/contracts/openapi.json and the as-built rules in docs/architecture/inventory-and-orders.md §6:
  * keyset-style `page.nextCursor`, ETag/If-Match → 412, Idempotency-Key replay, `warehouse.default_inactive`,
- * `warehouse.has_stock`, location required in located warehouses, negative-stock policy (block → 409
- * `inventory.insufficient_available`; warn → 409 `inventory.insufficient_stock` + `confirmationRequired` until the
- * request repeats with `confirmNegativeStock: true`). It is a simplified model, not the real validation.
+ * `warehouse.has_stock`, location required in located warehouses, stock never below zero (OD-09: an outbound
+ * adjustment beyond available → 409 `inventory.insufficient_available`, whatever the request says). It is a simplified
+ * model, not the real validation.
  * Tests inject single responses with `overrides` (one-shot, keyed "METHOD /path"). All data is invented.
  */
 import type { Route } from "@playwright/test";
@@ -75,8 +75,6 @@ export type MockInventory = {
   locations: MockLocation[];
   balances: MockBalance[];
   movements: MockMovement[];
-  /** Tenant setting negative_stock_policy. */
-  policy: "block" | "warn" | "allow";
   overrides: Map<string, InventoryOverride>;
   /** Idempotency-Key → stored success response (replayed with Idempotent-Replayed: true). */
   idempotency: Map<string, { status: number; body: unknown }>;
@@ -135,7 +133,7 @@ export function defaultLocations(): MockLocation[] {
  */
 export function createMockInventory(
   catalog: MockCatalog | null,
-  options: { stocked?: number; warehouses?: MockWarehouse[]; locations?: MockLocation[]; policy?: MockInventory["policy"] } = {},
+  options: { stocked?: number; warehouses?: MockWarehouse[]; locations?: MockLocation[] } = {},
 ): MockInventory {
   const variants = (catalog?.products ?? []).flatMap((p) => p.variants).slice(0, options.stocked ?? 3);
   const balances: MockBalance[] = variants.map((v, i) => {
@@ -148,7 +146,6 @@ export function createMockInventory(
     locations: options.locations ?? defaultLocations(),
     balances,
     movements: [],
-    policy: options.policy ?? "block",
     overrides: new Map(),
     idempotency: new Map(),
     dropNextResponse: false,
@@ -480,10 +477,7 @@ export async function handleInventory(route: Route, inv: MockInventory, catalog:
     const outbound = type === "adjustment_out" || type === "damage_out";
     if (outbound && row.available < quantity) {
       const shortages = [{ variantId: variant.id, sku: variant.sku, warehouseId: warehouse.id, locationId: row.locationId, requested: quantity, available: row.available }];
-      if (inv.policy === "block") return json(route, 409, problemBody(409, "inventory.insufficient_available", { shortages })).then(() => true);
-      if (inv.policy === "warn" && body?.confirmNegativeStock !== true) {
-        return json(route, 409, problemBody(409, "inventory.insufficient_stock", { shortages, confirmationRequired: true })).then(() => true);
-      }
+      return json(route, 409, problemBody(409, "inventory.insufficient_available", { shortages })).then(() => true);
     }
     const movement = apply(inv, row, type, outbound ? -quantity : quantity, "adjustment", uuid("9f", inv.movements.length + 1), String(body?.reason));
     return succeed(201, movement);

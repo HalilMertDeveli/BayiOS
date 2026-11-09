@@ -10,6 +10,7 @@
 import type { Page, Route } from "@playwright/test";
 import { grantsForRoleName } from "../../src/test/me-fixtures";
 import { API_URL, USER, problem, type MockMembership } from "./mock-backend";
+import { mockEntitlements } from "./mock-billing";
 
 type Api = Awaited<ReturnType<typeof import("./mock-backend").mockApi>>;
 
@@ -97,8 +98,12 @@ export async function mockTeam(
     api.billing.activeUsers = seats();
   };
   syncSeats();
-  const maxUsers = () => (api.billing.plan === "basic" ? 5 : 25);
-  const limitProblem = () => problem(403, "entitlement.limit_exceeded", { feature: "max_users", limit: maxUsers(), current: seats(), suggestedPlan: "professional" });
+  // The effective max_users of the billing mock (plan + operator overrides; Basic 999 since OD-02). null = unlimited.
+  const maxUsers = () => {
+    const limit = mockEntitlements(api.billing).limits.find((l) => l.code === "max_users");
+    return limit ? (limit.value === null ? Number.POSITIVE_INFINITY : Number(limit.value)) : 0;
+  };
+  const limitProblem = () => problem(403, "entitlement.limit_exceeded", { feature: "max_users", limit: maxUsers(), current: seats(), suggestedPlan: null });
   const issue = (inv: MockInvitation) => {
     for (const [token, invId] of team.tokens) if (invId === inv.id) team.tokens.delete(token);
     const token = newToken();

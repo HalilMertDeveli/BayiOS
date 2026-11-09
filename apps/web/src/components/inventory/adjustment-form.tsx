@@ -23,15 +23,12 @@ import {
   inventoryFieldErrors,
   BUSY_FINAL_MESSAGE,
   isBusy,
-  needsNegativeStockConfirmation,
   readShortages,
-  type Shortage,
 } from "@/lib/inventory/errors";
 import { ADJUSTMENT_TYPES, adjustmentTypeLabels, type AdjustmentType } from "@/lib/inventory/labels";
 import { inventoryPermissions } from "@/lib/inventory/permissions";
 import { formatQuantity } from "@/lib/inventory/quantity";
 import { useSession } from "@/lib/session/session-context";
-import { NegativeStockDialog } from "./negative-stock-dialog";
 import { AvailableQuantity } from "./quantity-cells";
 import { useLocations, useWarehouses } from "./use-inventory-data";
 import { VariantScanner } from "./variant-scanner";
@@ -39,8 +36,8 @@ import { VariantScanner } from "./variant-scanner";
 type Done = { sku: string; balanceAfter: number | string };
 
 /**
- * Manual stock adjustment with a mandatory reason (§4.2). Reserved stock cannot be adjusted away; the tenant's
- * negative-stock policy decides what happens below available: `block` refuses, `warn` asks for confirmation here.
+ * Manual stock adjustment with a mandatory reason (§4.2). Reserved stock cannot be adjusted away, and stock never goes
+ * below zero (owner decision OD-09): an outbound adjustment beyond available is refused with the shortage shown.
  */
 export function AdjustmentForm() {
   const { api, access } = useSession();
@@ -62,7 +59,6 @@ export function AdjustmentForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [retrying, setRetrying] = useState(false);
-  const [confirmation, setConfirmation] = useState<Shortage[] | null>(null);
   const [done, setDone] = useState<Done | null>(null);
   const [keys] = useState(() => new IdempotencyKeys());
   const alertRef = useRef<HTMLDivElement>(null);
@@ -146,10 +142,6 @@ export function AdjustmentForm() {
   };
 
   const handleError = (error: unknown) => {
-    if (needsNegativeStockConfirmation(error)) {
-      setConfirmation(readShortages(error));
-      return;
-    }
     if (error instanceof ApiError && error.status === 422) {
       setErrors(inventoryFieldErrors(error));
       setFormError(error.userMessage);
@@ -185,25 +177,9 @@ export function AdjustmentForm() {
     }
     setSubmitting(true);
     try {
-      const movement = await send(buildAdjustmentRequest(values, { usesLocations, confirmNegativeStock: false }));
+      const movement = await send(buildAdjustmentRequest(values, { usesLocations }));
       succeed(movement.balanceAfter);
     } catch (error) {
-      handleError(error);
-    } finally {
-      setSubmitting(false);
-      setRetrying(false);
-    }
-  };
-
-  const confirmNegative = async () => {
-    setSubmitting(true);
-    try {
-      // Same values, now with the explicit confirmation: a different body, so a new Idempotency-Key.
-      const movement = await send(buildAdjustmentRequest(values, { usesLocations, confirmNegativeStock: true }));
-      setConfirmation(null);
-      succeed(movement.balanceAfter);
-    } catch (error) {
-      setConfirmation(null);
       handleError(error);
     } finally {
       setSubmitting(false);
@@ -352,23 +328,11 @@ export function AdjustmentForm() {
           <p role="status" className="text-body text-fg-secondary">
             {retrying ? "Stok kayıtları meşgul, otomatik olarak yeniden deneniyor…" : ""}
           </p>
-          <Button type="submit" size="lg" loading={submitting && !confirmation} icon={<SlidersHorizontal className="size-5" />} className="w-full sm:w-auto">
+          <Button type="submit" size="lg" loading={submitting} icon={<SlidersHorizontal className="size-5" />} className="w-full sm:w-auto">
             Düzeltmeyi kaydet
           </Button>
         </div>
       </form>
-
-      <NegativeStockDialog
-        open={confirmation !== null}
-        shortages={confirmation ?? []}
-        skuOf={(variantId, fallback) => (values.variant?.id === variantId ? values.variant.sku : (fallback ?? "Ürün"))}
-        confirming={submitting}
-        onCancel={() => {
-          setConfirmation(null);
-          setFormError("Düzeltme kaydedilmedi: eksi stok onaylanmadı.");
-        }}
-        onConfirm={confirmNegative}
-      />
     </>
   );
 }

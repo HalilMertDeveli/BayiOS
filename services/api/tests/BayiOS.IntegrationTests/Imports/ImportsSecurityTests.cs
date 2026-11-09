@@ -40,7 +40,8 @@ public class ImportsSecurityTests(ApiFixture fixture)
         var bomb = SyntheticFiles.Xlsx(Headers, [["A"]], new Dictionary<string, byte[]> { ["xl/media/dolgu.xml"] = new byte[60 * 1024 * 1024] }, level: CompressionLevel.SmallestSize);
         await HttpAssert.ProblemAsync(await kit.UploadResponseAsync(bomb, "bomba.xlsx"), HttpStatusCode.UnprocessableEntity, "imports.file_archive_limits");
 
-        var oversized = new byte[(10 * 1024 * 1024) + 1];
+        // OD-04: the limit is 20 MB (A_file_between_10_and_20_MB_is_accepted_and_stored_whole).
+        var oversized = new byte[(20 * 1024 * 1024) + 1];
         Encoding.ASCII.GetBytes("SKU\r\n").CopyTo(oversized, 0);
         await HttpAssert.ProblemAsync(await kit.UploadResponseAsync(oversized, "buyuk.csv"), HttpStatusCode.RequestEntityTooLarge, "imports.file_too_large");
 
@@ -63,6 +64,20 @@ public class ImportsSecurityTests(ApiFixture fixture)
         Assert.True(replay.Headers.Contains("Idempotent-Replayed"));
         Assert.Equal((await first.Content.ReadFromJsonAsync<ImportJobResponse>(Ct))!.Id, (await replay.Content.ReadFromJsonAsync<ImportJobResponse>(Ct))!.Id);
         Assert.Equal((long)valid.Length, await kit.ScalarAsync<long>("SELECT sum(length(content))::bigint FROM imports.import_files WHERE tenant_id = $1", kit.TenantId));
+    }
+
+    [Fact]
+    public async Task A_file_between_10_and_20_MB_is_accepted_and_stored_whole()
+    {
+        // OD-04 (2026-11-09): 20 MB. ~18 MB of CSV in 9,000 rows (each name cell 2,000 characters, under the cell limit).
+        var kit = await ImportsKit.CreateAsync(fixture);
+        var name = new string('x', 2_000);
+        var file = SyntheticFiles.Csv(Headers, Enumerable.Range(0, 9_000).Select(i => (IReadOnlyList<object?>)[$"S{i}", name, "adet", "20"]));
+        Assert.InRange(file.LongLength, (10L * 1024 * 1024) + 1, 20L * 1024 * 1024);
+
+        var response = await kit.UploadResponseAsync(file, "buyuk.csv");
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(file.LongLength, await kit.ScalarAsync<long>("SELECT sum(length(content))::bigint FROM imports.import_files WHERE tenant_id = $1", kit.TenantId));
     }
 
     [Fact]

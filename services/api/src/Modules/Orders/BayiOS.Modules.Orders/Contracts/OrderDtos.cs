@@ -49,15 +49,12 @@ public sealed record UpdateOrderRequest(
     Guid? ShippingAddressId = null,
     Guid? BillingAddressId = null);
 
-/// <param name="ConfirmNegativeStock">Explicit confirmation under the <c>warn</c> negative-stock policy.</param>
-public sealed record ApproveOrderRequest(bool? ConfirmNegativeStock);
+/// <param name="ConfirmNegativeStock">Deprecated and ignored: stock never goes below zero (owner decision OD-09).</param>
+public sealed record ApproveOrderRequest(bool? ConfirmNegativeStock = null);
 
 /// <summary>Optional body of <c>submit</c>.</summary>
-/// <param name="ConfirmNegativeStock">
-/// Only used when the submit approves at once (tenant <c>requireOrderApproval = false</c>): the <c>warn</c>
-/// negative-stock confirmation, as on approve.
-/// </param>
-public sealed record SubmitOrderRequest(bool? ConfirmNegativeStock);
+/// <param name="ConfirmNegativeStock">Deprecated and ignored: stock never goes below zero (owner decision OD-09).</param>
+public sealed record SubmitOrderRequest(bool? ConfirmNegativeStock = null);
 
 /// <summary>Reason is required (PRD ORD-07 for cancel; reject and short-close likewise).</summary>
 public sealed record OrderReasonRequest(string? Reason);
