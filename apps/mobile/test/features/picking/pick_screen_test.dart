@@ -33,6 +33,27 @@ void main() {
     await openTask(tester);
   }
 
+  testWidgets('step indicator: shelf first, then product (announced)', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await open(tester);
+    String steps() =>
+        tester.getSemantics(find.byKey(const Key('pick-steps'))).label;
+    expect(steps(), l10n.scanStepSemantics(1, 3, l10n.scanStepShelf));
+
+    await enterCode(tester, 'LOC-A0101');
+    expect(steps(), l10n.scanStepSemantics(2, 3, l10n.scanStepProduct));
+    expect(find.text(l10n.pickingStepItem('FLT-001')), findsOneWidget);
+
+    // An unknown code does not move the flow on (the shelf stays scanned).
+    await enterCode(tester, 'UNKNOWN-1');
+    expect(steps(), l10n.scanStepSemantics(2, 3, l10n.scanStepProduct));
+    expect(alerts.events.last, 'rejected');
+    await expectAccessibleTargets(tester);
+    handle.dispose();
+  });
+
   testWidgets('detail: lines in shelf order with bins and quantities', (
     tester,
   ) async {

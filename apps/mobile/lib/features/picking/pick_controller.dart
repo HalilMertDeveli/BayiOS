@@ -279,7 +279,13 @@ class PickController extends ChangeNotifier {
     }
     if (onShelf != null) _focusId = onShelf.id;
     _feedback = PickFeedback(
-      location.isKnown ? PickTone.info : PickTone.warning,
+      // Same signal on screen as in the hand: green with the "accepted"
+      // alert, amber with the "rejected" one, neutral otherwise.
+      !location.isKnown
+          ? PickTone.warning
+          : onShelf != null
+          ? PickTone.success
+          : PickTone.info,
       _l10n.pickingShelfScanned(location.label),
       !location.isKnown
           ? _l10n.pickingShelfUnknown

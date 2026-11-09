@@ -414,6 +414,25 @@ Future<void> tapOn(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
+/// Like [scrollTo] for content above the viewport (e.g. a summary header
+/// after the form scrolled down to a scan field).
+Future<void> scrollUpTo(WidgetTester tester, Finder finder) async {
+  if (finder.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      finder,
+      -200,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+  }
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+}
+
 /// Builds and shows [finder] in the lazy list (scrolling down if needed).
 Future<void> scrollTo(WidgetTester tester, Finder finder) async {
   if (finder.evaluate().isEmpty) {

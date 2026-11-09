@@ -1,3 +1,4 @@
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/stock/scanner.dart';
@@ -181,14 +182,23 @@ class StockMessagePanel extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: BosSpace.s24),
       child: Column(
         children: [
-          Icon(icon, size: 48, color: tone?.fg ?? BosColors.textMuted),
-          const SizedBox(height: BosSpace.s12),
-          Semantics(
-            liveRegion: true,
-            child: Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyLarge,
+          ExcludeSemantics(
+            child: IconBadge(
+              icon: icon,
+              tone: tone ?? BosColors.brand,
+              size: 72,
+            ),
+          ),
+          const SizedBox(height: BosSpace.s16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: BosSpace.s16),
+            child: Semantics(
+              liveRegion: true,
+              child: Text(
+                message,
+                textAlign: TextAlign.center,
+                style: BosType.bodyLg.copyWith(color: BosColors.textPrimary),
+              ),
             ),
           ),
           if (onRetry != null) ...[

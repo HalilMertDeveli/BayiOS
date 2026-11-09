@@ -1,10 +1,57 @@
 import 'package:bayios_mobile/core/auth/auth_controller.dart';
 import 'package:bayios_mobile/core/session/session_controller.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+/// A read-only fact: small muted label above the value (the value is what
+/// is read).
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(BosSpace.s16),
+      child: Row(
+        children: [
+          IconBadge(icon: icon, size: 44),
+          const SizedBox(width: BosSpace.s16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: BosType.caption.copyWith(color: BosColors.textMuted),
+                ),
+                const SizedBox(height: BosSpace.s2),
+                Text(
+                  value,
+                  style: BosType.bodyLg.copyWith(
+                    color: BosColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -23,22 +70,22 @@ class ProfileScreen extends ConsumerWidget {
           Card(
             child: Column(
               children: [
-                ListTile(
-                  leading: const Icon(Icons.mail_outline),
-                  title: Text(l10n.profileEmailLabel),
-                  subtitle: Text(session.me.email ?? '—'),
+                _InfoRow(
+                  icon: Icons.mail_outline,
+                  label: l10n.profileEmailLabel,
+                  value: session.me.email ?? '—',
                 ),
                 const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.storefront_outlined),
-                  title: Text(l10n.profileTenantLabel),
-                  subtitle: Text(session.tenantName),
+                _InfoRow(
+                  icon: Icons.storefront_outlined,
+                  label: l10n.profileTenantLabel,
+                  value: session.tenantName,
                 ),
                 const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.badge_outlined),
-                  title: Text(l10n.profileRoleLabel),
-                  subtitle: Text(roleLabel(l10n, session.role)),
+                _InfoRow(
+                  icon: Icons.badge_outlined,
+                  label: l10n.profileRoleLabel,
+                  value: roleLabel(l10n, session.role),
                 ),
               ],
             ),

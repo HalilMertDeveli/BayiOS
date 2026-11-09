@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/stock/quantity.dart';
@@ -494,16 +495,12 @@ class _LinesSection extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     if (state.lines.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: BosSpace.s16),
-        child: Text(
-          l10n.receivingNoLines,
-          key: const Key('receiving-no-lines'),
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: BosColors.textMuted,
-          ),
-        ),
+      return EmptyState(
+        key: const Key('receiving-no-lines'),
+        compact: true,
+        icon: Icons.move_to_inbox_outlined,
+        title: l10n.receivingNoLines,
+        body: l10n.receivingNoLinesHint,
       );
     }
     return Column(

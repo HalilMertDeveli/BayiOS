@@ -94,6 +94,7 @@ void main() {
       find.text(l10n.countAcceptedLine('FLT-001', 'A-01-01', '1')),
       findsOne,
     );
+    await scrollTo(tester, find.text(l10n.countLinesTitle(1)));
     expect(find.text(l10n.countLinesTitle(1)), findsOneWidget);
     await scrollTo(tester, find.byKey(const Key('count-line-cl-1')));
     expect(find.byKey(const Key('count-line-cl-1')), findsOneWidget);

@@ -57,6 +57,8 @@ void main() {
       expect(c.location?.locationId, 'loc-a');
       expect(c.step, PickStep.item);
       expect(server.requests, isEmpty, reason: 'a shelf is local');
+      // Green on screen together with the "accepted" alert.
+      expect(c.feedback?.tone, PickTone.success);
 
       await c.handleCode('8690001');
       expect(server.appliedScans, 1);

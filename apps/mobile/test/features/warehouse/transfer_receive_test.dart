@@ -180,10 +180,9 @@ void main() {
       expect(find.text(l10n.docEntryRejectedCode('XYZ-999')), findsOneWidget);
       expect(find.text(message()), findsOneWidget);
       expect(alerts.events, ['rejected']);
-      expect(
-        find.text(l10n.transferReceivedSummary('0', '10', '10')),
-        findsOneWidget,
-      );
+      final summary = find.text(l10n.transferReceivedSummary('0', '10', '10'));
+      await scrollUpTo(tester, summary);
+      expect(summary, findsOneWidget);
       // A refused scan is not "pending": the next scan is a new action.
       expect(find.byKey(const Key('transfer-resend')), findsNothing);
       await typeInto(tester, 'transfer-code-field', '8690000000011');
