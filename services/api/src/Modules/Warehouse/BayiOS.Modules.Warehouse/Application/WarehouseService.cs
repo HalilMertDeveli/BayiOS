@@ -39,7 +39,12 @@ internal sealed record AppResult<T>(T? Value, AppError? Error)
 /// stock operations on existing warehouses are never gated, so a downgraded tenant keeps working with what it has.
 /// </summary>
 internal sealed class WarehouseService(
-    WarehouseDbContext db, IStockQueries stock, IEntitlements entitlements, IRequestContext requestContext, TimeProvider clock)
+    WarehouseDbContext db,
+    IStockQueries stock,
+    IEntitlements entitlements,
+    PickingReallocator reallocator,
+    IRequestContext requestContext,
+    TimeProvider clock)
 {
     public const int MaxListSize = 1000;
 
@@ -255,12 +260,21 @@ internal sealed class WarehouseService(
             return AppError.VersionMismatch();
         }
 
+        var deactivated = location.IsActive && request.IsActive == false;
         location.Code = code ?? location.Code;
         location.Barcode = request.Barcode is null ? location.Barcode : Clean(request.Barcode);
         location.PickSequence = request.PickSequence ?? location.PickSequence;
         location.IsActive = request.IsActive ?? location.IsActive;
         location.Touch(UserId, Now());
-        return await SaveAsync(() => ToResponse(location), cancellationToken);
+        var saved = await SaveAsync(() => ToResponse(location), cancellationToken);
+        if (deactivated && saved.Error is null)
+        {
+            // #98: the shelf is no longer available → open pick quantities move to active shelves with free stock
+            // (same transaction); what cannot move stays on the line, shown with locationIsActive = false.
+            await reallocator.AwayFromLocationAsync(location.Id, null, cancellationToken);
+        }
+
+        return saved;
     }
 
     // ---- Helpers ----

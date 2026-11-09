@@ -46,6 +46,9 @@ public static class Permissions
     public const string InventoryCountPerform = "inventory.count.perform";
     public const string InventoryTransfer = "inventory.transfer";
     public const string InventoryTransferReceive = "inventory.transfer.receive";
+
+    /// <summary>Shelf-to-shelf move inside one warehouse (POST /inventory/relocations; owner decision 2026-11-09, #98).</summary>
+    public const string InventoryRelocate = "inventory.relocate";
     public const string InventoryReturns = "inventory.returns";
     public const string WarehousesManage = "warehouses.manage";
 

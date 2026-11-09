@@ -107,6 +107,9 @@ public sealed class FulfillmentDatabaseTests(ApiFixture fixture) : IAsyncLifetim
     [Theory]
     [InlineData("UPDATE warehouse.picking_task_lines SET qty_picked = 4, qty_short = 2 WHERE id = '{0}'")]
     [InlineData("UPDATE warehouse.picking_task_lines SET qty_picked = -1 WHERE id = '{0}'")]
+    [InlineData("UPDATE warehouse.picking_task_lines SET qty_to_pick = -1 WHERE id = '{0}'")]
+    [InlineData("UPDATE warehouse.picking_task_lines SET qty_picked = 1, qty_to_pick = 0 WHERE id = '{0}'")]
+    [InlineData("UPDATE warehouse.picking_tasks SET priority = 'asap' WHERE id = '{3}'")]
     [InlineData("UPDATE warehouse.shipment_lines SET quantity = 3 WHERE id = '{1}'")]
     [InlineData("UPDATE warehouse.shipment_lines SET packed_quantity = 3 WHERE id = '{1}'")]
     [InlineData("UPDATE warehouse.shipments SET status = 'confirmed' WHERE id = '{2}'")]
@@ -114,7 +117,7 @@ public sealed class FulfillmentDatabaseTests(ApiFixture fixture) : IAsyncLifetim
     {
         await using var session = await AppSession.BeginAsync(fixture, _tenantA);
 
-        var ex = await Assert.ThrowsAsync<PostgresException>(() => session.Execute(string.Format(CultureInfo.InvariantCulture, sql, _lineA, _shipmentLineA, _shipmentA)));
+        var ex = await Assert.ThrowsAsync<PostgresException>(() => session.Execute(string.Format(CultureInfo.InvariantCulture, sql, _lineA, _shipmentLineA, _shipmentA, _taskA)));
 
         Assert.Equal(PostgresErrorCodes.CheckViolation, ex.SqlState);
     }

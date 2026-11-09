@@ -1,3 +1,4 @@
+using BayiOS.Modules.Inventory.Contracts;
 using BayiOS.Modules.Warehouse.Contracts;
 using BayiOS.Modules.Warehouse.Domain;
 using BayiOS.Modules.Warehouse.Infrastructure.Persistence;
@@ -125,5 +126,20 @@ internal sealed class StockTransferQueries(WarehouseDbContext db, TimeProvider c
     {
         var ids = transfers.SelectMany(t => new[] { t.SourceWarehouseId, t.DestinationWarehouseId }).Distinct().ToList();
         return await db.Warehouses.AsNoTracking().Where(w => ids.Contains(w.Id)).ToDictionaryAsync(w => w.Id, w => w.Name, cancellationToken);
+    }
+}
+
+/// <summary>
+/// Inventory's movement reads ask for transfer document numbers by id (<see cref="ITransferNumbers"/>); shelf-to-shelf
+/// relocations have no document and are simply absent from the answer.
+/// </summary>
+internal sealed class TransferNumbers(WarehouseDbContext db) : ITransferNumbers
+{
+    public async Task<IReadOnlyDictionary<Guid, string>> NumbersAsync(IReadOnlyCollection<Guid> transferIds, CancellationToken cancellationToken)
+    {
+        await db.JoinTransactionAsync(cancellationToken);
+        return await db.StockTransfers.AsNoTracking()
+            .Where(t => transferIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Number, cancellationToken);
     }
 }

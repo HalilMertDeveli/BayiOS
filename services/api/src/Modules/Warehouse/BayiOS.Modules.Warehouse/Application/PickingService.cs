@@ -1,3 +1,4 @@
+using BayiOS.Modules.Inventory.Contracts;
 using BayiOS.Modules.Orders.Contracts;
 using BayiOS.Modules.Warehouse.Contracts;
 using BayiOS.Modules.Warehouse.Domain;
@@ -22,6 +23,8 @@ internal sealed class PickingService(
     FulfillmentLocks locks,
     FulfillmentAccess access,
     PickingTaskBuilder builder,
+    PickingReallocator reallocator,
+    IInventoryService inventory,
     IOrderFulfillment orders,
     IFulfillmentCatalog catalog,
     ITaskAssigneeDirectory assignees,
@@ -40,6 +43,12 @@ internal sealed class PickingService(
         if (request.OrderId is not { } orderId)
         {
             return FulfillmentErrors.Validation("orderId", "Required.");
+        }
+
+        var priority = request.Priority ?? PickingTaskPriorities.Normal;
+        if (!PickingTaskPriorities.All.Contains(priority))
+        {
+            return InvalidPriority();
         }
 
         return await GuardAsync(async () =>
@@ -64,7 +73,7 @@ internal sealed class PickingService(
                 return InProgress();
             }
 
-            var task = await builder.CreateAsync(order.Id, order.Number, order.WarehouseId, order.Lines, cancellationToken);
+            var task = await builder.CreateAsync(order.Id, order.Number, order.WarehouseId, order.Lines, cancellationToken, priority);
             if (task is null)
             {
                 return new AppError(409, "picking.nothing_to_pick", "Nothing of this order is open and reserved");
@@ -113,6 +122,67 @@ internal sealed class PickingService(
             return await SaveAndDetailAsync(task, cancellationToken);
         }, cancellationToken);
 
+    /// <summary>WHT-03 (#98): supervisors set the priority of an active task; the mobile work queue sorts by it.</summary>
+    public async Task<AppResult<PickingTaskResponse>> SetPriorityAsync(
+        Guid id, long? expectedVersion, SetPickingTaskPriorityRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Priority is not { } priority || !PickingTaskPriorities.All.Contains(priority))
+        {
+            return InvalidPriority();
+        }
+
+        return await OnTaskAsync(id, expectedVersion, lockOrder: false, requireActor: false, async (task, _) =>
+        {
+            if (!PickingTaskStatuses.IsActive(task.Status))
+            {
+                return FulfillmentErrors.TaskTransition("set_priority", task.Status);
+            }
+
+            if (task.Priority == priority)
+            {
+                return await DetailAsync(task.Id, cancellationToken);
+            }
+
+            await audit.RecordAsync(
+                new AuditEvent(AuditActions.PickingTaskPriorityChanged, FulfillmentAuditActions.TaskEntityType, task.Id, new AuditChanges()
+                    .Field("priority", task.Priority, priority)
+                    .ToDictionary()),
+                cancellationToken);
+            task.Priority = priority;
+            return await SaveAndDetailAsync(task, cancellationToken);
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// #98: moves the task's open quantity away from deactivated shelves (or from <see cref="ReallocatePickingTaskRequest.FromLocationId"/>)
+    /// to active shelves with free stock; reservations follow in the same transaction. What cannot move stays.
+    /// </summary>
+    public async Task<AppResult<ReallocatePickingTaskResponse>> ReallocateAsync(
+        Guid id, long? expectedVersion, ReallocatePickingTaskRequest request, string? correlationId, CancellationToken cancellationToken) =>
+        await OnTaskAsync<ReallocatePickingTaskResponse>(id, expectedVersion, lockOrder: true, requireActor: false, async (task, order) =>
+        {
+            if (task.Type != PickingTaskTypes.Pick || !PickingTaskStatuses.IsActive(task.Status))
+            {
+                return FulfillmentErrors.TaskTransition("reallocate", task.Status);
+            }
+
+            if (!order!.IsFulfillable)
+            {
+                return FulfillmentErrors.OrderNotFulfillable(order.Status);
+            }
+
+            if (request.FromLocationId is { } from
+                && !await db.Locations.AsNoTracking().AnyAsync(l => l.Id == from && l.WarehouseId == task.WarehouseId, cancellationToken))
+            {
+                return FulfillmentErrors.Validation("fromLocationId", "Location not found in this task's warehouse.");
+            }
+
+            var summary = await reallocator.TaskAsync(task, request.FromLocationId, correlationId, cancellationToken);
+            return await DetailAsync(task.Id, cancellationToken) is { Value: { } detail }
+                ? new ReallocatePickingTaskResponse(detail, summary.Moved, summary.Unmoved)
+                : AppError.NotFound();
+        }, cancellationToken);
+
     /// <summary>Takes an unassigned active task from the pool; of two concurrent claims exactly one wins (row lock).</summary>
     public Task<AppResult<PickingTaskResponse>> ClaimAsync(Guid id, long? expectedVersion, CancellationToken cancellationToken) =>
         OnTaskAsync(id, expectedVersion, lockOrder: false, requireActor: false, async (task, _) =>
@@ -157,9 +227,10 @@ internal sealed class PickingService(
     /// <summary>
     /// One barcode scan (WHT-05, §4.5): code → variant (Catalog), location barcode/code → shelf, quantity (default 1).
     /// Rejections: <c>picking.unknown_code</c>, <c>picking.wrong_item</c> (not on this task),
-    /// <c>picking.location_required</c>, <c>picking.unknown_location</c>, <c>picking.wrong_location</c> (the item is
-    /// reserved on another shelf — re-allocation is not done here) and <c>picking.over_pick</c>. Nothing changes on a
-    /// rejection.
+    /// <c>picking.location_required</c>, <c>picking.unknown_location</c>, <c>picking.wrong_location</c> and
+    /// <c>picking.over_pick</c>. Nothing changes on a rejection. When the item is (partly) reserved on another shelf and
+    /// the scanned shelf is active with enough free stock, the reservation and the task line are re-allocated to the
+    /// scanned shelf first (§4.5, #98); otherwise <c>picking.wrong_location</c> as before.
     /// </summary>
     public async Task<AppResult<PickScanResponse>> ScanAsync(
         Guid id, long? expectedVersion, PickScanRequest request, string? correlationId, CancellationToken cancellationToken)
@@ -222,6 +293,12 @@ internal sealed class PickingService(
                 return WrongItem();
             }
 
+            var variant = (await catalog.FindVariantsAsync([variantId], cancellationToken)).GetValueOrDefault(variantId);
+            if (variant is { AllowsFraction: false } && quantity != decimal.Truncate(quantity))
+            {
+                return FulfillmentErrors.Validation("quantity", "The item's unit does not allow fractions.");
+            }
+
             if (candidates.Any(l => l.LocationId is not null))
             {
                 if (location is null)
@@ -232,30 +309,38 @@ internal sealed class PickingService(
                 var upper = location.ToUpperInvariant();
                 var scanned = await db.Locations.AsNoTracking()
                     .Where(l => l.WarehouseId == task.WarehouseId && (l.Barcode == location || l.Code == upper))
-                    .Select(l => (Guid?)l.Id)
+                    .Select(l => new { l.Id, l.IsActive })
                     .FirstOrDefaultAsync(cancellationToken);
                 if (scanned is null)
                 {
                     return new AppError(422, "picking.unknown_location", "The scanned location does not exist in this warehouse");
                 }
 
-                candidates = [.. candidates.Where(l => l.LocationId == scanned)];
+                var here = candidates.Where(l => l.LocationId == scanned.Id).ToList();
+                var openHere = here.Sum(l => l.Remaining);
+                var elsewhere = candidates.Where(l => l.LocationId is { } other && other != scanned.Id && l.Remaining > 0).ToList();
+                if (quantity > openHere && elsewhere.Count > 0)
+                {
+                    // §4.5 / #98: the picker took the item from another shelf → re-allocate the reservation there first.
+                    if (await ReallocateForScanAsync(task, variantId, scanned.Id, scanned.IsActive, openHere, elsewhere, quantity, correlationId, cancellationToken) is { } moveError)
+                    {
+                        return moveError;
+                    }
+
+                    here = [.. task.Lines.Where(l => l.VariantId == variantId && l.LocationId == scanned.Id).OrderBy(l => l.Sequence)];
+                }
+
+                candidates = here;
                 if (candidates.Count == 0)
                 {
-                    return new AppError(422, "picking.wrong_location", "This item is not picked from the scanned location");
+                    return WrongLocation();
                 }
-            }
-
-            var variant = (await catalog.FindVariantsAsync([variantId], cancellationToken)).GetValueOrDefault(variantId);
-            if (variant is { AllowsFraction: false } && quantity != decimal.Truncate(quantity))
-            {
-                return FulfillmentErrors.Validation("quantity", "The item's unit does not allow fractions.");
             }
 
             var open = candidates.Sum(l => l.Remaining);
             if (quantity > open)
             {
-                return new AppError(422, "picking.over_pick", $"Over-pick: {open} left to pick for this item here");
+                return OverPick(open);
             }
 
             var changed = new List<PickingTaskLine>();
@@ -575,6 +660,68 @@ internal sealed class PickingService(
             return InProgress();
         }
     }
+
+    /// <summary>
+    /// Moves the missing part of a scan (<paramref name="quantity"/> − what is open on the scanned shelf) from the item's
+    /// other task lines to the scanned shelf: the reservation moves in Inventory (target must be an active shelf with that
+    /// much free stock) and the task lines follow (<see cref="ReservationHolders"/>). Null on success.
+    /// </summary>
+    private async Task<AppError?> ReallocateForScanAsync(
+        PickingTask task,
+        Guid variantId,
+        Guid scannedLocationId,
+        bool scannedIsActive,
+        decimal openHere,
+        IReadOnlyList<PickingTaskLine> elsewhere,
+        decimal quantity,
+        string? correlationId,
+        CancellationToken cancellationToken)
+    {
+        var open = openHere + elsewhere.Sum(l => l.Remaining);
+        if (quantity > open)
+        {
+            return OverPick(open);
+        }
+
+        if (!scannedIsActive)
+        {
+            return openHere == 0 ? WrongLocation() : OverPick(openHere);
+        }
+
+        var need = quantity - openHere;
+        var shifts = new List<ReservationShift>();
+        foreach (var line in elsewhere)
+        {
+            var take = Math.Min(need, line.Remaining);
+            shifts.Add(new ReservationShift(line.OrderLineId, variantId, line.LocationId!.Value, scannedLocationId, take));
+            need -= take;
+            if (need == 0)
+            {
+                break;
+            }
+        }
+
+        shifts = [.. shifts
+            .GroupBy(s => (s.OrderLineId, s.FromLocationId))
+            .Select(g => g.First() with { Quantity = g.Sum(s => s.Quantity) })];
+        var result = await inventory.ReallocateAsync(
+            new ReallocateReservations(task.WarehouseId, shifts, ReallocationReasons.PickedElsewhere, correlationId), cancellationToken);
+        return result.Error switch
+        {
+            null => null,
+            { Code: "inventory.busy" } => FulfillmentErrors.Busy(),
+            _ when openHere == 0 => new AppError(
+                422, "picking.wrong_location", "This item is not reserved on the scanned shelf and the shelf has not enough free stock to re-allocate"),
+            _ => OverPick(openHere),
+        };
+    }
+
+    private static AppError WrongLocation() => new(422, "picking.wrong_location", "This item is not picked from the scanned location");
+
+    private static AppError OverPick(decimal open) => new(422, "picking.over_pick", $"Over-pick: {open} left to pick for this item here");
+
+    private static AppError InvalidPriority() =>
+        FulfillmentErrors.Validation("priority", $"Must be one of: {string.Join(", ", PickingTaskPriorities.All)}.");
 
     private static AppError InProgress() =>
         new(409, "picking.fulfillment_in_progress", "The order already has an active pick task or an unconfirmed shipment");

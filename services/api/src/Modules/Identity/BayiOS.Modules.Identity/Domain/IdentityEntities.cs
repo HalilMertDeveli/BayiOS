@@ -448,6 +448,12 @@ internal sealed class TenantSettings : ITenantOwned
     /// <summary>Prefix of new order numbers (PRD ORD-14), <see cref="IsValidOrderNumberPrefix"/>; existing numbers never change.</summary>
     public string OrderNumberPrefix { get; set; } = DefaultOrderNumberPrefix;
 
+    /// <summary>
+    /// WHT-01 (owner decision 2026-11-09, #98): true (default) = order approval creates the picking task in the same
+    /// transaction; false = a supervisor creates it (<c>POST /picking-tasks</c>).
+    /// </summary>
+    public bool AutoCreatePickingTask { get; set; } = true;
+
     public long RowVersion { get; private set; } = 1;
 
     public DateTimeOffset CreatedAt { get; private set; }

@@ -90,6 +90,8 @@ internal static class SecurityProbes
             },
             "POST /api/v1/picking-tasks" => new { orderId = own.Id("order") },
             "POST /api/v1/picking-tasks/{id}/assign" => new { userId = own.Owner.UserId },
+            "POST /api/v1/picking-tasks/{id}/priority" => new { priority = "urgent" },
+            "POST /api/v1/picking-tasks/{id}/reallocate" => new { },
             "POST /api/v1/picking-tasks/{id}/scans" => new { code = victim.Sku, quantity = 1m, lineId = victim.Id("pickingTaskLine") },
             "POST /api/v1/picking-tasks/{id}/lines/{lineId}/shortage" or "POST /api/v1/shipments/{id}/lines/{lineId}/shortage" => new { quantity = 1m, reason = "not_found" },
             "POST /api/v1/shipments/{id}/pack" => new { packages = new[] { new { items = new[] { new { code = victim.Sku, quantity = 1m } } } } },

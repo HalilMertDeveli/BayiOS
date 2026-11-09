@@ -71,6 +71,12 @@ namespace BayiOS.Modules.Warehouse.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("order_number");
 
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasDefaultValue("normal")
+                        .HasColumnName("priority");
+
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
                         .HasColumnType("bigint")
@@ -131,6 +137,8 @@ namespace BayiOS.Modules.Warehouse.Infrastructure.Persistence.Migrations
 
                     b.ToTable("picking_tasks", "warehouse", t =>
                         {
+                            t.HasCheckConstraint("ck_picking_tasks_priority", "priority IN ('low', 'normal', 'high', 'urgent')");
+
                             t.HasCheckConstraint("ck_picking_tasks_status", "status IN ('open', 'in_progress', 'completed', 'completed_with_shortage', 'cancelled')");
 
                             t.HasCheckConstraint("ck_picking_tasks_type", "type IN ('pick', 'putaway')");
@@ -219,7 +227,7 @@ namespace BayiOS.Modules.Warehouse.Infrastructure.Persistence.Migrations
 
                     b.ToTable("picking_task_lines", "warehouse", t =>
                         {
-                            t.HasCheckConstraint("ck_picking_task_lines_quantities", "qty_to_pick > 0 AND qty_picked >= 0 AND qty_short >= 0 AND qty_picked + qty_short <= qty_to_pick");
+                            t.HasCheckConstraint("ck_picking_task_lines_quantities", "qty_to_pick >= 0 AND qty_picked >= 0 AND qty_short >= 0 AND qty_picked + qty_short <= qty_to_pick");
 
                             t.HasCheckConstraint("ck_picking_task_lines_shortage_reason", "shortage_reason IS NULL OR shortage_reason IN ('not_found', 'damaged', 'insufficient')");
                         });

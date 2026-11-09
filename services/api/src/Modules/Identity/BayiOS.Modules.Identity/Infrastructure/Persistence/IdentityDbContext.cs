@@ -141,6 +141,8 @@ internal sealed class IdentityDbContext : DbContext, ITenantScopedDbContext
             settings.Property(s => s.RequireOrderApproval).HasDefaultValue(true).ValueGeneratedNever();
             settings.Property(s => s.OrderNumberPrefix).IsRequired()
                 .HasDefaultValue(Domain.TenantSettings.DefaultOrderNumberPrefix).ValueGeneratedNever();
+            // Existing tenants keep today's behaviour (tasks on approval, #98); new rows get the entity default (true).
+            settings.Property(s => s.AutoCreatePickingTask).HasDefaultValue(true).ValueGeneratedNever();
             settings.Property(s => s.RowVersion).IsConcurrencyToken();
             settings.HasQueryFilter(s => s.TenantId == CurrentTenantId);
         });

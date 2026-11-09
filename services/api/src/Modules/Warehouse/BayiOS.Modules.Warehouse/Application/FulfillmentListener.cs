@@ -1,5 +1,6 @@
 using BayiOS.Modules.Inventory.Contracts;
 using BayiOS.Modules.Orders.Contracts;
+using BayiOS.Modules.Warehouse.Contracts;
 using BayiOS.Modules.Warehouse.Domain;
 using BayiOS.Modules.Warehouse.Infrastructure.Persistence;
 using BayiOS.SharedKernel.Platform.Audit;
@@ -41,7 +42,12 @@ internal sealed class PickingTaskBuilder(
 {
     /// <returns>The new task, or null when nothing of the order is open and reserved.</returns>
     public async Task<PickingTask?> CreateAsync(
-        Guid orderId, string orderNumber, Guid warehouseId, IReadOnlyList<FulfillmentOrderLine> orderLines, CancellationToken cancellationToken)
+        Guid orderId,
+        string orderNumber,
+        Guid warehouseId,
+        IReadOnlyList<FulfillmentOrderLine> orderLines,
+        CancellationToken cancellationToken,
+        string priority = PickingTaskPriorities.Normal)
     {
         var reservations = (await stock.GetOpenReservationsAsync(orderId, cancellationToken))
             .Where(r => r.Quantity > 0)
@@ -62,6 +68,7 @@ internal sealed class PickingTaskBuilder(
         var task = PickingTask.Create(
             requestContext.TenantId ?? throw new InvalidOperationException("No tenant resolved."),
             PickingTaskTypes.Pick, orderId, orderNumber, warehouseId, requestContext.UserId, clock.GetUtcNow());
+        task.Priority = priority;
         var sequence = 0;
         foreach (var reservation in reservations
             .OrderBy(r => r.LocationId is { } id ? locations[id].PickSequence : int.MinValue)
@@ -79,23 +86,27 @@ internal sealed class PickingTaskBuilder(
                 .Value("orderId", orderId)
                 .Value("lineCount", task.Lines.Count)
                 .Value("quantity", task.Lines.Sum(l => l.QtyToPick))
+                .Value("priority", task.Priority)
                 .ToDictionary()),
             cancellationToken);
         await outbox.PublishAsync(
-            FulfillmentEvents.PickingTaskCreated, new { taskId = task.Id, orderId, warehouseId, type = task.Type }, cancellationToken);
+            FulfillmentEvents.PickingTaskCreated, new { taskId = task.Id, orderId, warehouseId, type = task.Type, priority = task.Priority }, cancellationToken);
         return task;
     }
 }
 
 /// <summary>
-/// Warehouse side of the Orders transitions (domain-model §12, same transaction): approval creates the pick task;
-/// a release (cancel / short-close) cancels open tasks and unconfirmed shipments and turns already picked goods into
-/// a putaway task (PRD ORD-07 — goods go back to the shelf; no ledger movement, the stock never left).
+/// Warehouse side of the Orders transitions (domain-model §12, same transaction): approval creates the pick task
+/// unless the tenant turned <c>auto_create_picking_task</c> off (WHT-01, #98 — then a supervisor creates it with
+/// <c>POST /picking-tasks</c>); a release (cancel / short-close) cancels open tasks and unconfirmed shipments and turns
+/// already picked goods into a putaway task (PRD ORD-07 — goods go back to the shelf; no ledger movement, the stock
+/// never left).
 /// </summary>
 internal sealed class FulfillmentListener(
     WarehouseDbContext db,
     PickingTaskBuilder builder,
     FulfillmentLocks locks,
+    IFulfillmentSettings settings,
     IRequestContext requestContext,
     IAuditLog audit,
     IOutbox outbox,
@@ -103,6 +114,11 @@ internal sealed class FulfillmentListener(
 {
     public async Task OnApprovedAsync(OrderApprovedNotice notice, CancellationToken cancellationToken)
     {
+        if (!await settings.AutoCreatePickingTaskAsync(cancellationToken))
+        {
+            return;
+        }
+
         await db.JoinTransactionAsync(cancellationToken);
         await builder.CreateAsync(notice.OrderId, notice.Number, notice.WarehouseId, notice.Lines, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);

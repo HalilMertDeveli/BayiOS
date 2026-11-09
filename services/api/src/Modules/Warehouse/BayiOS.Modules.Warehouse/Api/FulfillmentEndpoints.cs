@@ -31,10 +31,10 @@ internal static class FulfillmentEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
         tasks.MapGet("", ListTasks).WithName("Picking_List")
-            .WithSummary("Toplama görevleri (tümü): eskiden yeniye keyset; durum, tip, depo, sipariş, atanan (uuid | none) filtresi")
+            .WithSummary("Toplama görevleri (tümü): eskiden yeniye keyset; durum, tip, öncelik, depo, sipariş, atanan (uuid | none) filtresi; müşteri adı ve teslim tarihi döner")
             .RequirePermission(Permissions.TasksReadAll);
         tasks.MapGet("/mine", MyTasks).WithName("Picking_Mine")
-            .WithSummary("Mobil iş listesi: bana atanan aktif görevler, sonra havuz (scope = all | assigned | pool)")
+            .WithSummary("Mobil iş listesi: bana atanan aktif görevler, sonra havuz (scope = all | assigned | pool); her grupta öncelik (urgent → low), sonra eskiden yeniye")
             .RequirePermission(Permissions.TasksReadOwn);
         tasks.MapGet("/{id:guid}", GetTask).WithName("Picking_Get")
             .WithSummary("Görev ve raf sırasına göre satırlar (lokasyon, barkod, istenen/toplanan/eksik; ETag döner)")
@@ -47,6 +47,13 @@ internal static class FulfillmentEndpoints
             .WithSummary("Görevi personele atar (aktif üye, toplama yetkili rol)").RequirePermission(Permissions.TasksAssign));
         Command(tasks.MapPost("/{id:guid}/unassign", Unassign).WithName("Picking_Unassign")
             .WithSummary("Görevi havuza geri bırakır").RequirePermission(Permissions.TasksAssign));
+        Command(tasks.MapPost("/{id:guid}/priority", SetPriority).WithName("Picking_SetPriority")
+            .WithSummary("Aktif görevin önceliğini değiştirir (low, normal, high, urgent); mobil iş listesi önceliğe göre sıralanır")
+            .RequirePermission(Permissions.TasksAssign));
+        Command(tasks.MapPost("/{id:guid}/reallocate", Reallocate).WithName("Picking_Reallocate")
+            .WithSummary("Pasif raflardaki (veya fromLocationId rafındaki) açık miktarı boş stoğu olan aktif raflara yeniden tahsis eder; rezervasyon aynı işlemde taşınır")
+            .RequirePermission(Permissions.TasksAssign)
+            .ProducesStockProblems());
         Command(tasks.MapPost("/{id:guid}/claim", Claim).WithName("Picking_Claim")
             .WithSummary("Havuzdaki görevi üstlenir; eşzamanlı iki üstlenmeden yalnızca biri kazanır").RequirePermission(Permissions.TasksClaim));
         Command(tasks.MapPost("/{id:guid}/start", Start).WithName("Picking_Start")
@@ -106,11 +113,13 @@ internal static class FulfillmentEndpoints
     /// <param name="status">Virgülle durum listesi (open, in_progress, completed, completed_with_shortage, cancelled).</param>
     /// <param name="type">pick veya putaway.</param>
     /// <param name="assignedTo">Kullanıcı kimliği veya <c>none</c> (havuz).</param>
+    /// <param name="priority">low, normal, high veya urgent.</param>
     private static async Task<Results<Ok<PickingTaskPageResponse>, ProblemHttpResult>> ListTasks(
         HttpRequest http,
         FulfillmentQueries queries,
         string? status,
         string? type,
+        string? priority,
         string? warehouseId,
         string? orderId,
         string? assignedTo,
@@ -118,9 +127,14 @@ internal static class FulfillmentEndpoints
         string? cursor,
         CancellationToken cancellationToken)
     {
-        if (RejectUnknownQuery(http, "status", "type", "warehouseId", "orderId", "assignedTo", "limit", "cursor") is { } unknown)
+        if (RejectUnknownQuery(http, "status", "type", "priority", "warehouseId", "orderId", "assignedTo", "limit", "cursor") is { } unknown)
         {
             return unknown;
+        }
+
+        if (priority is not null && !PickingTaskPriorities.All.Contains(priority))
+        {
+            return Malformed($"priority must be one of: {string.Join(", ", PickingTaskPriorities.All)}");
         }
 
         if (ParseStatuses(status, PickingTaskStatuses.All, out var statuses) is { } statusProblem)
@@ -154,7 +168,7 @@ internal static class FulfillmentEndpoints
         }
 
         return TypedResults.Ok(await queries.ListTasksAsync(
-            new PickingTaskListQuery(statuses, type, warehouse, order, assignee, pageSize, keyset), cancellationToken));
+            new PickingTaskListQuery(statuses, type, warehouse, order, assignee, pageSize, keyset, priority), cancellationToken));
     }
 
     /// <param name="scope">all (varsayılan) | assigned | pool.</param>
@@ -208,6 +222,15 @@ internal static class FulfillmentEndpoints
     private static async Task<Results<Ok<PickingTaskResponse>, ProblemHttpResult>> Unassign(
         Guid id, [FromHeader(Name = "If-Match")] string? ifMatch, PickingService service, HttpContext http, CancellationToken cancellationToken) =>
         IfMatch(ifMatch, out var version) ?? Ok(http, await service.UnassignAsync(id, version, cancellationToken), t => t.Task.Version);
+
+    private static async Task<Results<Ok<PickingTaskResponse>, ProblemHttpResult>> SetPriority(
+        Guid id, SetPickingTaskPriorityRequest request, [FromHeader(Name = "If-Match")] string? ifMatch, PickingService service, HttpContext http, CancellationToken cancellationToken) =>
+        IfMatch(ifMatch, out var version) ?? Ok(http, await service.SetPriorityAsync(id, version, request, cancellationToken), t => t.Task.Version);
+
+    private static async Task<Results<Ok<ReallocatePickingTaskResponse>, ProblemHttpResult>> Reallocate(
+        Guid id, ReallocatePickingTaskRequest? request, [FromHeader(Name = "If-Match")] string? ifMatch, PickingService service, HttpContext http, CancellationToken cancellationToken) =>
+        IfMatch(ifMatch, out var version)
+        ?? Ok(http, await service.ReallocateAsync(id, version, request ?? new ReallocatePickingTaskRequest(null), http.TraceIdentifier, cancellationToken), r => r.Task.Task.Version);
 
     private static async Task<Results<Ok<PickingTaskResponse>, ProblemHttpResult>> Claim(
         Guid id, [FromHeader(Name = "If-Match")] string? ifMatch, PickingService service, HttpContext http, CancellationToken cancellationToken) =>

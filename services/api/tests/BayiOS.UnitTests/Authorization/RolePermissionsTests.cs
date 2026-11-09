@@ -27,8 +27,8 @@ public partial class RolePermissionsTests
     [Fact]
     public void Document_matrix_was_parsed()
     {
-        // Guards the parser itself: §3.1–§3.6 define 56 permission ids.
-        Assert.Equal(56, DocumentMatrix.Value.Count);
+        // Guards the parser itself: §3.1–§3.6 define 57 permission ids (inventory.relocate added for #98).
+        Assert.Equal(57, DocumentMatrix.Value.Count);
     }
 
     [Theory]

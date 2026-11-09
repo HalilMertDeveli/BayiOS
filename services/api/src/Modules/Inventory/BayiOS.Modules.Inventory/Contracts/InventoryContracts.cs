@@ -38,6 +38,60 @@ public interface IInventoryService
     /// before it are not double counted. Never leaves on_hand below zero or below reserved (409 <c>count.below_reserved</c>).
     /// </summary>
     Task<InventoryResult<CountResult>> ApplyCountAsync(ApplyCount command, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Re-allocation (§4.5, #98): moves the open quantity of order lines' reservations from one shelf to another of
+    /// the same warehouse. Not a movement (on_hand is unchanged): reserved goes down on the source row and up on the
+    /// target row, which must have that much <b>available</b> stock and be an active location. Only the part that is
+    /// still on the shelf may move — what <see cref="IReservationHolders"/> reports as picked, packed or reported
+    /// missing stays (<c>409 inventory.reservation_not_movable</c>). Open picking task lines follow through
+    /// <see cref="IReservationHolders.OnReallocatedAsync"/> in the same transaction.
+    /// </summary>
+    Task<InventoryResult<ReallocationResult>> ReallocateAsync(ReallocateReservations command, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Shelf-to-shelf move inside one warehouse (§4.7, POST /inventory/relocations). Without
+    /// <see cref="RelocationMove.IncludeReserved"/> it is a plain transfer of available stock. With it the move may
+    /// also carry reserved stock that is still on the shelf: the reservations (and the open picking task lines on
+    /// them) follow the goods to the target shelf in the same transaction (#98).
+    /// </summary>
+    Task<InventoryResult<TransferResult>> RelocateAsync(RelocateStock command, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Implemented by the Warehouse module (the owner of picking tasks and shipments): who holds reserved stock that is
+/// physically off the shelf, and what follows when a reservation moves. Both calls run in the caller's transaction.
+/// </summary>
+public interface IReservationHolders
+{
+    /// <summary>
+    /// Lock hierarchy step 2 (before the balance rows): locks the active Warehouse documents of the orders and returns,
+    /// per (order line, location), the reserved quantity that must not move — picked or reported missing on an active
+    /// pick task, on an unconfirmed shipment, or on its way back to the shelf on an active putaway task.
+    /// </summary>
+    Task<IReadOnlyDictionary<(Guid OrderLineId, Guid? LocationId), decimal>> LockHeldAsync(
+        IReadOnlyCollection<Guid> orderIds, CancellationToken cancellationToken);
+
+    /// <summary>After the reservations moved: re-points the open (unpicked) quantity of active pick task lines.</summary>
+    Task OnReallocatedAsync(IReadOnlyList<ReservationMoved> moves, string reason, CancellationToken cancellationToken);
+}
+
+/// <summary>Why a reservation was re-allocated (audit and outbox payloads).</summary>
+public static class ReallocationReasons
+{
+    /// <summary>The picker took the item from another shelf that has the free stock.</summary>
+    public const string PickedElsewhere = "picked_elsewhere";
+
+    /// <summary>The reserved shelf was deactivated; open quantities moved to active shelves.</summary>
+    public const string LocationDeactivated = "location_deactivated";
+
+    /// <summary>A supervisor asked to move open quantities away from inactive (or a named) shelf.</summary>
+    public const string Manual = "manual";
+
+    /// <summary>Reserved goods were relocated shelf-to-shelf together with their reservations.</summary>
+    public const string Relocated = "relocated";
+
+    public static readonly IReadOnlyList<string> All = [PickedElsewhere, LocationDeactivated, Manual, Relocated];
 }
 
 /// <summary>Read-side questions other modules may ask.</summary>
@@ -207,7 +261,46 @@ public sealed record ApplyCount(Guid StockCountId, Guid WarehouseId, IReadOnlyLi
 /// <param name="CountedAt">When the quantity was counted: movements after it are added to the counted quantity.</param>
 public sealed record CountLine(Guid CountLineId, Guid VariantId, Guid? LocationId, decimal CountedQuantity, DateTimeOffset CountedAt);
 
+/// <param name="Reason">One of <see cref="ReallocationReasons"/> (audit/outbox).</param>
+public sealed record ReallocateReservations(
+    Guid WarehouseId,
+    IReadOnlyList<ReservationShift> Shifts,
+    string Reason,
+    string? CorrelationId = null);
+
+/// <summary>Move <paramref name="Quantity"/> of the order line's open reservation from one shelf to another.</summary>
+public sealed record ReservationShift(Guid OrderLineId, Guid VariantId, Guid FromLocationId, Guid ToLocationId, decimal Quantity);
+
+/// <param name="RelocationId">Source document id of the transfer legs.</param>
+public sealed record RelocateStock(
+    Guid RelocationId,
+    Guid WarehouseId,
+    IReadOnlyList<RelocationMove> Moves,
+    string? Reference = null,
+    string? CorrelationId = null);
+
+/// <param name="IncludeReserved">
+/// False (default): only available stock moves (409 <c>inventory.insufficient_available</c> otherwise). True: the
+/// part above the available stock is taken from reservations that are still on the shelf, which move with it.
+/// </param>
+public sealed record RelocationMove(
+    Guid MoveId, Guid VariantId, Guid? FromLocationId, Guid? ToLocationId, decimal Quantity, bool IncludeReserved = false);
+
 // ---- Results ----
+
+/// <summary>One reservation (part) that moved shelves; <see cref="ToReservationId"/> is the active target reservation.</summary>
+public sealed record ReservationMoved(
+    Guid OrderId,
+    Guid OrderLineId,
+    Guid VariantId,
+    Guid WarehouseId,
+    Guid FromLocationId,
+    Guid ToLocationId,
+    decimal Quantity,
+    Guid FromReservationId,
+    Guid ToReservationId);
+
+public sealed record ReallocationResult(IReadOnlyList<ReservationMoved> Moves);
 
 public sealed record InventoryResult<T>(T? Value, InventoryError? Error)
 {
@@ -236,6 +329,16 @@ public sealed record InventoryError(
 /// <summary>One line that cannot be served from available stock.</summary>
 public sealed record StockShortage(Guid VariantId, string? Sku, Guid WarehouseId, Guid? LocationId, decimal Requested, decimal Available);
 
+/// <param name="WarehouseId">The warehouse — or, for an in-transit leg (<paramref name="IsTransit"/>), the transfer id.</param>
+/// <param name="IsTransit">
+/// True for a leg on a transfer's in-transit point ("Yolda"): <c>source_type = transfer</c> and the movement's warehouse
+/// slot holds the transfer id. Clients should use this instead of comparing ids.
+/// </param>
+/// <param name="TransferNumber">
+/// The two-stage transfer document number (e.g. <c>TRF-…</c>) for movements whose source is a warehouse transfer; null
+/// for shelf-to-shelf relocations (no document) and other sources. Filled on movement reads
+/// (<c>GET /inventory/movements</c>, <c>/{id}</c>); clients must not derive it from the id.
+/// </param>
 public sealed record MovementResult(
     Guid Id,
     Guid VariantId,
@@ -251,7 +354,20 @@ public sealed record MovementResult(
     decimal BalanceAfter,
     string? CorrelationId,
     DateTimeOffset OccurredAt,
-    Guid? CreatedBy);
+    Guid? CreatedBy,
+    bool IsTransit = false,
+    string? TransferNumber = null)
+{
+    /// <summary>The in-transit rule (OD-01): a transfer leg whose warehouse slot is the transfer itself.</summary>
+    public static bool IsTransitLeg(string sourceType, Guid? sourceId, Guid warehouseId) =>
+        sourceType == MovementSourceTypes.Transfer && sourceId == warehouseId;
+}
+
+/// <summary>Implemented by the Warehouse module: document numbers of two-stage transfers, by transfer id (one batch query).</summary>
+public interface ITransferNumbers
+{
+    Task<IReadOnlyDictionary<Guid, string>> NumbersAsync(IReadOnlyCollection<Guid> transferIds, CancellationToken cancellationToken);
+}
 
 public sealed record ReceiptResult(Guid ReceiptId, Guid WarehouseId, IReadOnlyList<MovementResult> Movements);
 
@@ -268,7 +384,8 @@ public sealed record ReservationResult(Guid OrderId, IReadOnlyList<ReservationAl
 
 public sealed record IssueResult(Guid ShipmentId, IReadOnlyList<MovementResult> Movements);
 
-public sealed record TransferResult(Guid TransferId, IReadOnlyList<MovementResult> Movements);
+/// <param name="ReservationMoves">Reservations carried along by a relocation with <c>includeReserved</c> (#98); empty otherwise.</param>
+public sealed record TransferResult(Guid TransferId, IReadOnlyList<MovementResult> Movements, IReadOnlyList<ReservationMoved>? ReservationMoves = null);
 
 /// <param name="SystemAtCount">on_hand when the line was counted (current on_hand − movements after the count).</param>
 /// <param name="Delta">counted − <paramref name="SystemAtCount"/>: the movement quantity (0 = no movement written).</param>
