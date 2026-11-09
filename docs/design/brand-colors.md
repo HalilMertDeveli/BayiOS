@@ -48,6 +48,10 @@ Bileşenler ölçeği doğrudan kullanmaz; yalnızca aşağıdaki anlamsal token
 | `text.link` | petrol-700 `#136579` | petrol-300 `#7FC4D3` |
 | `border.focus` (odak halkası) | petrol-600 `#1F7A90` | petrol-300 `#7FC4D3` |
 | `brand.fg / bg / border` (rozet, bağlantılar) | `#0C5468` / `#EDF6F8` / `#93CDD9` | `#93CDD9` / `#0D262D` / `#2B5D68` |
+| `brand.panel` (giriş/kayıt yan paneli; temadan bağımsız, iki temada da koyu) | petrol-900 `#0A4354` | petrol-900 `#0A4354` |
+| `brand.on-panel` / `brand.on-panel-muted` | `#FFFFFF` (10.8:1) / petrol-100 `#D4EAEF` (8.4:1) | aynı |
+
+Panel üzerinde bakır vurgu (çizgi, ikon) yalnızca dekoratiftir (≥ 3:1, `tokens.test.ts`).
 
 Mobil (Flutter) şu an yalnızca açık temayı kullanır (koyu tema P2, D-03); değerleri açık sütunla birebir aynıdır.
 

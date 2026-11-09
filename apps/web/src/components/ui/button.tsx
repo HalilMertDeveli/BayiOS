@@ -6,10 +6,10 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: "bg-brand text-on-brand hover:bg-brand-hover",
-  secondary: "border border-line-strong bg-card text-fg hover:bg-sunken",
+  primary: "bg-brand text-on-brand shadow-e1 hover:bg-brand-hover",
+  secondary: "border border-line-strong bg-card text-fg shadow-e1 hover:bg-sunken",
   ghost: "text-fg hover:bg-sunken",
-  danger: "bg-danger-solid text-white hover:bg-danger-solid-hover",
+  danger: "bg-danger-solid text-white shadow-e1 hover:bg-danger-solid-hover",
 };
 
 // size.control.*: sm 32 px, md 36 px (web default), lg 44 px.

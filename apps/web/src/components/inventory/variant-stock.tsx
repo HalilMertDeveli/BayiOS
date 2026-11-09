@@ -4,6 +4,7 @@ import { useEffect, useState, useId } from "react";
 import Link from "next/link";
 import { ArrowLeft, CircleAlert, History, Lock, SearchX, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -313,7 +314,7 @@ function MovementHistory({
           </div>
           <div className="md:hidden">
             {current === null ? (
-              <p className="py-6 text-center text-body text-fg-muted">Yükleniyor…</p>
+              <SkeletonCards />
             ) : rows.length === 0 ? (
               <p className="rounded-lg border border-line bg-card p-4 text-body text-fg-muted">Bu filtrede stok hareketi bulunmuyor.</p>
             ) : (

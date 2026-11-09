@@ -32,9 +32,9 @@ export function useToast(): ToastContextValue {
 }
 
 const toneMeta = {
-  info: { Icon: Info, className: "text-info-fg" },
-  success: { Icon: CircleCheck, className: "text-success-fg" },
-  error: { Icon: CircleAlert, className: "text-danger-fg" },
+  info: { Icon: Info, className: "text-info-fg", accent: "border-l-info-fg" },
+  success: { Icon: CircleCheck, className: "text-success-fg", accent: "border-l-success-fg" },
+  error: { Icon: CircleAlert, className: "text-danger-fg", accent: "border-l-danger-fg" },
 } as const;
 
 /**
@@ -81,7 +81,7 @@ function ToastView({ item, dismiss }: { item: ToastItem; dismiss: (id: number) =
   const duration = item.duration ?? (action ? 8000 : 5000);
   const [paused, setPaused] = useState(false);
   const remaining = useRef(duration);
-  const { Icon, className: iconClass } = toneMeta[tone];
+  const { Icon, className: iconClass, accent } = toneMeta[tone];
 
   useEffect(() => {
     if (paused) return;
@@ -100,7 +100,7 @@ function ToastView({ item, dismiss }: { item: ToastItem; dismiss: (id: number) =
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
-      className="pointer-events-auto flex w-full items-start gap-3 rounded-lg border border-line bg-raised p-4 text-fg shadow-e4"
+      className={cn("pointer-events-auto flex w-full items-start gap-3 rounded-lg border border-l-4 border-line bg-raised p-4 text-fg shadow-e4", accent)}
     >
       <Icon className={cn("mt-0.5 size-5 shrink-0", iconClass)} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">

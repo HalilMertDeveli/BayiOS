@@ -169,7 +169,9 @@ describe("Dashboard per role (MOCK /me permissions, MOCK API)", () => {
     const { paths } = renderAs("owner");
     const critical = tile("Kritik stok");
     expect(await within(critical).findByText("ürün minimum stokta veya altında")).toBeTruthy();
-    expect(within(critical).getByText(/satılabilir 2 \/ min\. 5 ADET/)).toBeTruthy();
+    // Available as a warning badge (text, not colour alone), the minimum and unit beneath it.
+    expect(within(critical).getByText("satılabilir 2")).toBeTruthy();
+    expect(within(critical).getByText(/min\. 5 ADET/)).toBeTruthy();
     const call = paths.find((p) => p.startsWith("/api/v1/reports/critical-stock"))!;
     const query = new URLSearchParams(call.split("?")[1]);
     expect(query.has("threshold")).toBe(false);

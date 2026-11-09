@@ -55,8 +55,8 @@ const tasks = (a: Access) => a.canSome("tasks.read.all") || a.canSome("tasks.rea
  */
 export const navSections: readonly NavSection[] = [
   {
-    id: "operasyon",
-    label: "Operasyon",
+    id: "genel",
+    label: "Genel",
     items: [
       {
         href: "/pano",
@@ -66,12 +66,45 @@ export const navSections: readonly NavSection[] = [
         visible: (a) => a.can("orders.read") || a.canSome("reports.read"),
       },
       {
+        href: "/raporlar",
+        label: "Raporlar",
+        description: "Sipariş, stok, depo ve AI kullanım raporları; CSV/Excel dışa aktarma.",
+        Icon: ChartColumn,
+        visible: (a) => a.canSome("reports.read"),
+      },
+    ],
+  },
+  {
+    id: "satis",
+    label: "Satış",
+    items: [
+      {
         href: "/siparisler",
         label: "Siparişler",
         description: "Sipariş listesi, WhatsApp'tan sipariş ve onay akışı burada olacak.",
         Icon: ShoppingCart,
         visible: (a) => a.canSome("orders.read"),
       },
+      {
+        href: "/musteriler",
+        label: "Müşteriler",
+        description: "Müşteri kayıtları, adresler, bayi grupları ve fiyat listesi ataması.",
+        Icon: Users,
+        visible: (a) => a.canSome("customers.read"),
+      },
+      {
+        href: "/fiyat-listeleri",
+        label: "Fiyat listeleri",
+        description: "Satış fiyat listeleri, miktar kademeleri ve fiyat sorgulama.",
+        Icon: Tags,
+        visible: (a) => a.canSome("prices.read.sell"),
+      },
+    ],
+  },
+  {
+    id: "stok",
+    label: "Stok ve depo",
+    items: [
       {
         href: "/urunler",
         label: "Ürünler",
@@ -121,33 +154,12 @@ export const navSections: readonly NavSection[] = [
         Icon: ClipboardCheck,
         visible: (a) => a.canSome("inventory.count.manage") || a.canSome("inventory.count.perform"),
       },
-      {
-        href: "/musteriler",
-        label: "Müşteriler",
-        description: "Müşteri kayıtları, adresler, bayi grupları ve fiyat listesi ataması.",
-        Icon: Users,
-        visible: (a) => a.canSome("customers.read"),
-      },
     ],
   },
   {
     id: "yonetim",
     label: "Yönetim",
     items: [
-      {
-        href: "/fiyat-listeleri",
-        label: "Fiyat listeleri",
-        description: "Satış fiyat listeleri, miktar kademeleri ve fiyat sorgulama.",
-        Icon: Tags,
-        visible: (a) => a.canSome("prices.read.sell"),
-      },
-      {
-        href: "/raporlar",
-        label: "Raporlar",
-        description: "Sipariş, stok, depo ve AI kullanım raporları; CSV/Excel dışa aktarma.",
-        Icon: ChartColumn,
-        visible: (a) => a.canSome("reports.read"),
-      },
       {
         href: "/ice-aktarma",
         label: "İçe aktarma",
@@ -202,4 +214,57 @@ export function activeHref(pathname: string, hrefs: readonly string[]): string |
  */
 export function homeFor(access: Access): string {
   return !access.can("orders.read") && !access.canSome("reports.read") && access.canSome("tasks.read.own") ? "/depo/gorevler" : "/pano";
+}
+
+/** Labels for known sub-page segments (breadcrumbs); unknown segments (record ids) read "Ayrıntı". */
+const SEGMENT_LABELS: Record<string, string> = {
+  yeni: "Yeni",
+  whatsapp: "WhatsApp'tan sipariş",
+  duzeltme: "Stok düzeltme",
+  "raf-tasima": "Raf taşıma",
+  "mal-kabul": "Mal kabul",
+  ekip: "Ekip",
+  "is-kurallari": "İş kuralları",
+  "ozel-alanlar": "Özel alanlar",
+  paket: "Paket ve modüller",
+  gruplar: "Bayi grupları",
+  sorgula: "Fiyat sorgula",
+  birimler: "Birimler",
+  kategoriler: "Kategoriler",
+  markalar: "Markalar",
+  siparisler: "Sipariş durumları",
+  "en-cok-siparis-edilenler": "En çok sipariş edilenler",
+  "kritik-stok": "Kritik stok",
+  "stok-hareketleri": "Stok hareketleri",
+  "toplama-gorevleri": "Toplama görevleri",
+  "ai-kullanimi": "AI asistan kullanımı",
+};
+
+/** Segments that only group a record id (/stok/varyant/{id}) and have no page of their own. */
+const GROUP_SEGMENTS: Record<string, string> = { varyant: "Varyant stoğu" };
+
+export type Crumb = { label: string; href?: string };
+
+/**
+ * Breadcrumbs for the header: menu section › menu item › sub-pages. The item links back when the user is on one of its
+ * sub-pages; the last crumb is the current page (no link). Empty for pages outside the menu.
+ */
+export function breadcrumbsFor(pathname: string, sections: readonly NavSection[]): Crumb[] {
+  const hrefs = sections.flatMap((s) => s.items.map((i) => i.href));
+  const current = activeHref(pathname, hrefs);
+  if (!current) return [];
+  const section = sections.find((s) => s.items.some((i) => i.href === current));
+  const item = section?.items.find((i) => i.href === current);
+  if (!section || !item) return [];
+  const rest = pathname.slice(current.length).split("/").filter(Boolean);
+  const crumbs: Crumb[] = [{ label: section.label }, { label: item.label, href: rest.length > 0 ? current : undefined }];
+  let href = current;
+  rest.forEach((segment, index) => {
+    href = `${href}/${segment}`;
+    const last = index === rest.length - 1;
+    if (GROUP_SEGMENTS[segment] && !last) return;
+    const group = index > 0 ? GROUP_SEGMENTS[rest[index - 1]] : undefined;
+    crumbs.push({ label: SEGMENT_LABELS[segment] ?? group ?? "Ayrıntı", href: last ? undefined : href });
+  });
+  return crumbs;
 }

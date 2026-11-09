@@ -66,4 +66,17 @@ describe("Table", () => {
     );
     expect(screen.getByRole("heading", { name: "Filtreye uyan ürün yok" })).toBeDefined();
   });
+
+  it("keeps numeric and nowrap columns on one line, right-aligning numbers", () => {
+    const cols: TableColumn<Row>[] = [
+      { key: "name", header: "Ürün", cell: (r) => r.name, nowrap: true },
+      { key: "qty", header: "Miktar", cell: (r) => r.qty, numeric: true },
+    ];
+    render(<Table caption="Ürünler" columns={cols} rows={rows} getRowId={(r) => r.id} />);
+    const [name, qty] = within(screen.getAllByRole("row")[1]).getAllByRole("cell");
+    expect(name.className).toContain("whitespace-nowrap");
+    expect(qty.className).toContain("whitespace-nowrap");
+    expect(qty.className).toContain("text-right");
+    expect(qty.className).toContain("tabular-nums");
+  });
 });

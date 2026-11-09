@@ -1,10 +1,23 @@
 import { Badge } from "@/components/ui/badge";
-import { Flag } from "lucide-react";
+import { CheckCheck, CircleX, Clock, Flag, Package, Pencil, ShoppingCart, Truck, TriangleAlert, type LucideIcon } from "lucide-react";
 import { shipmentStatusMeta, statusMeta, taskPriorityMeta, taskStatusMeta } from "@/lib/fulfilment/labels";
+
+/** Status icons (design-system-plan §1.3: colour + text + icon); unknown statuses get none. */
+const TASK_ICONS: Record<string, LucideIcon> = { open: Clock, in_progress: ShoppingCart, completed: CheckCheck, completed_with_shortage: TriangleAlert, cancelled: CircleX };
+const SHIPMENT_ICONS: Record<string, LucideIcon> = { draft: Pencil, packed: Package, confirmed: Truck, cancelled: CircleX };
+
+function iconFor(map: Record<string, LucideIcon>, status: string) {
+  const Icon = map[status];
+  return Icon ? <Icon className="size-3.5" aria-hidden="true" /> : undefined;
+}
 
 export function TaskStatusBadge({ status }: { status: string }) {
   const meta = statusMeta(taskStatusMeta, status);
-  return <Badge tone={meta.tone}>{meta.label}</Badge>;
+  return (
+    <Badge tone={meta.tone} icon={iconFor(TASK_ICONS, status)}>
+      {meta.label}
+    </Badge>
+  );
 }
 
 /** Task priority as text ("Öncelik: Acil", #98): the tone and flag only reinforce it, never carry it alone (WCAG 1.4.1). */
@@ -20,7 +33,11 @@ export function TaskPriorityBadge({ priority }: { priority: string | null | unde
 
 export function ShipmentStatusBadge({ status }: { status: string }) {
   const meta = statusMeta(shipmentStatusMeta, status);
-  return <Badge tone={meta.tone}>{meta.label}</Badge>;
+  return (
+    <Badge tone={meta.tone} icon={iconFor(SHIPMENT_ICONS, status)}>
+      {meta.label}
+    </Badge>
+  );
 }
 
 /** Picked / to-pick as a thin bar + text (the text carries the meaning; the bar is decorative). */

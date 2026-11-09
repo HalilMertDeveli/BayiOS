@@ -40,6 +40,13 @@ describe("AppShell", () => {
     expect(screen.getByRole("main").textContent).toBe("İçerik");
   });
 
+  it("shows breadcrumbs for the current page (section › page)", () => {
+    renderShell();
+    const crumbs = screen.getByRole("navigation", { name: "Konum" });
+    expect(within(crumbs).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Stok ve depo", "Ürünler"]);
+    expect(within(crumbs).getByText("Ürünler").getAttribute("aria-current")).toBe("page");
+  });
+
   it("shows the signed-in user, the active tenant and the role", () => {
     renderShell();
     expect(screen.getByTestId("session-user").textContent).toBe("Ayşe Yılmaz");

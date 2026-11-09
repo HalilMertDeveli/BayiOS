@@ -75,6 +75,23 @@ describe("İlk adımlar checklist (MOCK API)", () => {
     expect(within(section).queryByText(/Açılış stoğunu girin/)).toBeNull();
   });
 
+  it("collapses to a one-line confirmation once every step is done", async () => {
+    renderAs("owner", {
+      "/api/v1/warehouses": { items: [{ id: "w1" }] },
+      "/api/v1/products": page([{ id: "p1" }]),
+      "/api/v1/inventory/balances": page([{ id: "b1" }]),
+      "/api/v1/members/invitations": { items: [{ id: "i1" }] },
+      "/api/v1/members": page([{ userId: "u-1" }, { userId: "u-2" }]),
+      "/api/v1/orders": page([{ id: "o1" }]),
+    });
+    const section = await screen.findByRole("region", { name: "İlk adımlar" });
+    expect(section.textContent).toContain("Kurulum tamamlandı");
+    expect(within(section).queryByRole("progressbar")).toBeNull();
+    expect(within(section).queryByRole("list")).toBeNull();
+    await userEvent.click(within(section).getByRole("button", { name: "İlk adımlar listesini kapat" }));
+    expect(screen.queryByRole("region", { name: "İlk adımlar" })).toBeNull();
+  });
+
   it("can be dismissed, per user and tenant", async () => {
     renderAs("owner");
     const section = await screen.findByRole("region", { name: "İlk adımlar" });

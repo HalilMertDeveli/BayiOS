@@ -46,3 +46,6 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /blob-report/
+
+# UI polish review: the "before" screenshots stay local (only the after set is committed)
+/docs/screenshots/ui-polish/before/

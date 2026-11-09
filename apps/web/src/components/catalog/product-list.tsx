@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { CircleAlert, Package, Plus, Rows3, Rows4, Search, SearchX, SlidersHorizontal, Tags } from "lucide-react";
 import { Button, buttonClasses } from "@/components/ui/button";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
@@ -346,7 +347,7 @@ export function ProductList() {
             </div>
             <div className="md:hidden">
               {loading ? (
-                <p className="py-6 text-center text-body text-fg-muted">Yükleniyor…</p>
+                <SkeletonCards />
               ) : rows.length === 0 ? (
                 <div className="rounded-lg border border-line bg-card">{emptyView}</div>
               ) : (

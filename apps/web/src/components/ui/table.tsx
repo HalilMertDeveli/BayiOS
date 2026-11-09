@@ -11,6 +11,8 @@ export type TableColumn<T> = {
   numeric?: boolean;
   /** Optional CSS width, e.g. "8rem". */
   width?: string;
+  /** Keeps the cell on one line (codes, dates, short labels); numeric columns never wrap. */
+  nowrap?: boolean;
 };
 
 export type TableDensity = "comfortable" | "compact";
@@ -64,7 +66,7 @@ export function Table<T>({
       role="region"
       aria-label={caption}
       tabIndex={0}
-      className={cn("overflow-auto rounded-lg border border-line bg-card", className)}
+      className={cn("overflow-auto rounded-lg border border-line bg-card shadow-e1", className)}
       style={maxHeight ? { maxHeight } : undefined}
     >
       <table className="w-full border-separate border-spacing-0 text-left text-body" aria-busy={loading || undefined}>
@@ -78,7 +80,7 @@ export function Table<T>({
                 style={col.width ? { width: col.width } : undefined}
                 className={cn(
                   // Sticky header: stays visible while scrolling inside the region.
-                  "sticky top-0 z-(--bos-z-sticky) border-b border-line bg-sunken text-caption font-semibold text-fg-secondary",
+                  "sticky top-0 z-(--bos-z-sticky) border-b border-line bg-sunken text-caption font-semibold whitespace-nowrap text-fg-secondary",
                   pad,
                   col.numeric && "text-right",
                 )}
@@ -88,7 +90,7 @@ export function Table<T>({
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="[&>tr:last-child>td]:border-b-0">
           {loading
             ? Array.from({ length: loadingRows }, (_, i) => (
                 <tr key={`skeleton-${i}`} aria-hidden="true">
@@ -116,11 +118,11 @@ export function Table<T>({
           ) : null}
           {!loading &&
             rows.map((row) => (
-              <tr key={getRowId(row)} className="hover:bg-sunken/60">
+              <tr key={getRowId(row)} className="transition-colors hover:bg-brand-subtle/50">
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className={cn("border-b border-line text-fg", pad, col.numeric && "text-right tabular-nums")}
+                    className={cn("border-b border-line align-middle text-fg", pad, col.numeric && "text-right whitespace-nowrap tabular-nums", col.nowrap && "whitespace-nowrap")}
                   >
                     {col.cell(row)}
                   </td>
