@@ -103,9 +103,26 @@ jobs:
       - name: Install ingress-nginx (kind provider manifest)
         run: |
           kubectl apply -f "https://raw.githubusercontent.com/kubernetes/ingress-nginx/${INGRESS_NGINX_VERSION}/deploy/static/provider/kind/deploy.yaml"
-          kubectl -n ingress-nginx wait --for=condition=complete job --all --timeout=180s
+          # Do not wait on the admission-create/-patch Jobs by name: recent manifests give them a TTL, so they can be
+          # deleted (NotFound) before or during a `kubectl wait`. Wait on the controller and the Jobs' effects instead.
+          kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller --timeout=180s
           # The admission webhook only answers once the controller pod is Ready.
           kubectl -n ingress-nginx wait --for=condition=ready pod -l app.kubernetes.io/component=controller --timeout=180s
+          # The patch Job's effect: the webhook carries the CA bundle. Then probe the webhook itself with a server-side
+          # dry-run Ingress until it is accepted, so helm's Ingress is not refused by a webhook that is still starting.
+          probe='{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","metadata":{"name":"webhook-probe","namespace":"default"},"spec":{"ingressClassName":"nginx","rules":[{"host":"probe.invalid","http":{"paths":[{"path":"/","pathType":"Prefix","backend":{"service":{"name":"probe","port":{"number":80}}}}]}}]}}'
+          for i in $(seq 1 60); do
+            ca="$(kubectl get validatingwebhookconfiguration ingress-nginx-admission -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null || true)"
+            if [ -n "$ca" ] && echo "$probe" | kubectl apply --dry-run=server -f - > /dev/null 2> "${RUNNER_TEMP}/webhook-probe.err"; then
+              echo "ingress-nginx admission webhook ready after ${i} attempt(s)"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::ingress-nginx admission webhook not ready after 180s"
+          cat "${RUNNER_TEMP}/webhook-probe.err" || true
+          kubectl -n ingress-nginx get all,jobs -o wide || true
+          exit 1
 
       - name: Helm upgrade --install
         run: |
