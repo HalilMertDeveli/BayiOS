@@ -70,10 +70,12 @@ Gerekenler: Docker (yerel `psql` yoksa `postgres:17` imajı kullanılır), proje
 - [ ] Anonymous sign-ins: KAPALI · Manual linking: KAPALI · Signups: AÇIK (self-servis kayıt). API anonim oturumları
       (`is_anonymous: true`) bu ayardan bağımsız olarak her uçta 401 ile reddeder (denetim L-2).
 - [ ] **CAPTCHA (Cloudflare Turnstile)** — kayıt/giriş/parola sıfırlama kötüye kullanımına karşı önerilir (denetim L-3,
-      tehdit modeli §6.5). **Önce web entegrasyonu gerekir** (ayrı iş): Supabase'te CAPTCHA açılınca `signUp`/`signIn`/
-      `resetPasswordForEmail` çağrıları `captchaToken` göndermek zorundadır ve web CSP'sine (`apps/web/next.config.ts`)
-      `https://challenges.cloudflare.com` (`script-src`, `frame-src`) eklenmelidir. Web desteklemeden açılırsa **kimse giriş
-      yapamaz**. Gizli anahtar yalnızca Supabase Dashboard'da durur; site anahtarı web'e `NEXT_PUBLIC_` ile gider.
+      tehdit modeli §6.5; OD-05 kararı: hız limitleri + CAPTCHA, özel kilit yok). **Web entegrasyonu hazır (#61):**
+      `NEXT_PUBLIC_TURNSTILE_SITE_KEY` dolu olan web derlemesi `captchaToken` gönderir ve CSP'ye yalnızca
+      `https://challenges.cloudflare.com` eklenir. Sıra: önce Vercel'e site anahtarı + yeniden deploy, sonra burada gizli
+      anahtar — tersi **kimsenin giriş yapamaması** demektir. **Mobil uygulama henüz token göndermez:** burada açılınca mobil
+      giriş reddedilir. Adımlar ve mobil notu: `docs/operations/environments.md` §2.1. Gizli anahtar yalnızca Supabase
+      Dashboard'da durur.
 - [ ] Rate Limits: e-posta gönderimi (`Email sent`) ve doğrulama/OTP sınırları Supabase varsayılanlarında veya daha sıkı;
       onay/sıfırlama e-postaları arası en az 60 sn (yerel yığındaki `max_frequency = "1s"` yalnızca E2E hızı içindir).
 - [ ] URL Configuration: **Site URL** = ortamın web adresi; **Redirect URLs** yalnızca o ortamın

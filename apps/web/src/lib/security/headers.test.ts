@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { contentSecurityPolicy, originOf, securityHeaders } from "../../../next.config";
+import { TURNSTILE_ORIGIN, contentSecurityPolicy, originOf, securityHeaders } from "../../../next.config";
+import { TURNSTILE_ORIGIN as CAPTCHA_ORIGIN } from "@/lib/auth/captcha";
 
 const directives = (csp: string) =>
   new Map(
@@ -42,6 +43,23 @@ describe("security headers (audit M-2)", () => {
     const csp = contentSecurityPolicy({ apiBaseUrl: "*", supabaseUrl: "" });
     expect(directives(csp).get("connect-src")).toEqual(["'self'"]);
     expect(csp).not.toContain("*");
+  });
+
+  it("allows no foreign script or frame origin while CAPTCHA is off", () => {
+    const csp = directives(contentSecurityPolicy({ supabaseUrl: "https://abc.supabase.co" }));
+    expect(csp.get("frame-src")).toEqual(["'none'"]);
+    expect(csp.get("script-src")).toEqual(["'self'", "'unsafe-inline'"]);
+  });
+
+  it("allows only the Turnstile origin for script and frame when CAPTCHA is on (#61)", () => {
+    const csp = directives(contentSecurityPolicy({ supabaseUrl: "https://abc.supabase.co", turnstile: true }));
+    expect(TURNSTILE_ORIGIN).toBe(CAPTCHA_ORIGIN);
+    expect(csp.get("script-src")).toEqual(["'self'", "'unsafe-inline'", "https://challenges.cloudflare.com"]);
+    expect(csp.get("frame-src")).toEqual(["https://challenges.cloudflare.com"]);
+    // Nothing else widens: the widget talks to Cloudflare from inside its own frame.
+    expect(csp.get("connect-src")).toEqual(["'self'", "https://abc.supabase.co"]);
+    expect(csp.get("frame-ancestors")).toEqual(["'none'"]);
+    expect(csp.get("default-src")).toEqual(["'self'"]);
   });
 
   it("sends the framing, sniffing, referrer and permission headers", () => {

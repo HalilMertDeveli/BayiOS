@@ -9,24 +9,56 @@
  *          so components never hard-code a palette and never need `dark:` variants.
  *
  * Contrast targets (WCAG 2.2 AA): text.primary/secondary/muted ≥ 4.5:1 on page/card,
- * border.strong (form controls) and focus ring ≥ 3:1, every tone fg ≥ 4.5:1 on its own bg.
+ * border.strong (form controls) and focus ring ≥ 3:1, every tone fg ≥ 4.5:1 on its own bg — enforced by tokens.test.ts.
  */
 
 :root {
   color-scheme: light;
 
-  /* color.brand — calm petrol/navy family (final value pending D-01) */
-  --bos-brand-primary: #0f4c75;
-  --bos-brand-primary-hover: #0b3a5b;
-  --bos-brand-primary-subtle: #e6f0f7;
+  /*
+   * Brand palette (owner decision 2026-11-09, #61): deep petrol primary + warm copper accent.
+   * Raw scales — theme-independent; components never use them directly, only the semantic tokens below.
+   * Rationale and contrast table: docs/design/brand-colors.md. Mirrored in apps/mobile/lib/core/ui/tokens.dart.
+   */
+  --bos-petrol-50: #edf6f8;
+  --bos-petrol-100: #d4eaef;
+  --bos-petrol-200: #93cdd9;
+  --bos-petrol-300: #7fc4d3;
+  --bos-petrol-400: #6cb8c8;
+  --bos-petrol-500: #3d9aae;
+  --bos-petrol-600: #1f7a90;
+  --bos-petrol-700: #136579;
+  --bos-petrol-800: #0c5468;
+  --bos-petrol-900: #0a4354;
+  --bos-petrol-950: #04191e;
+  --bos-copper-50: #fcf3ed;
+  --bos-copper-100: #f8e1d2;
+  --bos-copper-200: #edb48d;
+  --bos-copper-300: #e39a68;
+  --bos-copper-400: #dd8650;
+  --bos-copper-500: #d4733a;
+  --bos-copper-600: #a4501f;
+  --bos-copper-700: #843f18;
+  --bos-copper-800: #66311a;
+  --bos-copper-900: #4f2815;
+  --bos-copper-950: #1f0f06;
+
+  /* color.brand — petrol primary (white text 8.46:1) */
+  --bos-brand-primary: var(--bos-petrol-800);
+  --bos-brand-primary-hover: var(--bos-petrol-900);
+  --bos-brand-primary-subtle: var(--bos-petrol-50);
   --bos-brand-on-primary: #ffffff;
+  /* color.brand.accent — decorative only (brand mark, illustrations); never a status, never body text */
+  --bos-brand-accent: var(--bos-copper-500);
+  --bos-brand-accent-hover: var(--bos-copper-400);
+  --bos-brand-on-accent: var(--bos-copper-950);
 
   /* color.text */
   --bos-text-primary: #111827;
   --bos-text-secondary: #374151;
   --bos-text-muted: #5b6472;
   --bos-text-inverse: #ffffff;
-  --bos-text-link: #0f5c8f;
+  --bos-text-link: var(--bos-petrol-700);
 
   /* color.surface */
   --bos-surface-page: #f6f7f9;
@@ -38,7 +70,7 @@
   /* color.border */
   --bos-border-default: #dfe3e8;
   --bos-border-strong: #7b8494;
-  --bos-border-focus: #2563eb;
+  --bos-border-focus: var(--bos-petrol-600);
 
   /* color.{tone}.{fg,bg,border} — feedback + status families */
   --bos-neutral-fg: #374151;
@@ -64,9 +96,9 @@
   --bos-teal-fg: #0f6b6b;
   --bos-teal-bg: #e2f4f3;
   --bos-teal-border: #8ccfcb;
-  --bos-brand-fg: #0f4c75;
-  --bos-brand-bg: #e6f0f7;
-  --bos-brand-border: #93b8d3;
+  --bos-brand-fg: var(--bos-petrol-800);
+  --bos-brand-bg: var(--bos-petrol-50);
+  --bos-brand-border: var(--bos-petrol-200);
 
   /* color.ai — AI suggestions must be visually distinct */
   --bos-ai-fg: #4338ca;
@@ -101,15 +133,18 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bos-brand-primary: #6cb0e0;
-    --bos-brand-primary-hover: #8cc3ea;
-    --bos-brand-primary-subtle: #11283a;
-    --bos-brand-on-primary: #06121f;
+    --bos-brand-primary: var(--bos-petrol-400);
+    --bos-brand-primary-hover: var(--bos-petrol-200);
+    --bos-brand-primary-subtle: #0d262d;
+    --bos-brand-on-primary: var(--bos-petrol-950);
+    --bos-brand-accent: var(--bos-copper-300);
+    --bos-brand-accent-hover: var(--bos-copper-200);
+    --bos-brand-on-accent: var(--bos-copper-950);
     --bos-text-primary: #e8ecf1;
     --bos-text-secondary: #c3cad4;
     --bos-text-muted: #98a2b0;
     --bos-text-inverse: #0d1117;
-    --bos-text-link: #7cb8ec;
+    --bos-text-link: var(--bos-petrol-300);
     --bos-surface-page: #0d1117;
     --bos-surface-card: #151b23;
     --bos-surface-raised: #1c2430;
@@ -117,7 +152,7 @@
     --bos-surface-overlay: rgb(0 0 0 / 0.6);
     --bos-border-default: #2a3340;
     --bos-border-strong: #6b7685;
-    --bos-border-focus: #6ea8fe;
+    --bos-border-focus: var(--bos-petrol-300);
     --bos-neutral-fg: #c3cad4;
     --bos-neutral-bg: #222a35;
     --bos-neutral-border: #3a4452;
@@ -134,16 +169,16 @@
     --bos-danger-bg: #331512;
     --bos-danger-border: #7f3029;
     --bos-danger-solid: #c9372c;
-    --bos-danger-solid-hover: #e04a3f;
+    --bos-danger-solid-hover: #b3302a;
     --bos-purple-fg: #d3a9ff;
     --bos-purple-bg: #26163a;
     --bos-purple-border: #5d3a87;
     --bos-teal-fg: #6fd3cc;
     --bos-teal-bg: #0e2a2a;
     --bos-teal-border: #2a6a66;
-    --bos-brand-fg: #8cc3ea;
-    --bos-brand-bg: #11283a;
-    --bos-brand-border: #2e5a7a;
+    --bos-brand-fg: var(--bos-petrol-200);
+    --bos-brand-bg: #0d262d;
+    --bos-brand-border: #2b5d68;
     --bos-ai-fg: #b7bcff;
     --bos-ai-bg: #1c1f45;
     --bos-ai-border: #444a9a;
@@ -156,15 +191,18 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bos-brand-primary: #6cb0e0;
-  --bos-brand-primary-hover: #8cc3ea;
-  --bos-brand-primary-subtle: #11283a;
-  --bos-brand-on-primary: #06121f;
+  --bos-brand-primary: var(--bos-petrol-400);
+  --bos-brand-primary-hover: var(--bos-petrol-200);
+  --bos-brand-primary-subtle: #0d262d;
+  --bos-brand-on-primary: var(--bos-petrol-950);
+  --bos-brand-accent: var(--bos-copper-300);
+  --bos-brand-accent-hover: var(--bos-copper-200);
+  --bos-brand-on-accent: var(--bos-copper-950);
   --bos-text-primary: #e8ecf1;
   --bos-text-secondary: #c3cad4;
   --bos-text-muted: #98a2b0;
   --bos-text-inverse: #0d1117;
-  --bos-text-link: #7cb8ec;
+  --bos-text-link: var(--bos-petrol-300);
   --bos-surface-page: #0d1117;
   --bos-surface-card: #151b23;
   --bos-surface-raised: #1c2430;
@@ -172,7 +210,7 @@
   --bos-surface-overlay: rgb(0 0 0 / 0.6);
   --bos-border-default: #2a3340;
   --bos-border-strong: #6b7685;
-  --bos-border-focus: #6ea8fe;
+  --bos-border-focus: var(--bos-petrol-300);
   --bos-neutral-fg: #c3cad4;
   --bos-neutral-bg: #222a35;
   --bos-neutral-border: #3a4452;
@@ -189,16 +227,16 @@
   --bos-danger-bg: #331512;
   --bos-danger-border: #7f3029;
   --bos-danger-solid: #c9372c;
-  --bos-danger-solid-hover: #e04a3f;
+  --bos-danger-solid-hover: #b3302a;
   --bos-purple-fg: #d3a9ff;
   --bos-purple-bg: #26163a;
   --bos-purple-border: #5d3a87;
   --bos-teal-fg: #6fd3cc;
   --bos-teal-bg: #0e2a2a;
   --bos-teal-border: #2a6a66;
-  --bos-brand-fg: #8cc3ea;
-  --bos-brand-bg: #11283a;
-  --bos-brand-border: #2e5a7a;
+  --bos-brand-fg: var(--bos-petrol-200);
+  --bos-brand-bg: #0d262d;
+  --bos-brand-border: #2b5d68;
   --bos-ai-fg: #b7bcff;
   --bos-ai-bg: #1c1f45;
   --bos-ai-border: #444a9a;
@@ -254,6 +292,9 @@
   --color-brand-hover: var(--bos-brand-primary-hover);
   --color-brand-subtle: var(--bos-brand-primary-subtle);
   --color-on-brand: var(--bos-brand-on-primary);
+  --color-accent: var(--bos-brand-accent);
+  --color-accent-hover: var(--bos-brand-accent-hover);
+  --color-on-accent: var(--bos-brand-on-accent);
 
   --color-fg: var(--bos-text-primary);
   --color-fg-secondary: var(--bos-text-secondary);

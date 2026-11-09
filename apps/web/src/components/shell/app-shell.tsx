@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, Repeat, X } from "lucide-react";
+import { BrandMark } from "@/components/ui/brand-mark";
 import { useModalDialog } from "@/components/ui/dialog";
 import { ROUTES } from "@/lib/auth/routes";
 import { cn } from "@/lib/cn";
@@ -22,12 +23,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
   const { access } = useSession();
   return (
     <Link href={homeFor(access)} className="flex items-center gap-2 rounded-md text-h3 text-fg">
-      <span
-        aria-hidden="true"
-        className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand text-caption font-bold text-on-brand"
-      >
-        B
-      </span>
+      <BrandMark />
       <span className={cn(compact && "sr-only")}>BayiOS</span>
     </Link>
   );
