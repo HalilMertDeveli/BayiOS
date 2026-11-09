@@ -234,12 +234,16 @@ public sealed class AuditFixesTests(ApiFixture fixture)
         await using var production = fixture.Derive(builder => builder.UseEnvironment("Production"));
         foreach (var client in new[] { owner, On(production, owner) })
         {
-            // "xyz" (not hex): the correlation id is hex and once contained "abc" by chance.
             foreach (var limit in new[] { "1e3", "xyz", "99999999999" })
             {
                 var response = await client.GetAsync($"/api/v1/ai/order-parses?limit={limit}");
                 var problem = await HttpAssert.ProblemJsonAsync(response, HttpStatusCode.BadRequest, "request.malformed");
-                Assert.DoesNotContain(limit, problem.GetRawText(), StringComparison.Ordinal);
+                // The server-generated random hex ids (traceId, correlationId) can contain "1e3" or "abc" by chance
+                // (a ~1% flake), so only they are left out of the echo check; every other field is still scanned.
+                var echoable = JsonNode.Parse(problem.GetRawText())!.AsObject();
+                echoable.Remove("traceId");
+                echoable.Remove("correlationId");
+                Assert.DoesNotContain(limit, echoable.ToJsonString(), StringComparison.Ordinal);
             }
 
             // An unreadable JSON body: same coded 400.
