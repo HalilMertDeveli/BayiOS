@@ -1,0 +1,18 @@
+# Build context = apps/web. Keep the context minimal and secret-free.
+node_modules/
+.next/
+coverage/
+playwright-report/
+test-results/
+e2e/
+e2e-local/
+docs/
+*.tsbuildinfo
+
+# Never send local env files into the build: NEXT_PUBLIC_* values come in as build args.
+**/.env
+**/.env.*
+**/*.pem
+
+Dockerfile
+.dockerignore

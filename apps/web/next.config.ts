@@ -116,6 +116,9 @@ export function securityHeaders(env: SecurityHeaderEnv): Header[] {
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // Container image only (apps/web/Dockerfile sets BAYIOS_NEXT_OUTPUT=standalone): a self-contained server.js with a
+  // traced, minimal node_modules. Off by default so `next start` (CI, e2e) and Vercel builds stay unchanged.
+  output: process.env.BAYIOS_NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   cacheComponents: true,
   partialPrefetching: true,
   // No "X-Powered-By: Next.js" (security audit 2026-11 M-2).
