@@ -27,6 +27,61 @@ paneli, depo için bir mobil uygulama ve aynı anda kaç kişi çalışırsa ça
 > Faz C (Flutter mobil uygulama, Android) tamamlandı. İlk canlı pilot, ürün sahibinin hesap ve hukuki kararlarını
 > bekliyor. Güncel ilerleme: [`STATUS.md`](STATUS.md) · Plan: [`ROADMAP.md`](ROADMAP.md).
 
+### Bir bakışta
+
+```mermaid
+flowchart LR
+    subgraph Clients["İstemciler"]
+        WEB["Web paneli<br/>Next.js 16 · React 19 · TypeScript"]
+        MOB["Mobil uygulama<br/>Flutter · Android / iOS"]
+    end
+
+    subgraph API["ASP.NET Core API (.NET 10) · modüler monolith, 13 modül"]
+        direction TB
+        PIPE["JWT → tenant üyeliği + rol → yetki → paket<br/>→ Unit of Work (istek başına tek transaction)"]
+        JOBS["Postgres iş kuyruğu + transactional outbox"]
+    end
+
+    subgraph SUPA["Supabase"]
+        PG[("PostgreSQL 17<br/>Row Level Security<br/>bayios_app rolü, NOBYPASSRLS")]
+        AUTH["Supabase Auth<br/>JWT / JWKS"]
+        STO["Storage<br/>özel bucket'lar"]
+    end
+
+    FCM["Firebase Cloud Messaging<br/>yalnızca push"]
+    AI["Claude API<br/>isteğe bağlı, insan onaylar"]
+
+    WEB -- "HTTPS / JSON" --> API
+    MOB -- "HTTPS / JSON" --> API
+    WEB -. "giriş" .-> AUTH
+    MOB -. "giriş" .-> AUTH
+    API -- "SQL, transaction başına app.tenant_id" --> PG
+    API -- "JWT doğrulama" --> AUTH
+    API --> STO
+    API -- "push" --> FCM
+    API -. "WhatsApp metnini ayrıştır" .-> AI
+
+    subgraph DELIVERY["CI/CD ve dağıtım yolları"]
+        GHA["GitHub Actions<br/>build · testler · CodeQL · Trivy · gitleaks"]
+        FLY["Fly.io (API) + Vercel (web)<br/>hat hazır, henüz deploy yok"]
+        K8S["Kubernetes<br/>Helm chart → CI'da kind"]
+        VPS["Linux VPS<br/>nginx + systemd, infra/linux"]
+    end
+    GHA --> FLY
+    GHA --> K8S
+    GHA -. "deploy.sh (elle)" .-> VPS
+```
+
+<p align="center">
+  <img src="apps/web/docs/screenshots/ui-polish/after/desktop-light-pano.jpg" alt="BayiOS web paneli panosu: onay bekleyen siparişler, bugünkü siparişler, kritik stok ve görevler (sentetik mock veri)" width="90%">
+  <br><sub>Web panosu. Üzerindeki tüm isimler, siparişler ve rakamlar Playwright paketinden gelen sentetik <i>mock</i> veridir — müşteri verisi yoktur.</sub>
+</p>
+
+**Dağıtım yolları:** [Fly.io / Vercel şablonları](infra/deploy/README.md) (hat hazır, hesap henüz yok) ·
+Kubernetes: [`infra/helm/bayios`](infra/helm/bayios) (bkz. [`docs/operations/kubernetes.md`](docs/operations/kubernetes.md)) ·
+nginx + systemd ile Linux VPS: [`infra/linux`](infra/linux/README.md) (Ubuntu 24.04 konteynerinde doğrulandı, henüz
+gerçek bir sunucuda çalışmıyor).
+
 ---
 
 ## İçindekiler
@@ -815,6 +870,10 @@ Strateji: [`docs/testing/test-strategy.md`](docs/testing/test-strategy.md).
 Dal akışı: `feature/*`, `fix/*`, `chore/*` → `preview`'a PR (yeşil CI zorunlu) → `main`'e yalnızca ürün sahibinin açık
 onayıyla. Her iki korumalı dalda da force-push ve doğrudan push yasaktır.
 Ayrıntılar: [`docs/operations/ci-cd.md`](docs/operations/ci-cd.md) · [`docs/operations/deploy-and-rollback.md`](docs/operations/deploy-and-rollback.md).
+
+**Düz Linux VPS alternatifi:** [`infra/linux`](infra/linux/README.md) — Ubuntu 24.04 bootstrap (ufw, fail2ban,
+yalnızca anahtarla SSH), sertleştirilmiş systemd servisleri, nginx reverse proxy + certbot TLS, sağlık kontrollü
+ve otomatik geri dönüşlü `deploy.sh`. `bash infra/linux/test.sh` tüm kontrolleri Docker'da çalıştırır.
 
 ---
 

@@ -28,6 +28,61 @@ no matter how many people work at the same time.
 > C (Flutter mobile app, Android) are complete. The first live pilot is waiting on account and legal decisions by the
 > product owner. Live progress: [`STATUS.md`](STATUS.md) · Plan: [`ROADMAP.md`](ROADMAP.md).
 
+### At a glance
+
+```mermaid
+flowchart LR
+    subgraph Clients
+        WEB["Web panel<br/>Next.js 16 · React 19 · TypeScript"]
+        MOB["Mobile app<br/>Flutter · Android / iOS"]
+    end
+
+    subgraph API["ASP.NET Core API (.NET 10) · modular monolith, 13 modules"]
+        direction TB
+        PIPE["JWT → tenant membership + role → permission → plan<br/>→ Unit of Work (one transaction per request)"]
+        JOBS["Postgres job queue + transactional outbox"]
+    end
+
+    subgraph SUPA["Supabase"]
+        PG[("PostgreSQL 17<br/>Row Level Security<br/>role bayios_app, NOBYPASSRLS")]
+        AUTH["Supabase Auth<br/>JWT / JWKS"]
+        STO["Storage<br/>private buckets"]
+    end
+
+    FCM["Firebase Cloud Messaging<br/>push only"]
+    AI["Claude API<br/>opt-in, human confirms"]
+
+    WEB -- "HTTPS / JSON" --> API
+    MOB -- "HTTPS / JSON" --> API
+    WEB -. "sign-in" .-> AUTH
+    MOB -. "sign-in" .-> AUTH
+    API -- "SQL, app.tenant_id per transaction" --> PG
+    API -- "validate JWT" --> AUTH
+    API --> STO
+    API -- "push" --> FCM
+    API -. "parse WhatsApp text" .-> AI
+
+    subgraph DELIVERY["CI/CD and deployment paths"]
+        GHA["GitHub Actions<br/>build · tests · CodeQL · Trivy · gitleaks"]
+        FLY["Fly.io (API) + Vercel (web)<br/>pipeline ready, not deployed yet"]
+        K8S["Kubernetes<br/>Helm chart → kind in CI"]
+        VPS["Linux VPS<br/>nginx + systemd, infra/linux"]
+    end
+    GHA --> FLY
+    GHA --> K8S
+    GHA -. "deploy.sh (manual)" .-> VPS
+```
+
+<p align="center">
+  <img src="apps/web/docs/screenshots/ui-polish/after/desktop-light-pano.jpg" alt="BayiOS web panel dashboard with pending orders, today's orders, critical stock and tasks (synthetic mock data)" width="90%">
+  <br><sub>Web dashboard. Every name, order and number on it is synthetic <i>mock</i> data from the Playwright suite — no customer data.</sub>
+</p>
+
+**Deployment paths:** [Fly.io / Vercel templates](infra/deploy/README.md) (pipeline ready, no account yet) ·
+Kubernetes: [`infra/helm/bayios`](infra/helm/bayios) (see [`docs/operations/kubernetes.md`](docs/operations/kubernetes.md)) ·
+Linux VPS with nginx + systemd: [`infra/linux`](infra/linux/README.md) (verified in an Ubuntu 24.04 container, not
+running on a real server yet).
+
 ---
 
 ## Table of contents
@@ -814,6 +869,10 @@ Strategy: [`docs/testing/test-strategy.md`](docs/testing/test-strategy.md).
 Branching: `feature/*`, `fix/*`, `chore/*` → PR into `preview` (green CI required) → `main` only with the product
 owner's explicit approval. Both protected branches forbid force-push and direct pushes.
 Details: [`docs/operations/ci-cd.md`](docs/operations/ci-cd.md) · [`docs/operations/deploy-and-rollback.md`](docs/operations/deploy-and-rollback.md).
+
+**Plain Linux VPS alternative:** [`infra/linux`](infra/linux/README.md) — Ubuntu 24.04 bootstrap (ufw, fail2ban,
+key-only SSH), hardened systemd services, nginx reverse proxy + certbot TLS, and a `deploy.sh` with health checks and
+automatic rollback. `bash infra/linux/test.sh` runs every check in Docker.
 
 ---
 
