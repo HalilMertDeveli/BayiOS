@@ -309,4 +309,39 @@ void main() {
       expect((calls[1].body! as Map)['confirmNegativeStock'], isTrue);
     });
   });
+
+  testWidgets('an exact SKU goes first among prefix matches', (tester) async {
+    // The API matches SKU prefixes: FLT-0010 comes back before FLT-001.
+    api
+      ..on(
+        'GET',
+        '/api/v1/inventory/balances',
+        (_) => balancesReply([
+          balanceJson(id: 'b-9', variant: 'v-9'),
+          balanceJson(),
+        ]),
+      )
+      ..on(
+        'GET',
+        '/api/v1/variants/batch',
+        (_) => FakeReply(
+          200,
+          json: {
+            'items': [
+              summaryJson(
+                id: 'v-9',
+                sku: 'FLT-0010',
+                productName: 'Hava filtresi',
+              ),
+              summaryJson(),
+            ],
+          },
+        ),
+      );
+    await pump(tester, location: '/stok?q=FLT-001');
+    await tester.pumpAndSettle();
+    final exact = tester.getTopLeft(find.text('FLT-001').first).dy;
+    final prefix = tester.getTopLeft(find.text('FLT-0010').first).dy;
+    expect(exact, lessThan(prefix));
+  });
 }

@@ -101,9 +101,9 @@ test.describe("WhatsApp siparişi (mock)", () => {
       ],
     });
 
-    // The draft: normal order screen, source WhatsApp (AI), status draft (never auto-approved), prices resolved.
+    // The draft: normal order screen, source WhatsApp mesajı, status draft (never auto-approved), prices resolved.
     await expect(page.getByText("Taslak sipariş oluşturuldu")).toBeVisible();
-    await expect(page.getByRole("definition").filter({ hasText: "WhatsApp (AI)" })).toBeVisible();
+    await expect(page.getByRole("definition").filter({ hasText: "WhatsApp mesajı" })).toBeVisible();
     await expect(page.getByRole("form", { name: "Taslak sipariş" })).toBeVisible();
     expect(ctx.orders.orders.at(-1)).toMatchObject({ source: "whatsapp_ai", status: "draft" });
     expect(ctx.orders.orders.at(-1)!.lines.map((l) => [l.sku, l.quantity, l.unitPrice !== null])).toEqual([

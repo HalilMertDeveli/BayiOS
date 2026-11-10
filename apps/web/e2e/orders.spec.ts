@@ -97,7 +97,7 @@ test.describe("sipariş listesi (mock)", () => {
     expect(new URLSearchParams(requestsTo(api, "GET", "/api/v1/orders").at(-1)!.search).get("status")).toBe("approved,picking,packed");
 
     await page.getByRole("button", { name: "Aramayı ve filtreleri temizle" }).first().click();
-    await page.getByRole("combobox", { name: "Kaynak" }).selectOption({ label: "WhatsApp (AI)" });
+    await page.getByRole("combobox", { name: "Kaynak" }).selectOption({ label: "WhatsApp mesajı" });
     await expect(page).toHaveURL(/kaynak=whatsapp_ai/);
     await expect(table.getByRole("row")).toHaveCount(2);
 

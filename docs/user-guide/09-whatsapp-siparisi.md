@@ -50,7 +50,7 @@ Sonra:
 ### 3. Taslağı oluşturun
 Tüm satırlar hazır olunca "Tüm satırlar hazır. …" yazar. **Taslak siparişi oluştur** düğmesine basın.
 "Taslak sipariş oluşturuldu — Fiyatlar fiyat listesinden geldi. Siparişi kontrol edip onaya gönderin." mesajı çıkar.
-Sipariş "WhatsApp (AI)" kaynağıyla kaydedilir ve **her zaman onay bekler** (sipariş onayı kapalı olsa bile).
+Sipariş "WhatsApp mesajı" kaynağıyla kaydedilir ve **her zaman onay bekler** (sipariş onayı kapalı olsa bile).
 
 Mesaj sipariş değilse **Ayrıştırmayı reddet** deyin; sipariş oluşmaz.
 

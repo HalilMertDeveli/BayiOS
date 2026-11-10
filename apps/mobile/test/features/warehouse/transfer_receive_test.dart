@@ -72,7 +72,7 @@ void main() {
   Map<String, Object?> sentLine(Call call) =>
       ((call.body! as Map)['lines'] as List).single as Map<String, Object?>;
 
-  testWidgets('hub → incoming list (destination = default warehouse)', (
+  testWidgets('hub → incoming list (every warehouse, then narrowed)', (
     tester,
   ) async {
     await pump(tester, location: '/depo');
@@ -83,8 +83,20 @@ void main() {
     await expectAccessibleTargets(tester);
 
     await tapOn(tester, find.byKey(const Key('warehouse-transfers')));
-    final list = api.callsTo('GET', '/api/v1/stock-transfers').single;
-    expect(list.query['status'], 'in_transit,partially_received');
+    // Starts on every warehouse: a transfer to a branch is not hidden.
+    final all = api.callsTo('GET', '/api/v1/stock-transfers').single;
+    expect(all.query['status'], 'in_transit,partially_received');
+    expect(all.query.containsKey('warehouseId'), isFalse);
+    expect(find.text('TRF-2026-0007'), findsOneWidget);
+    expect(find.text('TRF-2026-0009'), findsOneWidget);
+
+    // Narrowed to Ana Depo: only what comes in there.
+    await tapOn(tester, find.byKey(const Key('transfer-warehouse')));
+    await tapOn(
+      tester,
+      find.text(l10n.receivingWarehouseDefault('Ana Depo')).last,
+    );
+    final list = api.callsTo('GET', '/api/v1/stock-transfers').last;
     expect(list.query['warehouseId'], warehouseId);
     expect(find.text('TRF-2026-0007'), findsOneWidget);
     expect(find.text('TRF-2026-0009'), findsNothing);

@@ -40,7 +40,7 @@ Onay yetkisi olan kişi sipariş sayfasında:
 **Açıklama** yazın. İptal geri alınamaz; onaylı siparişte ayrılan stok serbest kalır. Kısmi sevk yapılmış sipariş iptal edilemez.
 
 ### Liste ve arama (`/siparisler`)
-Sipariş numarasının bir kısmıyla (ör. 000123) arayın; **Durum**, **Kaynak** (Manuel, WhatsApp (AI), İçe aktarma, Mobil),
+Sipariş numarasının bir kısmıyla (ör. 000123) arayın; **Durum**, **Kaynak** (Manuel, WhatsApp mesajı, İçe aktarma, Mobil),
 tarih ve müşteriye göre süzün. Sipariş sayfasında zaman çizelgesi, satırlar, KDV dökümü ve sevkiyatlar görünür.
 
 ## Sık hatalar ve mesajlar

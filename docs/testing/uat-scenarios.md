@@ -136,7 +136,7 @@ elle iletilir. Pilot öncesi BayiOS ekibi kullanıcıları hazırlayabilir. Her 
 | UAT-92 | satis | UAT-90, Eşleşti satırı | Önerilen ürünü onaylamadan taslak oluşturmayı deneyin | "Önerilen ürünü onaylayın veya başka bir ürün seçin." | Negatif | | |
 | UAT-93 | satis | M | "cg 150 kuba 2" (katalogda yok) | Satır Eşleşmedi; katalogda arayıp seçebilir veya **siparişten çıkar**; sistem ürün yaratmaz | Motor / negatif | | |
 | UAT-94 | satis | M | "ns200 buji 2 kutu" — ürün birimi Adet | Birim uyuşmazlığı uyarısı; miktarı ürün birimine göre girmeniz istenir | Motor | | |
-| UAT-95 | satis | UAT-91 hazır | **Taslak siparişi oluştur** | "Taslak sipariş oluşturuldu"; kaynak "WhatsApp (AI)"; fiyatlar fiyat listesinden; "Siparişler onaydan geçsin" kapalı olsa bile sipariş onay bekler | Motor (kritik kural) | | |
+| UAT-95 | satis | UAT-91 hazır | **Taslak siparişi oluştur** | "Taslak sipariş oluşturuldu"; kaynak "WhatsApp mesajı"; fiyatlar fiyat listesinden; "Siparişler onaydan geçsin" kapalı olsa bile sipariş onay bekler | Motor (kritik kural) | | |
 | UAT-96 | satis | L, P1 | sector-scenarios §2.3 "Örnek mesaj 2"yi yapıştırın, müşteri Mavi Sahne | Satırlar okunur; P2.5 modül iç/dış belirsizliği Belirsiz olarak gelir; "Teslim cuma" taslağa kendiliğinden yazılmaz | LED | | |
 | UAT-97 | satis | L | "p10 dış mekan modül 1/4 scan 40 tane fiyat atar mısın" | Fiyat uydurulmaz; uyarı "Mesajda fiyat geçiyor; dikkate alınmadı. …" (varsa) | LED | | |
 | UAT-98 | satis | Herhangi | Sipariş olmayan bir mesaj ("merhaba nasılsınız") | "Mesajda sipariş satırı bulunamadı"; **Ayrıştırmayı reddet** → "Ayrıştırma reddedildi" | Negatif | | |
