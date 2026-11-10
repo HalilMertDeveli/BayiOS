@@ -116,9 +116,9 @@ test("motor demo: bayi WhatsApp'tan fren seti → inceleme → onay → barkodla
   expect(approveResponse.status()).toBe(200);
   const orderId = ((await approveResponse.json()) as { orderId: string }).orderId;
 
-  // ---- 3. The draft: source WhatsApp (AI), dealer prices from the Bayi A list (resolved by the API, not the message).
+  // ---- 3. The draft: source WhatsApp mesajı, dealer prices from the Bayi A list (resolved by the API, not the message).
   await expect(page).toHaveURL(new RegExp(`/siparisler/${orderId}$`));
-  await expect(page.getByRole("definition").filter({ hasText: "WhatsApp (AI)" })).toBeVisible();
+  await expect(page.getByRole("definition").filter({ hasText: "WhatsApp mesajı" })).toBeVisible();
   const orderNumber = await orderNumberOnPage(page);
   type OrderDetail = {
     order: { source: string; status: string; totals: { grandTotal: number | string } | null };
