@@ -39,7 +39,7 @@ Tüm rakamlar 2026-11-04 itibarıyla resmi sayfalardan; doğrulanamayanlar belir
 |---|---|---|---|---|
 | Supabase | Free: 2 aktif proje, 500 MB DB, 1 GB storage, 50k MAU, 5 GB egress, 1 hafta etkisizlikte duraklama | Pro plan; branching (yalnızca Pro+, $0,01344/branch-saat); ek compute; PITR | Pro $25/ay'dan (+compute) | Prod ve branching için **gerekli**; `bayios-preview` (free) için de proje oluşturma onayı |
 | Vercel | Hobby ücretsiz ama **ticari kullanım yok** | Ticari kullanım → Pro; Password Protection $20/ay/proje | Pro $20/kullanıcı/ay | **Gerekli** (ticari pilot öncesi) |
-| API host (Fly.io önerisi) | Free tier yok (deneme: 2 saat makine süresi / 7 gün) | Hesap açılışı | ~$10–20/ay pilot (1 GB Frankfurt makine $7,73/ay) | **Gerekli** |
+| API host — production (Fly.io önerisi; preview Render free, #218) | Free tier yok (deneme: 2 saat makine süresi / 7 gün) | Hesap açılışı | ~$10–20/ay pilot (1 GB Frankfurt makine $7,73/ay) | **Gerekli** |
 | Anthropic Claude API | Ücretsiz katman varsayılmaz | Token kullanımı | Kullanıma bağlı; tenant kotası + aylık harcama limiti ayarlanır — model fiyatları uygulama sırasında resmi sayfadan doğrulanacak | **Gerekli** (anahtar + limit) |
 | Firebase (FCM) | FCM ücretsiz (Spark) | Blaze'e geçiş (başka Firebase ürünleri kullanılırsa) | 0 | Blaze için gerekli |
 | GitHub | Public repo: Actions standart runner dakikaları ve güvenlik özellikleri (secret scanning, CodeQL) ücretsiz — güncel koşullar doğrulanmalı | macOS runner, büyük runner, private repo'ya geçiş | 0 (public) | macOS/ücretli runner için gerekli |

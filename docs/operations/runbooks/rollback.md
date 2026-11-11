@@ -8,11 +8,15 @@ Ayrıntılı deploy akışı: `../deploy-and-rollback.md`. Bu runbook olay anın
 - Migration başarısız mı / şema sorunu mu? → §3 (geri değil, **ileri** düzeltme).
 - Veri yanlış/silinmiş mi? → §4.
 
-## 1. API imajı geri alma (Fly.io — hosting onayından sonra geçerli)
-1. Önceki sağlıklı release'i bul: `fly releases --app <app> --image` (imajlar değişmez `<git-sha>` etiketlidir; `latest` yok).
-2. Geri al: `fly deploy --config infra/deploy/fly.preview.toml --image registry.fly.io/<app>:<önceki-sha>`
-   (production: `deploy-production.yml`'i önceki etiketle `workflow_dispatch`, `production` environment onayı).
-3. Fly yeni makineyi `/health` geçene kadar trafiğe almaz. Ardından doğrula:
+## 1. API geri alma
+**Preview (Render):** Render Dashboard → `bayios-api-preview` → **Events** → son sağlıklı deploy → **Rollback**
+(önceki derlenmiş imaja anında döner; yeniden derleme yok). Rollback sonrası Render o servisin otomatik deploy'unu durdurur;
+düzeltme `preview`'a merge edilince Settings → Build & Deploy'dan auto-deploy yeniden açılır.
+
+**Production (Fly.io — hosting onayından sonra geçerli):**
+1. Önceki sağlıklı release'i bul: `fly releases --app <app> --image` (imajlar değişmez `<vX.Y.Z>-<sha12>` etiketlidir; `latest` yok).
+2. Geri al: `deploy-production.yml`'i önceki etiketle `workflow_dispatch` (`production` environment onayı).
+3. Host yeni örneği `/health` geçene kadar trafiğe almaz. Ardından doğrula:
    - `GET /health` = 200, `GET /health/ready` = `{"status":"ready"}` (DB + kuyruk), `GET /api/v1/meta` sürüm = önceki sürüm.
    - 5xx oranı alarmı temizlendi (`bayios_http_server_errors_total` artışı durdu).
 4. **DB geri alınmaz:** expand → migrate → contract kuralı sayesinde önceki API güncel şemayla çalışır (§3). Önceki sürüm yeni şemayla çalışamıyorsa bu bir expand/contract ihlalidir → SEV1, §3.
@@ -20,7 +24,10 @@ Ayrıntılı deploy akışı: `../deploy-and-rollback.md`. Bu runbook olay anın
 
 Worker ayrı container'da çalışıyorsa (Jobs:Enabled=false API + ayrı worker) ikisi aynı imaj sürümüne geri alınır.
 
-## 2. Web geri alma (Vercel)
+## 2. Web geri alma
+**Preview (Render):** Render Dashboard → `bayios-web-preview` → Events → önceki sağlıklı deploy → **Rollback** (sonra auto-deploy'u yeniden açın).
+
+**Vercel (production / blok kalkınca):**
 1. Vercel Dashboard → Project → Deployments → son sağlıklı **Production** deployment → **Instant Rollback** (yeniden derleme yok, anlık).
 2. Doğrula: giriş sayfası açılıyor, panodaki `/api/v1/meta` çağrısı başarılı, kritik akış (sipariş listesi) çalışıyor.
 3. Instant Rollback sonrası otomatik production atamaları durur; düzeltme merge edilince "Promote" ile yeniden açılır.

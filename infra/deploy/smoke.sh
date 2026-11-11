@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Post-deploy smoke check (issue #70, deploy-and-rollback.md §3 step 5). Runnable locally:
 #
-#   API_URL=https://bayios-api-preview.fly.dev EXPECT_ENVIRONMENT=Preview bash infra/deploy/smoke.sh
+#   API_URL=https://bayios-api-preview.onrender.com EXPECT_ENVIRONMENT=Preview bash infra/deploy/smoke.sh
 #
 #   GET /health          = 200 (liveness)
 #   GET /health/ready    = EXPECT_READY_STATUS (default 200: database + auth configuration reachable)
 #   GET /api/v1/meta     -> "environment" = EXPECT_ENVIRONMENT
-# Retries until SMOKE_TIMEOUT seconds (default 180) because a Fly machine may be cold-starting (auto-stop).
+# Retries until SMOKE_TIMEOUT seconds (default 180) because the host may be cold-starting (Render free instance asleep, Fly auto-stop).
 set -euo pipefail
 
 : "${API_URL:?API_URL is required}" "${EXPECT_ENVIRONMENT:?EXPECT_ENVIRONMENT is required}"
