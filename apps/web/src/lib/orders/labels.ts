@@ -61,7 +61,7 @@ export const ORDER_SOURCES = ["manual", "whatsapp_ai", "import", "mobile"] as co
 
 export const orderSourceLabels: Record<string, string> = {
   manual: "Manuel",
-  whatsapp_ai: "WhatsApp (AI)",
+  whatsapp_ai: "WhatsApp mesajı",
   import: "İçe aktarma",
   mobile: "Mobil",
 };

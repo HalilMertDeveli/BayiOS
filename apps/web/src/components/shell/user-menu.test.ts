@@ -8,6 +8,12 @@ describe("initials (header avatar)", () => {
     expect(initials("Mert")).toBe("M");
   });
 
+  it("skips words that do not start with a letter or digit", () => {
+    expect(initials("Örnek Müdür (sentetik)")).toBe("ÖM");
+    expect(initials("Demo Toptan Sahibi")).toBe("DS");
+    expect(initials("(sentetik)")).toBe("(");
+  });
+
   it("uses the first letter of an e-mail address", () => {
     expect(initials("mock.kullanici@example.test")).toBe("M");
   });

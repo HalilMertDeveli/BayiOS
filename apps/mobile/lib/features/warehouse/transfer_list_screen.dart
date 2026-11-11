@@ -34,7 +34,7 @@ String transferPath(String id) =>
 };
 
 /// Gelen transferler: `in_transit` / `partially_received` transfers whose
-/// destination is the chosen warehouse (default warehouse first).
+/// destination is the chosen warehouse (every warehouse first).
 class TransferListScreen extends ConsumerStatefulWidget {
   const TransferListScreen({super.key});
 
@@ -73,12 +73,10 @@ class _TransferListState extends ConsumerState<TransferListScreen> {
       if (_warehouses.isEmpty) {
         final all = await ref.read(stockApiProvider).warehouses();
         final active = all.where((w) => w.isActive).toList();
+        // Starts on "every warehouse": a transfer to a branch must not be
+        // hidden behind the default warehouse; the receiver narrows it.
         _warehouses = active;
-        _warehouseId = active.length < 2
-            ? null
-            : active
-                  .firstWhere((w) => w.isDefault, orElse: () => active.first)
-                  .id;
+        _warehouseId = null;
       }
       final page = await _page(null);
       if (!mounted) return;

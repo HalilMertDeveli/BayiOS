@@ -155,7 +155,26 @@ class StockQueryController extends Notifier<StockQueryState> {
         ),
       );
     }
-    return StockQueryResults(term, groups, hasMore: page.page.hasMore);
+    // The search matches SKU prefixes and names, so an exact SKU / barcode
+    // (e.g. "Stokta gör" after a receipt) goes first; the rest keep the
+    // API's order (stable sort).
+    final exact = [
+      for (final g in groups)
+        if (_isExact(g.variant, term)) g,
+    ];
+    final others = [
+      for (final g in groups)
+        if (!_isExact(g.variant, term)) g,
+    ];
+    return StockQueryResults(term, [
+      ...exact,
+      ...others,
+    ], hasMore: page.page.hasMore);
+  }
+
+  static bool _isExact(VariantRef v, String term) {
+    final t = term.toLowerCase();
+    return v.sku.toLowerCase() == t || (v.barcode?.toLowerCase() == t);
   }
 
   static int _byPlace(StockRow a, StockRow b) {

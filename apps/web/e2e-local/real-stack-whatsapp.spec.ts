@@ -104,9 +104,9 @@ test("WhatsApp mesajı → inceleme → satır onayı → whatsapp_ai taslak sip
   expect(approveResponse.status()).toBe(200);
   const orderId = ((await approveResponse.json()) as { orderId: string }).orderId;
 
-  // ---- The draft on the normal order screen: source WhatsApp (AI), still a draft, price from the list.
+  // ---- The draft on the normal order screen: source WhatsApp mesajı, still a draft, price from the list.
   await expect(page).toHaveURL(new RegExp(`/siparisler/${orderId}$`));
-  await expect(page.getByRole("definition").filter({ hasText: "WhatsApp (AI)" })).toBeVisible();
+  await expect(page.getByRole("definition").filter({ hasText: "WhatsApp mesajı" })).toBeVisible();
   await expect(page.getByRole("form", { name: "Taslak sipariş" })).toBeVisible();
   const order = await apiOk<{ order: { source: string; status: string }; lines: { sku: string; quantity: number | string; unitPrice: number | string | null }[] }>(
     session,
