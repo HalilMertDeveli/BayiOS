@@ -5,7 +5,8 @@
 BayiOS, bir toplama görevi bir personele atandığında o kişinin cihazlarına Firebase Cloud Messaging (FCM) ile bildirim
 gönderir. Firebase **yalnızca bildirim** içindir (CLAUDE.md): veri her zaman BayiOS API'sinden gelir.
 
-Henüz bir Firebase projesi **yok**. Proje oluşturmak ürün sahibi eylemidir (AUTOPILOT.md). O zamana kadar:
+Preview için Firebase projesi `bayios-preview` var (#219, [push-and-captcha.md](push-and-captcha.md)); servis hesabı
+anahtarı API host'una girilene kadar gönderim kapalıdır. Production projesi henüz **yok**. Anahtar girilene kadar:
 
 - API: `Push:Enabled=false` (varsayılan). Cihaz kayıtları (`/api/v1/devices`) çalışır, atama olayı ve gönderim işi
   kuyruğa girer, ama gönderici **no-op**'tur (`DisabledPushSender`): FCM'e hiçbir istek gitmez, token silinmez.
@@ -56,6 +57,7 @@ hatasıdır. Anahtar yalnızca `type=service_account` ve `token_uri=https://oaut
 | `BAYIOS_FIREBASE_MESSAGING_SENDER_ID` | Gönderici (proje numarası) |
 | `BAYIOS_FIREBASE_ANDROID_APP_ID` | Android uygulama id'si (`1:…:android:…`) |
 | `BAYIOS_FIREBASE_IOS_APP_ID` | iOS uygulama id'si (`1:…:ios:…`) |
+| `BAYIOS_FIREBASE_IOS_API_KEY` | Opsiyonel, iOS uygulamasının istemci API anahtarı (`GoogleService-Info.plist` → `API_KEY`); boşsa iOS'ta da `BAYIOS_FIREBASE_API_KEY` |
 | `BAYIOS_FIREBASE_IOS_BUNDLE_ID` | Opsiyonel, iOS bundle id |
 
 Bir platformun dört değeri (api key, project id, sender id, o platformun app id'si) tam değilse o derlemede push yoktur.

@@ -25,7 +25,7 @@ flutter run --dart-define-from-file=env/dev.json
 | `BAYIOS_SUPABASE_URL` | Supabase Auth kökü. Emülatör: `http://10.0.2.2:54321` |
 | `BAYIOS_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable (anon) anahtarı — public'tir; service-role anahtarı **asla** |
 | `BAYIOS_CLIENT_VERSION` | Opsiyonel, `X-Client-Version` (varsayılan `0.1.0`) |
-| `BAYIOS_FIREBASE_API_KEY`, `BAYIOS_FIREBASE_PROJECT_ID`, `BAYIOS_FIREBASE_MESSAGING_SENDER_ID`, `BAYIOS_FIREBASE_ANDROID_APP_ID`, `BAYIOS_FIREBASE_IOS_APP_ID`, `BAYIOS_FIREBASE_IOS_BUNDLE_ID` | Opsiyonel, push (#44). Boşsa Firebase hiç başlatılmaz (push yok, izin istenmez). Değerler ve kurulum: [push-notifications.md](../../docs/operations/push-notifications.md) |
+| `BAYIOS_FIREBASE_API_KEY`, `BAYIOS_FIREBASE_IOS_API_KEY`, `BAYIOS_FIREBASE_PROJECT_ID`, `BAYIOS_FIREBASE_MESSAGING_SENDER_ID`, `BAYIOS_FIREBASE_ANDROID_APP_ID`, `BAYIOS_FIREBASE_IOS_APP_ID`, `BAYIOS_FIREBASE_IOS_BUNDLE_ID` | Opsiyonel, push (#44). Boşsa Firebase hiç başlatılmaz (push yok, izin istenmez). Değerler ve kurulum: [push-notifications.md](../../docs/operations/push-notifications.md) |
 
 Yapılandırma eksikse uygulama çökmez, "Uygulama yapılandırılmamış" ekranını gösterir. Düz HTTP yalnızca **debug**
 derlemede `10.0.2.2` / `localhost` / `127.0.0.1`'e açıktır (`android/app/src/debug/res/xml/network_security_config.xml`).
