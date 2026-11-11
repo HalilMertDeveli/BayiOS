@@ -23,6 +23,7 @@ class FirebaseConfig {
   static FirebaseConfig? fromDefines({TargetPlatform? platform}) => resolve(
     platform: platform ?? defaultTargetPlatform,
     apiKey: const String.fromEnvironment('BAYIOS_FIREBASE_API_KEY'),
+    iosApiKey: const String.fromEnvironment('BAYIOS_FIREBASE_IOS_API_KEY'),
     projectId: const String.fromEnvironment('BAYIOS_FIREBASE_PROJECT_ID'),
     messagingSenderId: const String.fromEnvironment(
       'BAYIOS_FIREBASE_MESSAGING_SENDER_ID',
@@ -34,9 +35,12 @@ class FirebaseConfig {
     iosBundleId: const String.fromEnvironment('BAYIOS_FIREBASE_IOS_BUNDLE_ID'),
   );
 
+  /// Firebase creates one client API key per registered app: [apiKey] is the
+  /// Android app's key and the default; [iosApiKey], when set, is used on iOS.
   static FirebaseConfig? resolve({
     required TargetPlatform platform,
     required String apiKey,
+    required String iosApiKey,
     required String projectId,
     required String messagingSenderId,
     required String androidAppId,
@@ -48,10 +52,13 @@ class FirebaseConfig {
       TargetPlatform.iOS => iosAppId,
       _ => '',
     };
-    final values = [apiKey, projectId, messagingSenderId, appId];
+    final key = platform == TargetPlatform.iOS && iosApiKey.trim().isNotEmpty
+        ? iosApiKey
+        : apiKey;
+    final values = [key, projectId, messagingSenderId, appId];
     if (values.any((v) => v.trim().isEmpty)) return null;
     return FirebaseConfig(
-      apiKey: apiKey.trim(),
+      apiKey: key.trim(),
       appId: appId.trim(),
       messagingSenderId: messagingSenderId.trim(),
       projectId: projectId.trim(),
