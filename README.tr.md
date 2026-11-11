@@ -64,7 +64,7 @@ flowchart LR
     mods --> fcm
 ```
 
-Veriyi yazan tek yer API'dir: web ve mobil veritabanına doğrudan dokunmaz. Kurulum seçenekleri: Render (API, ücretsiz) + Vercel (web) — mevcut preview ortamı, Kubernetes (Helm chart, `infra/k8s`) veya Nginx + systemd ile tek bir Ubuntu VPS (`infra/linux`).
+Veriyi yazan tek yer API'dir: web ve mobil veritabanına doğrudan dokunmaz. Kurulum seçenekleri: Render ücretsiz (API + web) — mevcut preview ortamı; web Vercel'e de hazır, Kubernetes (Helm chart, `infra/k8s`) veya Nginx + systemd ile tek bir Ubuntu VPS (`infra/linux`).
 
 ### Ekran görüntüleri
 
@@ -343,7 +343,7 @@ yaz" işlemi bu sayede ya bütünüyle commit edilir ya da hiç olmaz.
 | **Bildirim** | Firebase Cloud Messaging (yalnızca push) |
 | **AI** | Anthropic Claude API (tenant bazında isteğe bağlı; maliyet ve token kullanımı saatlik izlenir) |
 | **Test** | xUnit v3 · Testcontainers (gerçek PostgreSQL 17) · Vitest · Playwright + axe (erişilebilirlik) · Flutter test + integration_test · k6 (yük) |
-| **DevOps** | GitHub Actions · Docker · Render (preview API) · Vercel (web) · CodeQL · gitleaks · Trivy · Dependabot |
+| **DevOps** | GitHub Actions · Docker · Render (preview API + web) · Vercel-ready web · CodeQL · gitleaks · Trivy · Dependabot |
 
 ---
 

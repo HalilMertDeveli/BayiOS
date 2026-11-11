@@ -3,7 +3,7 @@
 | Alan | Değer |
 |---|---|
 | Sahip | DevOps Engineer |
-| Durum | **Preview kararı verildi (2026-11-11, OD-12 — yalnızca ücretsiz katmanlar):** API Render (free, Frankfurt), web Vercel (Hobby) — §4. Production hostu hâlâ ürün sahibi kararında |
+| Durum | **Preview kararı verildi (2026-11-11, OD-12 — yalnızca ücretsiz katmanlar):** API ve web Render (free, Frankfurt; Vercel Hobby ekibi 2026-12-05'e kadar bloklu) — §4. Production hostu hâlâ ürün sahibi kararında |
 | Araştırma tarihi | 2026-11-04 |
 
 ## 1. Gereksinimler
@@ -43,12 +43,12 @@ egress, IPv4, log, depolama gibi kalemleri eksik bırakabilir — **"tahmini"** 
 - **Ops yükü:** Hetzner + Coolify en ucuz ama tek kişilik ekip için güvenlik/yedek yükü yüksek.
 
 ## 4. Karar — preview (2026-11-11, #218)
-- **Preview = Render free web service (`frankfurt`) + Vercel Hobby.** Gerekçe: OD-12 (yalnızca ücretsiz katman; kart,
+- **Preview = iki Render free web service (`frankfurt`): API + web.** İlk karar web için Vercel Hobby'ydi; ekip `hmd-team` diğer projelerin CPU kullanımıyla "fair use" blokunda (2026-11-05 → 2026-12-05), blok kaldırma ücretli → web de Render'da (ürün sahibi, 2026-11-11). **Ayda 750 ücretsiz instance saati workspace'teki tüm servislerce paylaşılır.** Gerekçe: OD-12 (yalnızca ücretsiz katman; kart,
   plan yükseltme veya ücret = dur, ürün sahibine sor). Fly.io free tier sunmadığı için preview'da kullanılmaz.
 - Render free sınırları ve kabul edilen riskler (yalnızca preview için): ~15 dk etkisizlikte uyur, ilk istek **~30–60 sn**
   sürer (cold start); worker (outbox, işler) yalnızca örnek uyanıkken çalışır; SignalR bağlantıları uykuda kopar; aylık
   ücretsiz instance saati sınırı vardır (https://render.com/docs/free). PR başına Preview Environments Render'da ücretli → yok.
-- Vercel Hobby: ticari olmayan kullanım şartı (preview/demo için uygun; ticari pilot öncesi yeniden değerlendirilir).
+- Vercel Hobby (blok kalkınca / production): ticari olmayan kullanım şartı; ticari pilot öncesi yeniden değerlendirilir.
 - Tanım: `render.yaml` (Blueprint), deploy akışı `deploy-and-rollback.md` §3 (API) ve §4 (web).
 
 ## 4.1 Öneri — production (⚠️ ürün sahibi onayı gerekir; değişmedi)

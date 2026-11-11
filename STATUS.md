@@ -16,14 +16,15 @@
 - #83 self-servis kurulum sihirbazı (`/kurulum`), panoda "İlk adımlar", sektörden bağımsız metinler (#186). Kalan: işletme
   adresi (API alanı yok), genel demo veri seti, API şablon adları, davet e-postası, KVKK adımı (#139).
 - Altyapı (OD-12, yalnızca ücretsiz): Supabase `bayios-preview` açıldı (Free, eu-central-1), bootstrap 01–03 uygulandı,
-  `bayios_migrator` parolası ayarlandı. **Bekleyen (sahip):** `bayios_app` parolası (`bash .demo/supabase-kurulum.sh`),
+  `bayios_migrator` parolası ayarlandı. `bayios_app` parolası 2026-11-11 ayarlandı. **Bekleyen (sahip):** Render'da `ConnectionStrings__Default`,
   GitHub Environment `preview` secret'ı, Auth ayarları + hook (`infra/supabase/bootstrap/README.md`). Org geçen dönem
   Egress kotasını aştı (diğer projeler); bu dönem %3.
 - Preview hostu (#218, 2026-11-11): API **Render free** `bayios-api-preview` (Frankfurt) canlı —
   https://bayios-api-preview.onrender.com, `/health` 200, `/api/v1/meta` = Preview, `/health/ready` 503 (kapalı-güvenli:
-  `ConnectionStrings__Default` = `bayios_app` sahip adımı). Pipeline Fly.io'dan Render'a (`render.yaml`, `checksPass`) ve
-  Vercel'e çevrildi. **Web BLOCKED:** Vercel Hobby ekibi `hmd-team` diğer projelerin CPU kullanımı yüzünden "fair use"
-  ile 2026-11-05'ten **2026-12-05'e** kadar bloklu; proje açılamıyor (açmak = ücretli Pro, OD-12'ye aykırı).
+  `ConnectionStrings__Default` = `bayios_app` sahip adımı). Web de **Render free**
+  `bayios-web-preview` — https://bayios-web-preview.onrender.com (sahip kararı: Vercel Hobby ekibi `hmd-team` diğer
+  projelerin CPU kullanımıyla "fair use" blokunda, 2026-11-05 → **2026-12-05**; blok kaldırma ücretli). Pipeline Fly.io'dan
+  Render'a çevrildi (`render.yaml`, `checksPass`); `apps/web/vercel.json` geri dönüş için hazır. 750 free saat/ay paylaşımlı.
 
 **Faz C (Flutter mobil, Android) — tamam.** Flutter 3.47.9 (`D:/DevTools/flutter`), `apps/mobile`.
 - Birleşenler: #165 temel (giriş/oturum, tenant seçimi, API istemcisi, sözleşme testi, ci-mobile; ADR 0011) · #166 pano, görev

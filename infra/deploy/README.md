@@ -1,7 +1,7 @@
 # infra/deploy — deploy hattı ve hosting şablonları
 
 > **Durum (#218, OD-12 — yalnızca ücretsiz katmanlar):** preview API **Render** free (Frankfurt, kök dizindeki
-> [`render.yaml`](../../render.yaml)), preview web **Vercel** Hobby (`apps/web`, [`apps/web/vercel.json`](../../apps/web/vercel.json)),
+> [`render.yaml`](../../render.yaml)), preview web de **Render** free (`bayios-web-preview`; Vercel Hobby ekibi 2026-12-05'e kadar bloklu, [`apps/web/vercel.json`](../../apps/web/vercel.json) geri dönüş için hazır),
 > DB Supabase `bayios-preview`. Production deploy edilmedi: `deploy-production.yml` `PRODUCTION_DEPLOY_ENABLED` ayarlanana
 > kadar kapalı; production hostu (öneri Fly.io) ürün sahibi kararında.
 

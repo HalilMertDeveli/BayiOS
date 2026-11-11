@@ -65,7 +65,7 @@ flowchart LR
     mods --> fcm
 ```
 
-One API is the only writer: web and mobile never touch the database directly. Deployment options: Render (API, free) + Vercel (web) — the current preview environment, Kubernetes (Helm chart, `infra/k8s`) or a single Ubuntu VPS with Nginx + systemd (`infra/linux`).
+One API is the only writer: web and mobile never touch the database directly. Deployment options: Render free (API + web) — the current preview environment; Vercel-ready web config, Kubernetes (Helm chart, `infra/k8s`) or a single Ubuntu VPS with Nginx + systemd (`infra/linux`).
 
 ### Screenshots
 
@@ -343,7 +343,7 @@ stock + write outbox event" commits or fails as one unit.
 | **Notifications** | Firebase Cloud Messaging (push only) |
 | **AI** | Anthropic Claude API (opt-in per tenant, cost and token usage tracked per hour) |
 | **Testing** | xUnit v3 · Testcontainers (real PostgreSQL 17) · Vitest · Playwright + axe (accessibility) · Flutter test + integration_test · k6 (load) |
-| **DevOps** | GitHub Actions · Docker · Render (preview API) · Vercel (web) · CodeQL · gitleaks · Trivy · Dependabot |
+| **DevOps** | GitHub Actions · Docker · Render (preview API + web) · Vercel-ready web · CodeQL · gitleaks · Trivy · Dependabot |
 
 ---
 

@@ -36,7 +36,7 @@
 |---|---|---|---|---|---|---|---|---|
 | GitHub (`gh` CLI) | Bağlı | `repo, workflow, gist, read:org` | Repo, issue, PR, Actions, ruleset | API rate limit | Mevcut token | Düşük (public repo Actions dakikaları ücretsiz — plan koşullarına bağlı) | `repo`+`workflow` geniş: tüm repolara yazabilir | Ruleset ayarı için admin gerekir; uzun vadede repo'ya özel fine-grained token veya GitHub App; `gist` gereksiz |
 | Supabase MCP | Bağlı | Org "HalilMertDeveli's Org" — proje oluşturma, SQL, migration, branch | Şema inceleme, dev/preview migration, advisors | Free: 2 aktif proje | Mevcut OAuth | **Yüksek**: `create_project`, `create_branch` maliyet doğurabilir | `execute_sql` ilgisiz `led-com-staging` dahil tüm projelere erişebilir | Yalnızca `bayios-*` projelerinde; prod'a yazma yok; MCP'yi mümkünse proje kapsamlı/read-only modda kullan |
-| Vercel CLI + Vercel MCP | Bağlı | Kişisel Hobby hesabı | Preview web projesi `bayios-web`, env, deployment durumu | Hobby: ticari kullanım yok | Mevcut giriş / OAuth | Orta (Pro geçişi) | Token tüm projelere erişir | Yalnızca `bayios-web`; deploy Git entegrasyonuyla, CI'da token yok |
+| Vercel CLI + Vercel MCP | Bağlı (MCP'nin `hmd-team` yetkisi yok; CLI çalışır) | Hobby ekibi `hmd-team` — **2026-12-05'e kadar fair-use blokunda** | Şimdilik kullanılmıyor (web preview Render'da) | Hobby: ticari kullanım yok | Mevcut giriş / OAuth | Orta (Pro geçişi) | Token tüm projelere erişir | Yalnızca `bayios-web`; deploy Git entegrasyonuyla, CI'da token yok |
 | Figma MCP | Bağlı | Kullanıcı "Halil Develi", starter takım, Full seat | Tasarım sistemi, ekranlar (UX Designer) | Starter plan limitleri (dosya/sayfa) | Mevcut | Düşük | Düşük (gerçek veri konmaz) | Yalnızca BayiOS dosyaları |
 | context7 | Bağlı | Okuma | Kütüphane dokümantasyonu doğrulama | — | — | Yok | Düşük | — |
 | Yerleşik tarayıcı / Claude in Chrome | Bağlı | Tarayıcı kontrolü | Preview ekran görüntüsü, E2E gözden geçirme | — | Chrome'da kullanıcının oturumları | Yok | **Orta**: Chrome uzantısı kullanıcının gerçek oturumlarıyla çalışır | Ekran görüntüsü için yerleşik tarayıcı tercih; Chrome'da üretim panellerine işlem yapılmaz |
@@ -46,7 +46,7 @@
 | Firebase MCP | **Eksik** | — | FCM proje yönetimi | — | — | — | — | CLI ile ve onayla |
 | Domain registrar | **Eksik** | — | Domain satın alma/DNS | — | — | — | — | Ürün sahibi yapar |
 | Anthropic API (uygulama içi) | Henüz yok | — | WhatsApp ayrıştırma | Hesap limiti | API anahtarı (ürün sahibi oluşturur) | **Orta**: token kullanımı | Anahtar sızıntısı | Ortam başına ayrı anahtar, harcama limiti |
-| Render MCP | Bağlı | Workspace "Halil mert's workspace" | Preview API servisi `bayios-api-preview` (free, Frankfurt), env, deploy/log | Free: uyku, aylık instance saati | Mevcut OAuth | **Orta**: plan yükseltme ücret doğurur — yalnızca `plan: free` (OD-12) | Env değerlerini okuyabilir/yazabilir | Sırlar ajan tarafından girilmez; yalnızca `bayios-*` servisleri |
+| Render MCP | Bağlı | Workspace "Halil mert's workspace" | Preview servisleri `bayios-api-preview` + `bayios-web-preview` (free, Frankfurt), env, deploy/log | Free: uyku, aylık instance saati | Mevcut OAuth | **Orta**: plan yükseltme ücret doğurur — yalnızca `plan: free` (OD-12) | Env değerlerini okuyabilir/yazabilir | Sırlar ajan tarafından girilmez; yalnızca `bayios-*` servisleri |
 | API host — production (Fly.io önerisi) | Henüz yok | — | API + worker | — | Hesap + kart | **Orta** | Deploy token | Uygulama kapsamlı deploy token |
 
 ## 4. BLOCKED — ürün sahibi kurulum adımları

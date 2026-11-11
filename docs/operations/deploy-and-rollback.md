@@ -3,7 +3,7 @@
 | Alan | Değer |
 |---|---|
 | Sahip | DevOps Engineer |
-| Durum | v0.3 — preview: API Render free (Frankfurt, `render.yaml`), web Vercel Hobby, DB Supabase `bayios-preview` (#218, OD-12). Production deploy edilmedi (`deploy-production.yml` iskeleti kapalı, Fly.io şablonu) |
+| Durum | v0.3 — preview: API Render free (Frankfurt, `render.yaml`), web Render free (Vercel bloklu, 2026-12-05'e kadar), DB Supabase `bayios-preview` (#218, OD-12). Production deploy edilmedi (`deploy-production.yml` iskeleti kapalı, Fly.io şablonu) |
 | İlgili | `environments.md` (ortamlar, sırlar, migration terfisi), `ci-cd.md` (workflow'lar), `hosting-options.md`, `infra/deploy/`, `infra/linux/` (self-hosted Ubuntu VPS alternatifi — API + web + Nginx; sunucu açılmadı, #194), `infra/supabase/bootstrap/`, olay anı adımları: `runbooks/rollback.md`, yedek: `backup-and-restore.md`, izleme: `observability.md` |
 | Son güncelleme | 2026-11-07 |
 
@@ -11,11 +11,11 @@
 
 | | Preview | Production |
 |---|---|---|
-| Tetik | `preview` dalına merge: Render (tüm check'ler yeşil olunca) ve Vercel Git entegrasyonu | `main`'den `vX.Y.Z` etiketi + GitHub Environment `production` reviewer onayı (ürün sahibi) |
+| Tetik | `preview` dalına merge: Render API + web (tüm check'ler yeşil olunca) | `main`'den `vX.Y.Z` etiketi + GitHub Environment `production` reviewer onayı (ürün sahibi) |
 | API | Render free web service `bayios-api-preview` (`frankfurt`, Docker, uyur/uyanır) — tanım: `render.yaml` | Ayrı uygulama (öneri Fly.io `bayios-api-prod`, `fra`, **min 1 makine always-on**) — onaydan sonra |
-| Web | Vercel Hobby `bayios-web`: `preview` dalı alias'ı + PR başına Preview URL'leri | Vercel Production |
+| Web | Render free web service `bayios-web-preview` (`frankfurt`, Next.js) — Vercel bloklu (§4) | Vercel Production |
 | DB | Supabase `bayios-preview` (free, yalnızca sentetik veri) | Supabase `bayios-prod` (Pro önerilir) |
-| Sırlar | GitHub Environment `preview`, Render servis env'i (Dashboard), Vercel "Preview" env | GitHub Environment `production`, prod host secrets, Vercel "Production" env |
+| Sırlar | GitHub Environment `preview`, Render servis env'leri (Dashboard) | GitHub Environment `production`, prod host secrets, Vercel "Production" env |
 | Paylaşım | Hiçbir sır, token, DB veya API servisi iki ortam arasında paylaşılmaz | |
 
 Kurallar: preview'a production verisi gelmez; fork PR'larında deploy ve sır yok; production adımları yalnızca ürün sahibi onayıyla.
@@ -46,7 +46,7 @@ kırmızıysa API deploy edilmez, eski sürüm çalışmaya devam eder.
 |---|---|---|
 | `deploy prepare (image, migration scripts, local smoke)` | — (sır yok) | `infra/ci/ef-migrations.sh` (idempotent script'ler + `manifest.txt`, boş Postgres 17'de iki kez prova) → `docker build` → imaj yerelde `--read-only --cap-drop ALL` ile çalıştırılıp `infra/deploy/smoke.sh` (`/health` 200, yapılandırmasız `/health/ready` **503** = kapalı-güvenli, ortam `Production`) |
 | `migrate preview database (bayios_migrator)` | `preview` | `infra/deploy/preflight.sh` → `infra/deploy/apply-migrations.sh` (`PREVIEW_MIGRATOR_CONNECTION`) → `verify.sql` duruş kontrolü |
-| `preview release hand-over (Render checksPass, Vercel Git)` | — | Yalnızca özet: Render'ın bu commit'i check'ler yeşil olunca deploy edeceğini, Vercel'in dalı derleyeceğini yazar (Render bu job'ı beklediği için Render'ı bekleyemez) |
+| `preview release hand-over (Render checksPass)` | — | Yalnızca özet: Render'ın API ve web'i check'ler yeşil olunca deploy edeceğini yazar (Render bu job'ı beklediği için Render'ı bekleyemez) |
 | `smoke preview API (Render)` | `preview` | Yalnızca `workflow_dispatch`: `smoke.sh` → `vars.API_BASE_URL` üzerinde `/health`, `/health/ready` (`vars.SMOKE_EXPECT_READY_STATUS`, varsayılan 200), `/api/v1/meta` = `Preview`; cold start için 240 sn |
 
 Davranış:
@@ -80,26 +80,37 @@ dokunmaz.
 **Rollback (production):** `fly releases --app <app> --image` ile önceki sağlıklı imajı bulun; `deploy-production.yml`'i önceki
 etiketle `workflow_dispatch` (`production` onayıyla). DB geri alınmaz (§5). Rollback sonrası incident notu + kök neden issue'su.
 
-## 4. Web deploy ve rollback (Vercel Hobby)
+## 4. Web deploy ve rollback
+
+### 4.1 Preview — Render free (`bayios-web-preview`, Frankfurt)
+Vercel Hobby ekibi (`hmd-team`) diğer projelerin CPU kullanımı yüzünden **"fair use" blokunda: 2026-11-05 → 2026-12-05**;
+proje açılamıyor ve blok kaldırmak ücretli Pro ister (OD-12'ye aykırı). Ürün sahibi kararı (2026-11-11): preview web de
+Render'da, ikinci free web service olarak (`render.yaml`).
 
 | Ayar | Değer |
 |---|---|
-| Proje | `bayios-web` (kişisel Hobby hesabı) — Git: `HalilMertDeveli/BayiOS` |
-| Root Directory | `apps/web` (Node 24.x) |
-| Yapı | `apps/web/vercel.json`: framework `nextjs`, `npm ci`, `npm run build`; `git.deploymentEnabled.main = false` → **`main` Vercel'de hiç deploy edilmez** (production yok) |
-| Preview adresi | `preview` dalının sabit alias'ı (`bayios-web-git-preview-<hesap>.vercel.app`). API CORS'unda izinli tek origin budur |
-| Env (Preview) | `NEXT_PUBLIC_API_BASE_URL` = Render URL'si, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (herkese açık publishable key) |
-| Deployment Protection | Vercel Authentication (Hobby varsayılanı, preview deployment'ları) — sayfayı açmak için Vercel'de oturum gerekir |
+| Servis | `bayios-web-preview`, `runtime: node`, `plan: free`, `region: frankfurt`, `branch: preview` |
+| Build / start | `cd apps/web && npm ci && npm run build` / `cd apps/web && npm run start` (`next start`, Render'ın `PORT`'unu dinler) |
+| Tetik | `autoDeployTrigger: checksPass`, build filtresi `apps/web/**`, `packages/contracts/**` |
+| Env | `NODE_VERSION=24`, `NEXT_PUBLIC_API_BASE_URL` = API Render URL'si, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (herkese açık publishable key), opsiyonel `NEXT_PUBLIC_TURNSTILE_SITE_KEY` |
+| Adres | `https://bayios-web-preview.onrender.com` — API CORS'unda (`Cors__AllowedOrigins__0`) izinli tek origin |
+| Erişim | Herkese açık URL (Render free'de kimlik doğrulama koruması yok) → yalnızca sentetik veri |
 
 `NEXT_PUBLIC_*` değerleri build zamanında pakete gömülür ve **herkese açıktır** — buraya sır konmaz. Değer değişince yeniden
-deploy gerekir. PR başına Preview URL'leri de derlenir ama CORS'ta olmadıkları için API çağrıları başarısız olur (yalnızca
-arayüz incelemesi için). Doğrulama: alias'ta `/giris` açılır; giriş sonrası panonun `/api/v1/meta` çağrısı başarılıdır (#10).
+deploy gerekir. **Ücretsiz instance saatleri (ayda 750) workspace'teki tüm servisler (API + web) arasında paylaşılır**; iki
+servis de uyuduğunda saat harcamaz. Web de ~15 dk etkisizlikte uyur, ilk açılış ~30–60 sn sürer.
 
-**Rollback:** Vercel Dashboard → `bayios-web` → Deployments → önceki sağlıklı `preview` deployment'ı → ⋯ → **Redeploy**
-(veya düzeltici commit'i `preview`'a merge). Production olduğunda: önceki production deployment → **Instant Rollback**.
+**Rollback:** Render Dashboard → `bayios-web-preview` → Events → önceki sağlıklı deploy → **Rollback** (sonra auto-deploy'u
+yeniden açın, §3.1 ile aynı).
 
-**Web sıralaması — bilinen sınır:** Vercel Git entegrasyonu `preview` dalını Render'ı beklemeden derler. Sözleşme kuralı
-(önce API PR'ı, sonra web; API geriye uyumlu) bu riski karşılar.
+### 4.2 Vercel (2026-12-05 sonrası veya production) — repo hazır
+`apps/web/vercel.json`: framework `nextjs`, `npm ci`, `npm run build`, `git.deploymentEnabled.main = false` (main'den
+otomatik deploy yok). Proje: root `apps/web`, Node 24.x, aynı `NEXT_PUBLIC_*` değişkenleri (Preview env). Geçişte API'nin
+`Cors__AllowedOrigins__*` listesine ve Supabase Auth redirect listesine Vercel adresi eklenir. Rollback: Deployments →
+önceki deployment → Redeploy / Instant Rollback (production).
+
+**Web sıralaması — bilinen sınır:** web ve API ayrı servislerdir; ikisi de `checksPass` ile aynı commit'i bekler ama
+birbirini beklemez. Sözleşme kuralı (önce API PR'ı, sonra web; API geriye uyumlu) bu riski karşılar.
 
 ## 5. Migration sırası (değişmez kural)
 - Migration'ları **yalnızca** CI/deploy pipeline'ındaki ayrı migration adımı (`infra/deploy/apply-migrations.sh`), `bayios_migrator` rolüyle çalıştırır (deploy'da `PREVIEW_MIGRATOR_CONNECTION` / `PRODUCTION_MIGRATOR_CONNECTION`; yerelde `ConnectionStrings__Migrator`).
@@ -122,7 +133,7 @@ arayüz incelemesi için). Doğrulama: alias'ta `/giris` açılır; giriş sonra
 ## 7. Ürün sahibi aksiyonları (özet)
 | Aksiyon | Maliyet | Durum |
 |---|---|---|
-| Preview hostu: Render free (API) + Vercel Hobby (web) — OD-12 | $0 | Karşılandı (#218) |
+| Preview hostu: Render free (API + web; Vercel 2026-12-05'e kadar bloklu) — OD-12 | $0 | Karşılandı (#218) |
 | `bayios-preview` Supabase projesi + bootstrap (roller, uzantı, hook, `bayios_migrator` parolası) | $0 (free) | Karşılandı; `bayios_app` parolası bekliyor |
 | Production hostu (öneri Fly.io `fra`) | Free tier yok, prod ~$10–20/ay (tahmini) | Bekliyor (onay) |
 | GitHub Environment `production` (+ reviewer) ve prod token'ları | $0 | Bekliyor |
@@ -136,7 +147,7 @@ Sıra önemlidir: önce DB rolleri, sonra GitHub migrator sırrı, sonra Render'
    `SUPABASE_DB_URL=… bash infra/supabase/bootstrap/bootstrap.sh --set-passwords`). Parolaları parola yöneticinizde saklayın.
 2. Auth kontrol listesi (README §3): Confirm email, Secure email change, min. parola ≥ 8, ES256 JWT imzalama,
    access-token hook'u etkin. Hook doğrulandıktan sonra Render'da `Invitations__TrustUserMetadataEmailVerified` = `false`.
-3. Authentication → URL Configuration: **Site URL** ve **Redirect URLs** = Vercel preview alias'ı (`https://<alias>/**`).
+3. Authentication → URL Configuration: **Site URL** ve **Redirect URLs** = `https://bayios-web-preview.onrender.com` (Redirect URLs: `https://bayios-web-preview.onrender.com/**`).
 
 **B. GitHub → Settings → Environments → `preview`**
 | Tür | Ad | Değer |
@@ -151,10 +162,10 @@ Deployment branches: yalnızca `preview`. Eski `FLY_API_TOKEN` / `VERCEL_DEPLOY_
 |---|---|
 | `ConnectionStrings__Default` | **Sır.** Yalnızca `bayios_app`: `Host=aws-1-eu-central-1.pooler.supabase.com;Port=5432;Database=postgres;Username=bayios_app.<proje-ref>;Password=…;SSL Mode=Require` |
 | `Auth__Authority` | `https://<proje-ref>.supabase.co/auth/v1` (ajan ayarlar) |
-| `Cors__AllowedOrigins__0` | Vercel preview alias'ı (ajan ayarlar) |
+| `Cors__AllowedOrigins__0` | `https://bayios-web-preview.onrender.com` (ajan ayarlar) |
 `Audit__IpHashKey` Render tarafından üretilir (`generateValue`). **`bayios_migrator` bilgisi Render'a konmaz.**
 
-**D. Vercel → `bayios-web` → Settings → Environment Variables (Preview)** — yalnızca herkese açık `NEXT_PUBLIC_*` (§4).
+**D. Render → `bayios-web-preview` → Environment** — yalnızca herkese açık `NEXT_PUBLIC_*` (§4.1; ajan ayarlar).
 Opsiyonel `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (CAPTCHA işi, ayrı).
 
 **E. Production** (onaydan sonra): GitHub Environment `production` — `PRODUCTION_MIGRATOR_CONNECTION`, `FLY_API_TOKEN`,
@@ -162,4 +173,4 @@ opsiyonel `VERCEL_DEPLOY_HOOK_URL`; variables `FLY_APP`, `API_BASE_URL`; require
 `v*`. Repo değişkeni `PRODUCTION_DEPLOY_ENABLED` = `true` **yalnızca** production onayı verildiğinde.
 
 **F. Doğrulama** — `preview`'a bir merge: `migrate` → `verify: OK`; Render Events → "Deploy live"; Actions → deploy-preview →
-Run workflow → `smoke` yeşil. Ardından #10 uçtan uca smoke (Vercel alias'ında giriş → pano).
+Run workflow → `smoke` yeşil. Ardından #10 uçtan uca smoke (`bayios-web-preview.onrender.com` üzerinde giriş → pano).

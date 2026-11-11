@@ -1,14 +1,14 @@
 name: deploy-preview
 
 # Preview deploy pipeline (issues #70, #218; deploy-and-rollback.md §3/§5). Order: migration -> API -> web.
-# Hosting (OD-12, free tiers only): API on Render (render.yaml, free, Frankfurt), web on Vercel (Hobby, apps/web).
+# Hosting (OD-12, free tiers only): API on Render (render.yaml, free, Frankfurt), web on Render too (bayios-web-preview; Vercel team blocked until 2026-12-05).
 #   prepare   build the API image, generate + rehearse the idempotent EF scripts (infra/ci/ef-migrations.sh),
 #             smoke the image locally. No secrets.
 #   migrate   GitHub Environment `preview`: apply the scripts AS bayios_migrator (PREVIEW_MIGRATOR_CONNECTION),
 #             then the posture check. A failure is a red check on the commit.
 #   release   no push from CI: Render builds services/api/Dockerfile from the `preview` commit and, because of
 #             `autoDeployTrigger: checksPass` (render.yaml), deploys it ONLY after every check on that commit is
-#             green — including `migrate`. Vercel's Git integration builds apps/web from the same branch.
+#             green — including `migrate`. The web service (apps/web) follows the same rule.
 #             This job only writes the hand-over summary (it cannot wait for Render: Render waits for it).
 #   smoke     workflow_dispatch only: /health, /health/ready, /api/v1/meta = Preview against vars.API_BASE_URL.
 #
@@ -152,7 +152,7 @@ jobs:
           bash infra/deploy/apply-migrations.sh
 
   release:
-    name: preview release hand-over (Render checksPass, Vercel Git)
+    name: preview release hand-over (Render checksPass)
     needs: migrate
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -170,7 +170,7 @@ jobs:
             fi
             echo "- API: Render deploys \`${GITHUB_SHA}\` once every check on it is green (render.yaml \`autoDeployTrigger: checksPass\`,"
             echo "  build filter \`services/api/**\`). Progress: Render Dashboard -> bayios-api-preview -> Events."
-            echo "- Web: Vercel's Git integration builds the \`preview\` branch (apps/web)."
+            echo "- Web: Render deploys bayios-web-preview (apps/web) under the same rule (build filter \`apps/web/**\`)."
             echo "- After the deploy: Actions -> deploy-preview -> Run workflow runs the \`smoke\` job."
             echo "- Rollback: docs/operations/deploy-and-rollback.md §3 (API) / §4 (web)."
           } >> "$GITHUB_STEP_SUMMARY"

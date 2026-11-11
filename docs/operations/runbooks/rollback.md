@@ -24,10 +24,11 @@ düzeltme `preview`'a merge edilince Settings → Build & Deploy'dan auto-deploy
 
 Worker ayrı container'da çalışıyorsa (Jobs:Enabled=false API + ayrı worker) ikisi aynı imaj sürümüne geri alınır.
 
-## 2. Web geri alma (Vercel)
+## 2. Web geri alma
+**Preview (Render):** Render Dashboard → `bayios-web-preview` → Events → önceki sağlıklı deploy → **Rollback** (sonra auto-deploy'u yeniden açın).
+
+**Vercel (production / blok kalkınca):**
 1. Vercel Dashboard → Project → Deployments → son sağlıklı **Production** deployment → **Instant Rollback** (yeniden derleme yok, anlık).
-   Preview (`bayios-web`, `preview` dalı alias'ı): önceki sağlıklı `preview` deployment'ı → ⋯ → **Redeploy** (veya
-   düzeltici commit'i `preview`'a merge).
 2. Doğrula: giriş sayfası açılıyor, panodaki `/api/v1/meta` çağrısı başarılı, kritik akış (sipariş listesi) çalışıyor.
 3. Instant Rollback sonrası otomatik production atamaları durur; düzeltme merge edilince "Promote" ile yeniden açılır.
 4. `NEXT_PUBLIC_*` yanlışsa (ör. API URL'si) değer düzeltilip yeniden deploy edilir — değer pakete gömülüdür, rollback eski değeri geri getirir.

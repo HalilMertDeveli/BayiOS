@@ -3,7 +3,7 @@
 | Alan | Değer |
 |---|---|
 | Sahip | DevOps Engineer |
-| Durum | v0.2 — preview: Supabase `bayios-preview` (eu-central-1), API Render free (Frankfurt), web Vercel Hobby (#218). Production kaynağı yok |
+| Durum | v0.2 — preview: Supabase `bayios-preview` (eu-central-1), API Render free (Frankfurt), web Render free (#218; Vercel Hobby ekibi 2026-12-05'e kadar bloklu). Production kaynağı yok |
 | Son güncelleme | 2026-11-11 |
 
 ## 1. Ortam tanımları
@@ -12,7 +12,7 @@
 |---|---|---|---|
 | Amaç | Geliştirme, test, ajan çalışması | PR doğrulama, entegrasyon (`preview` dalı), demo | Gerçek tenant'lar (pilot) |
 | Veri | Sentetik seed | **Yalnızca sentetik** | Gerçek müşteri verisi |
-| Web | `npm run dev` (localhost:3000) | Vercel Hobby projesi `bayios-web` (root `apps/web`): `preview` dalının sabit alias'ı (API'nin CORS'unda izinli tek origin) + PR başına Preview URL'leri (Vercel Authentication korumalı; CORS dışında olduklarından API çağrıları çalışmaz). `main` Vercel'de deploy edilmez (`apps/web/vercel.json`) | Vercel Production (onaydan sonra) |
+| Web | `npm run dev` (localhost:3000) | Render free web service `bayios-web-preview` (Frankfurt, `next start`) — https://bayios-web-preview.onrender.com, API CORS'unda izinli tek origin. Vercel ekibi 2026-12-05'e kadar "fair use" blokunda; `apps/web/vercel.json` sonraki geçiş için hazır | Vercel Production (onaydan sonra) |
 | API | `dotnet run` (localhost:5280) veya `services/api/Dockerfile` imajı (port 8080) | Render free web service `bayios-api-preview` (Frankfurt, Docker, `render.yaml`; ~15 dk etkisizlikte uyur, ilk istek ~30–60 sn) | Seçilen hosttaki prod uygulaması (EU; `hosting-options.md` §4.1) |
 | DB | Docker compose `postgres:17` | Supabase `bayios-preview` (free, eu-central-1; session pooler 5432, `sslmode=require`) | Supabase `bayios-prod` (**onay + muhtemelen Pro plan**) |
 | Auth | Local: Supabase CLI local stack (kurulunca) veya test JWT üretici | `bayios-preview` Supabase Auth | `bayios-prod` Supabase Auth |
@@ -24,7 +24,7 @@
 ## 2. Yapılandırma ve sırlar
 Ayrıntılı sır tablosu: `docs/security/data-policy.md` §9. Özet:
 - **Local:** `.env` (git-ignored) — `.env.example` yalnızca değişken adları.
-- **Preview:** GitHub Environment `preview` — secret `PREVIEW_MIGRATOR_CONNECTION`; variables `API_BASE_URL` (Render URL'si, smoke için), opsiyonel `SMOKE_EXPECT_READY_STATUS` — Render servis env'i (sırlar Dashboard'da, `sync: false`), Vercel "Preview" env (yalnızca herkese açık `NEXT_PUBLIC_*`). Deploy token'ı yok: Render ve Vercel GitHub entegrasyonlarıyla çeker.
+- **Preview:** GitHub Environment `preview` — secret `PREVIEW_MIGRATOR_CONNECTION`; variables `API_BASE_URL` (Render URL'si, smoke için), opsiyonel `SMOKE_EXPECT_READY_STATUS` — Render servis env'leri (sırlar Dashboard'da, `sync: false`; web'de yalnızca herkese açık `NEXT_PUBLIC_*`). Deploy token'ı yok: Render GitHub entegrasyonuyla çeker.
 - **Production:** GitHub Environment `production` (required reviewer: ürün sahibi) — secrets `PRODUCTION_MIGRATOR_CONNECTION`, `FLY_API_TOKEN` (ayrı token), opsiyonel `VERCEL_DEPLOY_HOOK_URL`; variables `FLY_APP`, `API_BASE_URL`; repo değişkeni `PRODUCTION_DEPLOY_ENABLED` — API host env, Vercel "Production" env. Tam liste ve sıra: `deploy-and-rollback.md` §8.
 - `ConnectionStrings__Default` = `bayios_app` rolü (`NOBYPASSRLS`, tablo sahibi değil); `ConnectionStrings__Migrator` = `bayios_migrator` (yalnızca yerel/CI migration; preview/production'da aynı rolün URI'si `*_MIGRATOR_CONNECTION` GitHub Environment secret'ı, API'ye verilmez). `postgres`/service-role ile uygulama bağlantısı yasaktır; local compose'da `infra/docker/initdb/`, Supabase'de `infra/supabase/bootstrap/` aynı rolleri kurar.
 - API yapılandırması ASP.NET Core adlandırmasını kullanır (`:` → `__`). Diziler indeksle verilir: CORS için `Cors__AllowedOrigins__0`, `Cors__AllowedOrigins__1`, … (tek değerli `Cors__AllowedOrigins=` diziye bağlanmaz).
@@ -71,7 +71,7 @@ Turnstile CAPTCHA'dır. Token'ı Supabase Auth doğrular; API'de veya web sunucu
 1. Cloudflare hesabı (ücretsiz) → **Turnstile** → *Add widget*. Ad: `BayiOS <ortam>`; *Hostname*: o ortamın web alan
    adı (ör. Vercel preview alias'ı / production alanı); *Widget mode*: **Managed**; *Pre-clearance*: hayır. Turnstile
    ücretsiz plandır; ödeme bilgisi gerekmez.
-2. **Site key** → Vercel → Project → Settings → Environment Variables → `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (ilgili
+2. **Site key** → preview: Render → `bayios-web-preview` → Environment (Vercel'de: Project → Settings → Environment Variables) → `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (ilgili
    ortam: Preview / Production). Değişken derleme anında gömülür: kaydettikten sonra **yeniden deploy** edin.
 3. Yeni deploy'da `/giris` sayfasında widget'ın göründüğünü ve girişin çalıştığını doğrulayın.
 4. **Ancak bundan sonra** Supabase Dashboard → Authentication → **Bot and Abuse Protection** (Attack Protection) →
