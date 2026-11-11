@@ -5,7 +5,7 @@
 # docs/operations/deploy-and-rollback.md §8 and sets PRODUCTION_DEPLOY_ENABLED=true.
 # COST: always-on machines are billed continuously; sizing below needs owner approval (#138, OD-12).
 #
-# Same rules as fly.preview.toml: image built in CI and deployed by immutable tag, no [build], no release_command
+# Rules: image built in CI and deployed by immutable tag, no [build], no release_command
 # (migrations run in the pipeline as bayios_migrator BEFORE this deploy), secrets only by name:
 #   ConnectionStrings__Default (bayios_app), Auth__Authority, Auth__Audience, Cors__AllowedOrigins__0..n,
 #   Audit__IpHashKey; Invitations__TrustUserMetadataEmailVerified=false once the access-token hook is enabled;

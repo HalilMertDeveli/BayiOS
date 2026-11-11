@@ -8,7 +8,7 @@
 # - Base images are pinned by multi-arch index digest; bump tag+digest together (Dependabot "docker" ecosystem).
 # - Listens on 8080 (ASPNETCORE_HTTP_PORTS from the base image). TLS is terminated by the host/proxy.
 # - No HEALTHCHECK: the runtime image has no shell/curl. Liveness is probed externally on GET /health
-#   (fly.preview.toml http_service.checks, CI smoke step). See docs/operations/deploy-and-rollback.md.
+#   (Render healthCheckPath in render.yaml, CI smoke step). See docs/operations/deploy-and-rollback.md.
 # - No configuration or secrets are baked in. ASPNETCORE_ENVIRONMENT defaults to Production;
 #   the host sets Preview/Production and injects secrets as env vars at runtime.
 

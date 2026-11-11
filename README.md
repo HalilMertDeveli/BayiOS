@@ -65,7 +65,7 @@ flowchart LR
     mods --> fcm
 ```
 
-One API is the only writer: web and mobile never touch the database directly. Deployment options: Fly.io + Vercel (current preview pipeline), Kubernetes (Helm chart, `infra/k8s`) or a single Ubuntu VPS with Nginx + systemd (`infra/linux`).
+One API is the only writer: web and mobile never touch the database directly. Deployment options: Render (API, free) + Vercel (web) — the current preview environment, Kubernetes (Helm chart, `infra/k8s`) or a single Ubuntu VPS with Nginx + systemd (`infra/linux`).
 
 ### Screenshots
 
@@ -343,7 +343,7 @@ stock + write outbox event" commits or fails as one unit.
 | **Notifications** | Firebase Cloud Messaging (push only) |
 | **AI** | Anthropic Claude API (opt-in per tenant, cost and token usage tracked per hour) |
 | **Testing** | xUnit v3 · Testcontainers (real PostgreSQL 17) · Vitest · Playwright + axe (accessibility) · Flutter test + integration_test · k6 (load) |
-| **DevOps** | GitHub Actions · Docker · Fly.io (API) · Vercel (web) · CodeQL · gitleaks · Trivy · Dependabot |
+| **DevOps** | GitHub Actions · Docker · Render (preview API) · Vercel (web) · CodeQL · gitleaks · Trivy · Dependabot |
 
 ---
 
@@ -782,7 +782,7 @@ BayiOS/
 │   ├── docker/                   Local PostgreSQL (compose) + DB roles
 │   ├── supabase/                 Bootstrap: roles, extensions, auth hook, storage policies
 │   ├── ci/                       CI helpers: migration check, real-stack E2E, CI gate
-│   ├── deploy/                   Fly.io configs, migration apply, preflight, smoke tests
+│   ├── deploy/                   migration apply, preflight, smoke tests (preview API: render.yaml)
 │   └── ops/                      Backups, observability, pg tools
 └── docs/                         Product, architecture, ADRs, security, testing, operations, user guide
 ```
@@ -887,7 +887,7 @@ Strategy: [`docs/testing/test-strategy.md`](docs/testing/test-strategy.md).
 | `ci-container` | API Docker image + Trivy scan |
 | `ci-k8s` | API + web images → 3-node kind cluster → Helm chart (`infra/k8s`) → health/readiness/401/web smoke test |
 | `codeql`, `secret-scan`, `dependency-review` | Static analysis, gitleaks, vulnerable dependencies |
-| `deploy-preview`, `deploy-production` | Migrations → API to Fly.io → smoke tests; production needs owner approval |
+| `deploy-preview`, `deploy-production` | Migrations → Render deploys the API once checks pass → smoke tests; production needs owner approval |
 
 Branching: `feature/*`, `fix/*`, `chore/*` → PR into `preview` (green CI required) → `main` only with the product
 owner's explicit approval. Both protected branches forbid force-push and direct pushes.

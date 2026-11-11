@@ -3,7 +3,7 @@
 | Alan | Değer |
 |---|---|
 | Sahip | DevOps Engineer |
-| Durum | v0.2 — deploy hattı **hazır** (`deploy-preview.yml`, `deploy-production.yml` iskeleti, #70) ve Supabase bootstrap'ı hazır (#76); **hiçbir ortam deploy edilmedi**, hesaplar ürün sahibini bekliyor (#138) |
+| Durum | v0.3 — preview: API Render free (Frankfurt, `render.yaml`), web Vercel Hobby, DB Supabase `bayios-preview` (#218, OD-12). Production deploy edilmedi (`deploy-production.yml` iskeleti kapalı, Fly.io şablonu) |
 | İlgili | `environments.md` (ortamlar, sırlar, migration terfisi), `ci-cd.md` (workflow'lar), `hosting-options.md`, `infra/deploy/`, `infra/linux/` (self-hosted Ubuntu VPS alternatifi — API + web + Nginx; sunucu açılmadı, #194), `infra/supabase/bootstrap/`, olay anı adımları: `runbooks/rollback.md`, yedek: `backup-and-restore.md`, izleme: `observability.md` |
 | Son güncelleme | 2026-11-07 |
 
@@ -11,12 +11,12 @@
 
 | | Preview | Production |
 |---|---|---|
-| Tetik | `preview` dalına merge (API), her PR (web) | `main`'den `vX.Y.Z` etiketi + GitHub Environment `production` reviewer onayı (ürün sahibi) |
-| API | Fly.io `bayios-api-preview` (`fra`, auto-stop, 0–1 makine) — şablon: `infra/deploy/fly.preview.toml` | Ayrı Fly uygulaması `bayios-api-prod` (`fra`, **min 1 makine always-on**) — şablon onaydan sonra yazılır |
-| Web | Vercel Preview deployment'ları (PR başına URL) + `preview` dalı alias'ı | Vercel Production |
+| Tetik | `preview` dalına merge: Render (tüm check'ler yeşil olunca) ve Vercel Git entegrasyonu | `main`'den `vX.Y.Z` etiketi + GitHub Environment `production` reviewer onayı (ürün sahibi) |
+| API | Render free web service `bayios-api-preview` (`frankfurt`, Docker, uyur/uyanır) — tanım: `render.yaml` | Ayrı uygulama (öneri Fly.io `bayios-api-prod`, `fra`, **min 1 makine always-on**) — onaydan sonra |
+| Web | Vercel Hobby `bayios-web`: `preview` dalı alias'ı + PR başına Preview URL'leri | Vercel Production |
 | DB | Supabase `bayios-preview` (free, yalnızca sentetik veri) | Supabase `bayios-prod` (Pro önerilir) |
-| Sırlar | GitHub Environment `preview`, Fly preview app secrets, Vercel "Preview" env | GitHub Environment `production`, Fly prod app secrets, Vercel "Production" env |
-| Paylaşım | Hiçbir sır, token, DB veya Fly uygulaması iki ortam arasında paylaşılmaz | |
+| Sırlar | GitHub Environment `preview`, Render servis env'i (Dashboard), Vercel "Preview" env | GitHub Environment `production`, prod host secrets, Vercel "Production" env |
+| Paylaşım | Hiçbir sır, token, DB veya API servisi iki ortam arasında paylaşılmaz | |
 
 Kurallar: preview'a production verisi gelmez; fork PR'larında deploy ve sır yok; production adımları yalnızca ürün sahibi onayıyla.
 
@@ -25,80 +25,85 @@ Kurallar: preview'a production verisi gelmez; fork PR'larında deploy ve sır yo
   ICU + tzdata dahil — `tr-TR` kültürü ve `Europe/Istanbul` için). Port 8080. Taban imajlar digest ile sabit.
 - İmajda yapılandırma/sır yok; `appsettings.Development.json` imaja girmez. `ASPNETCORE_ENVIRONMENT` varsayılanı `Production`;
   host `Preview`/`Production` olarak ayarlar.
-- **HEALTHCHECK yok** (chiseled imajda kabuk/curl yok). Liveness dışarıdan `GET /health` ile ölçülür: Fly `[[http_service.checks]]`,
-  CI smoke adımı. Readiness `GET /health/ready` (DB + yapılandırma + iş kuyruğu gecikmesi; `ready`/`degraded` 200, `unavailable` 503 — eşikler `observability.md` §4) dış izleme ve trafik kararı içindir.
+- **HEALTHCHECK yok** (chiseled imajda kabuk/curl yok). Liveness dışarıdan `GET /health` ile ölçülür: Render
+  `healthCheckPath` (`render.yaml`), CI smoke adımı. Readiness `GET /health/ready` (DB + yapılandırma + iş kuyruğu gecikmesi; `ready`/`degraded` 200, `unavailable` 503 — eşikler `observability.md` §4) dış izleme ve trafik kararı içindir.
 - `ci-container.yml` (job: **`api container build, smoke & scan`**): imajı derler, `--read-only --cap-drop ALL` ile çalıştırır,
   `/health` = 200 bekler, root olmadığını doğrular, Trivy ile tarar (HIGH+CRITICAL raporlanır; düzeltmesi olan CRITICAL'da kırmızı).
   Registry'ye push ve deploy **yapmaz**.
 
-## 3. API deploy ve rollback (Fly.io)
+## 3. API deploy ve rollback
 
-**Deploy (`.github/workflows/deploy-preview.yml`; push `preview` veya elle `workflow_dispatch`):**
+### 3.1 Preview — Render (free, Frankfurt)
+Tanım `render.yaml` (Blueprint): `bayios-api-preview`, `runtime: docker` (`services/api/Dockerfile`, bağlam `services/api`),
+`plan: free`, `region: frankfurt`, `branch: preview`, `healthCheckPath: /health`, `autoDeployTrigger: checksPass`,
+build filtresi `services/api/**` + `render.yaml`. İmajı Render derler; CI registry'ye push etmez, deploy token'ı yoktur.
 
-| Job | Ortam | Ne yapar |
+**Sıra (migration → API) nasıl korunur:** `checksPass` ile Render bir `preview` commit'ini **ancak o commit'teki tüm GitHub
+check'leri yeşil olduğunda** deploy eder. `deploy-preview.yml`'in `migrate` job'ı da bu check'lerden biridir: migration
+kırmızıysa API deploy edilmez, eski sürüm çalışmaya devam eder.
+
+| Job (`.github/workflows/deploy-preview.yml`) | Ortam | Ne yapar |
 |---|---|---|
 | `deploy prepare (image, migration scripts, local smoke)` | — (sır yok) | `infra/ci/ef-migrations.sh` (idempotent script'ler + `manifest.txt`, boş Postgres 17'de iki kez prova) → `docker build` → imaj yerelde `--read-only --cap-drop ALL` ile çalıştırılıp `infra/deploy/smoke.sh` (`/health` 200, yapılandırmasız `/health/ready` **503** = kapalı-güvenli, ortam `Production`) |
 | `migrate preview database (bayios_migrator)` | `preview` | `infra/deploy/preflight.sh` → `infra/deploy/apply-migrations.sh` (`PREVIEW_MIGRATOR_CONNECTION`) → `verify.sql` duruş kontrolü |
-| `deploy preview API (Fly.io)` | `preview` | imaj `registry.fly.io/<FLY_APP>:<git-sha>` (değişmez, `latest` yok) → `flyctl deploy --config infra/deploy/fly.preview.toml --image …` (rolling) → `smoke.sh` (`/health`, `/health/ready` 200, `/api/v1/meta` = `Preview`) |
-| `deploy preview web (Vercel)` | `preview` | `VERCEL_DEPLOY_HOOK_URL` varsa hook'u tetikler; yoksa not düşer (Vercel Git entegrasyonu kendisi deploy eder) |
+| `preview release hand-over (Render checksPass, Vercel Git)` | — | Yalnızca özet: Render'ın bu commit'i check'ler yeşil olunca deploy edeceğini, Vercel'in dalı derleyeceğini yazar (Render bu job'ı beklediği için Render'ı bekleyemez) |
+| `smoke preview API (Render)` | `preview` | Yalnızca `workflow_dispatch`: `smoke.sh` → `vars.API_BASE_URL` üzerinde `/health`, `/health/ready` (`vars.SMOKE_EXPECT_READY_STATUS`, varsayılan 200), `/api/v1/meta` = `Preview`; cold start için 240 sn |
 
 Davranış:
-- **Sır yok** (bugünkü durum): `migrate` job'ı `skipped: secrets missing (PREVIEW_MIGRATOR_CONNECTION FLY_API_TOKEN)` notu
-  ve özet tablosuyla **yeşil** biter; push, migration, deploy **olmaz**; sonraki job'lar atlanır.
-- **Yarım yapılandırma** (ör. `FLY_API_TOKEN` var, migrator yok): **kırmızı**, hiçbir şey deploy edilmez (migration'sız API yok).
-- **PR'lar** (deploy dosyaları değişince): yalnızca `prepare` (dry run) — ortam ve deploy sırrı **okunmaz**; aynı preflight
-  kodu sırsız çalıştırılıp "skipped: secrets missing" raporu gösterilir.
+- **Migrator sırrı yok:** `migrate` "skipped: secrets missing (PREVIEW_MIGRATOR_CONNECTION)" ile **yeşil** biter; migration
+  olmaz. Render yine deploy eder; `ConnectionStrings__Default` da yoksa API kapalı-güvenlidir (`/health` 200,
+  `/health/ready` 503). Bu yüzden ürün sahibi **önce** `PREVIEW_MIGRATOR_CONNECTION`'ı, **sonra** Render'daki
+  `ConnectionStrings__Default`'u girer (§8).
+- **PR'lar** (deploy dosyaları veya `render.yaml` değişince): yalnızca `prepare` (dry run) — ortam ve deploy sırrı **okunmaz**.
 - Migration adımı reddeder: `bayios_migrator` dışı kullanıcı (`postgres`, `service_role` …), `sslmode=require` olmayan URL,
-  eksik `manifest.txt`; herhangi bir SQL hatası veya `verify.sql` ihlali (ör. RLS'siz tablo, `anon` yetkisi) → API'ye dokunulmaz.
-- Eşzamanlılık: gerçek deploy'lar `deploy-preview` grubunda sıraya girer, **iptal edilmez** (yarım migration olmaz).
-- Fly yeni makineyi `/health` geçene kadar trafiğe almaz; geçmezse deploy başarısız olur, eski sürüm çalışmaya devam eder.
+  eksik `manifest.txt`; herhangi bir SQL hatası veya `verify.sql` ihlali (ör. RLS'siz tablo, `anon` yetkisi) → kırmızı check →
+  Render deploy etmez.
+- Eşzamanlılık: gerçek çalıştırmalar `deploy-preview` grubunda sıraya girer, **iptal edilmez** (yarım migration olmaz).
+- Render yeni örneği `/health` geçene kadar trafiğe almaz; geçmezse deploy başarısız olur, eski sürüm çalışmaya devam eder.
+- **Free katman:** ~15 dk istek gelmezse örnek uyur; ilk istek **~30–60 sn** sürer. Worker (outbox, işler) yalnızca uyanıkken
+  çalışır. Yalnızca preview için kabul edilmiştir (`hosting-options.md` §4).
+- Dikkat: `checksPass` commit'teki **tüm** check'leri bekler; ilgisiz bir kırmızı check de (ör. mobil) API deploy'unu durdurur.
 
-**Production (`deploy-production.yml`) — iskelet, kapalı:** `vX.Y.Z` etiketi push'u veya `workflow_dispatch` (girdi: etiket).
-`production guard` job'ı repo değişkeni `PRODUCTION_DEPLOY_ENABLED` `true` değilse "skipped: production deploy disabled" ile
-yeşil biter. `true` ise kapalı-güvenli kontroller: etiket biçimi, etiket commit'i `main` üzerinde, GitHub Environment
-`production` **var ve required reviewer kuralı içeriyor**, `infra/deploy/fly.production.toml` var. Sonra tek
-`production release (migrate -> API -> web)` job'ı (`production` ortamı → **tek onay**): katı preflight (her sır/değişken
-zorunlu) → migration → imaj `registry.fly.io/<FLY_APP>:<vX.Y.Z>-<sha12>` → `flyctl deploy` → smoke (`Production`) → web hook.
+**Rollback (preview):** Render Dashboard → `bayios-api-preview` → Events → önceki sağlıklı deploy → **Rollback** (önceki
+imaja anında döner). Rollback sonrası Render auto-deploy'u durdurur; düzeltme merge edilince Settings → Build & Deploy'dan
+yeniden açılır. DB geri alınmaz (§5). Olay anı listesi: `runbooks/rollback.md`.
 
-**Rollback:**
-1. `fly releases --app <app> --image` ile önceki sağlıklı release'in imaj referansını bul.
-2. `fly deploy --config infra/deploy/fly.preview.toml --image registry.fly.io/<app>:<önceki-git-sha>`
-   (production'da: `deploy-production.yml`'i önceki etiketle `workflow_dispatch`, `production` environment onayıyla).
-3. DB geri alınmaz: expand → migrate → contract kuralı sayesinde önceki API sürümü güncel şemayla çalışır (§5).
-4. Rollback sonrası incident notu + kök neden issue'su (`runbooks/incident-response.md`). Olay anı kontrol listesi: `runbooks/rollback.md`.
+### 3.2 Production (`deploy-production.yml`) — iskelet, kapalı
+`vX.Y.Z` etiketi push'u veya `workflow_dispatch` (girdi: etiket). `production guard` job'ı repo değişkeni
+`PRODUCTION_DEPLOY_ENABLED` `true` değilse "skipped: production deploy disabled" ile yeşil biter. `true` ise kapalı-güvenli
+kontroller: etiket biçimi, etiket commit'i `main` üzerinde, GitHub Environment `production` **var ve required reviewer kuralı
+içeriyor**, `infra/deploy/fly.production.toml` var. Sonra tek `production release (migrate -> API -> web)` job'ı (`production`
+ortamı → **tek onay**): katı preflight → migration → imaj `registry.fly.io/<FLY_APP>:<vX.Y.Z>-<sha12>` → `flyctl deploy` →
+smoke (`Production`) → web hook. Production hostu ürün sahibi kararındadır (`hosting-options.md` §4.1); bu iş (#218) production'a
+dokunmaz.
 
-Production farkları: `min_machines_running >= 1` (worker + SignalR), 2 makine önerilir, deploy yalnızca etiketten.
+**Rollback (production):** `fly releases --app <app> --image` ile önceki sağlıklı imajı bulun; `deploy-production.yml`'i önceki
+etiketle `workflow_dispatch` (`production` onayıyla). DB geri alınmaz (§5). Rollback sonrası incident notu + kök neden issue'su.
 
-## 4. Web deploy ve rollback (Vercel — onaydan sonra)
+## 4. Web deploy ve rollback (Vercel Hobby)
 
-**Preview kurulumu (ürün sahibi yapar; repoya dosya eklenmez):**
 | Ayar | Değer |
 |---|---|
-| Git entegrasyonu | `HalilMertDeveli/BayiOS` |
-| Root Directory | `apps/web` |
-| Framework | Next.js (otomatik) — build/install komutları varsayılan (`npm ci`, `next build`) |
-| Production Branch | `main` |
-| Env (Preview) | `NEXT_PUBLIC_API_BASE_URL` = preview API URL'si (ör. `https://bayios-api-preview.fly.dev`) |
-| Env (Production) | `NEXT_PUBLIC_API_BASE_URL` = prod API URL'si (prod onayından sonra) |
-| Deployment Protection | Vercel Authentication açık (preview URL'leri herkese açık olmaz) |
-| Fork PR'ları | Otomatik deploy kapalı / onay gerekli |
+| Proje | `bayios-web` (kişisel Hobby hesabı) — Git: `HalilMertDeveli/BayiOS` |
+| Root Directory | `apps/web` (Node 24.x) |
+| Yapı | `apps/web/vercel.json`: framework `nextjs`, `npm ci`, `npm run build`; `git.deploymentEnabled.main = false` → **`main` Vercel'de hiç deploy edilmez** (production yok) |
+| Preview adresi | `preview` dalının sabit alias'ı (`bayios-web-git-preview-<hesap>.vercel.app`). API CORS'unda izinli tek origin budur |
+| Env (Preview) | `NEXT_PUBLIC_API_BASE_URL` = Render URL'si, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (herkese açık publishable key) |
+| Deployment Protection | Vercel Authentication (Hobby varsayılanı, preview deployment'ları) — sayfayı açmak için Vercel'de oturum gerekir |
 
 `NEXT_PUBLIC_*` değerleri build zamanında pakete gömülür ve **herkese açıktır** — buraya sır konmaz. Değer değişince yeniden
-deploy gerekir. API tarafında CORS'a preview web origin'i eklenmelidir (API ekibi). PR'da doğrulama: Vercel bot yorumundaki
-preview URL'si açılır, sayfanın API'ye `/api/v1/meta` çağrısının başarılı olduğu kontrol edilir (#10 kabul kriteri).
+deploy gerekir. PR başına Preview URL'leri de derlenir ama CORS'ta olmadıkları için API çağrıları başarısız olur (yalnızca
+arayüz incelemesi için). Doğrulama: alias'ta `/giris` açılır; giriş sonrası panonun `/api/v1/meta` çağrısı başarılıdır (#10).
 
-**Rollback:** Vercel Dashboard → Deployments → önceki production deployment → "Instant Rollback" (yeniden derleme yok, anlık).
-Instant Rollback sonrası otomatik production atamaları durur; düzeltme merge edilince "Promote" ile tekrar açılır.
+**Rollback:** Vercel Dashboard → `bayios-web` → Deployments → önceki sağlıklı `preview` deployment'ı → ⋯ → **Redeploy**
+(veya düzeltici commit'i `preview`'a merge). Production olduğunda: önceki production deployment → **Instant Rollback**.
 
-**Web sıralaması — bilinen sınır:** Vercel Git entegrasyonu `preview` dalını API deploy'unu beklemeden kendisi derler.
-Sözleşme kuralı (önce API PR'ı, sonra web; API geriye uyumlu) bu riski karşılar. Sırayı kesinleştirmek için ürün sahibi
-Vercel'de `preview` (ve production için `main`) dalının otomatik deploy'unu kapatıp aynı dal için bir Deploy Hook
-oluşturur ve `VERCEL_DEPLOY_HOOK_URL` sırrını ilgili GitHub Environment'a ekler; o zaman web yalnızca API smoke'u geçtikten
-sonra deploy olur. (Dal bazlı kapatma `apps/web/vercel.json` `git.deploymentEnabled` ile de yapılabilir — web ekibi işi.)
+**Web sıralaması — bilinen sınır:** Vercel Git entegrasyonu `preview` dalını Render'ı beklemeden derler. Sözleşme kuralı
+(önce API PR'ı, sonra web; API geriye uyumlu) bu riski karşılar.
 
 ## 5. Migration sırası (değişmez kural)
 - Migration'ları **yalnızca** CI/deploy pipeline'ındaki ayrı migration adımı (`infra/deploy/apply-migrations.sh`), `bayios_migrator` rolüyle çalıştırır (deploy'da `PREVIEW_MIGRATOR_CONNECTION` / `PRODUCTION_MIGRATOR_CONNECTION`; yerelde `ConnectionStrings__Migrator`).
-- API **asla** başlangıçta migration çalıştırmaz (`Database.Migrate()` yok), Fly `release_command` kullanılmaz;
+- API **asla** başlangıçta migration çalıştırmaz (`Database.Migrate()` yok), hostta release/pre-deploy komutu kullanılmaz;
   API uygulaması `ConnectionStrings__Migrator`'ı hiç görmez — yalnızca `bayios_app` (`NOBYPASSRLS`) `ConnectionStrings__Default`'u vardır.
 - Sıra: **migration → API deploy → web deploy.** Migration başarısızsa deploy durur.
 - Migration'ın ön koşulları (roller, `pg_trgm`, Auth hook'u) Supabase projesinde bir kez `infra/supabase/bootstrap/`
@@ -117,41 +122,44 @@ sonra deploy olur. (Dal bazlı kapatma `apps/web/vercel.json` `git.deploymentEna
 ## 7. Ürün sahibi aksiyonları (özet)
 | Aksiyon | Maliyet | Durum |
 |---|---|---|
-| Hosting sağlayıcısını onayla (öneri Fly.io `fra`), hesap aç, harcama limiti kur | Free tier yok; preview auto-stop ile ~$0–4/ay, prod ~$10–20/ay (tahmini) | Bekliyor |
-| `bayios-preview` Supabase projesi | $0 (free) — son free slot | Bekliyor |
-| Vercel projesi (root `apps/web`) | Hobby $0 ama ticari olmayan kullanım; ticari pilotta Pro $20/kullanıcı/ay | Bekliyor |
-| GitHub Environments `preview` / `production` (+ `production` reviewer) ve deploy token'ları — adlar §8 | $0 | Bekliyor |
+| Preview hostu: Render free (API) + Vercel Hobby (web) — OD-12 | $0 | Karşılandı (#218) |
+| `bayios-preview` Supabase projesi + bootstrap (roller, uzantı, hook, `bayios_migrator` parolası) | $0 (free) | Karşılandı; `bayios_app` parolası bekliyor |
+| Production hostu (öneri Fly.io `fra`) | Free tier yok, prod ~$10–20/ay (tahmini) | Bekliyor (onay) |
+| GitHub Environment `production` (+ reviewer) ve prod token'ları | $0 | Bekliyor |
 | `ci-container` job'ını zorunlu kontrol yapma | $0 | Karşılandı: `ci gate` tüm workflow'ları kapsıyor (#71) |
 
-## 8. Ürün sahibi kurulum listesi (yalnızca adlar — değerler sağlayıcılarda, repoda asla)
-Hat bu adımlar yapılana kadar güvenli no-op'tur. Sıra önemlidir: önce DB, sonra API, en son GitHub sırları.
+## 8. Ürün sahibi kurulum listesi (yalnızca adlar — değerler sağlayıcılarda, repoda ve sohbette asla)
+Sıra önemlidir: önce DB rolleri, sonra GitHub migrator sırrı, sonra Render'daki API bağlantısı, en son Auth URL'leri.
 
-**A. Supabase (ortam başına ayrı proje)** — `infra/supabase/bootstrap/README.md`
-1. Projeyi oluşturun (`bayios-preview`, `eu-central-1`; maliyet §6).
-2. `SUPABASE_DB_URL=… bash infra/supabase/bootstrap/bootstrap.sh --set-passwords` (yalnızca kendi makinenizde; `postgres`
-   URL'si hiçbir yere kaydedilmez). `bayios_migrator` ve `bayios_app` parolalarını parola yöneticinizde saklayın.
-3. Auth kontrol listesi (README §3): Confirm email, Secure email change, min. parola ≥ 8, redirect URL'leri, ES256 JWT
-   imzalama, access-token hook'u etkinleştirme + doğrulama.
+**A. Supabase `bayios-preview`** — `infra/supabase/bootstrap/README.md`
+1. `bayios_app` parolası: kendi makinenizde `bash .demo/supabase-kurulum.sh` (veya
+   `SUPABASE_DB_URL=… bash infra/supabase/bootstrap/bootstrap.sh --set-passwords`). Parolaları parola yöneticinizde saklayın.
+2. Auth kontrol listesi (README §3): Confirm email, Secure email change, min. parola ≥ 8, ES256 JWT imzalama,
+   access-token hook'u etkin. Hook doğrulandıktan sonra Render'da `Invitations__TrustUserMetadataEmailVerified` = `false`.
+3. Authentication → URL Configuration: **Site URL** ve **Redirect URLs** = Vercel preview alias'ı (`https://<alias>/**`).
 
-**B. Fly.io (ortam başına ayrı uygulama)**
-1. Uygulama: `fly apps create <ad>` (öneri `bayios-api-preview`; prod `bayios-api-prod`), harcama limiti/alarm.
-2. Uygulama secret'ları (`fly secrets set --app <ad> …`, adlar):
-   `ConnectionStrings__Default` (`bayios_app`), `Auth__Authority`, `Auth__Audience`, `Cors__AllowedOrigins__0`
-   (`__1` …), `Audit__IpHashKey`; hook doğrulandıktan sonra `Invitations__TrustUserMetadataEmailVerified` = `false`.
-   **`bayios_migrator` bilgisi Fly'a konmaz.**
-3. Yalnızca o uygulamaya kısıtlı deploy token'ı: `fly tokens create deploy --app <ad>` → GitHub'a (C).
+**B. GitHub → Settings → Environments → `preview`**
+| Tür | Ad | Değer |
+|---|---|---|
+| Secret | `PREVIEW_MIGRATOR_CONNECTION` | `bayios_migrator` URI'si, session pooler `aws-1-eu-central-1.pooler.supabase.com:5432`, `sslmode=require` |
+| Variable | `API_BASE_URL` | Render URL'si (smoke job'ı için) |
+| Variable (geçici) | `SMOKE_EXPECT_READY_STATUS` | `503` — yalnızca `bayios_app` bağlantısı girilene kadar |
+Deployment branches: yalnızca `preview`. Eski `FLY_API_TOKEN` / `VERCEL_DEPLOY_HOOK_URL` / `FLY_APP` preview'da artık kullanılmaz.
 
-**C. GitHub → Settings → Environments**
-| Environment | Secrets | Variables | Koruma |
-|---|---|---|---|
-| `preview` | `PREVIEW_MIGRATOR_CONNECTION`, `FLY_API_TOKEN`, (opsiyonel) `VERCEL_DEPLOY_HOOK_URL` | (opsiyonel) `FLY_APP` (varsayılan `bayios-api-preview`), `API_BASE_URL` (varsayılan `https://<FLY_APP>.fly.dev`) | Deployment branches: yalnızca `preview` |
-| `production` | `PRODUCTION_MIGRATOR_CONNECTION`, `FLY_API_TOKEN` (ayrı token), (opsiyonel) `VERCEL_DEPLOY_HOOK_URL` | `FLY_APP`, `API_BASE_URL` (zorunlu) | **Required reviewers: ürün sahibi**; deployment tags: `v*` |
+**C. Render → `bayios-api-preview` → Environment** (`render.yaml`'da `sync: false` olanlar)
+| Ad | Değer |
+|---|---|
+| `ConnectionStrings__Default` | **Sır.** Yalnızca `bayios_app`: `Host=aws-1-eu-central-1.pooler.supabase.com;Port=5432;Database=postgres;Username=bayios_app.<proje-ref>;Password=…;SSL Mode=Require` |
+| `Auth__Authority` | `https://<proje-ref>.supabase.co/auth/v1` (ajan ayarlar) |
+| `Cors__AllowedOrigins__0` | Vercel preview alias'ı (ajan ayarlar) |
+`Audit__IpHashKey` Render tarafından üretilir (`generateValue`). **`bayios_migrator` bilgisi Render'a konmaz.**
 
-Repository variable (Settings → Secrets and variables → Actions → Variables): `PRODUCTION_DEPLOY_ENABLED` = `true` —
-**yalnızca** `production` ortamı ve prod kaynakları hazır ve production onayı verildiğinde. Sırlar repo düzeyine değil
-**environment** düzeyine konur (iki ortam arasında paylaşım yok, PR'lar okuyamaz).
+**D. Vercel → `bayios-web` → Settings → Environment Variables (Preview)** — yalnızca herkese açık `NEXT_PUBLIC_*` (§4).
+Opsiyonel `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (CAPTCHA işi, ayrı).
 
-**D. Vercel** — §4 tablosu; sıralama için opsiyonel Deploy Hook (§4 "Web sıralaması").
+**E. Production** (onaydan sonra): GitHub Environment `production` — `PRODUCTION_MIGRATOR_CONNECTION`, `FLY_API_TOKEN`,
+opsiyonel `VERCEL_DEPLOY_HOOK_URL`; variables `FLY_APP`, `API_BASE_URL`; required reviewers: ürün sahibi; deployment tags
+`v*`. Repo değişkeni `PRODUCTION_DEPLOY_ENABLED` = `true` **yalnızca** production onayı verildiğinde.
 
-**E. Doğrulama** — `preview`'a bir merge (veya Actions → deploy-preview → Run workflow): `migrate` → `verify: OK`,
-`deploy-api` → smoke yeşil, ortam URL'si GitHub deployment'ında görünür. Ardından #10 uçtan uca smoke.
+**F. Doğrulama** — `preview`'a bir merge: `migrate` → `verify: OK`; Render Events → "Deploy live"; Actions → deploy-preview →
+Run workflow → `smoke` yeşil. Ardından #10 uçtan uca smoke (Vercel alias'ında giriş → pano).

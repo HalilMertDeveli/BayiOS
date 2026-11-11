@@ -64,7 +64,7 @@ flowchart LR
     mods --> fcm
 ```
 
-Veriyi yazan tek yer API'dir: web ve mobil veritabanına doğrudan dokunmaz. Kurulum seçenekleri: Fly.io + Vercel (mevcut preview hattı), Kubernetes (Helm chart, `infra/k8s`) veya Nginx + systemd ile tek bir Ubuntu VPS (`infra/linux`).
+Veriyi yazan tek yer API'dir: web ve mobil veritabanına doğrudan dokunmaz. Kurulum seçenekleri: Render (API, ücretsiz) + Vercel (web) — mevcut preview ortamı, Kubernetes (Helm chart, `infra/k8s`) veya Nginx + systemd ile tek bir Ubuntu VPS (`infra/linux`).
 
 ### Ekran görüntüleri
 
@@ -343,7 +343,7 @@ yaz" işlemi bu sayede ya bütünüyle commit edilir ya da hiç olmaz.
 | **Bildirim** | Firebase Cloud Messaging (yalnızca push) |
 | **AI** | Anthropic Claude API (tenant bazında isteğe bağlı; maliyet ve token kullanımı saatlik izlenir) |
 | **Test** | xUnit v3 · Testcontainers (gerçek PostgreSQL 17) · Vitest · Playwright + axe (erişilebilirlik) · Flutter test + integration_test · k6 (yük) |
-| **DevOps** | GitHub Actions · Docker · Fly.io (API) · Vercel (web) · CodeQL · gitleaks · Trivy · Dependabot |
+| **DevOps** | GitHub Actions · Docker · Render (preview API) · Vercel (web) · CodeQL · gitleaks · Trivy · Dependabot |
 
 ---
 
@@ -783,7 +783,7 @@ BayiOS/
 │   ├── docker/                   Yerel PostgreSQL (compose) + DB rolleri
 │   ├── supabase/                 Bootstrap: roller, uzantılar, auth hook, storage politikaları
 │   ├── ci/                       CI yardımcıları: migration kontrolü, gerçek yığın E2E, CI gate
-│   ├── deploy/                   Fly.io ayarları, migration uygulama, ön kontrol, smoke testleri
+│   ├── deploy/                   migration uygulama, ön kontrol, smoke testleri (preview API: render.yaml)
 │   └── ops/                      Yedekleme, gözlemlenebilirlik, pg araçları
 └── docs/                         Ürün, mimari, ADR, güvenlik, test, operasyon, kullanıcı kılavuzu
 ```
@@ -888,7 +888,7 @@ Strateji: [`docs/testing/test-strategy.md`](docs/testing/test-strategy.md).
 | `ci-container` | API Docker imajı + Trivy taraması |
 | `ci-k8s` | API + web imajları → 3 düğümlü kind cluster → Helm chart (`infra/k8s`) → health/readiness/401/web smoke testi |
 | `codeql`, `secret-scan`, `dependency-review` | Statik analiz, gitleaks, açıklı bağımlılıklar |
-| `deploy-preview`, `deploy-production` | Migration → API'yi Fly.io'ya yayınlama → smoke testleri; production için sahip onayı gerekir |
+| `deploy-preview`, `deploy-production` | Migration → check'ler yeşilse Render API'yi yayınlar → smoke testleri; production için sahip onayı gerekir |
 
 Dal akışı: `feature/*`, `fix/*`, `chore/*` → `preview`'a PR (yeşil CI zorunlu) → `main`'e yalnızca ürün sahibinin açık
 onayıyla. Her iki korumalı dalda da force-push ve doğrudan push yasaktır.

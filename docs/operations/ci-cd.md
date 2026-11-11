@@ -34,7 +34,7 @@
 | `dependency-review.yml` | PR | `actions/dependency-review-action` — `fail-on-severity: high`; lisans deny listesi (ör. ticari/kısıtlı lisanslar) |
 | `secret-scan.yml` ✅ | PR (path filtresi yok), push (`main`, `preview`), haftalık cron, elle | gitleaks 8.30.1 resmi release'ten indirilir ve **SHA-256 ile doğrulanır** (üçüncü taraf Action/lisans yok). PR: `base..head` commit'leri (PR içinde eklenip silinen sır da yakalanır); push/cron/elle: tüm geçmiş (`fetch-depth: 0`). Bulgular log'da `--redact`. İzin listesi `.gitleaks.toml`: yalnızca belgeli sentetik **tam değerler**, yalnızca `generic-api-key` kuralı için (path izin listesi yasak — gitleaks dosyayı tüm kurallar için atlar). Job adı `gitleaks secret scan` |
 | `ci-gate.yml` ✅ | PR → `preview`, `main` (path filtresi yok, her zaman koşar) | Job adı **`ci gate`** — tek zorunlu kontrol. Ayrıntı §2.1 |
-| `deploy-preview.yml` ✅ | push `preview` (docs/md/mobil hariç), `workflow_dispatch`; PR'da yalnızca deploy dosyaları değişince **dry run** | `prepare` (sır yok: EF script'leri + `manifest.txt`, imaj, yerel smoke) → `migrate` (Environment `preview`: preflight → `apply-migrations.sh` `bayios_migrator` ile → `verify.sql`) → `deploy-api` (değişmez `registry.fly.io/<app>:<sha>` → `flyctl deploy --image` → smoke) → `deploy-web` (opsiyonel Vercel hook). Sır yoksa "skipped: secrets missing" ile yeşil no-op; yarım yapılandırmada kırmızı. Ayrıntı `deploy-and-rollback.md` §3/§8 |
+| `deploy-preview.yml` ✅ | push `preview` (docs/md/mobil hariç), `workflow_dispatch`; PR'da yalnızca deploy dosyaları değişince **dry run** | `prepare` (sır yok: EF script'leri + `manifest.txt`, imaj, yerel smoke) → `migrate` (Environment `preview`: preflight → `apply-migrations.sh` `bayios_migrator` ile → `verify.sql`) → `release` (özet; Render `render.yaml` `autoDeployTrigger: checksPass` ile commit'teki tüm check'ler yeşil olunca kendisi derleyip deploy eder, Vercel Git entegrasyonu web'i derler) → `smoke` (yalnızca `workflow_dispatch`, `vars.API_BASE_URL`). Migrator sırrı yoksa "skipped: secrets missing" ile yeşil. Ayrıntı `deploy-and-rollback.md` §3/§8 |
 | `deploy-production.yml` ✅ (iskelet, kapalı) | tag `v*.*.*`, `workflow_dispatch` (etiket girdisi; rollback için önceki etiket) | `production guard` (repo değişkeni `PRODUCTION_DEPLOY_ENABLED` ≠ `true` → yeşil no-op; aksi halde etiket `main`'de, Environment `production` **required reviewers** içeriyor, `fly.production.toml` var) → `prepare` → tek `release` job'ı (Environment `production` → tek onay): katı preflight → migration → API → smoke → web hook |
 
 ### 2.1 `ci-gate` tasarımı (issue #71)
@@ -69,13 +69,14 @@ PR hedef dalı: `preview`. Dependabot security updates açık. FluentAssertions 
 - Workflow'ların varsayılan `GITHUB_TOKEN` izni: read-only.
 
 ## 5. Preview deploy akışı
-- **Web:** Vercel Git entegrasyonu → her PR için otomatik Preview URL; `preview` dalı için sabit alias. Preview env değişkenleri
-  `bayios-preview` API URL'sine işaret eder. Vercel Deployment Protection (Vercel Authentication) açık.
+- **Web:** Vercel Hobby projesi `bayios-web` (root `apps/web`), Git entegrasyonu → `preview` dalı için sabit alias (API CORS'unda
+  izinli origin) + her PR için Preview URL; `main` deploy edilmez (`apps/web/vercel.json`). Preview env değişkenleri Render
+  API URL'sine (`bayios-api-preview`) ve Supabase `bayios-preview`'e işaret eder. Vercel Deployment Protection (Vercel Authentication) açık.
   ⚠️ Vercel Hobby planı **yalnızca kişisel/ticari olmayan** kullanım içindir (https://vercel.com/docs/plans/hobby, 2026-11-04);
   ticari pilot öncesi Pro ($20/kullanıcı/ay) **onayı gerekir**.
 - **API:** Varsayılan strateji: tek paylaşımlı preview API (`preview` dalından deploy) + tek `bayios-preview` DB. PR başına API
   oluşturmak maliyet ve DB izolasyonu gerektirdiğinden başlangıçta yapılmaz; PR'lar CI'da Testcontainers ile tam test edilir,
-  web PR preview'ları paylaşımlı preview API'yi kullanır. Sözleşme kıran API değişikliklerinde: önce API PR'ı `preview`'a merge, sonra web.
+  web PR preview'ları arayüz incelemesi içindir (API CORS'u yalnızca `preview` alias'ına izin verir). Sözleşme kıran API değişikliklerinde: önce API PR'ı `preview`'a merge, sonra web.
 - Fork PR'larında preview deploy yok.
 
 ## 6. Branch rulesets

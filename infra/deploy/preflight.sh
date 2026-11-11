@@ -2,8 +2,7 @@
 # Deploy preflight (issue #70): decides, from which secrets are PRESENT (values are never printed), whether a deploy
 # job runs, is skipped, or must fail. Used by deploy-preview.yml / deploy-production.yml; runnable locally:
 #
-#   ENVIRONMENT=preview REQUIRED="PREVIEW_MIGRATOR_CONNECTION FLY_API_TOKEN" OPTIONAL="VERCEL_DEPLOY_HOOK_URL" \
-#     PREVIEW_MIGRATOR_CONNECTION=... FLY_API_TOKEN=... bash infra/deploy/preflight.sh
+#   ENVIRONMENT=preview REQUIRED="PREVIEW_MIGRATOR_CONNECTION" PREVIEW_MIGRATOR_CONNECTION=... bash infra/deploy/preflight.sh
 #
 # Rules (fail closed, never fail open):
 #   * none of REQUIRED set -> "skipped: secrets missing" notice, outputs ready=false, exit 0 (environment not set up yet)

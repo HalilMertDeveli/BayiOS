@@ -1,18 +1,20 @@
 name: deploy-preview
 
-# Preview deploy pipeline (issue #70, deploy-and-rollback.md §3/§5). Order: migration -> API -> web.
-#   prepare     build the API image, generate + rehearse the idempotent EF scripts (infra/ci/ef-migrations.sh),
-#               smoke the image locally. No secrets.
-#   migrate     GitHub Environment `preview`: apply the scripts AS bayios_migrator (PREVIEW_MIGRATOR_CONNECTION),
-#               then the posture check. Runs BEFORE the API is touched; a failure stops the pipeline.
-#   deploy-api  push the image with an immutable tag (git SHA) to registry.fly.io and `flyctl deploy --image`
-#               (FLY_API_TOKEN), then smoke /health, /health/ready, /api/v1/meta.
-#   deploy-web  optional Vercel deploy hook (VERCEL_DEPLOY_HOOK_URL); otherwise Vercel's Git integration deploys.
+# Preview deploy pipeline (issues #70, #218; deploy-and-rollback.md §3/§5). Order: migration -> API -> web.
+# Hosting (OD-12, free tiers only): API on Render (render.yaml, free, Frankfurt), web on Vercel (Hobby, apps/web).
+#   prepare   build the API image, generate + rehearse the idempotent EF scripts (infra/ci/ef-migrations.sh),
+#             smoke the image locally. No secrets.
+#   migrate   GitHub Environment `preview`: apply the scripts AS bayios_migrator (PREVIEW_MIGRATOR_CONNECTION),
+#             then the posture check. A failure is a red check on the commit.
+#   release   no push from CI: Render builds services/api/Dockerfile from the `preview` commit and, because of
+#             `autoDeployTrigger: checksPass` (render.yaml), deploys it ONLY after every check on that commit is
+#             green — including `migrate`. Vercel's Git integration builds apps/web from the same branch.
+#             This job only writes the hand-over summary (it cannot wait for Render: Render waits for it).
+#   smoke     workflow_dispatch only: /health, /health/ready, /api/v1/meta = Preview against vars.API_BASE_URL.
 #
-# Safe without secrets: if the environment has none of the required secrets, every deploy step is skipped with
-# "skipped: secrets missing" (green, nothing pushed/migrated/deployed). Half-configured => red, nothing deployed.
-# Pull requests are a dry run: no environment, no deploy secrets, only `prepare` + the preflight report.
-# Owner setup (names only): docs/operations/deploy-and-rollback.md §8.
+# Safe without secrets: with no PREVIEW_MIGRATOR_CONNECTION, `migrate` ends green with "skipped: secrets missing"
+# (nothing migrated; the API stays fail-closed without its bayios_app connection). Pull requests are a dry run:
+# no environment, no deploy secrets. Owner setup (names only): docs/operations/deploy-and-rollback.md §8.
 
 on:
   push:
@@ -28,6 +30,7 @@ on:
       - ".github/workflows/deploy-production.yml"
       - "infra/deploy/**"
       - "infra/ci/ef-migrations.sh"
+      - "render.yaml"
 
 permissions:
   contents: read
@@ -90,19 +93,6 @@ jobs:
         if: always()
         run: docker rm -f api-smoke || true
 
-      - name: Save image
-        if: steps.mode.outputs.mode == 'deploy'
-        run: docker save "$IMAGE" | gzip -1 > "${RUNNER_TEMP}/api-image.tar.gz"
-
-      - name: Upload image
-        if: steps.mode.outputs.mode == 'deploy'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: deploy-api-image-${{ github.run_id }}
-          path: ${{ runner.temp }}/api-image.tar.gz
-          if-no-files-found: error
-          retention-days: 1
-
       - name: Upload migration scripts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -119,8 +109,7 @@ jobs:
         if: steps.mode.outputs.mode == 'dry-run'
         env:
           ENVIRONMENT: preview
-          REQUIRED: PREVIEW_MIGRATOR_CONNECTION FLY_API_TOKEN
-          OPTIONAL: VERCEL_DEPLOY_HOOK_URL
+          REQUIRED: PREVIEW_MIGRATOR_CONNECTION
         run: bash infra/deploy/preflight.sh
 
   migrate:
@@ -132,7 +121,6 @@ jobs:
     environment: preview
     outputs:
       ready: ${{ steps.preflight.outputs.ready }}
-      has_web_hook: ${{ steps.preflight.outputs.has_vercel_deploy_hook_url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -143,11 +131,8 @@ jobs:
         id: preflight
         env:
           ENVIRONMENT: preview
-          REQUIRED: PREVIEW_MIGRATOR_CONNECTION FLY_API_TOKEN
-          OPTIONAL: VERCEL_DEPLOY_HOOK_URL
+          REQUIRED: PREVIEW_MIGRATOR_CONNECTION
           PREVIEW_MIGRATOR_CONNECTION: ${{ secrets.PREVIEW_MIGRATOR_CONNECTION }}
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
         run: bash infra/deploy/preflight.sh
 
       - name: Download migration scripts
@@ -166,101 +151,54 @@ jobs:
           psql --version
           bash infra/deploy/apply-migrations.sh
 
-  deploy-api:
-    name: deploy preview API (Fly.io)
-    needs: [prepare, migrate]
-    if: needs.migrate.outputs.ready == 'true'
+  release:
+    name: preview release hand-over (Render checksPass, Vercel Git)
+    needs: migrate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+    steps:
+      - name: Summary
+        env:
+          READY: ${{ needs.migrate.outputs.ready }}
+        run: |
+          {
+            echo "### Preview release"
+            if [ "$READY" = true ]; then
+              echo "- Migrations: applied as \`bayios_migrator\` and posture-checked."
+            else
+              echo "- Migrations: **skipped** (PREVIEW_MIGRATOR_CONNECTION not set) — DB-backed endpoints stay unavailable."
+            fi
+            echo "- API: Render deploys \`${GITHUB_SHA}\` once every check on it is green (render.yaml \`autoDeployTrigger: checksPass\`,"
+            echo "  build filter \`services/api/**\`). Progress: Render Dashboard -> bayios-api-preview -> Events."
+            echo "- Web: Vercel's Git integration builds the \`preview\` branch (apps/web)."
+            echo "- After the deploy: Actions -> deploy-preview -> Run workflow runs the \`smoke\` job."
+            echo "- Rollback: docs/operations/deploy-and-rollback.md §3 (API) / §4 (web)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    name: smoke preview API (Render)
+    needs: migrate
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: preview
-      url: ${{ steps.target.outputs.api_url }}
+      url: ${{ vars.API_BASE_URL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           sparse-checkout: infra
 
-      - name: Target
-        id: target
-        env:
-          FLY_APP: ${{ vars.FLY_APP }}
-          API_BASE_URL: ${{ vars.API_BASE_URL }}
-        run: |
-          app="${FLY_APP:-bayios-api-preview}"
-          case "$app" in *[!a-z0-9-]*|"") echo "::error::invalid FLY_APP '${app}'"; exit 1 ;; esac
-          {
-            echo "app=${app}"
-            echo "image=registry.fly.io/${app}:${GITHUB_SHA}"
-            echo "api_url=${API_BASE_URL:-https://${app}.fly.dev}"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Download image
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: deploy-api-image-${{ github.run_id }}
-          path: ${{ runner.temp }}
-
-      - uses: superfly/flyctl-actions/setup-flyctl@fc53c09e1bc3be6f54706524e3b82c4f462f77be # 1.5
-        with:
-          version: 0.5.5
-
-      - name: Push immutable image (git SHA tag)
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-          TARGET_IMAGE: ${{ steps.target.outputs.image }}
-        run: |
-          gunzip -c "${RUNNER_TEMP}/api-image.tar.gz" | docker load
-          docker tag "$IMAGE" "$TARGET_IMAGE"
-          flyctl auth docker
-          docker push "$TARGET_IMAGE"
-
-      - name: Deploy (rolling; Fly keeps the old release unless the new one passes /health)
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-          APP: ${{ steps.target.outputs.app }}
-          TARGET_IMAGE: ${{ steps.target.outputs.image }}
-        run: |
-          flyctl deploy --config infra/deploy/fly.preview.toml --app "$APP" --image "$TARGET_IMAGE" \
-            --strategy rolling --wait-timeout 5m0s
-
+      # A free Render instance sleeps when idle: the first request can take ~30-60 s, hence the long timeout.
+      # Until ConnectionStrings__Default (bayios_app) is set on Render, /health/ready is 503 by design (fail-closed);
+      # for that phase set the environment variable SMOKE_EXPECT_READY_STATUS=503.
       - name: Smoke (/health, /health/ready, /api/v1/meta = Preview)
         env:
-          API_URL: ${{ steps.target.outputs.api_url }}
+          API_URL: ${{ vars.API_BASE_URL }}
           EXPECT_ENVIRONMENT: Preview
-        run: bash infra/deploy/smoke.sh
-
-      - name: Rollback hint
-        if: failure()
-        env:
-          APP: ${{ steps.target.outputs.app }}
+          EXPECT_READY_STATUS: ${{ vars.SMOKE_EXPECT_READY_STATUS || '200' }}
+          SMOKE_TIMEOUT: "240"
         run: |
-          {
-            echo "### Preview API deploy failed"
-            echo "The migration step already ran (expand/contract keeps the previous API compatible)."
-            echo "Roll back by redeploying the previous image: \`flyctl releases --app ${APP} --image\`, then"
-            echo "\`flyctl deploy --config infra/deploy/fly.preview.toml --app ${APP} --image registry.fly.io/${APP}:<previous-sha>\`"
-            echo "(docs/operations/deploy-and-rollback.md §3)."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  deploy-web:
-    name: deploy preview web (Vercel)
-    needs: [migrate, deploy-api]
-    if: needs.deploy-api.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment: preview
-    steps:
-      - name: Trigger Vercel deploy hook
-        if: needs.migrate.outputs.has_web_hook == 'true'
-        env:
-          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
-        run: |
-          # The hook URL is a secret (anyone holding it can deploy); only the job id is printed.
-          response="$(curl -fsS -X POST --max-time 30 "$HOOK")"
-          echo "Vercel deploy job: $(printf '%s' "$response" | grep -oE '"id":"[^"]+"' | head -n 1)"
-
-      - name: No deploy hook
-        if: needs.migrate.outputs.has_web_hook != 'true'
-        run: |
-          echo "::notice title=Web::skipped: VERCEL_DEPLOY_HOOK_URL not set; Vercel's Git integration deploys the preview branch on its own."
+          [ -n "$API_URL" ] || { echo "::error::variable API_BASE_URL (environment preview) is not set"; exit 1; }
+          bash infra/deploy/smoke.sh
