@@ -17,7 +17,7 @@ export function OrderAddresses({
 }) {
   const uid = useId();
   return (
-    <section aria-labelledby={`${uid}-order-addresses`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <section aria-labelledby={`${uid}-order-addresses`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
       <div className="flex flex-col gap-0.5">
         <h2 id={`${uid}-order-addresses`} className="text-h3 text-fg">
           Adresler

@@ -98,7 +98,7 @@ export function StockThresholdsSection({ product, units, readOnly }: { product: 
   };
 
   return (
-    <section aria-labelledby={`${uid}-sec-thresholds`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <section aria-labelledby={`${uid}-sec-thresholds`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
       <div className="flex flex-col gap-1">
         <h2 id={`${uid}-sec-thresholds`} className="text-h3 text-fg">
           Minimum stok

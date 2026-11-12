@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { AboutSection } from "@/components/settings/about-section";
 import { OrderSettings } from "@/components/settings/order-settings";
 import { SettingsLinks } from "@/components/settings/settings-links";
 import { PageHeader } from "@/components/ui/page-header";
@@ -22,6 +23,7 @@ export default function AyarlarPage() {
         <SettingsLinks />
         <p className="text-caption text-fg-muted">İşletme adı, telefon ve vergi bilgileri Kurulum sihirbazının ilk adımında düzenlenir.</p>
       </section>
+      <AboutSection />
     </>
   );
 }

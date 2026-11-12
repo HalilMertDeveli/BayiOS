@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { Lock, Mail } from "@/components/ui/icons";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,7 @@ export function SignInForm() {
         type="email"
         name="email"
         autoComplete="email"
+        prefix={<Mail className="size-5" />}
         required
         value={email}
         onChange={(e) => setEmail(e.target.value)}
@@ -76,6 +78,7 @@ export function SignInForm() {
         type="password"
         name="password"
         autoComplete="current-password"
+        prefix={<Lock className="size-5" />}
         required
         value={password}
         onChange={(e) => setPassword(e.target.value)}

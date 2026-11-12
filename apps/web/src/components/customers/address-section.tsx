@@ -106,7 +106,7 @@ export function AddressSection({
   };
 
   return (
-    <section aria-labelledby={`${uid}-sec-addresses`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <section aria-labelledby={`${uid}-sec-addresses`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id={`${uid}-sec-addresses`} className="flex items-center gap-2 text-h3 text-fg">
           <MapPin className="size-5" aria-hidden="true" />

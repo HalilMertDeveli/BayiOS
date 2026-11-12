@@ -222,7 +222,7 @@ export function ProductList() {
         }
       />
 
-      <section aria-label="Arama ve filtreler" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+      <section aria-label="Arama ve filtreler" className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
         <form role="search" onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-3">
           <Input
             label="Ürün ara"
@@ -313,7 +313,7 @@ export function ProductList() {
         </div>
 
         {current?.status === "error" ? (
-          <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+          <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
             <EmptyState
               headingLevel="h3"
               icon={<CircleAlert className="size-6" />}
@@ -349,13 +349,13 @@ export function ProductList() {
               {loading ? (
                 <SkeletonCards />
               ) : rows.length === 0 ? (
-                <div className="rounded-lg border border-line bg-card">{emptyView}</div>
+                <div className="rounded-xl border border-line bg-card">{emptyView}</div>
               ) : (
                 <ul aria-label="Ürünler" className="flex flex-col gap-2">
                   {rows.map((p) => {
                     const v = primaryVariant(p);
                     return (
-                      <li key={p.id} className="rounded-lg border border-line bg-card p-3 shadow-e1">
+                      <li key={p.id} className="rounded-xl border border-line bg-card p-3 shadow-e1">
                         <div className="flex items-start justify-between gap-2">
                           <Link href={productHref(p.id)} className="font-medium text-brand-fg underline-offset-2 hover:underline">
                             {p.name}

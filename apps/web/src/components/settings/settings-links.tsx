@@ -9,7 +9,7 @@ import { useSession } from "@/lib/session/session-context";
 function SettingsLink({ href, title, description, Icon }: { href: string; title: string; description: string; Icon: IconComponent }) {
   return (
     <li>
-      <Link href={href} className="flex h-full items-start gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 hover:bg-sunken">
+      <Link href={href} className="flex h-full items-start gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 hover:bg-sunken">
         <Icon className="mt-0.5 size-5 shrink-0 text-brand-fg" aria-hidden="true" />
         <span className="flex flex-col gap-1">
           <span className="font-medium text-fg">{title}</span>

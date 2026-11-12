@@ -19,7 +19,8 @@ export function fieldDescribedBy(id: string, hint: unknown, error: unknown): str
 }
 
 export const controlClasses = cn(
-  "w-full rounded-md border bg-card text-fg text-body placeholder:text-fg-muted transition-colors",
+  "w-full rounded-md border bg-card text-fg text-body shadow-e1 placeholder:text-fg-muted transition-colors",
+  "focus-visible:border-focus focus-visible:ring-4 focus-visible:ring-brand-subtle focus-visible:outline-none",
   "disabled:cursor-not-allowed disabled:bg-sunken disabled:text-fg-muted",
 );
 

@@ -38,7 +38,7 @@ export function Badge({ tone = "neutral", icon, className, children }: BadgeProp
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-caption font-medium whitespace-nowrap",
+        "inline-flex items-center gap-1 rounded-md border px-2.5 py-0.5 text-caption font-medium whitespace-nowrap",
         toneClasses[tone],
         className,
       )}

@@ -89,7 +89,7 @@ export function BusinessRules() {
 
 function RuleGroup({ legend, description, children }: { legend: string; description: string; children: React.ReactNode }) {
   return (
-    <fieldset className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <fieldset className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
       <legend className="float-left mb-1 text-h3 text-fg">{legend}</legend>
       <p className="clear-left text-caption text-fg-muted">{description}</p>
       {children}

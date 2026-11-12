@@ -140,7 +140,7 @@ export function PriceListIndex() {
           </label>
         </div>
         {state.status === "error" ? (
-          <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+          <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
             <EmptyState headingLevel="h3" icon={<CircleAlert className="size-6" />} title="Fiyat listeleri yüklenemedi" description={state.message} action={<Button onClick={reload}>Tekrar dene</Button>} />
           </div>
         ) : (
@@ -165,9 +165,9 @@ export function PriceListIndex() {
             </div>
             <ul aria-label="Fiyat listeleri" className="flex flex-col gap-2 md:hidden">
               {state.status === "loading" ? <li className="py-6 text-center text-body text-fg-muted">Yükleniyor…</li> : null}
-              {state.status === "ready" && lists.length === 0 ? <li className="rounded-lg border border-line bg-card p-4 text-body text-fg-muted">Henüz fiyat listesi yok.</li> : null}
+              {state.status === "ready" && lists.length === 0 ? <li className="rounded-xl border border-line bg-card p-4 text-body text-fg-muted">Henüz fiyat listesi yok.</li> : null}
               {lists.map((l) => (
-                <li key={l.id} className="rounded-lg border border-line bg-card p-4 shadow-e1">
+                <li key={l.id} className="rounded-xl border border-line bg-card p-4 shadow-e1">
                   <div className="flex items-start justify-between gap-2">
                     <Link href={priceListHref(l.id)} className="min-h-11 py-2 font-medium text-brand-fg underline-offset-2 hover:underline">
                       {l.name}

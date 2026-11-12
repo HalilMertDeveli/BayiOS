@@ -165,13 +165,14 @@ describe("AppShell", () => {
     expect(signOut).toHaveBeenCalled();
   });
 
-  it("the sidebar column stretches to the page height; only its inner panel is sticky (#111)", () => {
+  it("the sidebar column stretches to the page height; only its inner (floating, dark) panel is sticky (#111, #222)", () => {
     renderShell();
     const sidebar = document.getElementById("sidebar") as HTMLElement;
     expect(sidebar.className).toContain("self-stretch");
-    expect(sidebar.className).toContain("bg-card");
     expect(sidebar.className).not.toContain("h-dvh");
-    expect((sidebar.firstElementChild as HTMLElement).className).toContain("sticky");
+    const panel = sidebar.firstElementChild as HTMLElement;
+    expect(panel.className).toContain("sticky");
+    expect(panel.className).toContain("bg-nav");
   });
 
   it("offers a skip link to the main content", () => {

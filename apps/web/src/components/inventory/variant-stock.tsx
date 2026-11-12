@@ -63,7 +63,7 @@ export function VariantStock({ variantId }: { variantId: string }) {
       <>
         <BackLink />
         <PageHeader title="Ürün stoğu" />
-        <section role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <section role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={head.notFound ? <SearchX className="size-6" /> : <CircleAlert className="size-6" />}
             title={head.notFound ? "Ürün bulunamadı" : "Stok bilgileri yüklenemedi"}
@@ -120,12 +120,12 @@ export function VariantStock({ variantId }: { variantId: string }) {
               ["Toplam rafta", formatQuantity(totals.onHand)],
               ["Toplam ayrılmış", formatQuantity(totals.reserved)],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-line bg-card p-3 shadow-e1">
+              <div key={label} className="rounded-xl border border-line bg-card p-3 shadow-e1">
                 <dt className="text-caption text-fg-muted">{label}</dt>
                 <dd className="text-h2 tabular-nums text-fg">{value}</dd>
               </div>
             ))}
-            <div className="rounded-lg border border-line bg-card p-3 shadow-e1">
+            <div className="rounded-xl border border-line bg-card p-3 shadow-e1">
               <dt className="text-caption text-fg-muted">Toplam satılabilir</dt>
               <dd className="text-h2">
                 <AvailableQuantity value={totals.available} />
@@ -159,7 +159,7 @@ export function VariantStock({ variantId }: { variantId: string }) {
           ownOnly={permissions.movementsOwnOnly}
           warehouseOptions={warehouses.status === "ready" ? warehouses.data : []} warehouseLabel={warehouseLabel} />
       ) : (
-        <section aria-label="Hareket geçmişi" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Hareket geçmişi" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             headingLevel="h3"
             icon={<Lock className="size-6" />}
@@ -281,7 +281,7 @@ function MovementHistory({
         />
       </div>
       {current?.status === "error" ? (
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             headingLevel="h3"
             icon={<CircleAlert className="size-6" />}
@@ -316,11 +316,11 @@ function MovementHistory({
             {current === null ? (
               <SkeletonCards />
             ) : rows.length === 0 ? (
-              <p className="rounded-lg border border-line bg-card p-4 text-body text-fg-muted">Bu filtrede stok hareketi bulunmuyor.</p>
+              <p className="rounded-xl border border-line bg-card p-4 text-body text-fg-muted">Bu filtrede stok hareketi bulunmuyor.</p>
             ) : (
               <ul aria-label="Hareket geçmişi" className="flex flex-col gap-2">
                 {rows.map((m) => (
-                  <li key={m.id} className="rounded-lg border border-line bg-card p-3 shadow-e1">
+                  <li key={m.id} className="rounded-xl border border-line bg-card p-3 shadow-e1">
                     <div className="flex items-center justify-between gap-2">
                       <Badge tone={movementTypeTone(m.type)}>{movementTypeLabel(m.type)}</Badge>
                       <span className="text-h3 tabular-nums text-fg">{formatSignedQuantity(m.quantity)}</span>

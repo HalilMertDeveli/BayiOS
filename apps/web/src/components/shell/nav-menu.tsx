@@ -23,14 +23,14 @@ export function NavMenu({ sections, collapsed = false, onNavigate, idPrefix }: N
   );
 
   return (
-    <nav aria-label="Ana menü" className={cn("flex flex-col", collapsed ? "gap-3" : "gap-4")}>
+    <nav aria-label="Ana menü" className={cn("flex flex-col", collapsed ? "gap-3" : "gap-5")}>
       {sections.map((section, index) => {
         const headingId = `${idPrefix}-${section.id}`;
         return (
-          <div key={section.id} className={cn("flex flex-col gap-1", collapsed && index > 0 && "border-t border-line pt-3")}>
+          <div key={section.id} className={cn("flex flex-col gap-1", collapsed && index > 0 && "border-t border-dashed border-nav-line pt-3")}>
             <p
               id={headingId}
-              className={cn("px-3 text-caption font-semibold tracking-wide text-fg-muted uppercase", collapsed && "sr-only")}
+              className={cn("px-3 pb-1 text-body text-nav-fg-muted", collapsed && "sr-only")}
               lang="tr"
             >
               {section.label}
@@ -46,12 +46,12 @@ export function NavMenu({ sections, collapsed = false, onNavigate, idPrefix }: N
                       title={collapsed ? label : undefined}
                       onClick={onNavigate}
                       className={cn(
-                        // Active: tinted background, a brand bar at the start edge and a heavier label (not colour alone).
-                        "relative flex min-h-9 items-center gap-3 rounded-md px-3 text-body font-medium transition-colors",
+                        // Active (UI kit): lighter panel, white label and a heavier weight (not colour alone).
+                        "relative flex min-h-10 items-center gap-3 rounded-lg px-3 text-body transition-colors",
                         collapsed && "justify-center px-0",
                         active
-                          ? "bg-brand-subtle font-semibold text-brand-fg before:absolute before:inset-y-1.5 before:-left-3 before:w-1 before:rounded-r-full before:bg-brand"
-                          : "text-fg-secondary hover:bg-sunken hover:text-fg",
+                          ? "bg-nav-active font-semibold text-nav-fg-active"
+                          : "text-nav-fg hover:bg-nav-hover hover:text-nav-fg-active",
                       )}
                     >
                       <Icon className="size-5 shrink-0" aria-hidden="true" />

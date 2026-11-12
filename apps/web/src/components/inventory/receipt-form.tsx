@@ -75,7 +75,7 @@ export function ReceiptForm() {
       <>
         <BackLink />
         <PageHeader title="Mal kabul" />
-        <section className="rounded-lg border border-line bg-card shadow-e1">
+        <section className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<Lock className="size-6" />}
             title="Mal kabul yetkiniz yok"
@@ -178,7 +178,7 @@ export function ReceiptForm() {
       ) : null}
 
       <form aria-label="Mal kabul" noValidate onSubmit={submit} className="flex flex-col gap-4 pb-24 md:pb-0">
-        <section aria-label="Depo ve belge" className="grid grid-cols-1 gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 md:grid-cols-2">
+        <section aria-label="Depo ve belge" className="grid grid-cols-1 gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 md:grid-cols-2">
           <Select
             id={fieldId("warehouseId")}
             label="Depo"
@@ -217,7 +217,7 @@ export function ReceiptForm() {
           ) : null}
         </section>
 
-        <section aria-labelledby={`${uid}-receipt-lines`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+        <section aria-labelledby={`${uid}-receipt-lines`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
           <h2 id={`${uid}-receipt-lines`} className="text-h3 text-fg">
             Ürünler
           </h2>

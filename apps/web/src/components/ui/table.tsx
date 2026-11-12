@@ -66,7 +66,7 @@ export function Table<T>({
       role="region"
       aria-label={caption}
       tabIndex={0}
-      className={cn("overflow-auto rounded-lg border border-line bg-card shadow-e1", className)}
+      className={cn("overflow-auto rounded-xl border border-line bg-card shadow-e1", className)}
       style={maxHeight ? { maxHeight } : undefined}
     >
       <table className="w-full border-separate border-spacing-0 text-left text-body" aria-busy={loading || undefined}>
@@ -80,7 +80,7 @@ export function Table<T>({
                 style={col.width ? { width: col.width } : undefined}
                 className={cn(
                   // Sticky header: stays visible while scrolling inside the region.
-                  "sticky top-0 z-(--bos-z-sticky) border-b border-line bg-sunken text-caption font-semibold whitespace-nowrap text-fg-secondary",
+                  "sticky top-0 z-(--bos-z-sticky) border-b border-line bg-sunken text-body font-medium whitespace-nowrap text-fg-secondary",
                   pad,
                   col.numeric && "text-right",
                 )}
@@ -118,7 +118,7 @@ export function Table<T>({
           ) : null}
           {!loading &&
             rows.map((row) => (
-              <tr key={getRowId(row)} className="transition-colors hover:bg-brand-subtle/50">
+              <tr key={getRowId(row)} className="transition-colors hover:bg-brand-subtle">
                 {columns.map((col) => (
                   <td
                     key={col.key}

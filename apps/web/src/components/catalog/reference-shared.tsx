@@ -82,7 +82,7 @@ export function useReferenceList<T>(key: string, load: (signal: AbortSignal) => 
 
 export function ListError({ title, message, onRetry }: { title: string; message: string; onRetry: () => void }) {
   return (
-    <section role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+    <section role="alert" className="rounded-xl border border-line bg-card shadow-e1">
       <EmptyState headingLevel="h2" icon={<CircleAlert className="size-6" />} title={title} description={message} action={<Button onClick={onRetry}>Tekrar dene</Button>} />
     </section>
   );

@@ -68,7 +68,7 @@ export function OrderPickingTask({ orderId, orderNumber }: { orderId: string; or
   };
 
   return (
-    <section aria-labelledby={`${uid}-picking`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <section aria-labelledby={`${uid}-picking`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
       <h2 id={`${uid}-picking`} className="flex items-center gap-2 text-h3 text-fg">
         <ClipboardList className="size-5" aria-hidden="true" />
         Toplama görevi

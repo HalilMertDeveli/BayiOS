@@ -60,7 +60,7 @@ export function ImportWizard({ id }: { id: string }) {
       <>
         <BackToHistory />
         <PageHeader title="İçe aktarma" />
-        <p role="status" className="rounded-lg border border-line bg-card p-6 text-body text-fg-muted">
+        <p role="status" className="rounded-xl border border-line bg-card p-6 text-body text-fg-muted">
           Aktarma yükleniyor…
         </p>
       </>
@@ -72,7 +72,7 @@ export function ImportWizard({ id }: { id: string }) {
       <>
         <BackToHistory />
         <PageHeader title="İçe aktarma" />
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<CircleAlert className="size-6" />}
             title={load.notFound ? "Aktarma bulunamadı" : "Aktarma yüklenemedi"}
@@ -172,7 +172,7 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
     headingRef.current?.focus();
   }, [title]);
   return (
-    <section aria-labelledby={`${uid}-import-step-title`} className="flex flex-col gap-5 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <section aria-labelledby={`${uid}-import-step-title`} className="flex flex-col gap-5 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
       <h2 id={`${uid}-import-step-title`} ref={headingRef} tabIndex={-1} className="text-h2 text-fg focus:outline-none">
         {title}
       </h2>

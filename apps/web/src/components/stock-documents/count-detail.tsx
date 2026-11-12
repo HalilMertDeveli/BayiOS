@@ -87,7 +87,7 @@ export function CountDetailPage({ countId }: { countId: string }) {
       <>
         <BackLink />
         <PageHeader title="Sayım" />
-        <section aria-label="Sayım" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Sayım" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Lock className="size-6" />} title="Sayımı görme yetkiniz yok" />
         </section>
       </>
@@ -109,7 +109,7 @@ export function CountDetailPage({ countId }: { countId: string }) {
       <>
         <BackLink />
         <PageHeader title="Sayım" />
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<CircleAlert className="size-6" />}
             title={load.notFound ? "Sayım bulunamadı" : "Sayım yüklenemedi"}
@@ -346,7 +346,7 @@ function CountView({
         </FormAlert>
       ) : null}
 
-      <section aria-labelledby={`${uid}-info`} className="rounded-lg border border-line bg-card p-4 shadow-e1">
+      <section aria-labelledby={`${uid}-info`} className="rounded-xl border border-line bg-card p-4 shadow-e1">
         <h2 id={`${uid}-info`} className="sr-only">
           Sayım bilgileri
         </h2>
@@ -376,7 +376,7 @@ function CountView({
               ["Fazla", formatSignedQuantity(totals.plus)],
               ["Eksik", formatSignedQuantity(totals.minus)],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-line bg-card p-3 shadow-e1">
+              <div key={label} className="rounded-xl border border-line bg-card p-3 shadow-e1">
                 <dt className="text-caption text-fg-muted">{label}</dt>
                 <dd className="text-h3 tabular-nums text-fg">{value}</dd>
               </div>
@@ -594,7 +594,7 @@ function ScanEntry({ countId, usesLocations, onLoaded, onError }: { countId: str
   };
 
   return (
-    <section aria-labelledby={`${uid}-scan`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <section aria-labelledby={`${uid}-scan`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
       <h2 id={`${uid}-scan`} className="text-h3 text-fg">
         Okutarak say
       </h2>

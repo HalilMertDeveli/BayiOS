@@ -127,7 +127,7 @@ export function TransferCreate() {
       <>
         <BackLink />
         <PageHeader title="Yeni transfer" />
-        <section className="rounded-lg border border-line bg-card shadow-e1">
+        <section className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Lock className="size-6" />} title="Transfer oluşturma yetkiniz yok" description="Transferleri işletme sahibi, yönetici veya operasyon müdürü oluşturur." />
         </section>
       </>
@@ -198,7 +198,7 @@ export function TransferCreate() {
       ) : null}
 
       <form aria-label="Yeni transfer" noValidate onSubmit={submit} className="flex flex-col gap-4 pb-24 md:pb-0">
-        <section aria-label="Depolar" className="grid grid-cols-1 gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 md:grid-cols-2">
+        <section aria-label="Depolar" className="grid grid-cols-1 gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 md:grid-cols-2">
           <Select
             id={fieldId("sourceWarehouseId")}
             label="Kaynak depo"
@@ -247,7 +247,7 @@ export function TransferCreate() {
           {warehouses.status === "error" ? <p className="text-caption text-danger-fg md:col-span-2">Depolar yüklenemedi: {warehouses.message}</p> : null}
         </section>
 
-        <section aria-labelledby={`${uid}-transfer-lines`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+        <section aria-labelledby={`${uid}-transfer-lines`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
           <h2 id={`${uid}-transfer-lines`} className="text-h3 text-fg">
             Ürünler
           </h2>

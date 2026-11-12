@@ -25,7 +25,7 @@ export function OrderCreatePage() {
       {permissions.create ? (
         <OrderDraftEditor key={generation} loaded={null} permissions={permissions} onCreated={markCreated} />
       ) : (
-        <section aria-label="Yeni sipariş durumu" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Yeni sipariş durumu" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<Lock className="size-6" />}
             title="Sipariş oluşturma yetkiniz yok"

@@ -81,7 +81,7 @@ export function WhatsappOrderPage() {
       {permissions.parse ? (
         <>
           {aiGate.locked ? (
-            <section aria-label="WhatsApp mesajı" className="rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+            <section aria-label="WhatsApp mesajı" className="rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
               <LockedFeature gate={aiGate} title="WhatsApp siparişi ayrıştırma kapalı" />
             </section>
           ) : (
@@ -90,7 +90,7 @@ export function WhatsappOrderPage() {
           <PendingReviews />
         </>
       ) : (
-        <section aria-label="WhatsApp siparişi durumu" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="WhatsApp siparişi durumu" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<Lock className="size-6" />}
             title="WhatsApp siparişi yetkiniz yok"
@@ -127,7 +127,7 @@ function AssistantEntry({ canManage }: { canManage: boolean }) {
 
   if (state.status === "loading") {
     return (
-      <section aria-label="WhatsApp mesajı" className="rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+      <section aria-label="WhatsApp mesajı" className="rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
         <p role="status" className="text-body text-fg-muted">
           Yükleniyor…
         </p>
@@ -178,7 +178,7 @@ function OptInPanel({ canManage, onChanged }: { canManage: boolean; onChanged: (
   };
 
   return (
-    <section aria-labelledby={`${uid}-opt-in`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <section aria-labelledby={`${uid}-opt-in`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
       <h2 id={`${uid}-opt-in`} className="inline-flex items-center gap-2 text-h3 text-fg">
         <ShieldCheck className="size-5 text-fg-muted" aria-hidden="true" />
         AI ile sipariş ayrıştırma kapalı
@@ -287,7 +287,7 @@ function SubmitForm({ limits, onOptInRequired }: { limits: MessageLimits; onOptI
   };
 
   return (
-    <form noValidate onSubmit={submit} aria-label="WhatsApp mesajı" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <form noValidate onSubmit={submit} aria-label="WhatsApp mesajı" className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
       {alert ? (
         <FormAlert
           ref={alertRef}
@@ -372,7 +372,7 @@ function PendingReviews() {
   }, [api, attempt]);
 
   return (
-    <section aria-labelledby={`${uid}-pending-reviews`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <section aria-labelledby={`${uid}-pending-reviews`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
       <h2 id={`${uid}-pending-reviews`} className="text-h3 text-fg">
         İnceleme bekleyen mesajlar
       </h2>

@@ -80,7 +80,7 @@ export function TransferDetailPage({ transferId }: { transferId: string }) {
       <>
         <BackLink />
         <PageHeader title="Transfer" />
-        <section aria-label="Transfer" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Transfer" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Lock className="size-6" />} title="Transferi görme yetkiniz yok" />
         </section>
       </>
@@ -102,7 +102,7 @@ export function TransferDetailPage({ transferId }: { transferId: string }) {
       <>
         <BackLink />
         <PageHeader title="Transfer" />
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<CircleAlert className="size-6" />}
             title={load.notFound ? "Transfer bulunamadı" : "Transfer yüklenemedi"}
@@ -199,7 +199,7 @@ function TransferView({
         </FormAlert>
       ) : null}
 
-      <section aria-labelledby={`${uid}-info`} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+      <section aria-labelledby={`${uid}-info`} className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4 shadow-e1">
         <h2 id={`${uid}-info`} className="sr-only">
           Transfer bilgileri
         </h2>
@@ -376,7 +376,7 @@ function DiscrepancyReport({ lines }: { lines: TransferLine[] }) {
           ["İade", totals.returned],
           ["Kayıp", totals.lost],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-lg border border-line bg-card p-3 shadow-e1">
+          <div key={label} className="rounded-xl border border-line bg-card p-3 shadow-e1">
             <dt className="text-caption text-fg-muted">{label}</dt>
             <dd className="text-h3 tabular-nums text-fg">{formatQuantity(value)}</dd>
           </div>
@@ -556,7 +556,7 @@ function CloseSection({ inTransit, busy, onClose }: { inTransit: number; busy: b
   };
 
   return (
-    <section aria-labelledby={`${uid}-close`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <section aria-labelledby={`${uid}-close`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
       <h2 id={`${uid}-close`} className="text-h3 text-fg">
         Farkı kapat
       </h2>

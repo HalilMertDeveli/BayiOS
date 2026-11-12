@@ -106,7 +106,7 @@ export function SetupWizard() {
     return (
       <>
         <PageHeader title="Kurulum" />
-        <section aria-label="Kurulum" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Kurulum" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<ShieldAlert className="size-6" />}
             title="Kurulumu işletme sahibi veya yöneticisi yapar"

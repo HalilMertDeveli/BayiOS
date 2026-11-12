@@ -69,7 +69,7 @@ function PickingTasksReportBody() {
       ) : state.status === "error" ? (
         <ReportError message={state.message} onRetry={reload} />
       ) : empty ? (
-        <div className="rounded-lg border border-line bg-card shadow-e1">
+        <div className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<ClipboardList className="size-6" />} title="Bu aralıkta toplama görevi yok" description="Seçilen günlerde ve depoda oluşturulan, tamamlanan veya iptal edilen görev bulunamadı." />
         </div>
       ) : (

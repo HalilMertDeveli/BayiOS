@@ -36,7 +36,7 @@ export function TransferList() {
     return (
       <>
         <PageHeader title="Transferler" />
-        <section aria-label="Transferler" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Transferler" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Lock className="size-6" />} title="Transferleri görme yetkiniz yok" description="Rolünüz depolar arası transferlere izin vermiyor. Gerekirse işletme yöneticinizle görüşün." />
         </section>
       </>
@@ -62,7 +62,7 @@ export function TransferList() {
           </span>
         }
       />
-      <section aria-label="Filtreler" className="grid grid-cols-1 gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:grid-cols-2">
+      <section aria-label="Filtreler" className="grid grid-cols-1 gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 sm:grid-cols-2">
         <Select
           label="Durum"
           size="lg"
@@ -86,11 +86,11 @@ export function TransferList() {
           Transferler yükleniyor…
         </p>
       ) : data.status === "error" ? (
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<CircleAlert className="size-6" />} title="Transferler yüklenemedi" description={data.message} action={<Button size="lg" onClick={reload}>Tekrar dene</Button>} />
         </div>
       ) : data.items.length === 0 ? (
-        <section aria-label="Transferler" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Transferler" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<ArrowLeftRight className="size-6" />}
             title="Bu filtrede transfer yok"
@@ -108,7 +108,7 @@ export function TransferList() {
       ) : (
         <ul aria-label="Transferler" className="flex flex-col gap-3">
           {data.items.map((t) => (
-            <li key={t.id} data-testid={`transfer-${t.number}`} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+            <li key={t.id} data-testid={`transfer-${t.number}`} className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4 shadow-e1">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <h2 className="text-h3 text-fg">
                   <Link href={transferHref(t.id)} className="underline-offset-2 hover:underline">

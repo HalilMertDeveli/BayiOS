@@ -31,7 +31,7 @@ export function DailyChart({ title, label, points }: { title: string; label: str
   const summary = chartSummary(points, label);
   const summaryId = useId();
   return (
-    <figure className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <figure className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4 shadow-e1">
       <figcaption className="text-body font-medium text-fg">{title}</figcaption>
       <div role="img" aria-label={`${title} grafiği`} aria-describedby={summaryId} className="flex gap-2">
         <div className="flex h-40 flex-col justify-between text-right text-caption text-fg-muted tabular-nums" aria-hidden="true">

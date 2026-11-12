@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, Repeat, X } from "@/components/ui/icons";
+import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, Repeat, Sun, X } from "@/components/ui/icons";
+import { Avatar } from "@/components/ui/avatar";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { useModalDialog } from "@/components/ui/dialog";
 import { ROUTES } from "@/lib/auth/routes";
@@ -20,10 +21,10 @@ import { UserMenu } from "./user-menu";
 
 const MOBILE_NAV_ID = "mobile-nav";
 
-function Brand({ compact = false }: { compact?: boolean }) {
+function Brand({ compact = false, onDark = false }: { compact?: boolean; onDark?: boolean }) {
   const { access } = useSession();
   return (
-    <Link href={homeFor(access)} className="flex items-center gap-2 rounded-md text-h3 text-fg">
+    <Link href={homeFor(access)} className={cn("flex items-center gap-2.5 rounded-md text-h2 font-bold", onDark ? "text-nav-fg-active" : "text-fg")}>
       <BrandMark />
       <span className={cn(compact && "sr-only")}>BayiOS</span>
     </Link>
@@ -40,14 +41,14 @@ function EmptyNav({ onNavigate, withActions = false }: { onNavigate?: () => void
   const router = useRouter();
   if (state.status === "loading" || state.status === "error") return null;
   if (state.status === "ready") {
-    return <p className="px-3 text-caption text-fg-muted">Rolünüz için menüde gösterilecek bir bölüm yok. Gerekirse işletme yöneticinizle görüşün.</p>;
+    return <p className="px-3 text-caption text-nav-fg">Rolünüz için menüde gösterilecek bir bölüm yok. Gerekirse işletme yöneticinizle görüşün.</p>;
   }
   const others = state.memberships.some((m) => m.tenantId !== state.tenant.tenantId);
-  const itemClass = "flex min-h-10 w-full items-center gap-3 rounded-md px-3 text-body font-medium text-fg-secondary hover:bg-sunken hover:text-fg";
+  const itemClass = "flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-body font-medium text-nav-fg hover:bg-nav-hover hover:text-nav-fg-active";
   return (
     <div className="flex flex-col gap-3">
-      <p className="px-3 text-caption text-fg-muted">
-        <strong className="text-fg">{state.tenant.tenantName}</strong> askıya alınmış veya kapatılmış; bu işletmenin menüsü kullanılamıyor.
+      <p className="px-3 text-caption text-nav-fg">
+        <strong className="text-nav-fg-active">{state.tenant.tenantName}</strong> askıya alınmış veya kapatılmış; bu işletmenin menüsü kullanılamıyor.
       </p>
       {withActions ? (
         <ul aria-label="İşletme işlemleri" className="flex flex-col gap-0.5">
@@ -79,8 +80,37 @@ function EmptyNav({ onNavigate, withActions = false }: { onNavigate?: () => void
   );
 }
 
+/** Bottom of the sidebar (UI kit): who is signed in. Display only — sign-out lives in the top bar. */
+function SidebarUser({ compact }: { compact: boolean }) {
+  const { state } = useSession();
+  if (state.status !== "ready") return null;
+  const name = state.user.fullName || state.user.email || "Kullanıcı";
+  return (
+    <div className={cn("flex items-center gap-3 rounded-xl px-2 py-2", compact && "justify-center px-0")}>
+      <Avatar name={name} size="md" className="ring-nav" />
+      <div className={cn("flex min-w-0 flex-col", compact && "sr-only")}>
+        <span className="truncate text-body font-semibold text-nav-fg-active">{name}</span>
+        {state.user.email && state.user.fullName ? <span className="truncate text-caption text-nav-fg">{state.user.email}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+/** Top-bar greeting (UI kit "Hello, …!"): first name of the signed-in user. */
+function Greeting() {
+  const { state } = useSession();
+  if (state.status !== "ready") return null;
+  const name = state.user.fullName?.trim().split(/\s+/)[0];
+  return (
+    <p className="flex min-w-0 items-center gap-2 text-h2 font-medium text-fg">
+      <Sun className="size-6" />
+      <span className="truncate">{name ? `Merhaba, ${name}!` : "Merhaba!"}</span>
+    </p>
+  );
+}
+
 /**
- * Application shell: persistent, collapsible sidebar from md (768 px) up; off-canvas drawer below.
+ * Application shell (UI kit, #222): a floating dark sidebar and a top-bar card on the page background. persistent, collapsible sidebar from md (768 px) up; off-canvas drawer below.
  * Menu items follow the effective permissions of the active membership (GET /api/v1/me) — visibility only, the API
  * authorizes.
  */
@@ -105,7 +135,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const sections = navFor(access);
 
   return (
-    <div className="flex min-h-dvh w-full">
+    <div className="flex min-h-dvh w-full md:gap-3 md:p-3">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-(--bos-z-toast) focus:rounded-md focus:bg-raised focus:px-4 focus:py-2 focus:shadow-e2"
@@ -115,31 +145,31 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Desktop / tablet sidebar. The aside stretches to the full page height (background and border reach the bottom of
           long pages); the sticky panel inside keeps the menu in view while the page scrolls. */}
-      <aside
-        id="sidebar"
-        className={cn("hidden shrink-0 self-stretch border-r border-line bg-card transition-[width] md:block", collapsed ? "w-18" : "w-64")}
-      >
-        <div className="sticky top-0 flex h-dvh flex-col">
-          <div className={cn("flex h-14 items-center border-b border-line px-4", collapsed && "justify-center px-0")}>
-            <Brand compact={collapsed} />
-          </div>
-          <div className="flex-1 overflow-y-auto px-3 py-4">
-            {sections.length > 0 ? <NavMenu sections={sections} collapsed={collapsed} idPrefix="sidebar" /> : collapsed ? null : <EmptyNav />}
-          </div>
-          <div className="border-t border-line p-3">
+      <aside id="sidebar" className={cn("hidden shrink-0 self-stretch transition-[width] md:block", collapsed ? "w-20" : "w-64")}>
+        <div className="sticky top-3 flex h-[calc(100dvh-1.5rem)] flex-col rounded-2xl bg-nav text-nav-fg shadow-e2">
+          <div className={cn("flex items-center gap-2 px-5 pt-5 pb-4", collapsed && "flex-col px-0")}>
+            <Brand compact={collapsed} onDark />
             <button
               type="button"
               onClick={() => setCollapsed(!collapsed)}
               aria-expanded={!collapsed}
               aria-controls="sidebar"
+              title={collapsed ? "Menüyü genişlet" : "Menüyü daralt"}
               className={cn(
-                "flex min-h-10 w-full items-center gap-3 rounded-md px-3 text-body font-medium text-fg-secondary hover:bg-sunken hover:text-fg",
-                collapsed && "justify-center px-0",
+                "inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-nav-fg hover:bg-nav-hover hover:text-nav-fg-active",
+                !collapsed && "ml-auto",
               )}
             >
               {collapsed ? <PanelLeftOpen className="size-5" aria-hidden="true" /> : <PanelLeftClose className="size-5" aria-hidden="true" />}
-              <span className={cn(collapsed && "sr-only")}>{collapsed ? "Menüyü genişlet" : "Menüyü daralt"}</span>
+              <span className="sr-only">{collapsed ? "Menüyü genişlet" : "Menüyü daralt"}</span>
             </button>
+          </div>
+          <div className="mx-5 border-t border-dashed border-nav-line" />
+          <div className="flex-1 overflow-y-auto px-4 py-5">
+            {sections.length > 0 ? <NavMenu sections={sections} collapsed={collapsed} idPrefix="sidebar" /> : collapsed ? null : <EmptyNav />}
+          </div>
+          <div className="border-t border-dashed border-nav-line p-3">
+            <SidebarUser compact={collapsed} />
           </div>
         </div>
       </aside>
@@ -152,22 +182,22 @@ export function AppShell({ children }: { children: ReactNode }) {
         onClick={(event) => {
           if (event.target === event.currentTarget) closeDrawer();
         }}
-        className="m-0 h-dvh max-h-none w-72 max-w-[85vw] border-r border-line bg-card p-0 text-fg shadow-e3 md:hidden"
+        className="m-0 h-dvh max-h-none w-72 max-w-[85vw] bg-nav p-0 text-nav-fg shadow-e3 md:hidden"
       >
         {drawerOpen ? (
           <div className="flex h-full flex-col">
-            <div className="flex h-14 items-center justify-between border-b border-line px-4">
-              <Brand />
+            <div className="flex h-16 items-center justify-between border-b border-dashed border-nav-line px-4">
+              <Brand onDark />
               <button
                 type="button"
                 onClick={closeDrawer}
                 aria-label="Menüyü kapat"
-                className="inline-flex size-11 items-center justify-center rounded-md text-fg-muted hover:bg-sunken hover:text-fg"
+                className="inline-flex size-11 items-center justify-center rounded-lg text-nav-fg hover:bg-nav-hover hover:text-nav-fg-active"
               >
                 <X className="size-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-3 py-4">
+            <div className="flex-1 overflow-y-auto px-4 py-5">
               {sections.length > 0 ? <NavMenu sections={sections} onNavigate={closeDrawer} idPrefix="drawer" /> : <EmptyNav onNavigate={closeDrawer} withActions />}
             </div>
           </div>
@@ -175,26 +205,29 @@ export function AppShell({ children }: { children: ReactNode }) {
       </dialog>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-(--bos-z-sticky) flex h-14 items-center gap-3 border-b border-line bg-card/95 px-4 backdrop-blur md:px-8">
+        <header className="sticky top-0 z-(--bos-z-sticky) flex h-16 items-center gap-3 border-b border-line bg-card px-4 md:top-3 md:rounded-2xl md:border md:px-5 md:shadow-e1">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
             aria-label="Menüyü aç"
             aria-expanded={drawerOpen}
             aria-controls={MOBILE_NAV_ID}
-            className="-ml-2 inline-flex size-11 items-center justify-center rounded-md text-fg-secondary hover:bg-sunken hover:text-fg md:hidden"
+            className="inline-flex size-11 items-center justify-center rounded-lg border border-line text-fg-secondary hover:bg-sunken hover:text-fg md:hidden"
           >
             <Menu className="size-5" />
           </button>
           <div className="md:hidden">
             <Brand />
           </div>
-          <Breadcrumbs sections={sections} className="hidden min-w-0 md:block" />
+          <div className="hidden min-w-0 md:block">
+            <Greeting />
+          </div>
           <div className="ml-auto flex min-w-0 items-center gap-2">
             <UserMenu />
           </div>
         </header>
-        <main id="main" tabIndex={-1} className="mx-auto flex w-full max-w-[96rem] flex-1 flex-col gap-6 px-4 py-6 focus:outline-none md:px-8 md:py-8">
+        <Breadcrumbs sections={sections} className="mx-auto hidden w-full max-w-[96rem] min-w-0 px-1 pt-5 text-caption md:block" />
+        <main id="main" tabIndex={-1} className="mx-auto flex w-full max-w-[96rem] flex-1 flex-col gap-6 px-4 py-6 focus:outline-none md:px-1 md:pt-4 md:pb-3">
           <TrialBanner />
           <SessionGate>{children}</SessionGate>
         </main>

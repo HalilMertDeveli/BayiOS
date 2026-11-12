@@ -276,7 +276,7 @@ export function TeamPage() {
       />
 
       {seats ? (
-        <section aria-labelledby={`${uid}-seats`} className="flex flex-col gap-1 rounded-lg border border-line bg-card p-4 shadow-e1">
+        <section aria-labelledby={`${uid}-seats`} className="flex flex-col gap-1 rounded-xl border border-line bg-card p-4 shadow-e1">
           <h2 id={`${uid}-seats`} className="text-body font-semibold text-fg">
             Kullanıcı sayısı
           </h2>

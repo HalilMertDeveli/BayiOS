@@ -68,7 +68,7 @@ export function CountCreate() {
       <>
         <BackLink />
         <PageHeader title="Yeni sayım" />
-        <section className="rounded-lg border border-line bg-card shadow-e1">
+        <section className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Lock className="size-6" />} title="Sayım başlatma yetkiniz yok" description="Sayımı işletme sahibi, yönetici veya operasyon müdürü başlatır; depo personeli açık sayımlarda sayım yapar." />
         </section>
       </>
@@ -121,7 +121,7 @@ export function CountCreate() {
           {formError}
         </FormAlert>
       ) : null}
-      <form aria-label="Yeni sayım" noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1">
+      <form aria-label="Yeni sayım" noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1">
         <Select
           label="Depo"
           size="lg"

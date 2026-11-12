@@ -108,7 +108,7 @@ export function PriceQuotePanel() {
       </Link>
       <PageHeader title="Fiyat sorgula" description="Bir müşterinin bugün (veya seçtiğiniz tarihte) hangi fiyatı göreceğini ve fiyatın hangi listeden geldiğini önizleyin." />
 
-      <form noValidate onSubmit={submit} aria-label="Fiyat sorgusu" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+      <form noValidate onSubmit={submit} aria-label="Fiyat sorgusu" className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
         {formError ? (
           <FormAlert tone="error" title="Sorgulanamadı">
             {formError}
@@ -196,7 +196,7 @@ export function PriceQuotePanel() {
           </div>
           <ul aria-label="Çözümlenen fiyatlar" className="flex flex-col gap-2 md:hidden">
             {result.lines.map((r) => (
-              <li key={`${r.variantId}-${String(r.quantity)}`} className="rounded-lg border border-line bg-card p-3 shadow-e1">
+              <li key={`${r.variantId}-${String(r.quantity)}`} className="rounded-xl border border-line bg-card p-3 shadow-e1">
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-mono text-body text-fg">{r.sku}</span>
                   <PriceCell line={r} currency={result.currency} />

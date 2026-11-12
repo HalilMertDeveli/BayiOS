@@ -66,7 +66,7 @@ function StockMovementsReportBody() {
       ) : state.status === "error" ? (
         <ReportError message={state.message} onRetry={reload} />
       ) : report && report.totals.length === 0 ? (
-        <div className="rounded-lg border border-line bg-card shadow-e1">
+        <div className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<ArrowLeftRight className="size-6" />}
             title="Bu aralıkta stok hareketi yok"

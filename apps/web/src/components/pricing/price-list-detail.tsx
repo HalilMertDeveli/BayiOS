@@ -77,7 +77,7 @@ export function PriceListDetail({ priceListId }: { priceListId: string }) {
       <>
         <BackLink />
         <PageHeader title="Fiyat listesi" />
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<CircleAlert className="size-6" />}
             title={load.notFound ? "Fiyat listesi bulunamadı" : "Fiyat listesi yüklenemedi"}
@@ -243,7 +243,7 @@ function SettingsAndItems({ loaded, onSaved, onReload }: { loaded: Loaded; onSav
       ) : null}
 
       {canEdit ? (
-        <section aria-labelledby={`${uid}-sec-settings`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+        <section aria-labelledby={`${uid}-sec-settings`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
           <h2 id={`${uid}-sec-settings`} className="text-h3 text-fg">
             Liste ayarları
           </h2>

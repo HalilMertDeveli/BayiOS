@@ -30,7 +30,7 @@ const columns: TableColumn<SampleRow>[] = [
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 md:p-6">
+    <section className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 md:p-6">
       <h2 className="text-h2 text-fg">{title}</h2>
       {children}
     </section>

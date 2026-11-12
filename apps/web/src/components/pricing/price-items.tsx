@@ -222,7 +222,7 @@ export function PriceItems({ priceList, canEdit }: { priceList: PriceList; canEd
       </div>
 
       {canEdit ? (
-        <form noValidate onSubmit={save} aria-label="Fiyat ekle veya güncelle" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+        <form noValidate onSubmit={save} aria-label="Fiyat ekle veya güncelle" className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
           <h3 className="text-body font-semibold text-fg">Fiyat ekle / güncelle</h3>
           <p className="text-caption text-fg-muted">
             Ürünü okutun veya SKU/ad yazıp Enter&apos;a basın. Aynı ürünü tekrar ekleyip farklı “en az miktar” girerek kademe tanımlayın (ör. 1 adet ve 10 adet). Ürün +
@@ -310,7 +310,7 @@ export function PriceItems({ priceList, canEdit }: { priceList: PriceList; canEd
       ) : null}
 
       {state.status === "error" ? (
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState headingLevel="h3" icon={<CircleAlert className="size-6" />} title="Fiyatlar yüklenemedi" description={state.message} action={<Button onClick={reload}>Tekrar dene</Button>} />
         </div>
       ) : (
@@ -336,11 +336,11 @@ export function PriceItems({ priceList, canEdit }: { priceList: PriceList; canEd
           </div>
           <ul aria-label={`${priceList.name} fiyatları`} className="flex flex-col gap-2 md:hidden">
             {state.status === "loading" ? <li className="py-6 text-center text-body text-fg-muted">Yükleniyor…</li> : null}
-            {state.status === "ready" && items.length === 0 ? <li className="rounded-lg border border-line bg-card p-4 text-body text-fg-muted">Bu listede henüz fiyat yok.</li> : null}
+            {state.status === "ready" && items.length === 0 ? <li className="rounded-xl border border-line bg-card p-4 text-body text-fg-muted">Bu listede henüz fiyat yok.</li> : null}
             {items.map((i) => {
               const label = variantLabel(directory.get(i.variantId), i.variantId);
               return (
-                <li key={i.id} className="rounded-lg border border-line bg-card p-3 shadow-e1">
+                <li key={i.id} className="rounded-xl border border-line bg-card p-3 shadow-e1">
                   <div className="flex items-start justify-between gap-2">
                     <span className="flex flex-col">
                       <span className="font-mono text-body text-fg">{label.sku}</span>

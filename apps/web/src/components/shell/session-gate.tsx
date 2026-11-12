@@ -25,7 +25,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
 
   if (state.status === "error") {
     return (
-      <section role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+      <section role="alert" className="rounded-xl border border-line bg-card shadow-e1">
         <EmptyState
           icon={<CircleAlert className="size-6" />}
           title="Oturum bilgileri yüklenemedi"
@@ -67,7 +67,7 @@ function TenantInactive() {
   const others = state.memberships.filter((m) => m.tenantId !== state.tenant.tenantId);
 
   return (
-    <section role="alert" aria-label="İşletme kullanılamıyor" className="rounded-lg border border-line bg-card shadow-e1">
+    <section role="alert" aria-label="İşletme kullanılamıyor" className="rounded-xl border border-line bg-card shadow-e1">
       <EmptyState
         icon={<Ban className="size-6" />}
         title="Bu işletme askıya alınmış veya kapatılmış"

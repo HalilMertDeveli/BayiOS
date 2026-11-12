@@ -44,7 +44,7 @@ export function Select({
           required={required}
           aria-invalid={error ? true : undefined}
           aria-describedby={fieldDescribedBy(id, hint, error)}
-          className={cn(controlClasses, size === "lg" ? "h-12 pl-4" : "h-9 pl-3", "appearance-none pr-9", error ? "border-danger-fg" : "border-line-strong")}
+          className={cn(controlClasses, size === "lg" ? "h-12 pl-4" : "h-10 pl-3", "appearance-none pr-9", error ? "border-danger-fg" : "border-line-strong")}
           {...rest}
         >
           {placeholder !== undefined && <option value="">{placeholder}</option>}

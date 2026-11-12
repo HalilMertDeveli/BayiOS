@@ -154,7 +154,7 @@ export function WarehouseAdmin() {
           Depolar
         </h2>
         {state.status === "error" ? (
-          <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+          <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
             <EmptyState
               headingLevel="h3"
               icon={<CircleAlert className="size-6" />}
@@ -186,10 +186,10 @@ export function WarehouseAdmin() {
             <ul aria-label="Depolar" className="flex flex-col gap-2 md:hidden">
               {state.status === "loading" ? <li className="py-6 text-center text-body text-fg-muted">Yükleniyor…</li> : null}
               {state.status === "ready" && warehouses.length === 0 ? (
-                <li className="rounded-lg border border-line bg-card p-4 text-body text-fg-muted">Henüz depo yok. İlk mal kabulde “Ana Depo” otomatik oluşturulur.</li>
+                <li className="rounded-xl border border-line bg-card p-4 text-body text-fg-muted">Henüz depo yok. İlk mal kabulde “Ana Depo” otomatik oluşturulur.</li>
               ) : null}
               {warehouses.map((w) => (
-                <li key={w.id} className="rounded-lg border border-line bg-card p-4 shadow-e1">
+                <li key={w.id} className="rounded-xl border border-line bg-card p-4 shadow-e1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex flex-col">
                       <span className="font-medium text-fg">{w.name}</span>
@@ -435,7 +435,7 @@ function LocationsPanel({ warehouse, canManage: canManageRole, locationsGate }: 
       {canManageRole && locationsGate.locked ? <LockedFeature gate={locationsGate} title="Yeni lokasyon eklenemiyor" /> : null}
 
       {!warehouse.usesLocations ? (
-        <div className="rounded-lg border border-line bg-card shadow-e1">
+        <div className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             headingLevel="h3"
             icon={<MapPin className="size-6" />}
@@ -448,7 +448,7 @@ function LocationsPanel({ warehouse, canManage: canManageRole, locationsGate }: 
           />
         </div>
       ) : state.status === "error" ? (
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState headingLevel="h3" icon={<CircleAlert className="size-6" />} title="Lokasyonlar yüklenemedi" description={state.message} action={<Button onClick={reload}>Tekrar dene</Button>} />
         </div>
       ) : (

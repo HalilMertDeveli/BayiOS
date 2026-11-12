@@ -120,7 +120,7 @@ export function AdjustmentForm() {
       <>
         <BackLink />
         <PageHeader title="Stok düzeltme" />
-        <section className="rounded-lg border border-line bg-card shadow-e1">
+        <section className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<Lock className="size-6" />}
             title="Stok düzeltme yetkiniz yok"
@@ -226,7 +226,7 @@ export function AdjustmentForm() {
       ) : null}
 
       <form aria-label="Stok düzeltme" noValidate onSubmit={submit} className="flex max-w-3xl flex-col gap-4">
-        <section aria-label="Ürün" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+        <section aria-label="Ürün" className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
           {values.variant ? (
             <div className="flex items-start justify-between gap-2" id={fieldId("variantId")}>
               <div className="flex flex-col">
@@ -249,7 +249,7 @@ export function AdjustmentForm() {
           )}
         </section>
 
-        <section aria-label="Düzeltme" className="grid grid-cols-1 gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 md:grid-cols-2">
+        <section aria-label="Düzeltme" className="grid grid-cols-1 gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 md:grid-cols-2">
           <Select
             id={fieldId("warehouseId")}
             label="Depo"

@@ -73,7 +73,7 @@ export function TaskList() {
     return (
       <>
         <PageHeader title="Depo görevleri" />
-        <section aria-label="Görevler" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Görevler" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Lock className="size-6" />} title="Depo görevlerini görme yetkiniz yok" description="Rolünüz depo görevlerini görmeye izin vermiyor. Gerekirse işletme yöneticinizle görüşün." />
         </section>
       </>
@@ -289,11 +289,11 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
             Görevler yükleniyor…
           </p>
         ) : data.status === "error" ? (
-          <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+          <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
             <EmptyState icon={<CircleAlert className="size-6" />} title="Görevler yüklenemedi" description={data.message} action={<Button size="lg" onClick={refresh}>Tekrar dene</Button>} />
           </div>
         ) : data.items.length === 0 ? (
-          <section aria-label={TAB_LABELS[tab]} className="rounded-lg border border-line bg-card shadow-e1">
+          <section aria-label={TAB_LABELS[tab]} className="rounded-xl border border-line bg-card shadow-e1">
             <EmptyState
               icon={<ClipboardList className="size-6" />}
               title={tab === "mine" ? "Size atanmış görev yok" : tab === "pool" ? "Havuzda bekleyen görev yok" : "Bu filtrede görev yok"}
@@ -311,7 +311,7 @@ function TaskListView({ tabs, permissions }: { tabs: Tab[]; permissions: Fulfilm
               // Detail: tasks.read.all (any task the list showed) or tasks.read.own (own and pool tasks).
               const canOpen = permissions.readAll || permissions.assign || (permissions.readOwn && (mine || task.assignedTo === null));
               return (
-                <li key={task.id} data-testid={`task-${task.id}`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+                <li key={task.id} data-testid={`task-${task.id}`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="flex min-w-0 flex-col">
                       <h2 className="text-h3 text-fg">

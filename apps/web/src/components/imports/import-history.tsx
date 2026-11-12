@@ -40,7 +40,7 @@ export function resultSummary(job: ImportJob): string {
 /** Locked screen for roles without imports.run (e.g. the operations manager, who only holds imports.run.stock). */
 export function ImportsLocked({ permissions }: { permissions: ImportPermissions }) {
   return (
-    <section aria-label="İçe aktarma erişimi" className="rounded-lg border border-line bg-card shadow-e1">
+    <section aria-label="İçe aktarma erişimi" className="rounded-xl border border-line bg-card shadow-e1">
       <EmptyState
         icon={<Lock className="size-6" />}
         title="İçe aktarma için yetkiniz yok"
@@ -171,7 +171,7 @@ export function ImportHistory() {
             İçe aktarma geçmişi
           </h2>
           {state.status === "error" ? (
-            <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+            <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
               <EmptyState
                 headingLevel="h3"
                 icon={<CircleAlert className="size-6" />}
@@ -196,12 +196,12 @@ export function ImportHistory() {
               <ul aria-label="İçe aktarma geçmişi" className="flex flex-col gap-2 md:hidden">
                 {state.status === "loading" ? <li className="py-6 text-center text-body text-fg-muted">Yükleniyor…</li> : null}
                 {state.status === "ready" && items.length === 0 ? (
-                  <li className="rounded-lg border border-line bg-card">
+                  <li className="rounded-xl border border-line bg-card">
                     <HistoryEmpty canStart={canStartAny} />
                   </li>
                 ) : null}
                 {items.map((j) => (
-                  <li key={j.id} className="flex flex-col gap-1 rounded-lg border border-line bg-card p-4 shadow-e1">
+                  <li key={j.id} className="flex flex-col gap-1 rounded-xl border border-line bg-card p-4 shadow-e1">
                     <div className="flex items-start justify-between gap-2">
                       <Link href={importHref(j.id)} className="min-h-11 py-2 font-medium break-all text-brand-fg underline-offset-2 hover:underline">
                         {j.fileName}

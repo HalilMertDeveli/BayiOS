@@ -45,9 +45,9 @@ export function Input({
           aria-describedby={fieldDescribedBy(id, hint, error)}
           className={cn(
             controlClasses,
-            size === "lg" ? "h-12 px-4" : "h-9 px-3",
+            size === "lg" ? "h-12 px-4" : "h-10 px-3",
             "read-only:bg-sunken",
-            prefix ? "pl-9" : null,
+            prefix ? "pl-10" : null,
             suffix ? "pr-9" : null,
             error ? "border-danger-fg" : "border-line-strong",
           )}

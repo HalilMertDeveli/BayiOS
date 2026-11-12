@@ -58,7 +58,7 @@ export function PlanPage() {
       <>
         <BackLink />
         <PageHeader title="Paket ve modüller" />
-        <section aria-label="Paket ve modüller durumu" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Paket ve modüller durumu" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<Lock className="size-6" />}
             title="Paket bilgilerini görme yetkiniz yok"
@@ -109,7 +109,7 @@ function PlanPageView({ canManage }: { canManage: boolean }) {
           Paket bilgileri yükleniyor…
         </p>
       ) : state.status === "error" ? (
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             headingLevel="h2"
             icon={<CircleAlert className="size-6" />}
@@ -134,7 +134,7 @@ function CurrentPlan({ subscription }: { subscription: Subscription }) {
   const uid = useId();
   const daysLeft = subscription.status === "trialing" ? trialDaysLeft(subscription.trialEndsAt) : null;
   return (
-    <section aria-labelledby={`${uid}-current-plan`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <section aria-labelledby={`${uid}-current-plan`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
       <h2 id={`${uid}-current-plan`} className="text-h3 text-fg">
         Mevcut paket
       </h2>
@@ -165,7 +165,7 @@ function CurrentPlan({ subscription }: { subscription: Subscription }) {
 function UsageSection({ usage }: { usage: Usage }) {
   const uid = useId();
   return (
-    <section aria-labelledby={`${uid}-usage`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <section aria-labelledby={`${uid}-usage`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
       <h2 id={`${uid}-usage`} className="text-h3 text-fg">
         Kullanım ve sınırlar
       </h2>
@@ -275,7 +275,7 @@ function ModuleStore({ data, canManage, onChanged }: { data: Data; canManage: bo
         </FormAlert>
       ) : null}
       {data.modules.length === 0 ? (
-        <div className="rounded-lg border border-line bg-card shadow-e1">
+        <div className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState headingLevel="h3" icon={<Puzzle className="size-6" />} title="Modül yok" description="Katalogda şu an ek modül bulunmuyor." />
         </div>
       ) : (
@@ -284,7 +284,7 @@ function ModuleStore({ data, canManage, onChanged }: { data: Data; canManage: bo
             const info = descriptions.get(module.code);
             const isBusy = busy?.code === module.code;
             return (
-              <li key={module.code} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+              <li key={module.code} className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4 shadow-e1">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="font-medium text-fg">{module.name}</h3>
                   <Badge tone={moduleTone[module.status]}>{moduleStatusLabels[module.status]}</Badge>

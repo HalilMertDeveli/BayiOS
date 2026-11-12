@@ -127,7 +127,7 @@ export function CustomerEditor({ customerId }: { customerId: string | null }) {
       <>
         <BackLink />
         <PageHeader title="Müşteri" />
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<CircleAlert className="size-6" />}
             title={load.notFound ? "Müşteri bulunamadı" : "Müşteri yüklenemedi"}
@@ -350,7 +350,7 @@ function CustomerForm({
 
       <form noValidate onSubmit={submit} aria-label={customer ? "Müşteriyi düzenle" : "Yeni müşteri"} className="flex flex-col gap-4">
         <fieldset disabled={readOnly} className="flex flex-col gap-4">
-          <section aria-labelledby={`${uid}-sec-firm`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+          <section aria-labelledby={`${uid}-sec-firm`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
             <h2 id={`${uid}-sec-firm`} className="text-h3 text-fg">
               Firma bilgileri
             </h2>
@@ -381,7 +381,7 @@ function CustomerForm({
             </div>
           </section>
 
-          <section aria-labelledby={`${uid}-sec-contact`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+          <section aria-labelledby={`${uid}-sec-contact`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
             <h2 id={`${uid}-sec-contact`} className="text-h3 text-fg">
               İletişim
             </h2>
@@ -399,7 +399,7 @@ function CustomerForm({
             />
           </section>
 
-          <section aria-labelledby={`${uid}-sec-commercial`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+          <section aria-labelledby={`${uid}-sec-commercial`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
             <h2 id={`${uid}-sec-commercial`} className="text-h3 text-fg">
               Ticari koşullar
             </h2>
@@ -467,7 +467,7 @@ function CustomerForm({
             ) : null}
           </section>
 
-          <section aria-labelledby={`${uid}-sec-notes`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+          <section aria-labelledby={`${uid}-sec-notes`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
             <h2 id={`${uid}-sec-notes`} className="text-h3 text-fg">
               Notlar
             </h2>
