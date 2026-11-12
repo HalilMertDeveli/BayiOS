@@ -24,12 +24,12 @@
 
 ## 2. Tasarım token planı
 
-Token isimlendirme: `kategori.rol.varyant` (ör. `color.text.muted`). Kaynak tek JSON (W3C Design Tokens formatı) → web için CSS değişkenleri, Flutter için `ThemeExtension` üretilir. Açık tema MVP; koyu tema altyapısı hazır, P2.
+Token isimlendirme: `kategori.rol.varyant` (ör. `color.text.muted`). **Kaynak (#222):** UI kit JSON'ları `packages/design-tokens/` → `build.mjs` web `tokens.css` ve Flutter `app_palette.dart` üretir; anlamsal katman web `globals.css`, mobil `AppColors` (ThemeExtension). Açık ve koyu tema ikisi de etkin.
 
 ### 2.1 Renk
 | Grup | Token örnekleri | Not |
 |---|---|---|
-| Marka | `color.brand.primary`, `.primary-hover`, `.primary-subtle`, `.accent` | **Karar verildi (#61, 2026-11-09):** derin petrol `#0C5468` + dekoratif bakır vurgu `#D4733A`; ölçekler, eşleme ve kontrast tablosu: `brand-colors.md` |
+| Marka | `color.brand.primary`, `.primary-hover`, `.primary-subtle`, `.accent` | **UI kit (#222, 2026-11-12):** yeşil `#27A376` (vurgu) / `#1F825E` (AA dolgu); önceki petrol + bakır (#61) emekli. Palet, sapmalar, kontrast: `brand-colors.md` |
 | Nötr | `color.neutral.0…950` (11 adım) | Arka plan, kenarlık, metin |
 | Metin | `color.text.primary`, `.secondary`, `.muted`, `.inverse`, `.link` | `primary` ve `secondary` beyaz üzerinde ≥ 4.5:1 |
 | Yüzey | `color.surface.page`, `.card`, `.raised`, `.overlay`, `.sunken` | |
@@ -63,7 +63,7 @@ Her durum: rozet arka planı (`bg`), metin (`fg`), ikon. Metin/zemin kontrastı 
 | İçe aktarma: Kuyrukta / Çalışıyor / Tamamlandı / Hatalı / Geri alındı | — | Nötr / Mavi / Yeşil / Kırmızı / Gri |
 
 ### 2.3 Tipografi
-- Yazı ailesi: Türkçe karakter desteği tam, açık kaynak sans-serif (öneri: **Inter**; mobilde aynı veya sistem fontu). Sayısal kolonlarda `tabular-nums`.
+- Yazı ailesi: **Inter Tight** (UI kit, #222; web ve mobil). Sayısal kolonlarda `tabular-nums`. Güncel ölçek `brand-colors.md` §3; aşağıdaki tablo ilk plandır.
 - Monospace (SKU, barkod, raf kodu): **JetBrains Mono** veya sistem mono.
 
 | Token | Boyut / satır yüksekliği (web px) | Kullanım |
@@ -82,9 +82,9 @@ Her durum: rozet arka planı (`bg`), metin (`fg`), ikon. Metin/zemin kontrastı 
 | Token | Değerler |
 |---|---|
 | `space.*` (4 px tabanı) | 0, 2, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64 |
-| `radius.*` | `none` 0, `sm` 4, `md` 6, `lg` 8, `xl` 12, `full` 9999 |
+| `radius.*` | (#222, kit) `sm` 6, `md` 8 (kontrol), `lg` 12, `xl` 16 (kart), `2xl` 20, `full` 9999 |
 | `elevation.*` | `0` yok, `1` kart (çok hafif), `2` açılır menü/popover, `3` diyalog, `4` toast |
-| `size.control.*` | `sm` 32, `md` 36 (web varsayılan), `lg` 44; mobil min 48 dp |
+| `size.control.*` | `sm` 32, `md` 40 (web varsayılan, kit), `lg` 44; mobil min 48 dp |
 | `motion.*` | `fast` 120 ms, `base` 200 ms, `slow` 300 ms; `prefers-reduced-motion` ile devre dışı |
 | `z.*` | `dropdown`, `sticky`, `drawer`, `modal`, `toast` |
 

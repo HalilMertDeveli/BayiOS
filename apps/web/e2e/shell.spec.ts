@@ -54,6 +54,8 @@ test.describe("shell — desktop", () => {
     await expect(page.getByRole("button", { name: "Menüyü daralt" })).toBeVisible();
   });
 
+  // #222: the sidebar is a floating panel inset by the shell padding (UI kit), so "reaches the bottom" and "stays at the
+  // top" are measured against that inset instead of the page edge.
   test("long page (#111): the sidebar background reaches the bottom; the menu stays in view while scrolling", async ({ page }) => {
     await page.goto("/tasarim-sistemi");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -61,7 +63,11 @@ test.describe("shell — desktop", () => {
     const box = await page.evaluate(() => {
       const aside = document.getElementById("sidebar")!;
       const panel = aside.firstElementChild as HTMLElement;
+      const shell = getComputedStyle(aside.parentElement!);
       return {
+        insetTop: parseFloat(shell.paddingTop),
+        insetBottom: parseFloat(shell.paddingBottom),
+        stickyTop: parseFloat(getComputedStyle(panel).top),
         pageHeight: document.documentElement.scrollHeight,
         viewport: window.innerHeight,
         asideHeight: aside.getBoundingClientRect().height,
@@ -69,8 +75,8 @@ test.describe("shell — desktop", () => {
       };
     });
     expect(box.pageHeight).toBeGreaterThan(box.viewport * 1.5);
-    expect(box.asideHeight).toBeGreaterThanOrEqual(box.pageHeight - 1);
-    expect(Math.abs(box.panelTop)).toBeLessThanOrEqual(1);
+    expect(box.asideHeight).toBeGreaterThanOrEqual(box.pageHeight - box.insetTop - box.insetBottom - 1);
+    expect(Math.abs(box.panelTop - box.stickyTop)).toBeLessThanOrEqual(1);
     await expect(page.getByRole("navigation", { name: "Ana menü" }).getByRole("link", { name: "Pano" })).toBeInViewport();
   });
 

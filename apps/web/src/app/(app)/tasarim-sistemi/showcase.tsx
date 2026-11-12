@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search } from "@/components/ui/icons";
+import { AppIcon, ICONS, Plus, Search, type IconName } from "@/components/ui/icons";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge, OrderStatusBadge, orderStatusMeta, type OrderStatus } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -30,7 +31,7 @@ const columns: TableColumn<SampleRow>[] = [
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 md:p-6">
+    <section className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4 shadow-e1 md:p-6">
       <h2 className="text-h2 text-fg">{title}</h2>
       {children}
     </section>
@@ -49,6 +50,7 @@ export function Showcase() {
         <div className="flex flex-wrap items-center gap-2">
           <Button icon={<Plus className="size-4" />}>Birincil</Button>
           <Button variant="secondary">İkincil</Button>
+          <Button variant="tertiary">Üçüncül</Button>
           <Button variant="ghost">Sade</Button>
           <Button variant="danger">Sil</Button>
           <Button loading>Kaydediliyor</Button>
@@ -173,6 +175,26 @@ export function Showcase() {
             </>
           }
         />
+      </Section>
+
+      <Section title="Avatar">
+        <div className="flex flex-wrap items-center gap-3">
+          <Avatar name="Ayşe Yılmaz" size="sm" />
+          <Avatar name="Mehmet Demir" />
+          <Avatar name="Örnek Toptan" size="lg" />
+        </div>
+        <p className="text-caption text-fg-muted">Gerçek kullanıcılarda baş harfler; fotoğraf yalnızca demo verisinde.</p>
+      </Section>
+
+      <Section title="İkonlar (UI kit)">
+        <ul className="grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-2">
+          {(Object.keys(ICONS) as IconName[]).map((name) => (
+            <li key={name} className="flex flex-col items-center gap-2 rounded-lg border border-line p-3 text-fg-secondary">
+              <AppIcon name={name} className="size-6" />
+              <span className="text-caption break-all text-fg-muted">{name}</span>
+            </li>
+          ))}
+        </ul>
       </Section>
 
       <Section title="Boş durum">

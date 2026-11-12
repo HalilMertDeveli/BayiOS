@@ -1,87 +1,45 @@
-# BayiOS — Marka renkleri (petrol + bakır)
+# BayiOS — Renkler ve tasarım token'ları (UI kit, #222)
 
 | Alan | Değer |
 |---|---|
-| Karar | Ürün sahibi, 2026-11-09 (#61): "güven veren ve farklı" bir ana renk; jenerik SaaS mavisi değil |
-| Kaynak (web) | `apps/web/src/app/globals.css` (`--bos-petrol-*`, `--bos-copper-*`, `--bos-brand-*`) |
-| Kaynak (mobil) | `apps/mobile/lib/core/ui/tokens.dart` (`BosPetrol`, `BosCopper`, `BosColors.brand*`) |
-| Koruma | `apps/web/src/app/tokens.test.ts` (kontrast + iki koyu blok eşitliği + Flutter eşleşmesi), `apps/mobile/test/core/ui/tokens_test.dart` |
+| Karar | Ürün sahibi, 2026-11-12 (#222): arayüz Figma Community UI kit'ine göre yeniden kurulur. Önceki petrol + bakır paleti (#61, #178) emekliye ayrıldı. |
+| Kaynak (UI kit) | "AI Inventory Management Web App UI Kit" — Lukáš Marek (Figma Community), **CC BY 4.0**, değiştirilerek kullanılır. Kredi satırı: Ayarlar › Hakkında (web) ve Profil › Hakkında (mobil). |
+| Tek kaynak | `packages/design-tokens/renkler.json`, `tipografi.json` (kit dışa aktarımı) → `node packages/design-tokens/build.mjs` üretir: `apps/web/src/app/tokens.css`, `apps/mobile/lib/core/theme/app_palette.dart` |
+| Anlamsal katman | web `apps/web/src/app/globals.css` (`--bos-*`, açık + koyu) · mobil `apps/mobile/lib/core/theme/app_colors.dart` (`AppColors` ThemeExtension, açık + koyu) |
+| İkonlar | `packages/design-tokens/icons.mjs` → `packages/design-tokens/icons/` (kaynak), `apps/mobile/assets/icons/`, `apps/web/src/components/ui/icons/data.ts` |
+| Koruma | `apps/web/src/app/tokens.test.ts` (WCAG kontrastı, iki koyu blok eşitliği, üretilmiş dosyalar güncel mi, Flutter açık tema eşleşmesi), `apps/mobile/test/core/ui/tokens_test.dart` |
 
-## 1. Gerekçe
-- **Petrol (derin mavi-yeşil, ton ~193°)** — lacivertin kurumsal güvenini taşır ama B2B SaaS'ta yaygın mavi (`#2563eb`
-  ailesi) ve önceki lacivert (`#0f4c75`) ile karışmaz. Depo/lojistik dünyasında "sakin, sağlam, endüstriyel" okunur.
-- **Bakır (sıcak turuncu-kahve, ton ~22°)** — petrolün tamamlayıcısı; markaya sıcaklık verir. **Yalnızca dekoratif**:
-  logo işaretindeki alt çizgi, illüstrasyon, pazarlama yüzeyi. Durum (uyarı/hata), rozet veya gövde metni olarak
-  **kullanılmaz** — sıcak tonlar uyarı (amber) ve hata (kırmızı) ile aynı bölgededir.
-- Durum renkleri (success yeşil, warning amber, danger kırmızı, info mavi, mor, teal, AI çivit) **değişmedi**. Tek
-  istisna: koyu temada `danger-solid-hover` `#e04a3f` → `#b3302a` (beyaz metin 4.02:1 → 6.23:1; önceden AA altındaydı).
-- Durum etiketleri yalnızca renge dayanmaz (renk + metin + ikon, tasarım planı §1.3); renk farkı ek ipucudur.
+## 1. Palet
+Kit ölçekleri (50…900): **Primary** (yeşil, ana `#27A376`), **Grayscale** (0 `#F4F6F6` … 900 `#0C110F`), Success,
+Red, Yellow, Blue, Purple. Bileşenler ham ölçeği değil yalnızca anlamsal token'ları kullanır.
 
-## 2. Ölçekler (temadan bağımsız)
-| Adım | Petrol | Bakır |
+| Rol | Açık | Koyu |
 |---|---|---|
-| 50 | `#EDF6F8` | `#FCF3ED` |
-| 100 | `#D4EAEF` | `#F8E1D2` |
-| 200 | `#93CDD9` | `#EDB48D` |
-| 300 | `#7FC4D3` | `#E39A68` |
-| 400 | `#6CB8C8` | `#DD8650` |
-| 500 | `#3D9AAE` | `#D4733A` |
-| 600 | `#1F7A90` | `#A4501F` |
-| 700 | `#136579` | `#843F18` |
-| 800 | `#0C5468` | `#66311A` |
-| 900 | `#0A4354` | `#4F2815` |
-| 950 | `#04191E` | `#1F0F06` |
+| Sayfa (`surface.page`) | `#F4F6F6` gray-0 | `#0C110F` gray-900 |
+| Kart (`surface.card`) | `#FFFFFF` | `#181D1B` (kit: beyaz %5, düz renge çevrildi) |
+| Metin (`text.primary`) | `#0C110F` | `#F4F6F6` |
+| Kenarlık (`border.default`) | `#E6E8E5` gray-200 | `#2F3833` |
+| Marka vurgusu (`brand.accent`) | `#27A376` primary-600 | `#79C7AB` primary-500 |
+| Marka dolgusu (`brand.primary`, buton) | `#1F825E` primary-700 | `#79C7AB` primary-500 |
+| Kenar çubuğu (`nav.bg`) | `#2C342F` gray-800 | `#141A17` |
 
-Bileşenler ölçeği doğrudan kullanmaz; yalnızca aşağıdaki anlamsal token'ları (Tailwind: `bg-brand`, `text-brand-fg`,
-`text-link`, `outline-focus`, `bg-accent` …) kullanır.
+## 2. Kit değerinden sapmalar (WCAG 2.2 AA)
+Kit'in birkaç değeri AA'yı karşılamıyor; testler gevşetilmedi, bir sonraki kit adımı kullanıldı:
 
-## 3. Anlamsal eşleme
-| Token | Açık tema | Koyu tema |
+| Kit değeri | Sorun | Kullanılan |
 |---|---|---|
-| `brand.primary` (birincil buton) | petrol-800 `#0C5468` | petrol-400 `#6CB8C8` |
-| `brand.primary-hover` | petrol-900 `#0A4354` | petrol-200 `#93CDD9` |
-| `brand.primary-subtle` | petrol-50 `#EDF6F8` | `#0D262D` |
-| `brand.on-primary` | `#FFFFFF` | petrol-950 `#04191E` |
-| `brand.accent` (dekoratif) | copper-500 `#D4733A` | copper-300 `#E39A68` |
-| `brand.accent-hover` | copper-400 `#DD8650` | copper-200 `#EDB48D` |
-| `brand.on-accent` | copper-950 `#1F0F06` | copper-950 `#1F0F06` |
-| `text.link` | petrol-700 `#136579` | petrol-300 `#7FC4D3` |
-| `border.focus` (odak halkası) | petrol-600 `#1F7A90` | petrol-300 `#7FC4D3` |
-| `brand.fg / bg / border` (rozet, bağlantılar) | `#0C5468` / `#EDF6F8` / `#93CDD9` | `#93CDD9` / `#0D262D` / `#2B5D68` |
-| `brand.panel` (giriş/kayıt yan paneli; temadan bağımsız, iki temada da koyu) | petrol-900 `#0A4354` | petrol-900 `#0A4354` |
-| `brand.on-panel` / `brand.on-panel-muted` | `#FFFFFF` (10.8:1) / petrol-100 `#D4EAEF` (8.4:1) | aynı |
+| Buton `#27A376` + beyaz metin | 3.19:1 (< 4.5) | Dolgu `#1F825E` (primary-700, 4.76:1); `#27A376` vurgu/grafik/logo olarak kalır, butonda üstten alta geçişin üst rengi |
+| İkincil metin `#919992` | beyaz üzerinde 2.92:1 | `text.secondary` `#2C342F`, `text.muted` `#4A5950` (kit "Text/tertiary") |
+| Kenarlık `#E6E8E5` form kontrollerinde | < 3:1 (1.4.11) | Kontrol kenarı `border.strong` `#707371`; kartlar ve tablolar kit kenarlığını kullanır |
+| Rozet metinleri (`#0CAF60`, `#FFD023`, …) | kendi açık zeminlerinde < 4.5 | Aynı ailenin 700–900 adımı (`success.fg` `#07693A`, `warning.fg` `#66530E`, …); zemin ve kenarlık kit değerleri |
+| Koyu tema rozetleri | `#E65A5F` / `#5A1416` 3.9:1 | Koyu temada fg = ailenin 300 adımı |
 
-Panel üzerinde bakır vurgu (çizgi, ikon) yalnızca dekoratiftir (≥ 3:1, `tokens.test.ts`).
+Durum etiketleri yalnızca renge dayanmaz (renk + metin + ikon). Kit'in "Interoly" adı ve logosu kullanılmaz; logo yerine
+geçici "B" işareti + "BayiOS" yazısı durur (sahibinin logosu gelince değişir).
 
-Mobil (Flutter) şu an yalnızca açık temayı kullanır (koyu tema P2, D-03); değerleri açık sütunla birebir aynıdır.
-
-## 4. Kontrast (WCAG 2.2 AA, hesaplanmış)
-Zeminler: açık `page #F6F7F9`, `card #FFFFFF`, `sunken #EEF0F3`; koyu `page #0D1117`, `card #151B23`, `sunken #0A0E13`.
-
-| Çift | Eşik | Açık | Koyu |
-|---|---|---|---|
-| on-primary / primary (buton metni) | 4.5 | **8.46** | **8.02** |
-| on-primary / primary-hover | 4.5 | **10.80** | **10.30** |
-| primary dolgu / page · card · sunken (1.4.11) | 3 | 7.89 · 8.46 · 7.41 | 8.41 · 7.69 · 8.60 |
-| text.link / page · card · sunken | 4.5 | 6.19 · 6.63 · 5.81 | 9.68 · 8.85 · 9.90 |
-| brand.fg / page · card · sunken | 4.5 | 7.89 · 8.46 · 7.41 | 10.79 · 9.87 · 11.04 |
-| brand.fg / brand.bg (rozet) | 4.5 | 7.71 | 8.99 |
-| primary / primary-subtle | 4.5 | 7.71 | 7.00 |
-| focus halkası / page · card · sunken | 3 | 4.62 · 4.95 · 4.33 | 9.68 · 8.85 · 9.90 |
-| on-accent / accent | 4.5 | 5.59 | 8.05 |
-| on-accent / accent-hover | 4.5 | 6.73 | 10.20 |
-
-Odak halkası `outline-offset: 2px` ile zemine karşı çizilir; bu yüzden ölçüt halka/zemin kontrastıdır.
-
-## 5. Durum renklerinden ayrışma (CIEDE2000 ΔE, metin renkleri)
-| Çift | Açık | Koyu |
-|---|---|---|
-| primary ↔ success | 29.0 | 26.5 |
-| primary ↔ info | 17.5 (eski lacivert: 12.5) | 18.7 |
-| brand.fg ↔ teal.fg ("Sevk Edildi" ↔ "Paketlendi") | 12.7 | 10.3 |
-| focus ↔ danger | 56.1 | 48.8 |
-| accent ↔ warning.fg · danger.fg | 21.0 · 22.3 | 14.0 · 15.2 |
-
-Petrol, eski laciverte göre bilgi mavisinden belirgin biçimde ayrıştı. "Paketlendi" (teal) ile "Sevk Edildi" (brand)
-rozetleri yakın tonlardadır (önceki paletteki en yakın çift olan brand ↔ info ile aynı düzeyde); ikisi farklı ikon
-ve etiket taşır. Teal tonu bilerek değiştirilmedi (yeşile yaklaşıp success ile karışırdı).
+## 3. Tipografi, boşluk, yarıçap, gölge
+- Yazı ailesi **Inter Tight** (web `next/font/google`, mobil `GoogleFonts.interTight` — font dosyaları uygulamada paketli), kod/SKU için JetBrains Mono.
+- Ölçek (kit): H4 32/42 · H5 24/34 · Large 18/24 · Medium 16/20 · Small 14/18 · X-Small 12/16. Web eşlemesi: `display` = H4, `h1` = H5, `h2` = Large SemiBold, `h3` = Medium SemiBold, `body` = Small (14), `caption` = X-Small.
+- Boşluk 4/8/12/16/24/32 (kit Padding ölçeği; web'de Tailwind'in 4 px tabanı ile aynı).
+- Yarıçap: kontroller 8, kartlar 16, rozetler 8, büyük paneller 16–20 (web `rounded-md` 8, `rounded-lg` 12, `rounded-xl` 16, `rounded-2xl` 20).
+- Gölge: kit düzdür — `elevation-1` kıl çizgisi, `elevation-2` kart, birincil butonda iç parlama + yumuşak düşen gölge (`shadow-button`).

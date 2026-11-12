@@ -95,7 +95,7 @@ export const SlidersHorizontal = kit("filter_2", "SlidersHorizontal");
 export const ListFilter = kit("filter_2", "ListFilter");
 export const ScanBarcode = kit("scan", "ScanBarcode");
 export const ScanText = kit("scan", "ScanText");
-export const Menu = kit("menu_1", "Menu");
+export const Menu = kit("line_caretleft", "Menu");
 export const PanelLeftClose = kit("collaps", "PanelLeftClose");
 // Arrows
 export const ArrowLeft = kit("arrow_left_2", "ArrowLeft");
