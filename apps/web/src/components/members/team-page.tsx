@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, useId } from "react";
 import Link from "next/link";
-import { Ban, CircleAlert, Crown, Lock, MailPlus, RefreshCw, RotateCcw, Trash2, UserCog, Users } from "lucide-react";
+import { Ban, CircleAlert, Crown, Lock, MailPlus, RefreshCw, RotateCcw, Trash2, UserCog, Users } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";

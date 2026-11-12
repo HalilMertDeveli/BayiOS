@@ -1,9 +1,9 @@
-import { ArrowRightLeft, Check, CheckCheck, CircleDashed, CircleX, ClipboardCheck, Clock, Hourglass, PackageCheck, Pencil, Truck, TriangleAlert, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, Check, CheckCheck, CircleDashed, CircleX, ClipboardCheck, Clock, Hourglass, PackageCheck, Pencil, Truck, TriangleAlert, type IconComponent } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { countLineStatusMeta, countStatusMeta, statusMeta, transferStatusMeta } from "@/lib/stock-documents/labels";
 
 /** Status icons (design-system-plan §1.3: colour + text + icon); unknown statuses get none. */
-const TRANSFER_ICONS: Record<string, LucideIcon> = {
+const TRANSFER_ICONS: Record<string, IconComponent> = {
   draft: Pencil,
   in_transit: Truck,
   partially_received: ArrowRightLeft,
@@ -11,10 +11,10 @@ const TRANSFER_ICONS: Record<string, LucideIcon> = {
   closed: CheckCheck,
   cancelled: CircleX,
 };
-const COUNT_ICONS: Record<string, LucideIcon> = { open: ClipboardCheck, submitted: Hourglass, applied: CheckCheck, cancelled: CircleX };
-const COUNT_LINE_ICONS: Record<string, LucideIcon> = { pending: CircleDashed, counted: Check, applied: CheckCheck, uncounted: CircleDashed };
+const COUNT_ICONS: Record<string, IconComponent> = { open: ClipboardCheck, submitted: Hourglass, applied: CheckCheck, cancelled: CircleX };
+const COUNT_LINE_ICONS: Record<string, IconComponent> = { pending: CircleDashed, counted: Check, applied: CheckCheck, uncounted: CircleDashed };
 
-function iconFor(map: Record<string, LucideIcon>, status: string) {
+function iconFor(map: Record<string, IconComponent>, status: string) {
   const Icon = map[status];
   return Icon ? <Icon className="size-3.5" aria-hidden="true" /> : undefined;
 }

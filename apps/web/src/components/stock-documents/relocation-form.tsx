@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRightLeft, Lock } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, Lock } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
 import { CheckboxField } from "@/components/ui/checkbox-field";

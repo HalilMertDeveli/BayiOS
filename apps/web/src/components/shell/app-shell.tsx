@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, Repeat, X } from "lucide-react";
+import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, Repeat, X } from "@/components/ui/icons";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { useModalDialog } from "@/components/ui/dialog";
 import { ROUTES } from "@/lib/auth/routes";

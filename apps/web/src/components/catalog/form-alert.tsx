@@ -1,5 +1,5 @@
 import type { ReactNode, Ref } from "react";
-import { CircleAlert, CircleCheck, Info } from "lucide-react";
+import { CircleAlert, CircleCheck, Info } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
 const tones = {

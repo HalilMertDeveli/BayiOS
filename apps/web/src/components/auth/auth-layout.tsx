@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { CircleAlert, CircleCheck } from "lucide-react";
+import { CircleAlert, CircleCheck } from "@/components/ui/icons";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { cn } from "@/lib/cn";
 

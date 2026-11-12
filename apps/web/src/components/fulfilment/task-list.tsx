@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, CircleAlert, ClipboardList, Lock, RefreshCw, Truck } from "lucide-react";
+import { ChevronRight, CircleAlert, ClipboardList, Lock, RefreshCw, Truck } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";

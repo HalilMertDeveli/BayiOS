@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { PackageCheck, TriangleAlert } from "lucide-react";
+import { PackageCheck, TriangleAlert } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Table, type TableColumn } from "@/components/ui/table";

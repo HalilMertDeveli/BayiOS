@@ -2,7 +2,7 @@
 
 import { useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
-import { ArrowLeft, Calculator, X } from "lucide-react";
+import { ArrowLeft, Calculator, X } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { VariantScanner } from "@/components/inventory/variant-scanner";
 import { Badge } from "@/components/ui/badge";

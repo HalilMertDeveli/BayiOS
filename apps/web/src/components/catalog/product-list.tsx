@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
-import { CircleAlert, Package, Plus, Rows3, Rows4, Search, SearchX, SlidersHorizontal, Tags } from "lucide-react";
+import { CircleAlert, Package, Plus, Rows3, Rows4, Search, SearchX, SlidersHorizontal, Tags } from "@/components/ui/icons";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";

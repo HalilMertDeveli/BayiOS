@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
-import { CircleAlert } from "lucide-react";
+import { CircleAlert } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";

@@ -1,122 +1,116 @@
 @import "tailwindcss";
 
 /*
- * BayiOS design tokens — source of truth: docs/design/design-system-plan.md §2.
+ * BayiOS design tokens (#222) — semantic layer.
  *
- * Layer 1: raw semantic tokens as CSS custom properties (`--bos-*`), redefined for dark mode.
- *          Dark mode follows `prefers-color-scheme`, and can be forced with `data-theme="light|dark"` on <html>.
+ * Layer 0: raw kit palette / spacing / radius / type scale — `tokens.css`, GENERATED from packages/design-tokens/*.json
+ *          (node packages/design-tokens/build.mjs). UI kit: "AI Inventory Management Web App UI Kit" — Lukáš Marek
+ *          (Figma Community), CC BY 4.0, modified.
+ * Layer 1: semantic tokens as CSS custom properties (`--bos-*`) for the light theme (:root) and the dark theme
+ *          (`prefers-color-scheme`, or forced with `data-theme="light|dark"` on <html>).
  * Layer 2: `@theme inline` maps them to Tailwind utilities (bg-card, text-fg-muted, bg-success-bg, …),
  *          so components never hard-code a palette and never need `dark:` variants.
  *
  * Contrast targets (WCAG 2.2 AA): text.primary/secondary/muted ≥ 4.5:1 on page/card,
  * border.strong (form controls) and focus ring ≥ 3:1, every tone fg ≥ 4.5:1 on its own bg — enforced by tokens.test.ts.
+ * Where a kit value misses AA (kit green #27A376 under white text = 3.2:1, kit secondary text #919992 = 2.9:1) the next
+ * kit step is used for text and fills; the kit value stays as decoration (brand accent, charts). docs/design/brand-colors.md.
+ * Mirrored for Flutter in apps/mobile/lib/core/theme/app_colors.dart (tokens.test.ts checks the light values).
  */
+@import "./tokens.css";
 
 :root {
   color-scheme: light;
 
-  /*
-   * Brand palette (owner decision 2026-11-09, #61): deep petrol primary + warm copper accent.
-   * Raw scales — theme-independent; components never use them directly, only the semantic tokens below.
-   * Rationale and contrast table: docs/design/brand-colors.md. Mirrored in apps/mobile/lib/core/ui/tokens.dart.
-   */
-  --bos-petrol-50: #edf6f8;
-  --bos-petrol-100: #d4eaef;
-  --bos-petrol-200: #93cdd9;
-  --bos-petrol-300: #7fc4d3;
-  --bos-petrol-400: #6cb8c8;
-  --bos-petrol-500: #3d9aae;
-  --bos-petrol-600: #1f7a90;
-  --bos-petrol-700: #136579;
-  --bos-petrol-800: #0c5468;
-  --bos-petrol-900: #0a4354;
-  --bos-petrol-950: #04191e;
-  --bos-copper-50: #fcf3ed;
-  --bos-copper-100: #f8e1d2;
-  --bos-copper-200: #edb48d;
-  --bos-copper-300: #e39a68;
-  --bos-copper-400: #dd8650;
-  --bos-copper-500: #d4733a;
-  --bos-copper-600: #a4501f;
-  --bos-copper-700: #843f18;
-  --bos-copper-800: #66311a;
-  --bos-copper-900: #4f2815;
-  --bos-copper-950: #1f0f06;
-
-  /* color.brand — petrol primary (white text 8.46:1) */
-  --bos-brand-primary: var(--bos-petrol-800);
-  --bos-brand-primary-hover: var(--bos-petrol-900);
-  --bos-brand-primary-subtle: var(--bos-petrol-50);
+  /* color.brand — kit green. Fills and text use primary-700 (white 4.76:1); the kit's primary-600 is the accent. */
+  --bos-brand-primary: var(--bos-primary-700);
+  --bos-brand-primary-hover: var(--bos-primary-800);
+  --bos-brand-primary-subtle: var(--bos-primary-50);
   --bos-brand-on-primary: #ffffff;
-  /* color.brand.accent — decorative only (brand mark, illustrations); never a status, never body text */
-  --bos-brand-accent: var(--bos-copper-500);
-  --bos-brand-accent-hover: var(--bos-copper-400);
-  --bos-brand-on-accent: var(--bos-copper-950);
-  /*
-   * color.brand.panel — the deep petrol brand surface (auth side panel). Theme-independent on purpose (it stays dark in
-   * both themes), so it is only defined here. White text 10.8:1, muted text 8.4:1, copper accent 3.9:1 (decorative).
-   */
-  --bos-brand-panel: var(--bos-petrol-900);
+  /* color.brand.accent — kit primary-600 #27A376: brand mark, active indicators, charts, illustrations. Never body text. */
+  --bos-brand-accent: var(--bos-primary-600);
+  --bos-brand-accent-hover: var(--bos-primary-500);
+  --bos-brand-on-accent: var(--bos-gray-900);
+  /* color.brand.panel — auth side panel: deep kit green in both themes. */
+  --bos-brand-panel: var(--bos-primary-900);
   --bos-brand-on-panel: #ffffff;
-  --bos-brand-on-panel-muted: var(--bos-petrol-100);
+  --bos-brand-on-panel-muted: var(--bos-primary-100);
+
+  /* color.nav — the kit's dark sidebar */
+  --bos-nav-bg: var(--bos-gray-800);
+  --bos-nav-fg: var(--bos-gray-200);
+  --bos-nav-fg-muted: var(--bos-gray-400);
+  --bos-nav-fg-active: #ffffff;
+  --bos-nav-active-bg: var(--bos-gray-700);
+  --bos-nav-hover-bg: #38413b;
+  --bos-nav-border: var(--bos-gray-700);
 
   /* color.text */
-  --bos-text-primary: #111827;
-  --bos-text-secondary: #374151;
-  --bos-text-muted: #5b6472;
+  --bos-text-primary: var(--bos-gray-900);
+  --bos-text-secondary: var(--bos-gray-800);
+  --bos-text-muted: var(--bos-gray-700);
   --bos-text-inverse: #ffffff;
-  --bos-text-link: var(--bos-petrol-700);
+  --bos-text-link: var(--bos-primary-800);
 
   /* color.surface */
-  --bos-surface-page: #f6f7f9;
+  --bos-surface-page: var(--bos-gray-0);
   --bos-surface-card: #ffffff;
   --bos-surface-raised: #ffffff;
-  --bos-surface-sunken: #eef0f3;
-  --bos-surface-overlay: rgb(15 23 42 / 0.5);
+  --bos-surface-sunken: var(--bos-gray-50);
+  --bos-surface-overlay: rgb(12 17 15 / 0.5);
 
   /* color.border */
-  --bos-border-default: #dfe3e8;
-  --bos-border-strong: #7b8494;
-  --bos-border-focus: var(--bos-petrol-600);
+  --bos-border-default: var(--bos-gray-200);
+  --bos-border-strong: var(--bos-gray-600);
+  --bos-border-focus: var(--bos-primary-700);
 
-  /* color.{tone}.{fg,bg,border} — feedback + status families */
-  --bos-neutral-fg: #374151;
-  --bos-neutral-bg: #eef0f3;
-  --bos-neutral-border: #c5cbd3;
-  --bos-info-fg: #1d4ed8;
-  --bos-info-bg: #e8effd;
-  --bos-info-border: #9db7f2;
-  --bos-success-fg: #166534;
-  --bos-success-bg: #e8f5ec;
-  --bos-success-border: #86c79a;
-  --bos-warning-fg: #8a4b00;
-  --bos-warning-bg: #fff4e0;
-  --bos-warning-border: #f0b45a;
-  --bos-danger-fg: #b42318;
-  --bos-danger-bg: #fdecea;
-  --bos-danger-border: #f1a29b;
-  --bos-danger-solid: #b42318;
-  --bos-danger-solid-hover: #912018;
-  --bos-purple-fg: #6b21a8;
-  --bos-purple-bg: #f3e8fd;
-  --bos-purple-border: #c9a3ee;
-  --bos-teal-fg: #0f6b6b;
-  --bos-teal-bg: #e2f4f3;
-  --bos-teal-border: #8ccfcb;
-  --bos-brand-fg: var(--bos-petrol-800);
-  --bos-brand-bg: var(--bos-petrol-50);
-  --bos-brand-border: var(--bos-petrol-200);
+  /* color.{tone}.{fg,bg,border} — feedback + status families (kit badges; fg darkened to AA) */
+  --bos-neutral-fg: var(--bos-gray-800);
+  --bos-neutral-bg: var(--bos-gray-50);
+  --bos-neutral-border: var(--bos-gray-300);
+  --bos-info-fg: var(--bos-blue-700);
+  --bos-info-bg: var(--bos-blue-50);
+  --bos-info-border: var(--bos-blue-300);
+  --bos-success-fg: var(--bos-green-800);
+  --bos-success-bg: var(--bos-green-50);
+  --bos-success-border: var(--bos-green-300);
+  --bos-warning-fg: var(--bos-yellow-900);
+  --bos-warning-bg: var(--bos-yellow-50);
+  --bos-warning-border: var(--bos-yellow-300);
+  --bos-danger-fg: var(--bos-red-700);
+  --bos-danger-bg: var(--bos-red-50);
+  --bos-danger-border: var(--bos-red-300);
+  --bos-danger-solid: var(--bos-red-700);
+  --bos-danger-solid-hover: var(--bos-red-800);
+  --bos-purple-fg: var(--bos-purple-700);
+  --bos-purple-bg: var(--bos-purple-50);
+  --bos-purple-border: var(--bos-purple-300);
+  --bos-teal-fg: var(--bos-primary-800);
+  --bos-teal-bg: var(--bos-primary-50);
+  --bos-teal-border: var(--bos-primary-300);
+  --bos-brand-fg: var(--bos-primary-800);
+  --bos-brand-bg: var(--bos-primary-100);
+  --bos-brand-border: var(--bos-primary-400);
 
   /* color.ai — AI suggestions must be visually distinct */
-  --bos-ai-fg: #4338ca;
-  --bos-ai-bg: #eef0ff;
-  --bos-ai-border: #b4b9f5;
+  --bos-ai-fg: var(--bos-purple-800);
+  --bos-ai-bg: var(--bos-purple-100);
+  --bos-ai-border: var(--bos-purple-400);
 
-  /* elevation.* */
-  --bos-elevation-1: 0 1px 2px rgb(16 24 40 / 0.06);
-  --bos-elevation-2: 0 4px 12px rgb(16 24 40 / 0.1);
-  --bos-elevation-3: 0 12px 32px rgb(16 24 40 / 0.18);
-  --bos-elevation-4: 0 8px 24px rgb(16 24 40 / 0.16);
+  /* color.chart — series colours (kit charts) + empty track */
+  --bos-chart-1: var(--bos-primary-600);
+  --bos-chart-2: var(--bos-blue-600);
+  --bos-chart-3: var(--bos-purple-600);
+  --bos-chart-4: var(--bos-yellow-600);
+  --bos-chart-track: var(--bos-primary-100);
+
+  /* elevation.* — the kit is flat: hairline shadows, borders do the work */
+  --bos-elevation-1: 0 1px 2px rgb(12 17 15 / 0.04);
+  --bos-elevation-2: 0 4px 16px rgb(12 17 15 / 0.06);
+  --bos-elevation-3: 0 12px 32px rgb(12 17 15 / 0.14);
+  --bos-elevation-4: 0 8px 24px rgb(12 17 15 / 0.12);
+  /* the kit's raised primary button: inner highlight + soft drop */
+  --bos-elevation-button: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 2px 6px rgb(12 17 15 / 0.18);
 
   /* motion.* */
   --bos-motion-fast: 120ms;
@@ -132,7 +126,7 @@
 
   /* size.control.* */
   --bos-control-sm: 2rem;
-  --bos-control-md: 2.25rem;
+  --bos-control-md: 2.5rem;
   --bos-control-lg: 2.75rem;
 }
 
@@ -140,159 +134,182 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bos-brand-primary: var(--bos-petrol-400);
-    --bos-brand-primary-hover: var(--bos-petrol-200);
-    --bos-brand-primary-subtle: #0d262d;
-    --bos-brand-on-primary: var(--bos-petrol-950);
-    --bos-brand-accent: var(--bos-copper-300);
-    --bos-brand-accent-hover: var(--bos-copper-200);
-    --bos-brand-on-accent: var(--bos-copper-950);
-    --bos-text-primary: #e8ecf1;
-    --bos-text-secondary: #c3cad4;
-    --bos-text-muted: #98a2b0;
-    --bos-text-inverse: #0d1117;
-    --bos-text-link: var(--bos-petrol-300);
-    --bos-surface-page: #0d1117;
-    --bos-surface-card: #151b23;
-    --bos-surface-raised: #1c2430;
-    --bos-surface-sunken: #0a0e13;
+    --bos-brand-primary: var(--bos-primary-500);
+    --bos-brand-primary-hover: var(--bos-primary-400);
+    --bos-brand-primary-subtle: var(--bos-primary-900);
+    --bos-brand-on-primary: var(--bos-gray-900);
+    --bos-brand-accent: var(--bos-primary-500);
+    --bos-brand-accent-hover: var(--bos-primary-400);
+    --bos-brand-on-accent: var(--bos-gray-900);
+    --bos-nav-bg: #141a17;
+    --bos-nav-active-bg: var(--bos-gray-800);
+    --bos-nav-hover-bg: #232a26;
+    --bos-nav-border: var(--bos-gray-800);
+    --bos-text-primary: var(--bos-gray-0);
+    --bos-text-secondary: var(--bos-gray-300);
+    --bos-text-muted: var(--bos-gray-500);
+    --bos-text-inverse: var(--bos-gray-900);
+    --bos-text-link: var(--bos-primary-500);
+    --bos-surface-page: var(--bos-gray-900);
+    --bos-surface-card: #181d1b;
+    --bos-surface-raised: var(--bos-gray-800);
+    --bos-surface-sunken: #121715;
     --bos-surface-overlay: rgb(0 0 0 / 0.6);
-    --bos-border-default: #2a3340;
-    --bos-border-strong: #6b7685;
-    --bos-border-focus: var(--bos-petrol-300);
-    --bos-neutral-fg: #c3cad4;
-    --bos-neutral-bg: #222a35;
-    --bos-neutral-border: #3a4452;
-    --bos-info-fg: #9dbcff;
-    --bos-info-bg: #132042;
-    --bos-info-border: #34508f;
-    --bos-success-fg: #7ad69a;
-    --bos-success-bg: #0f2a1a;
-    --bos-success-border: #2f6b45;
-    --bos-warning-fg: #f3bf6b;
-    --bos-warning-bg: #2e2008;
-    --bos-warning-border: #7a5a1f;
-    --bos-danger-fg: #ff9b91;
-    --bos-danger-bg: #331512;
-    --bos-danger-border: #7f3029;
-    --bos-danger-solid: #c9372c;
-    --bos-danger-solid-hover: #b3302a;
-    --bos-purple-fg: #d3a9ff;
-    --bos-purple-bg: #26163a;
-    --bos-purple-border: #5d3a87;
-    --bos-teal-fg: #6fd3cc;
-    --bos-teal-bg: #0e2a2a;
-    --bos-teal-border: #2a6a66;
-    --bos-brand-fg: var(--bos-petrol-200);
-    --bos-brand-bg: #0d262d;
-    --bos-brand-border: #2b5d68;
-    --bos-ai-fg: #b7bcff;
-    --bos-ai-bg: #1c1f45;
-    --bos-ai-border: #444a9a;
+    --bos-border-default: #2f3833;
+    --bos-border-strong: var(--bos-gray-600);
+    --bos-border-focus: var(--bos-primary-500);
+    --bos-neutral-fg: var(--bos-gray-400);
+    --bos-neutral-bg: var(--bos-gray-800);
+    --bos-neutral-border: var(--bos-gray-700);
+    --bos-info-fg: var(--bos-blue-300);
+    --bos-info-bg: var(--bos-blue-900);
+    --bos-info-border: var(--bos-blue-700);
+    --bos-success-fg: var(--bos-green-300);
+    --bos-success-bg: var(--bos-green-900);
+    --bos-success-border: var(--bos-green-700);
+    --bos-warning-fg: var(--bos-yellow-300);
+    --bos-warning-bg: var(--bos-yellow-900);
+    --bos-warning-border: var(--bos-yellow-700);
+    --bos-danger-fg: var(--bos-red-300);
+    --bos-danger-bg: var(--bos-red-900);
+    --bos-danger-border: var(--bos-red-700);
+    --bos-danger-solid: var(--bos-red-700);
+    --bos-danger-solid-hover: var(--bos-red-800);
+    --bos-purple-fg: var(--bos-purple-300);
+    --bos-purple-bg: var(--bos-purple-900);
+    --bos-purple-border: var(--bos-purple-700);
+    --bos-teal-fg: var(--bos-primary-300);
+    --bos-teal-bg: var(--bos-primary-900);
+    --bos-teal-border: var(--bos-primary-800);
+    --bos-brand-fg: var(--bos-primary-400);
+    --bos-brand-bg: var(--bos-primary-900);
+    --bos-brand-border: var(--bos-primary-800);
+    --bos-ai-fg: var(--bos-purple-300);
+    --bos-ai-bg: var(--bos-purple-900);
+    --bos-ai-border: var(--bos-purple-700);
+    --bos-chart-1: var(--bos-primary-500);
+    --bos-chart-2: var(--bos-blue-500);
+    --bos-chart-3: var(--bos-purple-500);
+    --bos-chart-4: var(--bos-yellow-500);
+    --bos-chart-track: var(--bos-primary-900);
     --bos-elevation-1: 0 1px 2px rgb(0 0 0 / 0.4);
-    --bos-elevation-2: 0 4px 12px rgb(0 0 0 / 0.5);
+    --bos-elevation-2: 0 4px 16px rgb(0 0 0 / 0.45);
     --bos-elevation-3: 0 12px 32px rgb(0 0 0 / 0.6);
     --bos-elevation-4: 0 8px 24px rgb(0 0 0 / 0.55);
+    --bos-elevation-button: inset 0 1px 0 rgb(255 255 255 / 0.2), 0 2px 6px rgb(0 0 0 / 0.4);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bos-brand-primary: var(--bos-petrol-400);
-  --bos-brand-primary-hover: var(--bos-petrol-200);
-  --bos-brand-primary-subtle: #0d262d;
-  --bos-brand-on-primary: var(--bos-petrol-950);
-  --bos-brand-accent: var(--bos-copper-300);
-  --bos-brand-accent-hover: var(--bos-copper-200);
-  --bos-brand-on-accent: var(--bos-copper-950);
-  --bos-text-primary: #e8ecf1;
-  --bos-text-secondary: #c3cad4;
-  --bos-text-muted: #98a2b0;
-  --bos-text-inverse: #0d1117;
-  --bos-text-link: var(--bos-petrol-300);
-  --bos-surface-page: #0d1117;
-  --bos-surface-card: #151b23;
-  --bos-surface-raised: #1c2430;
-  --bos-surface-sunken: #0a0e13;
+  --bos-brand-primary: var(--bos-primary-500);
+  --bos-brand-primary-hover: var(--bos-primary-400);
+  --bos-brand-primary-subtle: var(--bos-primary-900);
+  --bos-brand-on-primary: var(--bos-gray-900);
+  --bos-brand-accent: var(--bos-primary-500);
+  --bos-brand-accent-hover: var(--bos-primary-400);
+  --bos-brand-on-accent: var(--bos-gray-900);
+  --bos-nav-bg: #141a17;
+  --bos-nav-active-bg: var(--bos-gray-800);
+  --bos-nav-hover-bg: #232a26;
+  --bos-nav-border: var(--bos-gray-800);
+  --bos-text-primary: var(--bos-gray-0);
+  --bos-text-secondary: var(--bos-gray-300);
+  --bos-text-muted: var(--bos-gray-500);
+  --bos-text-inverse: var(--bos-gray-900);
+  --bos-text-link: var(--bos-primary-500);
+  --bos-surface-page: var(--bos-gray-900);
+  --bos-surface-card: #181d1b;
+  --bos-surface-raised: var(--bos-gray-800);
+  --bos-surface-sunken: #121715;
   --bos-surface-overlay: rgb(0 0 0 / 0.6);
-  --bos-border-default: #2a3340;
-  --bos-border-strong: #6b7685;
-  --bos-border-focus: var(--bos-petrol-300);
-  --bos-neutral-fg: #c3cad4;
-  --bos-neutral-bg: #222a35;
-  --bos-neutral-border: #3a4452;
-  --bos-info-fg: #9dbcff;
-  --bos-info-bg: #132042;
-  --bos-info-border: #34508f;
-  --bos-success-fg: #7ad69a;
-  --bos-success-bg: #0f2a1a;
-  --bos-success-border: #2f6b45;
-  --bos-warning-fg: #f3bf6b;
-  --bos-warning-bg: #2e2008;
-  --bos-warning-border: #7a5a1f;
-  --bos-danger-fg: #ff9b91;
-  --bos-danger-bg: #331512;
-  --bos-danger-border: #7f3029;
-  --bos-danger-solid: #c9372c;
-  --bos-danger-solid-hover: #b3302a;
-  --bos-purple-fg: #d3a9ff;
-  --bos-purple-bg: #26163a;
-  --bos-purple-border: #5d3a87;
-  --bos-teal-fg: #6fd3cc;
-  --bos-teal-bg: #0e2a2a;
-  --bos-teal-border: #2a6a66;
-  --bos-brand-fg: var(--bos-petrol-200);
-  --bos-brand-bg: #0d262d;
-  --bos-brand-border: #2b5d68;
-  --bos-ai-fg: #b7bcff;
-  --bos-ai-bg: #1c1f45;
-  --bos-ai-border: #444a9a;
+  --bos-border-default: #2f3833;
+  --bos-border-strong: var(--bos-gray-600);
+  --bos-border-focus: var(--bos-primary-500);
+  --bos-neutral-fg: var(--bos-gray-400);
+  --bos-neutral-bg: var(--bos-gray-800);
+  --bos-neutral-border: var(--bos-gray-700);
+  --bos-info-fg: var(--bos-blue-300);
+  --bos-info-bg: var(--bos-blue-900);
+  --bos-info-border: var(--bos-blue-700);
+  --bos-success-fg: var(--bos-green-300);
+  --bos-success-bg: var(--bos-green-900);
+  --bos-success-border: var(--bos-green-700);
+  --bos-warning-fg: var(--bos-yellow-300);
+  --bos-warning-bg: var(--bos-yellow-900);
+  --bos-warning-border: var(--bos-yellow-700);
+  --bos-danger-fg: var(--bos-red-300);
+  --bos-danger-bg: var(--bos-red-900);
+  --bos-danger-border: var(--bos-red-700);
+  --bos-danger-solid: var(--bos-red-700);
+  --bos-danger-solid-hover: var(--bos-red-800);
+  --bos-purple-fg: var(--bos-purple-300);
+  --bos-purple-bg: var(--bos-purple-900);
+  --bos-purple-border: var(--bos-purple-700);
+  --bos-teal-fg: var(--bos-primary-300);
+  --bos-teal-bg: var(--bos-primary-900);
+  --bos-teal-border: var(--bos-primary-800);
+  --bos-brand-fg: var(--bos-primary-400);
+  --bos-brand-bg: var(--bos-primary-900);
+  --bos-brand-border: var(--bos-primary-800);
+  --bos-ai-fg: var(--bos-purple-300);
+  --bos-ai-bg: var(--bos-purple-900);
+  --bos-ai-border: var(--bos-purple-700);
+  --bos-chart-1: var(--bos-primary-500);
+  --bos-chart-2: var(--bos-blue-500);
+  --bos-chart-3: var(--bos-purple-500);
+  --bos-chart-4: var(--bos-yellow-500);
+  --bos-chart-track: var(--bos-primary-900);
   --bos-elevation-1: 0 1px 2px rgb(0 0 0 / 0.4);
-  --bos-elevation-2: 0 4px 12px rgb(0 0 0 / 0.5);
+  --bos-elevation-2: 0 4px 16px rgb(0 0 0 / 0.45);
   --bos-elevation-3: 0 12px 32px rgb(0 0 0 / 0.6);
   --bos-elevation-4: 0 8px 24px rgb(0 0 0 / 0.55);
+  --bos-elevation-button: inset 0 1px 0 rgb(255 255 255 / 0.2), 0 2px 6px rgb(0 0 0 / 0.4);
 }
 
 @theme inline {
-  /* Typography — Inter / JetBrains Mono, loaded with latin + latin-ext (Turkish: ç ğ ı İ ö ş ü). */
-  --font-sans: var(--font-inter), system-ui, sans-serif;
+  /* Typography — Inter Tight (kit) / JetBrains Mono, latin + latin-ext (Turkish: ç ğ ı İ ö ş ü). Sizes from tokens.css. */
+  --font-sans: var(--font-inter-tight), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 
-  --text-display: 1.875rem;
-  --text-display--line-height: 2.375rem;
-  --text-display--font-weight: 600;
-  --text-h1: 1.5rem;
-  --text-h1--line-height: 2rem;
-  --text-h1--font-weight: 600;
-  --text-h2: 1.25rem;
-  --text-h2--line-height: 1.75rem;
+  /* display = kit Heading/H4, h1 = H5, h2 = Large/Semi Bold, h3 = Medium/Semi Bold, body = Small, caption = X-Small */
+  --text-display: var(--bos-type-heading-h4-size);
+  --text-display--line-height: var(--bos-type-heading-h4-line);
+  --text-display--font-weight: 700;
+  --text-h1: var(--bos-type-heading-h5-size);
+  --text-h1--line-height: var(--bos-type-heading-h5-line);
+  --text-h1--font-weight: 700;
+  --text-h2: var(--bos-type-large-semi-bold-size);
+  --text-h2--line-height: var(--bos-type-large-semi-bold-line);
   --text-h2--font-weight: 600;
-  --text-h3: 1rem;
-  --text-h3--line-height: 1.5rem;
+  --text-h3: var(--bos-type-medium-semi-bold-size);
+  --text-h3--line-height: var(--bos-type-medium-semi-bold-line);
   --text-h3--font-weight: 600;
-  --text-body: 0.875rem;
+  --text-body: var(--bos-type-small-regular-size);
   --text-body--line-height: 1.25rem;
-  --text-body-lg: 1rem;
+  --text-body-lg: var(--bos-type-medium-regular-size);
   --text-body-lg--line-height: 1.5rem;
-  --text-caption: 0.75rem;
-  --text-caption--line-height: 1rem;
+  --text-caption: var(--bos-type-xsmall-regular-size);
+  --text-caption--line-height: var(--bos-type-xsmall-regular-line);
   --text-code: 0.8125rem;
   --text-code--line-height: 1.25rem;
   --text-code--font-weight: 500;
 
-  /* Spacing: Tailwind's 4 px base (--spacing: 0.25rem) already matches space.* (p-1 = 4px … p-16 = 64px). */
+  /* Spacing: the Tailwind 4 px base (--spacing: 0.25rem) matches the kit Padding scale (p-1 = 4 … p-8 = 32 px). */
 
-  /* radius.* */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
+  /* radius.* — kit Radius/xs, s, l, xl, xxl */
+  --radius-sm: var(--bos-radius-xs);
+  --radius-md: var(--bos-radius-s);
+  --radius-lg: var(--bos-radius-l);
+  --radius-xl: var(--bos-radius-xl);
+  --radius-2xl: var(--bos-radius-xxl);
 
   /* elevation.* → shadow-e1 … shadow-e4 */
   --shadow-e1: var(--bos-elevation-1);
   --shadow-e2: var(--bos-elevation-2);
   --shadow-e3: var(--bos-elevation-3);
   --shadow-e4: var(--bos-elevation-4);
+  --shadow-button: var(--bos-elevation-button);
 
   /* Colors */
   --color-brand: var(--bos-brand-primary);
@@ -305,6 +322,20 @@
   --color-brand-panel: var(--bos-brand-panel);
   --color-on-brand-panel: var(--bos-brand-on-panel);
   --color-on-brand-panel-muted: var(--bos-brand-on-panel-muted);
+
+  --color-nav: var(--bos-nav-bg);
+  --color-nav-fg: var(--bos-nav-fg);
+  --color-nav-fg-muted: var(--bos-nav-fg-muted);
+  --color-nav-fg-active: var(--bos-nav-fg-active);
+  --color-nav-active: var(--bos-nav-active-bg);
+  --color-nav-hover: var(--bos-nav-hover-bg);
+  --color-nav-line: var(--bos-nav-border);
+
+  --color-chart-1: var(--bos-chart-1);
+  --color-chart-2: var(--bos-chart-2);
+  --color-chart-3: var(--bos-chart-3);
+  --color-chart-4: var(--bos-chart-4);
+  --color-chart-track: var(--bos-chart-track);
 
   --color-fg: var(--bos-text-primary);
   --color-fg-secondary: var(--bos-text-secondary);

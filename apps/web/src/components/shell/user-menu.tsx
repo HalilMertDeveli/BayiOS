@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { LogOut } from "lucide-react";
+import { LogOut } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { ROUTES } from "@/lib/auth/routes";

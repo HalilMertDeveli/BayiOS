@@ -1,12 +1,12 @@
 import { Badge } from "@/components/ui/badge";
-import { CheckCheck, CircleX, Clock, Flag, Package, Pencil, ShoppingCart, Truck, TriangleAlert, type LucideIcon } from "lucide-react";
+import { CheckCheck, CircleX, Clock, Flag, Package, Pencil, ShoppingCart, Truck, TriangleAlert, type IconComponent } from "@/components/ui/icons";
 import { shipmentStatusMeta, statusMeta, taskPriorityMeta, taskStatusMeta } from "@/lib/fulfilment/labels";
 
 /** Status icons (design-system-plan §1.3: colour + text + icon); unknown statuses get none. */
-const TASK_ICONS: Record<string, LucideIcon> = { open: Clock, in_progress: ShoppingCart, completed: CheckCheck, completed_with_shortage: TriangleAlert, cancelled: CircleX };
-const SHIPMENT_ICONS: Record<string, LucideIcon> = { draft: Pencil, packed: Package, confirmed: Truck, cancelled: CircleX };
+const TASK_ICONS: Record<string, IconComponent> = { open: Clock, in_progress: ShoppingCart, completed: CheckCheck, completed_with_shortage: TriangleAlert, cancelled: CircleX };
+const SHIPMENT_ICONS: Record<string, IconComponent> = { draft: Pencil, packed: Package, confirmed: Truck, cancelled: CircleX };
 
-function iconFor(map: Record<string, LucideIcon>, status: string) {
+function iconFor(map: Record<string, IconComponent>, status: string) {
   const Icon = map[status];
   return Icon ? <Icon className="size-3.5" aria-hidden="true" /> : undefined;
 }

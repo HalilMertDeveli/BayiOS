@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent, useId } from "react";
-import { CircleAlert, Gauge } from "lucide-react";
+import { CircleAlert, Gauge } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";

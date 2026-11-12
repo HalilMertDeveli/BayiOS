@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useId, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Lock, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Lock, Save, Trash2 } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";

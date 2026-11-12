@@ -1,28 +1,34 @@
 /**
- * Design-token contrast guard (WCAG 2.2 AA, #61). Reads the real globals.css, resolves `var(--bos-…)` references and checks
- * the pairs the UI actually renders: text ≥ 4.5:1 (1.4.3), focus ring and button fills ≥ 3:1 (1.4.11 / 2.4.13 spirit),
- * in the light theme and in both dark-theme blocks (which must stay identical). It also keeps the Flutter tokens
- * (apps/mobile/lib/core/ui/tokens.dart) on the same brand/text/border values as the web light theme.
+ * Design-token guard (WCAG 2.2 AA, #61; UI kit palette, #222). Reads the real CSS — the generated raw palette
+ * (tokens.css, from packages/design-tokens/*.json) and the semantic layer (globals.css) — resolves `var(--bos-…)`
+ * references and checks the pairs the UI actually renders: text ≥ 4.5:1 (1.4.3), focus ring and button fills ≥ 3:1
+ * (1.4.11 / 2.4.13 spirit), in the light theme and in both dark-theme blocks (which must stay identical). It also keeps
+ * the Flutter semantic colours (apps/mobile/lib/core/theme/app_colors.dart) on the same values as the web light theme,
+ * and the generated files in sync with the token JSON.
  */
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // Comments stripped first: they contain braces (`color.{tone}.{fg,bg,border}`).
-const css = readFileSync(resolve(__dirname, "globals.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+const strip = (path: string) => readFileSync(resolve(__dirname, path), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+const paletteCss = strip("tokens.css");
+const css = strip("globals.css");
 
-function block(selector: string): Map<string, string> {
-  const start = css.indexOf(`${selector} {`);
+function block(source: string, selector: string): Map<string, string> {
+  const start = source.indexOf(`${selector} {`);
   if (start < 0) throw new Error(`selector not found: ${selector}`);
-  const body = css.slice(start + selector.length + 2, css.indexOf("}", start));
+  const body = source.slice(start + selector.length + 2, source.indexOf("}", start));
   const vars = new Map<string, string>();
   for (const m of body.matchAll(/(--bos-[\w-]+)\s*:\s*([^;]+);/g)) vars.set(m[1], m[2].trim());
   return vars;
 }
 
-const lightVars = block(":root");
-const darkMediaVars = block(':root:not([data-theme="light"])');
-const darkForcedVars = block(':root[data-theme="dark"]');
+const rawVars = block(paletteCss, ":root");
+const lightVars = new Map([...rawVars, ...block(css, ":root")]);
+const darkMediaVars = block(css, ':root:not([data-theme="light"])');
+const darkForcedVars = block(css, ':root[data-theme="dark"]');
 
 function theme(overrides: Map<string, string>) {
   const merged = new Map([...lightVars, ...overrides]);
@@ -77,6 +83,12 @@ const PAIRS: [string, string, number][] = [
   ["brand-accent", "brand-panel", 3],
   ["white", "danger-solid", 4.5],
   ["white", "danger-solid-hover", 4.5],
+  // The dark sidebar (same family in both themes): item text, section labels, active item.
+  ["nav-fg", "nav-bg", 4.5],
+  ["nav-fg", "nav-hover-bg", 4.5],
+  ["nav-fg-muted", "nav-bg", 4.5],
+  ["nav-fg-active", "nav-active-bg", 4.5],
+  ["brand-accent", "nav-bg", 3],
   ...TONES.map((t): [string, string, number] => [`${t}-fg`, `${t}-bg`, 4.5]),
 ];
 
@@ -95,20 +107,44 @@ describe("design tokens — structure", () => {
     expect(Object.fromEntries(darkForcedVars)).toEqual(Object.fromEntries(darkMediaVars));
   });
 
-  it("uses the petrol primary, not the old navy or generic blue", () => {
+  it("uses the UI kit green family and surfaces (#222), not the retired petrol palette", () => {
     const light = theme(new Map());
-    expect(light("--bos-brand-primary")).toBe("#0c5468");
-    expect(light("--bos-border-focus")).not.toBe("#2563eb");
+    expect(light("--bos-brand-accent")).toBe("#27a376");
+    expect(light("--bos-brand-primary")).toBe("#1f825e");
+    expect(light("--bos-text-primary")).toBe("#0c110f");
+    expect(light("--bos-surface-page")).toBe("#f4f6f6");
+    expect(light("--bos-surface-card")).toBe("#ffffff");
+    expect(light("--bos-border-default")).toBe("#e6e8e5");
+    expect(css).not.toMatch(/petrol|copper/);
+  });
+
+  it("keeps the generated token files in sync with packages/design-tokens", () => {
+    // Throws (exit 1) when tokens.css or app_palette.dart is stale.
+    execFileSync(process.execPath, [resolve(__dirname, "../../../../packages/design-tokens/build.mjs"), "--check"]);
   });
 
   it("mirrors the brand, text, surface and border tokens in the Flutter theme", () => {
-    const dart = readFileSync(resolve(__dirname, "../../../mobile/lib/core/ui/tokens.dart"), "utf8");
-    const light = theme(new Map());
-    const dartColor = (name: string) => {
-      const m = new RegExp(`static const ${name} = Color\\(0xFF([0-9A-Fa-f]{6})\\)`).exec(dart);
-      if (!m) throw new Error(`BosColors.${name} not found`);
+    const mobile = resolve(__dirname, "../../../mobile/lib/core/theme");
+    const palette = readFileSync(resolve(mobile, "app_palette.dart"), "utf8");
+    const colors = readFileSync(resolve(mobile, "app_colors.dart"), "utf8");
+    const lightStart = colors.indexOf("static const light = AppColors(");
+    if (lightStart < 0) throw new Error("AppColors.light not found");
+    const lightBlock = colors.slice(lightStart, colors.indexOf(");", lightStart));
+    const hexOf = (expr: string): string => {
+      const literal = /^Color\(0xFF([0-9A-Fa-f]{6})\)$/.exec(expr);
+      if (literal) return `#${literal[1].toLowerCase()}`;
+      const ref = /^AppPalette\.(\w+)$/.exec(expr);
+      if (!ref) throw new Error(`unsupported colour expression: ${expr}`);
+      const m = new RegExp(`static const ${ref[1]} = Color\\(0xFF([0-9A-Fa-f]{6})\\)`).exec(palette);
+      if (!m) throw new Error(`AppPalette.${ref[1]} not found`);
       return `#${m[1].toLowerCase()}`;
     };
+    const dartColor = (name: string) => {
+      const m = new RegExp(`\\b${name}:\\s*([^,\\n]+),`).exec(lightBlock);
+      if (!m) throw new Error(`AppColors.light.${name} not found`);
+      return hexOf(m[1].trim());
+    };
+    const light = theme(new Map());
     const mapping: Record<string, string> = {
       brandPrimary: "--bos-brand-primary",
       brandPrimaryHover: "--bos-brand-primary-hover",

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight } from "@/components/ui/icons";
 import { breadcrumbsFor, type NavSection } from "@/lib/navigation";
 
 /** Header breadcrumbs (menu section › page › sub-page) derived from the menu; hidden on pages outside it. */

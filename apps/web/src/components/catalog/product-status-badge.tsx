@@ -1,4 +1,4 @@
-import { Archive, CircleCheck, CirclePause } from "lucide-react";
+import { Archive, CircleCheck, CirclePause } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 
 /** Product/variant status (active | inactive | archived) as a text badge. */

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList } from "@/components/ui/icons";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { getPickingTasks, type PickingTasksReport } from "@/lib/reports/api";

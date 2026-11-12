@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Construction } from "lucide-react";
+import { Construction } from "@/components/ui/icons";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { findNavItem } from "@/lib/navigation";

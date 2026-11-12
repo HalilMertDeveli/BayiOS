@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, useId } from "react";
-import { CircleAlert, Lock, RotateCcw, Save, X } from "lucide-react";
+import { CircleAlert, Lock, RotateCcw, Save, X } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
 import { CheckboxField } from "@/components/ui/checkbox-field";

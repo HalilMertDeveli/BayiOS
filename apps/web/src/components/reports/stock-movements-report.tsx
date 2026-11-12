@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, type TableColumn } from "@/components/ui/table";

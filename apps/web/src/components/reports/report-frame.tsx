@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarRange, CircleAlert, Lock } from "lucide-react";
+import { ArrowLeft, CalendarRange, CircleAlert, Lock } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";

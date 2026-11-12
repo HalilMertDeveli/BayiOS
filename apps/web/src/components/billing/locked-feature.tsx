@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Lock } from "lucide-react";
+import { Lock } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import type { Gate } from "@/lib/billing/entitlements";
 import { PLAN_PAGE_HREF, featureLabel, limitLabel, moduleLabel, planLabel } from "@/lib/billing/labels";

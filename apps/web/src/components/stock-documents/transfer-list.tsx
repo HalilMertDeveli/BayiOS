@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeftRight, ArrowRight, CircleAlert, Lock, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, CircleAlert, Lock, Plus, RefreshCw } from "@/components/ui/icons";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";

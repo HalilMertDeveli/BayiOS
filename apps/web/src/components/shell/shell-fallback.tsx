@@ -1,4 +1,4 @@
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "@/components/ui/icons";
 
 /**
  * Static stand-in for the app shell while the pathname is not known yet (prerendered HTML of dynamic routes).

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CircleAlert, Calculator, Plus, Star, Tags } from "lucide-react";
+import { CircleAlert, Calculator, Plus, Star, Tags } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";

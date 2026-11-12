@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Ban, Crown, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Ban, Crown, RotateCcw, Save, Trash2 } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";

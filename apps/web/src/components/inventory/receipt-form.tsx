@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
-import { ArrowLeft, Lock, PackagePlus, Trash2 } from "lucide-react";
+import { ArrowLeft, Lock, PackagePlus, Trash2 } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
-import { Archive, ArrowLeft, CircleAlert, RotateCcw, Star } from "lucide-react";
+import { Archive, ArrowLeft, CircleAlert, RotateCcw, Star } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

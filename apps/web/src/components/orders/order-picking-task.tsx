@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useId } from "react";
 import Link from "next/link";
-import { ChevronRight, ClipboardList, Plus } from "lucide-react";
+import { ChevronRight, ClipboardList, Plus } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { TaskPriorityBadge, TaskStatusBadge } from "@/components/fulfilment/fulfilment-badges";
 import { Button, buttonClasses } from "@/components/ui/button";

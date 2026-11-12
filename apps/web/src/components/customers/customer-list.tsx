@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useId } from "react";
 import Link from "next/link";
-import { CircleAlert, Plus, Search, SearchX, Users, UsersRound } from "lucide-react";
+import { CircleAlert, Plus, Search, SearchX, Users, UsersRound } from "@/components/ui/icons";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";

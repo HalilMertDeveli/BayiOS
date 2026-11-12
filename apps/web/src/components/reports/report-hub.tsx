@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeftRight, Bot, ChevronRight, ClipboardList, Lock, PackageMinus, ShoppingCart, Trophy, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Bot, ChevronRight, ClipboardList, Lock, PackageMinus, ShoppingCart, Trophy, type IconComponent } from "@/components/ui/icons";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { ordersOnly, reportAccess, reportHref, visibleReports, type ReportId } from "@/lib/reports/definitions";
 import { useSession } from "@/lib/session/session-context";
 
-const ICONS: Record<ReportId, LucideIcon> = {
+const ICONS: Record<ReportId, IconComponent> = {
   orders: ShoppingCart,
   "top-products": Trophy,
   "critical-stock": PackageMinus,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, type FormEvent, type RefObject } from "react";
-import { ScanBarcode, Search } from "lucide-react";
+import { ScanBarcode, Search } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { findVariantByCode, searchVariants } from "@/lib/inventory/api";

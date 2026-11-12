@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CircleAlert, Clock, Lock, MessageSquareText, ScanText, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CircleAlert, Clock, Lock, MessageSquareText, ScanText, ShieldCheck } from "@/components/ui/icons";
 import { LockedFeature } from "@/components/billing/locked-feature";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { CustomerPicker } from "@/components/customers/customer-picker";

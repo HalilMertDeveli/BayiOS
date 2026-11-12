@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { CircleAlert, CircleCheck, Circle, Lightbulb, RotateCcw } from "lucide-react";
+import { CircleAlert, CircleCheck, Circle, Lightbulb, RotateCcw } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

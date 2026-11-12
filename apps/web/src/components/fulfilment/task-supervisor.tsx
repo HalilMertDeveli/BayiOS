@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useId } from "react";
-import { Shuffle, Save } from "lucide-react";
+import { Shuffle, Save } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";

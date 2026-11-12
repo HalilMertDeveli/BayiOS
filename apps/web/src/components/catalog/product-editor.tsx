@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ArrowLeft, CircleAlert, LoaderCircle, Lock, Plus, RotateCcw, SearchX, Trash2 } from "lucide-react";
+import { Archive, ArrowLeft, CircleAlert, LoaderCircle, Lock, Plus, RotateCcw, SearchX, Trash2 } from "@/components/ui/icons";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";

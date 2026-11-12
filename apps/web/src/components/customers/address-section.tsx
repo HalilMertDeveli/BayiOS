@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState, type FormEvent, useId } from "react";
-import { MapPin, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { MapPin, Pencil, Plus, Star, Trash2 } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

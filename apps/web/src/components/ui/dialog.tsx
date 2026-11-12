@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
-import { X } from "lucide-react";
+import { X } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
 /**

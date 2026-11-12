@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, useId } from "react";
 import { useRouter } from "next/navigation";
-import { RotateCcw, Save, X } from "lucide-react";
+import { RotateCcw, Save, X } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import { VariantScanner } from "@/components/inventory/variant-scanner";

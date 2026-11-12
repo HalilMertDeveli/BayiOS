@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type DragEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, FileSpreadsheet, Upload, X } from "lucide-react";
+import { ArrowLeft, FileSpreadsheet, Upload, X } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";

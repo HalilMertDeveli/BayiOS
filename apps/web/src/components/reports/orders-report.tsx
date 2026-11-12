@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart } from "@/components/ui/icons";
 import { OrderStatus } from "@/components/orders/order-badges";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";

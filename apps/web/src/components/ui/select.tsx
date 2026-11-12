@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, type ComponentProps } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 import { Field, controlClasses, fieldDescribedBy, type FieldBaseProps } from "./field";
 

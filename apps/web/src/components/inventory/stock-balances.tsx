@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
-import { ArrowRightLeft, Boxes, CircleAlert, PackagePlus, Rows3, Rows4, ScanBarcode, SearchX, SlidersHorizontal } from "lucide-react";
+import { ArrowRightLeft, Boxes, CircleAlert, PackagePlus, Rows3, Rows4, ScanBarcode, SearchX, SlidersHorizontal } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { Button, buttonClasses } from "@/components/ui/button";

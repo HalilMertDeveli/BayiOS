@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode, type RefObject } from "react";
-import { CircleAlert, CircleCheck, Info, ScanBarcode } from "lucide-react";
+import { CircleAlert, CircleCheck, Info, ScanBarcode } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Bot, ChevronRight, CircleAlert, ClipboardCheck, ClipboardList, LayoutDashboard, PackageMinus, Plus, ShoppingCart, Sparkles, type LucideIcon } from "lucide-react";
+import { Bot, ChevronRight, CircleAlert, ClipboardCheck, ClipboardList, LayoutDashboard, PackageMinus, Plus, ShoppingCart, Sparkles, type IconComponent } from "@/components/ui/icons";
 import { TaskStatusBadge } from "@/components/fulfilment/fulfilment-badges";
 import { SetupChecklist } from "@/components/onboarding/setup-checklist";
 import { OrderStatus } from "@/components/orders/order-badges";
@@ -126,7 +126,7 @@ function Tile<T>({
 }: {
   id: string;
   title: string;
-  Icon: LucideIcon;
+  Icon: IconComponent;
   href: string;
   linkLabel: string;
   state: TileState<T>;

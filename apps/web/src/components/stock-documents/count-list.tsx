@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CircleAlert, ClipboardCheck, EyeOff, Lock, Plus, RefreshCw } from "lucide-react";
+import { CircleAlert, ClipboardCheck, EyeOff, Lock, Plus, RefreshCw } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";

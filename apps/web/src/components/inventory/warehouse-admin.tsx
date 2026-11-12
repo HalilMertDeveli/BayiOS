@@ -3,7 +3,7 @@
 import { useState, type FormEvent, type ReactNode, useId } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CircleAlert, Lock, MapPin, PackagePlus, Pencil, Plus, Star, Warehouse as WarehouseIcon } from "lucide-react";
+import { CircleAlert, Lock, MapPin, PackagePlus, Pencil, Plus, Star, Warehouse as WarehouseIcon } from "@/components/ui/icons";
 import { LockedFeature } from "@/components/billing/locked-feature";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";

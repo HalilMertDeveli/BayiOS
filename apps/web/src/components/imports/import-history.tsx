@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useId } from "react";
 import Link from "next/link";
-import { CircleAlert, FileUp, Lock, Plus } from "lucide-react";
+import { CircleAlert, FileUp, Lock, Plus } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, ArrowLeft, CircleAlert, RotateCcw, ShieldAlert } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, CircleAlert, RotateCcw, ShieldAlert } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { CheckboxField } from "@/components/ui/checkbox-field";

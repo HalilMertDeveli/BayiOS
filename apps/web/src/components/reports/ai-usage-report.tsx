@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { Bot } from "lucide-react";
+import { Bot } from "@/components/ui/icons";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { getAiUsage, type AiUsageReport } from "@/lib/reports/api";

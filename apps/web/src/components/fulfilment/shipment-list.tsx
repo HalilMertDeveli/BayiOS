@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CircleAlert, ClipboardList, Lock, RefreshCw, Truck } from "lucide-react";
+import { CircleAlert, ClipboardList, Lock, RefreshCw, Truck } from "@/components/ui/icons";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";

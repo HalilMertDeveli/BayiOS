@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Bot, CircleAlert, FileCheck2, Hourglass, Lock, MessageSquareText, RotateCcw, ShieldAlert, XCircle } from "lucide-react";
+import { ArrowLeft, Bot, CircleAlert, FileCheck2, Hourglass, Lock, MessageSquareText, RotateCcw, ShieldAlert, XCircle } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import { useCustomerNames, useWarehouses } from "@/components/orders/use-order-reference";

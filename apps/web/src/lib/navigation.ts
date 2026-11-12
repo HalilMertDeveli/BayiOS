@@ -13,8 +13,8 @@ import {
   Truck,
   Users,
   Warehouse,
-  type LucideIcon,
-} from "lucide-react";
+  type IconComponent,
+} from "@/components/ui/icons";
 import type { Access } from "@/lib/session/access";
 
 /** Fixed MVP role set (docs/product/roles-permissions.md §2) — for labels only; what a role may do comes from GET /me. */
@@ -35,7 +35,7 @@ export type NavItem = {
   label: string;
   /** One-line description shown on the placeholder page. */
   description: string;
-  Icon: LucideIcon;
+  Icon: IconComponent;
   /** Whether the effective permissions (GET /me) show the item. Visibility only — the API enforces permissions. */
   visible: (access: Access) => boolean;
 };

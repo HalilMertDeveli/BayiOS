@@ -8,8 +8,8 @@ import {
   Pencil,
   ShoppingCart,
   Truck,
-  type LucideIcon,
-} from "lucide-react";
+  type IconComponent,
+} from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
 export type BadgeTone = "neutral" | "info" | "success" | "warning" | "danger" | "purple" | "teal" | "brand" | "ai";
@@ -61,7 +61,7 @@ export type OrderStatus =
   | "Completed"
   | "Cancelled";
 
-export const orderStatusMeta: Record<OrderStatus, { label: string; tone: BadgeTone; Icon: LucideIcon }> = {
+export const orderStatusMeta: Record<OrderStatus, { label: string; tone: BadgeTone; Icon: IconComponent }> = {
   Draft: { label: "Taslak", tone: "neutral", Icon: Pencil },
   PendingApproval: { label: "Onay Bekliyor", tone: "warning", Icon: Clock },
   Approved: { label: "Onaylandı", tone: "info", Icon: Check },

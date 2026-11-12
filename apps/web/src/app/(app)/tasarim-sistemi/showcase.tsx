@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search } from "@/components/ui/icons";
 import { Badge, OrderStatusBadge, orderStatusMeta, type OrderStatus } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";

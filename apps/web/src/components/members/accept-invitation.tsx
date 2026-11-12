@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CircleAlert, LogIn, LogOut, MailCheck, RotateCcw, UserPlus } from "lucide-react";
+import { CircleAlert, LogIn, LogOut, MailCheck, RotateCcw, UserPlus } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { createApiClient } from "@/lib/api/client";

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useId } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, CircleAlert, Gift, Lock, PackagePlus, Puzzle } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, Gift, Lock, PackagePlus, Puzzle } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

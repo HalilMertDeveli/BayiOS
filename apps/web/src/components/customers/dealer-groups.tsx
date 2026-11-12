@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
-import { Archive, ArchiveRestore, ArrowLeft, CircleAlert, Pencil, Plus, UsersRound } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, CircleAlert, Pencil, Plus, UsersRound } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

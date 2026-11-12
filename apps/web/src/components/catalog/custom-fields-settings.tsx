@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { Archive, ArrowLeft, CircleAlert, ListPlus, Pencil, Plus } from "lucide-react";
+import { Archive, ArrowLeft, CircleAlert, ListPlus, Pencil, Plus } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";

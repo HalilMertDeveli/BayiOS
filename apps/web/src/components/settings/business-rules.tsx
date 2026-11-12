@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CircleAlert, Lock, RotateCcw, Save, X } from "lucide-react";
+import { CircleAlert, Lock, RotateCcw, Save, X } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

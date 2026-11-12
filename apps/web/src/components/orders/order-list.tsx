@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useId } from "react";
 import Link from "next/link";
-import { CircleAlert, Lock, MessageSquareText, Plus, Rows3, Rows4, Search, SearchX, ShoppingCart } from "lucide-react";
+import { CircleAlert, Lock, MessageSquareText, Plus, Rows3, Rows4, Search, SearchX, ShoppingCart } from "@/components/ui/icons";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { SkeletonCards } from "@/components/ui/skeleton";

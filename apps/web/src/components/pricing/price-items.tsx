@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, useId } from "react";
-import { CircleAlert, Layers, Pencil, Trash2, X } from "lucide-react";
+import { CircleAlert, Layers, Pencil, Trash2, X } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { useVariantDirectory } from "@/components/inventory/use-inventory-data";
 import { VariantScanner } from "@/components/inventory/variant-scanner";

@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";

@@ -2,7 +2,7 @@
 
 import { Fragment, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, CircleAlert, LoaderCircle, LogOut, Repeat } from "lucide-react";
+import { Ban, CircleAlert, LoaderCircle, LogOut, Repeat } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ROUTES } from "@/lib/auth/routes";

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useId } from "react";
 import Link from "next/link";
-import { ArrowLeft, CircleAlert, History, Lock, SearchX, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, CircleAlert, History, Lock, SearchX, SlidersHorizontal } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { Button, buttonClasses } from "@/components/ui/button";
