@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "@/components/ui/icons";
 
 /** "← Ayarlar" above a settings sub-page. */
 export function SettingsBackLink() {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { CircleCheck, Circle, ListChecks, X } from "lucide-react";
+import { CircleCheck, Circle, ListChecks, X } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { loadSetupFacts } from "@/lib/onboarding/facts";
 import { SETUP_HREF, canRunSetup, checklistDismissKey, checklistItems, checklistProgress, type SetupFacts } from "@/lib/onboarding/setup";

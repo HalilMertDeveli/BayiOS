@@ -1,28 +1,30 @@
 import type { ComponentProps, ReactNode } from "react";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+/** UI kit buttons: primary (green, raised), secondary (outlined), tertiary (grey fill), ghost, danger. */
+export type ButtonVariant = "primary" | "secondary" | "tertiary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: "bg-brand text-on-brand shadow-e1 hover:bg-brand-hover",
-  secondary: "border border-line-strong bg-card text-fg shadow-e1 hover:bg-sunken",
+  primary: "bg-linear-to-b from-accent to-brand text-on-brand shadow-button hover:from-brand hover:to-brand-hover",
+  secondary: "border border-line bg-card text-fg shadow-e1 hover:bg-sunken",
+  tertiary: "bg-sunken text-fg hover:bg-neutral-bg",
   ghost: "text-fg hover:bg-sunken",
   danger: "bg-danger-solid text-white shadow-e1 hover:bg-danger-solid-hover",
 };
 
-// size.control.*: sm 32 px, md 36 px (web default), lg 44 px.
+// size.control.*: sm 32 px, md 40 px (web default, kit), lg 44 px.
 const sizeClasses: Record<ButtonSize, string> = {
   sm: "h-8 gap-1.5 px-3 text-body",
-  md: "h-9 gap-2 px-4 text-body",
+  md: "h-10 gap-2 px-4 text-body",
   lg: "h-11 gap-2 px-5 text-body-lg",
 };
 
 export const buttonClasses = (variant: ButtonVariant = "primary", size: ButtonSize = "md") =>
   cn(
     "inline-flex shrink-0 items-center justify-center rounded-md font-medium whitespace-nowrap transition-colors",
-    "disabled:cursor-not-allowed disabled:opacity-60 aria-busy:cursor-progress",
+    "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none aria-busy:cursor-progress",
     variantClasses[variant],
     sizeClasses[size],
   );

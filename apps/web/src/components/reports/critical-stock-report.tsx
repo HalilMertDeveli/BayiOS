@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent, useId } from "react";
 import Link from "next/link";
-import { Gauge, PackageCheck } from "lucide-react";
+import { Gauge, PackageCheck } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { CheckboxField } from "@/components/ui/checkbox-field";
 import { EmptyState } from "@/components/ui/empty-state";

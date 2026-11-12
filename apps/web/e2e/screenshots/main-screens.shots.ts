@@ -194,11 +194,21 @@ const shots: Shot[] = [
 
 const ONLY = process.env.SHOTS_ONLY?.split(",").filter(Boolean);
 
-for (const [viewportName, viewport] of [
-  ["desktop", DESKTOP],
-  ["mobile", MOBILE],
-] as const) {
-  for (const scheme of ["light", "dark"] as const) {
+/**
+ * SHOTS_VIEWPORTS picks the sizes (comma list, default "desktop,mobile"). "kit" = 1440×1024, the UI kit reference
+ * width (#222); "tablet" = 1024×768 (the 768–1024 responsive range).
+ */
+const VIEWPORTS = {
+  desktop: DESKTOP,
+  mobile: MOBILE,
+  kit: { width: 1440, height: 1024 },
+  tablet: { width: 1024, height: 768 },
+} as const;
+const WANTED = (process.env.SHOTS_VIEWPORTS ?? "desktop,mobile").split(",").filter((v): v is keyof typeof VIEWPORTS => v in VIEWPORTS);
+const SCHEMES = (process.env.SHOTS_SCHEMES ?? "light,dark").split(",").filter((v): v is "light" | "dark" => v === "light" || v === "dark");
+
+for (const [viewportName, viewport] of WANTED.map((name) => [name, VIEWPORTS[name]] as const)) {
+  for (const scheme of SCHEMES) {
     test.describe(`${viewportName} ${scheme}`, () => {
       test.use({ viewport, colorScheme: scheme });
       for (const shot of shots) {

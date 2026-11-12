@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, useId } from "react";
+import { Avatar } from "@/components/ui/avatar";
 import Link from "next/link";
-import { CircleAlert, Plus, Search, SearchX, Users, UsersRound } from "lucide-react";
+import { CircleAlert, Plus, Search, SearchX, Users, UsersRound } from "@/components/ui/icons";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -128,11 +129,14 @@ export function CustomerList() {
       key: "name",
       header: "Müşteri",
       cell: (c) => (
-        <span className="flex flex-col">
-          <Link href={customerHref(c.id)} className="font-medium text-brand-fg underline-offset-2 hover:underline">
-            {c.name}
-          </Link>
-          {c.contactName ? <span className="text-caption text-fg-muted">{c.contactName}</span> : null}
+        <span className="flex items-center gap-3">
+          <Avatar name={c.name} size="sm" />
+          <span className="flex flex-col">
+            <Link href={customerHref(c.id)} className="font-medium text-brand-fg underline-offset-2 hover:underline">
+              {c.name}
+            </Link>
+            {c.contactName ? <span className="text-caption text-fg-muted">{c.contactName}</span> : null}
+          </span>
         </span>
       ),
     },
@@ -192,7 +196,7 @@ export function CustomerList() {
         }
       />
 
-      <section aria-label="Arama ve filtreler" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+      <section aria-label="Arama ve filtreler" className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
         <form role="search" onSubmit={(e) => e.preventDefault()}>
           <Input
             label="Müşteri ara"
@@ -242,7 +246,7 @@ export function CustomerList() {
         </div>
 
         {current?.status === "error" ? (
-          <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+          <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
             <EmptyState
               headingLevel="h3"
               icon={<CircleAlert className="size-6" />}
@@ -269,11 +273,11 @@ export function CustomerList() {
               {loading ? (
                 <SkeletonCards />
               ) : rows.length === 0 ? (
-                <div className="rounded-lg border border-line bg-card">{emptyView}</div>
+                <div className="rounded-xl border border-line bg-card">{emptyView}</div>
               ) : (
                 <ul aria-label="Müşteriler" className="flex flex-col gap-2">
                   {rows.map((c) => (
-                    <li key={c.id} className="rounded-lg border border-line bg-card p-3 shadow-e1">
+                    <li key={c.id} className="rounded-xl border border-line bg-card p-3 shadow-e1">
                       <div className="flex items-start justify-between gap-2">
                         <Link href={customerHref(c.id)} className="min-h-11 py-2 font-medium text-brand-fg underline-offset-2 hover:underline">
                           {c.name}

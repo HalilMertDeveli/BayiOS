@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { CircleAlert, CircleCheck, Circle, Lightbulb, RotateCcw } from "lucide-react";
+import { CircleAlert, CircleCheck, Circle, Lightbulb, RotateCcw } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,14 +82,14 @@ export function MappingStep({
 
   if (load.status === "loading") {
     return (
-      <p role="status" className="rounded-lg border border-line bg-card p-6 text-body text-fg-muted">
+      <p role="status" className="rounded-xl border border-line bg-card p-6 text-body text-fg-muted">
         Kolonlar ve öneriler yükleniyor…
       </p>
     );
   }
   if (load.status === "error") {
     return (
-      <div role="alert" className="rounded-lg border border-line bg-card">
+      <div role="alert" className="rounded-xl border border-line bg-card">
         <EmptyState
           headingLevel="h3"
           icon={<CircleAlert className="size-6" />}
@@ -201,7 +201,7 @@ function MappingForm({
   const template = data.templates.find((t) => t.id === templateId);
 
   return (
-    <form id={formId} noValidate onSubmit={submit} className="flex flex-col gap-5 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <form id={formId} noValidate onSubmit={submit} className="flex flex-col gap-5 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
       <div className="flex flex-col gap-1">
         <h2 className="text-h2 text-fg">Kolonları eşleyin</h2>
         <p className="text-body text-fg-secondary">

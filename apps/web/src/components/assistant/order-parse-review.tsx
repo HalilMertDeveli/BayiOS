@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Bot, CircleAlert, FileCheck2, Hourglass, Lock, MessageSquareText, RotateCcw, ShieldAlert, XCircle } from "lucide-react";
+import { ArrowLeft, Bot, CircleAlert, FileCheck2, Hourglass, Lock, MessageSquareText, RotateCcw, ShieldAlert, XCircle } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import { useCustomerNames, useWarehouses } from "@/components/orders/use-order-reference";
@@ -79,7 +79,7 @@ export function OrderParseReviewPage({ parseId }: { parseId: string }) {
       <>
         <BackLink />
         <PageHeader title={TITLE} />
-        <section aria-label="İnceleme durumu" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="İnceleme durumu" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<Lock className="size-6" />}
             title="WhatsApp siparişi yetkiniz yok"
@@ -105,7 +105,7 @@ export function OrderParseReviewPage({ parseId }: { parseId: string }) {
       <>
         <BackLink />
         <PageHeader title={TITLE} />
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<CircleAlert className="size-6" />}
             title={load.notFound ? "Ayrıştırma bulunamadı" : "Ayrıştırma yüklenemedi"}
@@ -182,7 +182,7 @@ function PendingParse({ parseId, onDone }: { parseId: string; onDone: () => void
   }, [api, parseId, onDone, attempt]);
 
   return (
-    <section aria-label="İnceleme durumu" className="rounded-lg border border-line bg-card shadow-e1">
+    <section aria-label="İnceleme durumu" className="rounded-xl border border-line bg-card shadow-e1">
       {stalled ? (
         <div role="alert">
           <EmptyState
@@ -217,7 +217,7 @@ function PendingParse({ parseId, onDone }: { parseId: string; onDone: () => void
 /** The background parse gave up: nothing to review; parse again or enter the order manually. */
 function FailedParse({ parse }: { parse: OrderParse }) {
   return (
-    <section aria-label="İnceleme durumu" className="rounded-lg border border-line bg-card shadow-e1">
+    <section aria-label="İnceleme durumu" className="rounded-xl border border-line bg-card shadow-e1">
       <EmptyState
         icon={<CircleAlert className="size-6" />}
         title="Mesaj ayrıştırılamadı"
@@ -241,7 +241,7 @@ function FailedParse({ parse }: { parse: OrderParse }) {
 function ClosedParse({ parse }: { parse: OrderParse }) {
   const approved = parse.status === "approved";
   return (
-    <section aria-label="İnceleme durumu" className="rounded-lg border border-line bg-card shadow-e1">
+    <section aria-label="İnceleme durumu" className="rounded-xl border border-line bg-card shadow-e1">
       <EmptyState
         icon={approved ? <FileCheck2 className="size-6" /> : <XCircle className="size-6" />}
         title={approved ? "Bu mesajdan taslak sipariş oluşturuldu" : "Bu ayrıştırma reddedildi"}
@@ -458,7 +458,7 @@ function ReviewForm({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start">
         <section
           aria-labelledby={`${uid}-original-message`}
-          className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 lg:sticky lg:top-4 lg:row-span-2"
+          className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 lg:sticky lg:top-4 lg:row-span-2"
         >
           <h2 id={`${uid}-original-message`} className="inline-flex items-center gap-2 text-h3 text-fg">
             <MessageSquareText className="size-5 text-fg-muted" aria-hidden="true" />
@@ -483,7 +483,7 @@ function ReviewForm({
         </section>
 
         <div className="flex flex-col gap-4">
-          <section aria-labelledby={`${uid}-draft-header`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1">
+          <section aria-labelledby={`${uid}-draft-header`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1">
             <h2 id={`${uid}-draft-header`} className="text-h3 text-fg">
               Müşteri ve depo
             </h2>
@@ -531,7 +531,7 @@ function ReviewForm({
               </p>
             </div>
             {parse.lines.length === 0 ? (
-              <div className="rounded-lg border border-line bg-card shadow-e1">
+              <div className="rounded-xl border border-line bg-card shadow-e1">
                 <EmptyState
                   headingLevel="h3"
                   icon={<MessageSquareText className="size-6" />}
@@ -561,7 +561,7 @@ function ReviewForm({
             the top of the review on; under the lines (right column, static) in the desktop layout. */}
         <section
           aria-label="Taslak oluştur"
-          className="sticky bottom-0 z-10 flex flex-col gap-3 rounded-lg border border-line bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-e3 lg:static lg:col-start-2 lg:pb-4 lg:shadow-e1"
+          className="sticky bottom-0 z-10 flex flex-col gap-3 rounded-xl border border-line bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-e3 lg:static lg:col-start-2 lg:pb-4 lg:shadow-e1"
         >
           <p className="text-body text-fg">
             {summary.kept} satır taslağa eklenecek{summary.skipped > 0 ? `, ${summary.skipped} satır çıkarıldı` : ""}.

@@ -16,7 +16,7 @@ export function SkeletonCards({ count = 3, label = "Yükleniyor…" }: { count?:
         {label}
       </p>
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} aria-hidden="true" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-3 shadow-e1">
+        <div key={i} aria-hidden="true" className="flex flex-col gap-3 rounded-xl border border-line bg-card p-3 shadow-e1">
           <div className="flex items-center justify-between gap-3">
             <Skeleton className="w-32" />
             <Skeleton className="w-16" />

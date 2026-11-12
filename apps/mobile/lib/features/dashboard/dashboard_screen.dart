@@ -3,8 +3,11 @@ import 'package:bayios_mobile/core/auth/auth_controller.dart';
 import 'package:bayios_mobile/core/session/access.dart';
 import 'package:bayios_mobile/core/session/display_name.dart';
 import 'package:bayios_mobile/core/session/session_controller.dart';
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
 import 'package:bayios_mobile/core/ui/components.dart';
-import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/dashboard/dashboard_data.dart';
 import 'package:bayios_mobile/features/picking/task_list_screen.dart';
@@ -40,7 +43,10 @@ class DashboardScreen extends ConsumerWidget {
     final summary = ref.watch(dashboardSummaryProvider);
     final actions = _quickActions(context, l10n, session.access);
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.dashboardTitle)),
+      appBar: AppTopBar(
+        title: l10n.dashboardTitle,
+        trailing: const UserAvatar(),
+      ),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(tasksPageProvider);
@@ -53,22 +59,23 @@ class DashboardScreen extends ConsumerWidget {
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(BosSpace.s16),
+          padding: const EdgeInsets.all(AppSpacing.md),
           children: [
             _Header(
+              name: name ?? session.tenantName,
               greeting: name == null
                   ? l10n.dashboardWelcomeAnonymous
                   : l10n.dashboardWelcome(name),
               tenantName: session.tenantName,
               role: roleLabel(l10n, session.role),
             ),
-            const SizedBox(height: BosSpace.s16),
+            const SizedBox(height: AppSpacing.md),
             ..._tasks(context, ref, l10n, session, summary),
             if (actions.isNotEmpty) ...[
               SectionHeader(l10n.dashboardQuickLinks),
               _ActionGrid(actions: actions),
             ],
-            const SizedBox(height: BosSpace.s24),
+            const SizedBox(height: AppSpacing.lg),
           ],
         ),
       ),
@@ -86,13 +93,13 @@ class DashboardScreen extends ConsumerWidget {
       if (readOwn) ...[
         _QuickAction(
           key: const Key('dashboard-link-mine'),
-          icon: Icons.assignment_ind_outlined,
+          icon: AppIcons.profile,
           label: l10n.dashboardLinkMyTasks,
           onTap: () => context.go('/gorevler'),
         ),
         _QuickAction(
           key: const Key('dashboard-link-pool'),
-          icon: Icons.inbox_outlined,
+          icon: AppIcons.twoUser,
           label: l10n.dashboardLinkPool,
           onTap: () => context.go(
             '/gorevler?$tabQueryKey=${tabQueryValue(TaskTab.pool)}',
@@ -102,7 +109,7 @@ class DashboardScreen extends ConsumerWidget {
       if (readAll)
         _QuickAction(
           key: const Key('dashboard-link-all'),
-          icon: Icons.list_alt_outlined,
+          icon: AppIcons.document,
           label: l10n.dashboardLinkAllTasks,
           onTap: () => context.go(
             '/gorevler?$tabQueryKey=${tabQueryValue(TaskTab.all)}',
@@ -111,35 +118,35 @@ class DashboardScreen extends ConsumerWidget {
       if (access.canSome(StockPermissions.receive))
         _QuickAction(
           key: const Key('dashboard-link-receiving'),
-          icon: Icons.move_to_inbox_outlined,
+          icon: AppIcons.trolley01,
           label: l10n.receivingTitle,
           onTap: () => context.go('/stok/mal-kabul'),
         ),
       if (access.canSome(StockPermissions.read))
         _QuickAction(
           key: const Key('dashboard-link-stock'),
-          icon: Icons.qr_code_scanner,
+          icon: AppIcons.scan,
           label: l10n.stockTitle,
           onTap: () => context.go('/stok'),
         ),
       if (access.canSome(WarehousePermissions.receiveTransfer))
         _QuickAction(
           key: const Key('dashboard-link-transfers'),
-          icon: Icons.local_shipping_outlined,
+          icon: AppIcons.packageMoving,
           label: l10n.transferListTitle,
           onTap: () => context.go('/depo/transferler'),
         ),
       if (access.canSome(WarehousePermissions.performCount))
         _QuickAction(
           key: const Key('dashboard-link-counts'),
-          icon: Icons.fact_check_outlined,
+          icon: AppIcons.receiptBill2,
           label: l10n.countListTitle,
           onTap: () => context.go('/depo/sayimlar'),
         ),
       if (access.canSome(WarehousePermissions.relocate))
         _QuickAction(
           key: const Key('dashboard-link-relocation'),
-          icon: Icons.swap_vert,
+          icon: AppIcons.trolley02,
           label: l10n.relocationTitle,
           onTap: () => context.go('/depo/raf-tasima'),
         ),
@@ -165,51 +172,47 @@ class DashboardScreen extends ConsumerWidget {
       body = RefetchOnReconnect(
         error: summary.error,
         onReconnect: () => ref.invalidate(dashboardSummaryProvider),
-        child: Card(
+        child: AppCard(
           key: const Key('dashboard-tasks-error'),
-          child: Padding(
-            padding: const EdgeInsets.all(BosSpace.s16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ErrorMessageBox(
-                  '${l10n.dashboardTasksFailed} '
-                  '${errorMessage(l10n, summary.error!)}',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ErrorMessageBox(
+                '${l10n.dashboardTasksFailed} '
+                '${errorMessage(l10n, summary.error!)}',
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              OutlinedButton.icon(
+                key: const Key('dashboard-tasks-retry'),
+                onPressed: () => ref.invalidate(dashboardSummaryProvider),
+                icon: const AppIcon(AppIcons.refresh),
+                label: Text(l10n.retry),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(AppSize.minTouchTarget),
                 ),
-                const SizedBox(height: BosSpace.s8),
-                OutlinedButton.icon(
-                  key: const Key('dashboard-tasks-retry'),
-                  onPressed: () => ref.invalidate(dashboardSummaryProvider),
-                  icon: const Icon(Icons.refresh),
-                  label: Text(l10n.retry),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(BosSize.minTouchTarget),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );
     } else {
-      body = const Padding(
-        padding: EdgeInsets.all(BosSpace.s24),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      body = const SkeletonList(count: 2);
     }
 
-    return [body, const SizedBox(height: BosSpace.s16)];
+    return [body, const SizedBox(height: AppSpacing.md)];
   }
 }
 
-/// Greeting, business and role on the brand colour.
+//// Who and where: initials avatar, greeting, business and role.
 class _Header extends StatelessWidget {
   const _Header({
+    required this.name,
     required this.greeting,
     required this.tenantName,
     required this.role,
   });
 
+  final String name;
   final String greeting;
   final String tenantName;
   final String role;
@@ -217,100 +220,63 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [BosColors.brandPrimary, BosPetrol.p900],
-        ),
-        borderRadius: BorderRadius.circular(BosRadius.xl * 1.5),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(BosSpace.s20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              greeting,
-              key: const Key('dashboard-welcome'),
-              style: BosType.h2.copyWith(
-                color: BosColors.brandOnPrimary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: BosSpace.s12),
-            Semantics(
-              container: true,
-              label: l10n.dashboardTenantLabel,
-              child: Row(
-                key: const Key('dashboard-tenant'),
-                children: [
-                  const Icon(
-                    Icons.storefront_outlined,
-                    color: BosPetrol.p100,
-                    size: 22,
+    final c = context.colors;
+    return AppCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppAvatar(name: name, size: AppSize.minTouchTarget),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  greeting,
+                  key: const Key('dashboard-welcome'),
+                  style: context.text.titleLarge?.copyWith(
+                    color: c.textPrimary,
                   ),
-                  const SizedBox(width: BosSpace.s8),
-                  Expanded(
-                    child: Text(
-                      tenantName,
-                      style: BosType.bodyLg.copyWith(
-                        color: BosColors.brandOnPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: BosSpace.s8),
-            Semantics(
-              container: true,
-              label: l10n.dashboardRoleLabel,
-              child: DecoratedBox(
-                key: const Key('dashboard-role'),
-                decoration: BoxDecoration(
-                  color: BosPetrol.p950,
-                  borderRadius: BorderRadius.circular(BosRadius.xl * 2),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: BosSpace.s12,
-                    vertical: BosSpace.s4,
-                  ),
+                const SizedBox(height: AppSpacing.xxs),
+                Semantics(
+                  container: true,
+                  label: l10n.dashboardTenantLabel,
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                    key: const Key('dashboard-tenant'),
                     children: [
-                      const Icon(
-                        Icons.badge_outlined,
-                        color: BosPetrol.p100,
-                        size: 18,
+                      AppIcon(
+                        AppIcons.store03,
+                        color: c.textMuted,
+                        size: AppSize.iconSm,
                       ),
-                      const SizedBox(width: BosSpace.s4),
-                      Text(
-                        role,
-                        style: BosType.caption.copyWith(
-                          color: BosPetrol.p100,
-                          fontWeight: FontWeight.w700,
+                      const SizedBox(width: AppSpacing.xxs),
+                      Expanded(
+                        child: Text(
+                          tenantName,
+                          style: context.text.bodySmall?.copyWith(
+                            color: c.textSecondary,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
+                const SizedBox(height: AppSpacing.xs),
+                Semantics(
+                  container: true,
+                  label: l10n.dashboardRoleLabel,
+                  child: StatusChip(
+                    role,
+                    Tone.brand,
+                    key: const Key('dashboard-role'),
+                    icon: AppIcons.userStory,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: BosSpace.s16),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: BosColors.brandAccent,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -329,12 +295,13 @@ class _SummaryView extends StatelessWidget {
       final count = summary.activeAll ?? 0;
       return Row(
         children: [
-          _Count(
-            key: const Key('dashboard-count-active'),
-            icon: Icons.list_alt_outlined,
-            tone: BosColors.brand,
-            label: l10n.dashboardCountActive,
-            value: summary.activeAllHasMore ? '$count+' : '$count',
+          Expanded(
+            child: KpiCard(
+              key: const Key('dashboard-count-active'),
+              icon: AppIcons.document,
+              label: l10n.dashboardCountActive,
+              value: summary.activeAllHasMore ? '$count+' : '$count',
+            ),
           ),
         ],
       );
@@ -346,43 +313,51 @@ class _SummaryView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SectionHeader(l10n.dashboardTasksTitle),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Count(
-              key: const Key('dashboard-count-assigned'),
-              icon: Icons.assignment_ind_outlined,
-              tone: BosColors.brand,
-              label: l10n.dashboardCountAssigned,
-              value: '${summary.assigned.length}',
-            ),
-            const SizedBox(width: BosSpace.s8),
-            _Count(
-              key: const Key('dashboard-count-in-progress'),
-              icon: Icons.timelapse,
-              tone: BosColors.warning,
-              label: l10n.dashboardCountInProgress,
-              value: '${summary.inProgress}',
-            ),
-            const SizedBox(width: BosSpace.s8),
-            _Count(
-              key: const Key('dashboard-count-pool'),
-              icon: Icons.inbox_outlined,
-              tone: BosColors.info,
-              label: l10n.dashboardCountPool,
-              value: '${summary.pool.length}',
-            ),
-          ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: KpiCard(
+                  key: const Key('dashboard-count-assigned'),
+                  icon: AppIcons.profile,
+                  label: l10n.dashboardCountAssigned,
+                  value: '${summary.assigned.length}',
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: KpiCard(
+                  key: const Key('dashboard-count-in-progress'),
+                  icon: AppIcons.timelapse,
+                  tone: Tone.warning,
+                  label: l10n.dashboardCountInProgress,
+                  value: '${summary.inProgress}',
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: KpiCard(
+                  key: const Key('dashboard-count-pool'),
+                  icon: AppIcons.twoUser,
+                  tone: Tone.info,
+                  label: l10n.dashboardCountPool,
+                  value: '${summary.pool.length}',
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: BosSpace.s16),
+        const SizedBox(height: AppSpacing.md),
         SectionHeader(l10n.dashboardOpenTasks),
         if (preview.isEmpty)
-          Card(
+          AppCard(
             key: const Key('dashboard-no-tasks'),
+            padding: EdgeInsets.zero,
             child: EmptyState(
               compact: true,
-              icon: Icons.task_alt,
-              tone: BosColors.success,
+              icon: AppIcons.checkCircle1,
+              tone: Tone.success,
               title: l10n.dashboardNoTasks,
               body: summary.pool.isNotEmpty
                   ? l10n.dashboardNoTasksPoolHint(summary.pool.length)
@@ -396,60 +371,9 @@ class _SummaryView extends StatelessWidget {
               userId: session.me.userId,
               onTap: () => context.go(taskPath(task.id)),
             ),
-            const SizedBox(height: BosSpace.s8),
+            const SizedBox(height: AppSpacing.xs),
           ],
       ],
-    );
-  }
-}
-
-class _Count extends StatelessWidget {
-  const _Count({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.tone,
-    super.key,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final BosTone tone;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(BosSpace.s12),
-          child: Semantics(
-            container: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // The number first: it is what the eye looks for.
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: Text(value, style: BosType.quantity)),
-                    ExcludeSemantics(
-                      child: IconBadge(icon: icon, tone: tone, size: 32),
-                    ),
-                  ],
-                ),
-                Text(
-                  label,
-                  style: BosType.caption.copyWith(
-                    color: BosColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -463,37 +387,31 @@ class _QuickAction extends StatelessWidget {
     super.key,
   });
 
-  final IconData icon;
+  final AppIconData icon;
   final String label;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 104),
-          child: Padding(
-            padding: const EdgeInsets.all(BosSpace.s12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconBadge(icon: icon),
-                const SizedBox(height: BosSpace.s12),
-                Text(
-                  label,
-                  maxLines: 2,
-                  style: BosType.body.copyWith(
-                    color: BosColors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 88),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            IconBadge(icon: icon),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              label,
+              maxLines: 2,
+              style: context.text.bodySmall?.semiBold.copyWith(
+                color: context.colors.textPrimary,
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -509,7 +427,7 @@ class _ActionGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        const gap = BosSpace.s8;
+        const gap = AppSpacing.xs;
         final columns = constraints.maxWidth >= 560 ? 3 : 2;
         final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
         return Wrap(

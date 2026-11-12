@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useId } from "react";
 import Link from "next/link";
-import { ArrowLeft, CircleAlert, Lock, RotateCcw } from "lucide-react";
+import { ArrowLeft, CircleAlert, Lock, RotateCcw } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -100,7 +100,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       <>
         <BackLink />
         <PageHeader title="Sipariş" />
-        <section aria-label="Sipariş durumu" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Sipariş durumu" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Lock className="size-6" />} title="Siparişi görme yetkiniz yok" description="Rolünüz siparişleri görmeye izin vermiyor. Gerekirse işletme yöneticinizle görüşün." />
         </section>
       </>
@@ -122,7 +122,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       <>
         <BackLink />
         <PageHeader title="Sipariş" />
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<CircleAlert className="size-6" />}
             title={load.notFound ? "Sipariş bulunamadı" : "Sipariş yüklenemedi"}
@@ -337,7 +337,7 @@ function OrderView({
         </div>
       ) : null}
 
-      <section aria-labelledby={`${uid}-order-summary`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+      <section aria-labelledby={`${uid}-order-summary`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
         <h2 id={`${uid}-order-summary`} className="sr-only">
           Sipariş bilgileri
         </h2>
@@ -368,7 +368,7 @@ function OrderView({
       ) : null}
 
       {actions.length > 0 ? (
-        <section aria-labelledby={`${uid}-order-actions`} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+        <section aria-labelledby={`${uid}-order-actions`} className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4 shadow-e1">
           <h2 id={`${uid}-order-actions`} className="text-h3 text-fg">
             İşlemler
           </h2>

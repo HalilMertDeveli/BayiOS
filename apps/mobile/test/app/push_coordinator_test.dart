@@ -8,6 +8,7 @@ import 'package:bayios_mobile/core/providers.dart';
 import 'package:bayios_mobile/core/push/push_registration.dart';
 import 'package:bayios_mobile/core/push/push_service.dart';
 import 'package:bayios_mobile/core/session/active_tenant_store.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -25,7 +26,7 @@ final _home = AppFeature(
   id: 'home',
   path: '/pano',
   label: (_) => 'Pano',
-  icon: Icons.home,
+  icon: AppIcons.document,
   builder: (_, _) => const Scaffold(body: Text('home-screen')),
 );
 
@@ -33,7 +34,7 @@ final _tasks = AppFeature(
   id: 'tasks',
   path: '/gorevler',
   label: (_) => 'Görevler',
-  icon: Icons.checklist,
+  icon: AppIcons.document,
   isVisible: (access) => access.canSome('tasks.read.own'),
   builder: (_, _) => const Scaffold(body: Text('tasks-screen')),
   routes: [

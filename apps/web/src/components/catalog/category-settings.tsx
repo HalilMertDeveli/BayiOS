@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent, useId } from "react";
-import { Archive, FolderPlus, FolderTree, Pencil, Plus } from "lucide-react";
+import { Archive, FolderPlus, FolderTree, Pencil, Plus } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";

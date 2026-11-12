@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Inbox } from "lucide-react";
+import { Inbox } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
 export type EmptyStateProps = {
@@ -24,7 +24,10 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div className={cn("flex flex-col items-center gap-3 px-6 py-12 text-center", className)}>
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-brand-subtle text-brand-fg ring-8 ring-brand-subtle/40" aria-hidden="true">
+      <div
+        className="flex size-16 items-center justify-center rounded-full bg-linear-to-b from-accent to-brand text-on-brand shadow-button ring-8 ring-brand-bg"
+        aria-hidden="true"
+      >
         {icon ?? <Inbox className="size-6" />}
       </div>
       <Heading className="text-h3 text-fg">{title}</Heading>

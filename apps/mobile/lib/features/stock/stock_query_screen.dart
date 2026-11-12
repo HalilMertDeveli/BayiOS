@@ -1,7 +1,12 @@
 import 'dart:async';
 
 import 'package:bayios_mobile/core/api/api_exception.dart';
-import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
+import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/stock/adjustment_screen.dart';
 import 'package:bayios_mobile/features/stock/quantity.dart';
 import 'package:bayios_mobile/features/stock/stock_errors.dart';
@@ -72,23 +77,23 @@ class _StockQueryScreenState extends ConsumerState<StockQueryScreen> {
     final canAdjust = access.can(StockPermissions.adjust);
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.stockTitle)),
+      appBar: AppTopBar(title: l10n.stockTitle, trailing: const UserAvatar()),
       body: RefreshIndicator(
         onRefresh: controller.refresh,
         child: ListView(
-          padding: const EdgeInsets.all(BosSpace.s16),
+          padding: const EdgeInsets.all(AppSpacing.md),
           children: [
             if (access.can(StockPermissions.receive)) ...[
-              FilledButton.icon(
+              OutlinedButton.icon(
                 key: const Key('stock-receive'),
                 onPressed: () => context.push('/stok/mal-kabul'),
-                icon: const Icon(Icons.move_to_inbox_outlined),
+                icon: const AppIcon(AppIcons.trolley01),
                 label: Text(l10n.receivingTitle),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(BosSize.primaryAction),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(AppSize.minTouchTarget),
                 ),
               ),
-              const SizedBox(height: BosSpace.s16),
+              const SizedBox(height: AppSpacing.md),
             ],
             CodeEntryField(
               fieldKey: const Key('stock-search-field'),
@@ -101,7 +106,7 @@ class _StockQueryScreenState extends ConsumerState<StockQueryScreen> {
               busy: state is StockQueryLoading,
               onSubmit: controller.search,
             ),
-            const SizedBox(height: BosSpace.s16),
+            const SizedBox(height: AppSpacing.md),
             ..._body(context, l10n, state, controller, canAdjust: canAdjust),
           ],
         ),
@@ -121,30 +126,19 @@ class _StockQueryScreenState extends ConsumerState<StockQueryScreen> {
         return [
           StockMessagePanel(
             key: const Key('stock-idle'),
-            icon: Icons.manage_search,
+            icon: AppIcons.search,
             message: l10n.stockIdle,
           ),
         ];
       case StockQueryLoading():
-        return [
-          Padding(
-            padding: const EdgeInsets.all(BosSpace.s24),
-            child: Center(
-              child: Semantics(
-                liveRegion: true,
-                label: l10n.stockSearching,
-                child: const CircularProgressIndicator(),
-              ),
-            ),
-          ),
-        ];
+        return [SkeletonList(count: 2, label: l10n.stockSearching)];
       case StockQueryFailed(:final error):
         final retryable = error is! ApiException || error.isTransient;
         return [
           StockMessagePanel(
             key: const Key('stock-error'),
-            icon: retryable ? Icons.cloud_off_outlined : Icons.error_outline,
-            tone: BosColors.danger,
+            icon: retryable ? AppIcons.offline : AppIcons.infoCircle,
+            tone: Tone.danger,
             message: stockErrorMessage(l10n, error),
             onRetry: retryable ? controller.refresh : null,
             error: error,
@@ -153,17 +147,12 @@ class _StockQueryScreenState extends ConsumerState<StockQueryScreen> {
       case StockQueryEmpty(:final term, :final variant):
         return [
           if (variant != null) ...[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(BosSpace.s16),
-                child: VariantHeader(variant: variant),
-              ),
-            ),
-            const SizedBox(height: BosSpace.s8),
+            AppCard(child: VariantHeader(variant: variant)),
+            const SizedBox(height: AppSpacing.xs),
           ],
           StockMessagePanel(
             key: const Key('stock-empty'),
-            icon: Icons.inventory_2_outlined,
+            icon: AppIcons.package,
             message: variant != null
                 ? l10n.stockNoBalanceForVariant
                 : l10n.stockNoResults(term),
@@ -177,12 +166,12 @@ class _StockQueryScreenState extends ConsumerState<StockQueryScreen> {
               canAdjust: canAdjust,
               onAdjust: (row) => _adjust(group, row),
             ),
-            const SizedBox(height: BosSpace.s12),
+            const SizedBox(height: AppSpacing.sm),
           ],
           if (hasMore)
             StockNotice(
-              tone: BosColors.info,
-              icon: Icons.info_outline,
+              tone: Tone.info,
+              icon: AppIcons.infoCircle,
               child: Text(l10n.stockMoreResults),
             ),
         ];
@@ -204,31 +193,30 @@ class _GroupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return Card(
+    return AppCard(
       key: Key('stock-group-${group.variant.id}'),
-      child: Padding(
-        padding: const EdgeInsets.all(BosSpace.s16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            VariantHeader(variant: group.variant),
-            const SizedBox(height: BosSpace.s4),
-            Text(
-              l10n.stockTotals(
-                formatQuantity(group.totalOnHand),
-                formatQuantity(group.totalAvailable),
-              ),
-              style: Theme.of(context).textTheme.bodyMedium,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          VariantHeader(variant: group.variant),
+          const SizedBox(height: AppSpacing.xxs),
+          Text(
+            l10n.stockTotals(
+              formatQuantity(group.totalOnHand),
+              formatQuantity(group.totalAvailable),
             ),
-            for (final row in group.rows) ...[
-              const Divider(height: BosSpace.s24),
-              _BalanceRow(
-                row: row,
-                onAdjust: canAdjust ? () => onAdjust(row) : null,
-              ),
-            ],
+            style: context.text.bodySmall?.copyWith(
+              color: context.colors.textSecondary,
+            ),
+          ),
+          for (final row in group.rows) ...[
+            const Divider(height: AppSpacing.lg),
+            _BalanceRow(
+              row: row,
+              onAdjust: canAdjust ? () => onAdjust(row) : null,
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -243,7 +231,6 @@ class _BalanceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
     final b = row.balance;
     return Column(
       key: Key('stock-balance-${b.id}'),
@@ -251,61 +238,58 @@ class _BalanceRow extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.warehouse_outlined, color: BosColors.textMuted),
-            const SizedBox(width: BosSpace.s8),
+            AppIcon(
+              AppIcons.pin3,
+              size: AppSize.icon,
+              color: context.colors.textMuted,
+            ),
+            const SizedBox(width: AppSpacing.xs),
             Expanded(
               child: Text(
                 placeLabel(row.warehouse, row.location),
-                style: theme.textTheme.titleMedium,
+                style: context.text.titleSmall?.copyWith(
+                  color: context.colors.textPrimary,
+                ),
               ),
             ),
             if (b.belowMinimum)
-              Container(
+              StatusChip(
+                l10n.stockCritical,
+                Tone.danger,
                 key: Key('stock-critical-${b.id}'),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: BosSpace.s8,
-                  vertical: BosSpace.s2,
-                ),
-                decoration: BoxDecoration(
-                  color: BosColors.danger.bg,
-                  border: Border.all(color: BosColors.danger.border),
-                  borderRadius: BorderRadius.circular(BosRadius.sm),
-                ),
-                child: Text(
-                  l10n.stockCritical,
-                  style: TextStyle(
-                    color: BosColors.danger.fg,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                icon: AppIcons.trendDownGraph,
               ),
           ],
         ),
-        const SizedBox(height: BosSpace.s8),
+        const SizedBox(height: AppSpacing.xs),
         Row(
           children: [
             _Figure(label: l10n.stockOnHand, value: b.onHand),
+            const SizedBox(width: AppSpacing.xs),
             _Figure(label: l10n.stockReserved, value: b.reserved),
+            const SizedBox(width: AppSpacing.xs),
             _Figure(label: l10n.stockAvailable, value: b.available, bold: true),
           ],
         ),
         if (b.minQuantity != null) ...[
-          const SizedBox(height: BosSpace.s4),
+          const SizedBox(height: AppSpacing.xxs),
           Text(
             l10n.stockMinimum(formatQuantity(b.minQuantity!)),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: b.belowMinimum ? BosColors.danger.fg : BosColors.textMuted,
+            style: context.text.bodySmall?.copyWith(
+              color: b.belowMinimum
+                  ? context.colors.danger.fg
+                  : context.colors.textMuted,
             ),
           ),
         ],
         if (onAdjust != null) ...[
-          const SizedBox(height: BosSpace.s8),
+          const SizedBox(height: AppSpacing.xs),
           Align(
             alignment: Alignment.centerRight,
             child: OutlinedButton.icon(
               key: Key('stock-adjust-${b.id}'),
               onPressed: onAdjust,
-              icon: const Icon(Icons.tune),
+              icon: const AppIcon(AppIcons.preferences2),
               label: Text(l10n.stockAdjustAction),
             ),
           ),
@@ -324,25 +308,35 @@ class _Figure extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = context.colors;
     return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: BosColors.textMuted,
-            ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: bold ? c.brandPrimarySubtle : c.surfaceSunken,
+          border: Border.all(color: bold ? c.brand.border : c.borderDefault),
+          borderRadius: AppRadius.smAll,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xs),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: context.text.labelMedium?.copyWith(color: c.textMuted),
+              ),
+              Text(
+                formatQuantity(value),
+                style:
+                    (bold
+                            ? context.text.titleLarge?.bold
+                            : context.text.titleLarge)
+                        ?.tabular
+                        .copyWith(color: bold ? c.brand.fg : c.textPrimary),
+              ),
+            ],
           ),
-          Text(
-            formatQuantity(value),
-            style: BosType.h3.copyWith(
-              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

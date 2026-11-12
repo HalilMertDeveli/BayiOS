@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useId } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCheck, CircleAlert, Lock, MapPin, Minus, PackageCheck, Plus, RotateCcw, TriangleAlert } from "lucide-react";
+import { ArrowLeft, CheckCheck, CircleAlert, Lock, MapPin, Minus, PackageCheck, Plus, RotateCcw, TriangleAlert } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -98,7 +98,7 @@ export function PickScreen({ taskId }: { taskId: string }) {
       <>
         <BackLink />
         <PageHeader title="Toplama görevi" />
-        <section aria-label="Görev" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Görev" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Lock className="size-6" />} title="Görev ayrıntısını görme yetkiniz yok" description="Rolünüz görev ayrıntısını görmeye izin vermiyor. Gerekirse işletme yöneticinizle görüşün." />
         </section>
       </>
@@ -120,7 +120,7 @@ export function PickScreen({ taskId }: { taskId: string }) {
       <>
         <BackLink />
         <PageHeader title="Toplama görevi" />
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<CircleAlert className="size-6" />}
             title={load.notFound ? "Görev bulunamadı" : "Görev yüklenemedi"}

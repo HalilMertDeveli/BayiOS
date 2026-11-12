@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent, useId } from "react";
-import { Archive, Pencil, Plus, RotateCcw } from "lucide-react";
+import { Archive, Pencil, Plus, RotateCcw } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Table, type TableColumn } from "@/components/ui/table";

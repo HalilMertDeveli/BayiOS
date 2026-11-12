@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { History } from "lucide-react";
+import { History } from "@/components/ui/icons";
 import type { OrderHistoryEntry } from "@/lib/orders/api";
 import { historyActionLabels, orderStatusLabel } from "@/lib/orders/labels";
 

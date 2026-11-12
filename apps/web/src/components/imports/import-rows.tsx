@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CircleAlert } from "lucide-react";
+import { CircleAlert } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -142,7 +142,7 @@ export function ImportRows({
       </div>
 
       {current.status === "error" ? (
-        <div role="alert" className="rounded-lg border border-line bg-card">
+        <div role="alert" className="rounded-xl border border-line bg-card">
           <EmptyState
             headingLevel="h3"
             icon={<CircleAlert className="size-6" />}
@@ -169,10 +169,10 @@ export function ImportRows({
           <ul aria-label={caption} className="flex flex-col gap-2 md:hidden">
             {current.status === "loading" ? <li className="py-6 text-center text-body text-fg-muted">Yükleniyor…</li> : null}
             {current.status === "ready" && rows.length === 0 ? (
-              <li className="rounded-lg border border-line bg-card p-4 text-body text-fg-muted">Bu filtrede satır yok.</li>
+              <li className="rounded-xl border border-line bg-card p-4 text-body text-fg-muted">Bu filtrede satır yok.</li>
             ) : null}
             {rows.map((r) => (
-              <li key={String(r.rowNumber)} className="flex flex-col gap-1 rounded-lg border border-line bg-card p-3">
+              <li key={String(r.rowNumber)} className="flex flex-col gap-1 rounded-xl border border-line bg-card p-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-body font-medium text-fg">Satır {num(r.rowNumber)}</span>
                   <Badge tone={rowActionMeta[r.action]?.tone ?? "neutral"}>{rowActionMeta[r.action]?.label ?? r.action}</Badge>

@@ -1,5 +1,5 @@
 import 'package:bayios_mobile/app/app.dart';
-import 'package:bayios_mobile/core/ui/app_theme.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

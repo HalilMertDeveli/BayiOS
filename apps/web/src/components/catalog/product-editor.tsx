@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ArrowLeft, CircleAlert, LoaderCircle, Lock, Plus, RotateCcw, SearchX, Trash2 } from "lucide-react";
+import { Archive, ArrowLeft, CircleAlert, LoaderCircle, Lock, Plus, RotateCcw, SearchX, Trash2 } from "@/components/ui/icons";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -89,7 +89,7 @@ export function ProductEditor({ productId }: { productId?: string }) {
       <>
         <BackLink />
         <PageHeader title={title} />
-        <section className="rounded-lg border border-line bg-card shadow-e1">
+        <section className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<Lock className="size-6" />}
             title="Ürün ekleme yetkiniz yok"
@@ -111,7 +111,7 @@ export function ProductEditor({ productId }: { productId?: string }) {
       <>
         <BackLink />
         <PageHeader title={title} />
-        <section role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <section role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={notFound ? <SearchX className="size-6" /> : <CircleAlert className="size-6" />}
             title={notFound ? "Ürün bulunamadı" : "Ürün bilgileri yüklenemedi"}
@@ -446,7 +446,7 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, 
 
       <form ref={formRef} noValidate onSubmit={submit} aria-label={product ? "Ürünü düzenle" : "Yeni ürün"} className="flex flex-col gap-4">
         <fieldset disabled={readOnly} className="flex flex-col gap-4">
-          <section aria-labelledby={`${uid}-sec-core`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+          <section aria-labelledby={`${uid}-sec-core`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
             <h2 id={`${uid}-sec-core`} className="text-h3 text-fg">
               Temel bilgiler
             </h2>
@@ -549,7 +549,7 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, 
           </section>
 
           {productFields.length > 0 ? (
-            <section aria-labelledby={`${uid}-sec-attributes`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+            <section aria-labelledby={`${uid}-sec-attributes`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
               <div className="flex flex-col gap-1">
                 <h2 id={`${uid}-sec-attributes`} className="text-h3 text-fg">
                   Özel alanlar
@@ -575,7 +575,7 @@ function ProductForm({ reference, loaded, onSaved, onReload, onVariantsChanged, 
           ) : null}
 
           {!product ? (
-            <section aria-labelledby={`${uid}-sec-variants`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+            <section aria-labelledby={`${uid}-sec-variants`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
               <div className="flex flex-col gap-1">
                 <h2 id={`${uid}-sec-variants`} className="text-h3 text-fg">
                   Varyantlar

@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { PackageCheck, TriangleAlert } from "lucide-react";
+import { PackageCheck, TriangleAlert } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Table, type TableColumn } from "@/components/ui/table";
@@ -72,7 +72,7 @@ export function OrderLinesTable({ detail, showFulfilment }: { detail: OrderDetai
       </div>
       <ul aria-label="Sipariş satırları" className="flex flex-col gap-2 md:hidden">
         {detail.lines.map((l) => (
-          <li key={l.id} className="rounded-lg border border-line bg-card p-3 shadow-e1">
+          <li key={l.id} className="rounded-xl border border-line bg-card p-3 shadow-e1">
             <div className="flex items-start justify-between gap-2">
               <span className="flex flex-col">
                 <span className="font-mono text-body text-fg">{l.sku}</span>
@@ -108,7 +108,7 @@ export function OrderTotalsPanel({ totals, currency }: { totals: OrderTotals; cu
   const uid = useId();
   const money = (v: OrderTotals["subtotal"]) => formatMoney(v, currency) ?? "—";
   return (
-    <section aria-labelledby={`${uid}-order-totals`} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <section aria-labelledby={`${uid}-order-totals`} className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4 shadow-e1">
       <h2 id={`${uid}-order-totals`} className="text-h3 text-fg">
         Toplamlar <span className="text-caption font-normal text-fg-muted">({vatModeLabel(totals.pricesIncludeTax)} fiyatlar)</span>
       </h2>

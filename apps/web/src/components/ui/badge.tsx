@@ -8,8 +8,8 @@ import {
   Pencil,
   ShoppingCart,
   Truck,
-  type LucideIcon,
-} from "lucide-react";
+  type IconComponent,
+} from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
 export type BadgeTone = "neutral" | "info" | "success" | "warning" | "danger" | "purple" | "teal" | "brand" | "ai";
@@ -38,7 +38,7 @@ export function Badge({ tone = "neutral", icon, className, children }: BadgeProp
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-caption font-medium whitespace-nowrap",
+        "inline-flex items-center gap-1 rounded-md border px-2.5 py-0.5 text-caption font-medium whitespace-nowrap",
         toneClasses[tone],
         className,
       )}
@@ -61,7 +61,7 @@ export type OrderStatus =
   | "Completed"
   | "Cancelled";
 
-export const orderStatusMeta: Record<OrderStatus, { label: string; tone: BadgeTone; Icon: LucideIcon }> = {
+export const orderStatusMeta: Record<OrderStatus, { label: string; tone: BadgeTone; Icon: IconComponent }> = {
   Draft: { label: "Taslak", tone: "neutral", Icon: Pencil },
   PendingApproval: { label: "Onay Bekliyor", tone: "warning", Icon: Clock },
   Approved: { label: "Onaylandı", tone: "info", Icon: Check },

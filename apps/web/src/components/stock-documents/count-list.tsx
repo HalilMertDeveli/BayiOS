@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CircleAlert, ClipboardCheck, EyeOff, Lock, Plus, RefreshCw } from "lucide-react";
+import { CircleAlert, ClipboardCheck, EyeOff, Lock, Plus, RefreshCw } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -36,7 +36,7 @@ export function CountList() {
     return (
       <>
         <PageHeader title="Sayımlar" />
-        <section aria-label="Sayımlar" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Sayımlar" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Lock className="size-6" />} title="Sayımları görme yetkiniz yok" description="Rolünüz stok sayımına izin vermiyor. Gerekirse işletme yöneticinizle görüşün." />
         </section>
       </>
@@ -64,7 +64,7 @@ export function CountList() {
           </span>
         }
       />
-      <section aria-label="Filtreler" className="grid grid-cols-1 gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:grid-cols-2">
+      <section aria-label="Filtreler" className="grid grid-cols-1 gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 sm:grid-cols-2">
         <Select
           label="Durum"
           size="lg"
@@ -88,11 +88,11 @@ export function CountList() {
           Sayımlar yükleniyor…
         </p>
       ) : data.status === "error" ? (
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<CircleAlert className="size-6" />} title="Sayımlar yüklenemedi" description={data.message} action={<Button size="lg" onClick={reload}>Tekrar dene</Button>} />
         </div>
       ) : data.items.length === 0 ? (
-        <section aria-label="Sayımlar" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Sayımlar" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<ClipboardCheck className="size-6" />}
             title="Bu filtrede sayım yok"
@@ -103,7 +103,7 @@ export function CountList() {
       ) : (
         <ul aria-label="Sayımlar" className="flex flex-col gap-3">
           {data.items.map((c) => (
-            <li key={c.id} data-testid={`count-${c.number}`} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+            <li key={c.id} data-testid={`count-${c.number}`} className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4 shadow-e1">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <h2 className="text-h3 text-fg">
                   <Link href={countHref(c.id)} className="underline-offset-2 hover:underline">

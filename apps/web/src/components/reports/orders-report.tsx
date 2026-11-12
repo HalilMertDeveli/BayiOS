@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart } from "@/components/ui/icons";
 import { OrderStatus } from "@/components/orders/order-badges";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
@@ -89,7 +89,7 @@ function OrdersContent({ report }: { report: OrdersReport | null }) {
 
   if (report && rows.length === 0) {
     return (
-      <div className="rounded-lg border border-line bg-card shadow-e1">
+      <div className="rounded-xl border border-line bg-card shadow-e1">
         <EmptyState
           icon={<ShoppingCart className="size-6" />}
           title="Bu aralıkta sipariş yok"

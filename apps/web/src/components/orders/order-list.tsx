@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, useId } from "react";
+import { Avatar } from "@/components/ui/avatar";
 import Link from "next/link";
-import { CircleAlert, Lock, MessageSquareText, Plus, Rows3, Rows4, Search, SearchX, ShoppingCart } from "lucide-react";
+import { CircleAlert, Lock, MessageSquareText, Plus, Rows3, Rows4, Search, SearchX, ShoppingCart } from "@/components/ui/icons";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { SkeletonCards } from "@/components/ui/skeleton";
@@ -72,7 +73,7 @@ function NoAccess() {
   return (
     <>
       <PageHeader title="Siparişler" />
-      <section aria-label="Siparişler durumu" className="rounded-lg border border-line bg-card shadow-e1">
+      <section aria-label="Siparişler durumu" className="rounded-xl border border-line bg-card shadow-e1">
         <EmptyState
           icon={<Lock className="size-6" />}
           title="Sipariş listesini görme yetkiniz yok"
@@ -193,12 +194,18 @@ function OrderListView({
       header: "Sipariş no",
       nowrap: true,
       cell: (o) => (
-        <Link href={orderHref(o.id)} className="font-mono font-medium text-brand-fg underline-offset-2 hover:underline">
+        <Link href={orderHref(o.id)} className="font-medium text-link tabular-nums underline-offset-2 hover:underline">
           {o.number}
         </Link>
       ),
     },
-    { key: "customer", header: "Müşteri", cell: (o) => <span className="block min-w-40">{customerName(o)}</span> },
+    { key: "customer", header: "Müşteri", cell: (o) => (
+        <span className="flex min-w-40 items-center gap-3">
+          <Avatar name={customerName(o)} size="sm" />
+          {customerName(o)}
+        </span>
+      ),
+    },
     { key: "status", header: "Durum", nowrap: true, cell: (o) => <OrderStatusCell status={o.status} fulfillmentStatus={o.fulfillmentStatus} /> },
     { key: "source", header: "Kaynak", nowrap: true, cell: (o) => orderSourceLabels[o.source] ?? o.source },
     { key: "lines", header: "Satır", numeric: true, cell: (o) => formatQuantity(o.lineCount) },
@@ -265,7 +272,7 @@ function OrderListView({
         }
       />
 
-      <section aria-label="Arama ve filtreler" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+      <section aria-label="Arama ve filtreler" className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
         <form role="search" onSubmit={(e) => e.preventDefault()}>
           <Input
             label="Sipariş no ara"
@@ -344,11 +351,11 @@ function OrderListView({
         </div>
 
         {rangeError ? (
-          <p role="alert" className="rounded-lg border border-line bg-card p-4 text-body text-danger-fg">
+          <p role="alert" className="rounded-xl border border-line bg-card p-4 text-body text-danger-fg">
             {rangeError} Tarihleri düzeltin.
           </p>
         ) : current?.status === "error" ? (
-          <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+          <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
             <EmptyState
               headingLevel="h3"
               icon={<CircleAlert className="size-6" />}
@@ -384,13 +391,13 @@ function OrderListView({
               {loading ? (
                 <SkeletonCards />
               ) : rows.length === 0 ? (
-                <div className="rounded-lg border border-line bg-card">{emptyView}</div>
+                <div className="rounded-xl border border-line bg-card">{emptyView}</div>
               ) : (
                 <ul aria-label="Siparişler" className="flex flex-col gap-2">
                   {rows.map((o) => (
-                    <li key={o.id} className="rounded-lg border border-line bg-card p-3 shadow-e1">
+                    <li key={o.id} className="rounded-xl border border-line bg-card p-3 shadow-e1">
                       <div className="flex items-start justify-between gap-2">
-                        <Link href={orderHref(o.id)} className="min-h-11 py-2 font-mono font-medium text-brand-fg underline-offset-2 hover:underline">
+                        <Link href={orderHref(o.id)} className="min-h-11 py-2 font-medium text-link tabular-nums underline-offset-2 hover:underline">
                           {o.number}
                         </Link>
                         <span className="pt-2 font-medium tabular-nums text-fg">{formatMoney(o.grandTotal, o.currency) ?? "—"}</span>

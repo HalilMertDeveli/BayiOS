@@ -1,7 +1,10 @@
 import 'package:bayios_mobile/core/auth/auth_controller.dart';
 import 'package:bayios_mobile/core/session/me.dart';
 import 'package:bayios_mobile/core/session/session_controller.dart';
-import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -24,29 +27,32 @@ class TenantPickerScreen extends ConsumerWidget {
         : null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.tenantPickerTitle),
+      appBar: AppTopBar(
+        title: l10n.tenantPickerTitle,
+        showBack: false,
         actions: [
           TextButton.icon(
             key: const Key('tenant-picker-sign-out'),
             onPressed: () =>
                 ref.read(authControllerProvider.notifier).signOut(),
-            icon: const Icon(Icons.logout),
+            icon: const AppIcon(AppIcons.logout),
             label: Text(l10n.signOut),
           ),
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(BosSpace.s16),
+        padding: const EdgeInsets.all(AppSpacing.md),
         children: [
           Text(
             l10n.tenantPickerSubtitle,
-            style: Theme.of(context).textTheme.bodyLarge,
+            style: context.text.bodyMedium?.copyWith(
+              color: context.colors.textMuted,
+            ),
           ),
-          const SizedBox(height: BosSpace.s16),
+          const SizedBox(height: AppSpacing.md),
           if (inactive) ...[
             ErrorMessageBox(l10n.tenantInactiveNotice),
-            const SizedBox(height: BosSpace.s16),
+            const SizedBox(height: AppSpacing.md),
           ],
           for (final m in memberships) ...[
             _TenantTile(
@@ -56,7 +62,7 @@ class TenantPickerScreen extends ConsumerWidget {
                   .read(sessionControllerProvider.notifier)
                   .selectTenant(m.tenantId),
             ),
-            const SizedBox(height: BosSpace.s8),
+            const SizedBox(height: AppSpacing.xs),
           ],
         ],
       ),
@@ -87,6 +93,7 @@ class _TenantTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final c = context.colors;
     final status = tenantStatusLabel(l10n, membership);
     final usable = status == null;
     final subtitle = [
@@ -95,21 +102,37 @@ class _TenantTile extends StatelessWidget {
       if (current) l10n.tenantCurrent,
     ].join(' · ');
 
-    return Card(
+    return AppCard(
+      borderColor: current ? c.brandPrimary : null,
+      padding: EdgeInsets.zero,
       child: ListTile(
         key: Key('tenant-${membership.tenantId}'),
         enabled: usable,
         onTap: usable ? onTap : null,
-        leading: Icon(
-          usable ? Icons.storefront_outlined : Icons.block,
-          color: usable ? BosColors.brandPrimary : BosColors.textMuted,
+        contentPadding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          AppSpacing.xxs,
+          AppSpacing.sm,
+          AppSpacing.xxs,
+        ),
+        leading: IconBadge(
+          icon: usable ? AppIcons.store03 : AppIcons.block,
+          tone: usable ? Tone.brand : Tone.neutral,
         ),
         title: Text(
           membership.tenantName,
-          style: Theme.of(context).textTheme.titleMedium,
+          style: context.text.titleMedium?.copyWith(
+            color: usable ? c.textPrimary : c.textMuted,
+          ),
         ),
         subtitle: Text(subtitle),
-        trailing: usable ? const Icon(Icons.chevron_right) : null,
+        trailing: usable
+            ? AppIcon(
+                AppIcons.arrowRight2,
+                size: AppSize.icon,
+                color: c.textMuted,
+              )
+            : null,
       ),
     );
   }

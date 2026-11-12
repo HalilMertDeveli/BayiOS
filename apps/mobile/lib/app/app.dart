@@ -1,7 +1,8 @@
 import 'package:bayios_mobile/app/push_coordinator.dart';
 import 'package:bayios_mobile/app/router.dart';
 import 'package:bayios_mobile/core/providers.dart';
-import 'package:bayios_mobile/core/ui/app_theme.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,7 @@ class BayiOsApp extends ConsumerWidget {
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      darkTheme: buildAppDarkTheme(),
       locale: appLocale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -66,6 +68,7 @@ class ConfigErrorApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      darkTheme: buildAppDarkTheme(),
       locale: appLocale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -75,15 +78,15 @@ class ConfigErrorApp extends StatelessWidget {
           return Scaffold(
             body: SafeArea(
               child: ListView(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 children: [
                   Text(
                     l10n.configErrorTitle,
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.sm),
                   Text(l10n.configErrorBody),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.sm),
                   for (final p in problems) Text('• $p'),
                 ],
               ),

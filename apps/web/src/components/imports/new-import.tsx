@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type DragEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, FileSpreadsheet, Upload, X } from "lucide-react";
+import { ArrowLeft, FileSpreadsheet, Upload, X } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -174,7 +174,7 @@ export function NewImport() {
       <ImportStepper current={step} />
 
       {step === "type" ? (
-        <form noValidate onSubmit={goUpload} className="flex flex-col gap-5 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+        <form noValidate onSubmit={goUpload} className="flex flex-col gap-5 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
           <h2 ref={headingRef} tabIndex={-1} className="text-h2 text-fg focus:outline-none">
             Ne aktaracaksınız?
           </h2>
@@ -244,7 +244,7 @@ export function NewImport() {
           </div>
         </form>
       ) : (
-        <form noValidate onSubmit={upload} className="flex flex-col gap-5 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+        <form noValidate onSubmit={upload} className="flex flex-col gap-5 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
           <h2 ref={headingRef} tabIndex={-1} className="text-h2 text-fg focus:outline-none">
             Dosyayı yükleyin
           </h2>

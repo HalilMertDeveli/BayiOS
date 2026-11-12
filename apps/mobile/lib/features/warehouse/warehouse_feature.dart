@@ -1,6 +1,8 @@
 import 'package:bayios_mobile/app/feature.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
 import 'package:bayios_mobile/core/ui/components.dart';
-import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/stock/stock_errors.dart';
 import 'package:bayios_mobile/features/warehouse/count_list_screen.dart';
 import 'package:bayios_mobile/features/warehouse/count_screen.dart';
@@ -23,8 +25,8 @@ final warehouseFeature = AppFeature(
   id: 'warehouse',
   path: '/depo',
   label: (l10n) => l10n.warehouseNav,
-  icon: Icons.warehouse_outlined,
-  selectedIcon: Icons.warehouse,
+  icon: AppIcons.delivery4,
+  selectedIcon: AppIcons.delivery4,
   isVisible: (access) => access.canAny(WarehousePermissions.all),
   builder: (context, state) => const WarehouseHubScreen(),
   routes: [
@@ -71,7 +73,7 @@ class WarehouseHubScreen extends ConsumerWidget {
       if (access.canSome(WarehousePermissions.receiveTransfer))
         (
           'warehouse-transfers',
-          Icons.local_shipping_outlined,
+          AppIcons.packageMoving,
           l10n.transferListTitle,
           l10n.warehouseHubTransfersHint,
           '/depo/transferler',
@@ -79,7 +81,7 @@ class WarehouseHubScreen extends ConsumerWidget {
       if (access.canSome(WarehousePermissions.performCount))
         (
           'warehouse-counts',
-          Icons.fact_check_outlined,
+          AppIcons.receiptBill2,
           l10n.countListTitle,
           l10n.warehouseHubCountsHint,
           '/depo/sayimlar',
@@ -87,58 +89,29 @@ class WarehouseHubScreen extends ConsumerWidget {
       if (access.canSome(WarehousePermissions.relocate))
         (
           'warehouse-relocation',
-          Icons.swap_vert,
+          AppIcons.trolley02,
           l10n.relocationTitle,
           l10n.warehouseHubRelocationHint,
           '/depo/raf-tasima',
         ),
     ];
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.warehouseTitle)),
+      appBar: AppTopBar(
+        title: l10n.warehouseTitle,
+        trailing: const UserAvatar(),
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(BosSpace.s16),
+        padding: const EdgeInsets.all(AppSpacing.md),
         children: [
           for (final (key, icon, title, hint, path) in items) ...[
-            Card(
+            ListCard(
               key: Key(key),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => context.go(path),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 88),
-                  child: Padding(
-                    padding: const EdgeInsets.all(BosSpace.s16),
-                    child: Row(
-                      children: [
-                        IconBadge(icon: icon, size: 56),
-                        const SizedBox(width: BosSpace.s16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: BosSpace.s2),
-                              Text(
-                                hint,
-                                style: BosType.body.copyWith(
-                                  color: BosColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.chevron_right),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              onTap: () => context.go(path),
+              leading: IconBadge(icon: icon, size: AppSize.minTouchTarget),
+              title: title,
+              subtitle: hint,
             ),
-            const SizedBox(height: BosSpace.s8),
+            const SizedBox(height: AppSpacing.xs),
           ],
         ],
       ),

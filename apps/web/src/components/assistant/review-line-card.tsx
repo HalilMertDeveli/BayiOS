@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { CircleAlert, CircleCheck, CircleHelp, CircleX, RotateCcw, Trash2 } from "lucide-react";
+import { CircleAlert, CircleCheck, CircleHelp, CircleX, RotateCcw, Trash2 } from "@/components/ui/icons";
 import { VariantScanner } from "@/components/inventory/variant-scanner";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

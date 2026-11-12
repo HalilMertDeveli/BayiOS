@@ -1,5 +1,8 @@
 import 'package:bayios_mobile/core/auth/auth_controller.dart';
 import 'package:bayios_mobile/core/session/session_controller.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -15,27 +18,42 @@ class SessionLoadingScreen extends ConsumerWidget {
     final session = ref.watch(sessionControllerProvider);
     return Scaffold(
       body: SafeArea(
-        child: switch (session) {
-          SessionFailed(:final error) => Column(
-            children: [
-              Expanded(
-                child: ErrorView(
-                  error: error,
-                  onRetry: () =>
-                      ref.read(sessionControllerProvider.notifier).reload(),
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(AppSpacing.md),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: BrandWordmark(),
+              ),
+            ),
+            Expanded(
+              child: switch (session) {
+                SessionFailed(:final error) => Column(
+                  children: [
+                    Expanded(
+                      child: ErrorView(
+                        error: error,
+                        onRetry: () => ref
+                            .read(sessionControllerProvider.notifier)
+                            .reload(),
+                      ),
+                    ),
+                    TextButton.icon(
+                      key: const Key('session-sign-out'),
+                      onPressed: () =>
+                          ref.read(authControllerProvider.notifier).signOut(),
+                      icon: const AppIcon(AppIcons.logout),
+                      label: Text(l10n.signOut),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
                 ),
-              ),
-              TextButton.icon(
-                key: const Key('session-sign-out'),
-                onPressed: () =>
-                    ref.read(authControllerProvider.notifier).signOut(),
-                icon: const Icon(Icons.logout),
-                label: Text(l10n.signOut),
-              ),
-            ],
-          ),
-          _ => LoadingView(label: l10n.sessionLoading),
-        },
+                _ => LoadingView(label: l10n.sessionLoading),
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

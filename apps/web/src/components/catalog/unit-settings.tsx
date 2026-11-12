@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent, useId } from "react";
-import { Archive, Pencil, Plus, Ruler } from "lucide-react";
+import { Archive, Pencil, Plus, Ruler } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckboxField } from "@/components/ui/checkbox-field";

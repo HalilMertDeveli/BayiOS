@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent, useId } from "react";
-import { CircleAlert, Gauge } from "lucide-react";
+import { CircleAlert, Gauge } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
@@ -110,7 +110,7 @@ export function VariantThresholds({
   };
 
   return (
-    <section aria-labelledby={`${uid}-variant-thresholds`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <section aria-labelledby={`${uid}-variant-thresholds`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
       <div className="flex flex-col gap-1">
         <h2 id={`${uid}-variant-thresholds`} className="flex items-center gap-2 text-h3 text-fg">
           <Gauge className="size-5" aria-hidden="true" />

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, useId } from "react";
 import { useRouter } from "next/navigation";
-import { RotateCcw, Save, X } from "lucide-react";
+import { RotateCcw, Save, X } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { CustomerPicker } from "@/components/customers/customer-picker";
 import { VariantScanner } from "@/components/inventory/variant-scanner";
@@ -220,7 +220,7 @@ export function OrderDraftEditor({
         </FormAlert>
       ) : null}
 
-      <section aria-labelledby={`${uid}-draft-header`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+      <section aria-labelledby={`${uid}-draft-header`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
         <h2 id={`${uid}-draft-header`} className="text-h3 text-fg">
           Müşteri ve teslimat
         </h2>
@@ -273,7 +273,7 @@ export function OrderDraftEditor({
         <Textarea label="Not" value={values.notes} error={errors.notes} maxLength={2000} onChange={(e) => set({ notes: e.target.value })} />
       </section>
 
-      <section aria-labelledby={`${uid}-draft-lines`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+      <section aria-labelledby={`${uid}-draft-lines`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
         <h2 id={`${uid}-draft-lines`} className="text-h3 text-fg">
           Satırlar
         </h2>

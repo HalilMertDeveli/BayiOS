@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { ListPlus, Puzzle, Rocket, SlidersHorizontal, Tags, Users, type LucideIcon } from "lucide-react";
+import { ListPlus, Puzzle, Rocket, SlidersHorizontal, Tags, Users, type IconComponent } from "@/components/ui/icons";
 import { PLAN_PAGE_HREF } from "@/lib/billing/labels";
 import { SETUP_HREF } from "@/lib/onboarding/setup";
 import { useSession } from "@/lib/session/session-context";
 
-function SettingsLink({ href, title, description, Icon }: { href: string; title: string; description: string; Icon: LucideIcon }) {
+function SettingsLink({ href, title, description, Icon }: { href: string; title: string; description: string; Icon: IconComponent }) {
   return (
     <li>
-      <Link href={href} className="flex h-full items-start gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 hover:bg-sunken">
+      <Link href={href} className="flex h-full items-start gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 hover:bg-sunken">
         <Icon className="mt-0.5 size-5 shrink-0 text-brand-fg" aria-hidden="true" />
         <span className="flex flex-col gap-1">
           <span className="font-medium text-fg">{title}</span>

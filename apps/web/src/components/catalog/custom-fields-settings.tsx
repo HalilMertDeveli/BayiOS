@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { Archive, ArrowLeft, CircleAlert, ListPlus, Pencil, Plus } from "lucide-react";
+import { Archive, ArrowLeft, CircleAlert, ListPlus, Pencil, Plus } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -191,7 +191,7 @@ export function CustomFieldsSettings() {
       </div>
 
       {current?.status === "error" ? (
-        <section role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <section role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             headingLevel="h2"
             icon={<CircleAlert className="size-6" />}

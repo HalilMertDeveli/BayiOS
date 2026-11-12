@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, useId } from "react";
 import Link from "next/link";
-import { Ban, CircleAlert, Crown, Lock, MailPlus, RefreshCw, RotateCcw, Trash2, UserCog, Users } from "lucide-react";
+import { Ban, CircleAlert, Crown, Lock, MailPlus, RefreshCw, RotateCcw, Trash2, UserCog, Users } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -276,7 +276,7 @@ export function TeamPage() {
       />
 
       {seats ? (
-        <section aria-labelledby={`${uid}-seats`} className="flex flex-col gap-1 rounded-lg border border-line bg-card p-4 shadow-e1">
+        <section aria-labelledby={`${uid}-seats`} className="flex flex-col gap-1 rounded-xl border border-line bg-card p-4 shadow-e1">
           <h2 id={`${uid}-seats`} className="text-body font-semibold text-fg">
             Kullanıcı sayısı
           </h2>

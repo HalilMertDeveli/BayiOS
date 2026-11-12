@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useId } from "react";
 import Link from "next/link";
-import { ArrowLeft, CircleAlert, Lock, PackagePlus, Truck, TriangleAlert, Undo2 } from "lucide-react";
+import { ArrowLeft, CircleAlert, Lock, PackagePlus, Truck, TriangleAlert, Undo2 } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,7 +84,7 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
       <>
         <BackLink />
         <PageHeader title="Sevkiyat" />
-        <section aria-label="Sevkiyat" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Sevkiyat" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Lock className="size-6" />} title="Sevkiyatı görme yetkiniz yok" />
         </section>
       </>
@@ -106,7 +106,7 @@ export function ShipmentDetailPage({ shipmentId }: { shipmentId: string }) {
       <>
         <BackLink />
         <PageHeader title="Sevkiyat" />
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<CircleAlert className="size-6" />}
             title={load.notFound ? "Sevkiyat bulunamadı" : "Sevkiyat yüklenemedi"}
@@ -226,7 +226,7 @@ function ShipmentView({
         </FormAlert>
       ) : null}
 
-      <section aria-labelledby={`${uid}-shipment-info`} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+      <section aria-labelledby={`${uid}-shipment-info`} className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4 shadow-e1">
         <h2 id={`${uid}-shipment-info`} className="sr-only">
           Sevkiyat bilgileri
         </h2>
@@ -284,7 +284,7 @@ function ShipmentView({
       ) : null}
 
       {isOpen && permissions.assign ? (
-        <section aria-labelledby={`${uid}-shipment-cancel`} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+        <section aria-labelledby={`${uid}-shipment-cancel`} className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4 shadow-e1">
           <h2 id={`${uid}-shipment-cancel`} className="text-h3 text-fg">
             Sevkiyatı iptal et
           </h2>
@@ -383,7 +383,7 @@ function ShipmentLines({ lines, canShort, onShort }: { lines: ShipmentLine[]; ca
         {lines.map((line) => {
           const short = toNumber(line.shortQuantity);
           return (
-            <li key={line.id} data-testid={`shipment-line-${line.sku}`} className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-card p-3">
+            <li key={line.id} data-testid={`shipment-line-${line.sku}`} className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-card p-3">
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="font-mono text-body text-fg">{line.sku}</span>
                 <span className="truncate text-caption text-fg-muted">
@@ -481,7 +481,7 @@ function PackCheck({
   const current = pack.packages[pack.current] ?? {};
 
   return (
-    <section aria-labelledby={`${uid}-pack-check`} className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <section aria-labelledby={`${uid}-pack-check`} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
       <h2 id={`${uid}-pack-check`} className="text-h3 text-fg">
         Paket kontrolü (isteğe bağlı)
       </h2>

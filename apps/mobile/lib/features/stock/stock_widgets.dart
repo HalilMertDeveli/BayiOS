@@ -1,5 +1,8 @@
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
 import 'package:bayios_mobile/core/ui/components.dart';
-import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/stock/scanner.dart';
 import 'package:bayios_mobile/features/stock/stock_models.dart';
@@ -90,6 +93,10 @@ class _CodeEntryFieldState extends ConsumerState<CodeEntryField> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final enabled = widget.enabled;
+    final c = context.colors;
+    // Compact scan control: the label sits on the field border (not above
+    // it) so the scan screens keep shelf, quantity, product and the result
+    // on one screen.
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -104,19 +111,22 @@ class _CodeEntryFieldState extends ConsumerState<CodeEntryField> {
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
               labelText: widget.label,
+              floatingLabelBehavior: FloatingLabelBehavior.always,
+              hintText: l10n.stockCodeHint,
               helperText: widget.hint,
-              helperMaxLines: 2,
+              helperMaxLines: 3,
+              prefixIcon: const AppIcon(AppIcons.search),
               suffixIcon: widget.busy
                   ? const Padding(
-                      padding: EdgeInsets.all(BosSpace.s12),
+                      padding: EdgeInsets.all(AppSpacing.sm),
                       child: SizedBox.square(
-                        dimension: 24,
+                        dimension: AppSize.icon,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     )
                   : IconButton(
                       tooltip: l10n.stockCodeSubmit,
-                      icon: const Icon(Icons.search),
+                      icon: const AppIcon(AppIcons.arrowRight2),
                       onPressed: enabled
                           ? () => _submit(_controller.text)
                           : null,
@@ -128,23 +138,27 @@ class _CodeEntryFieldState extends ConsumerState<CodeEntryField> {
             onEditingComplete: () {},
           ),
         ),
-        const SizedBox(width: BosSpace.s8),
-        IconButton.filled(
+        const SizedBox(width: AppSpacing.xs),
+        IconButton(
           key: widget.scanKey,
           tooltip: widget.scanTitle,
           onPressed: enabled && !widget.busy ? _scan : null,
-          iconSize: 28,
           style: IconButton.styleFrom(
-            minimumSize: const Size.square(BosSize.primaryAction),
+            fixedSize: const Size.square(AppSize.minTouchTarget),
+            backgroundColor: c.brandPrimary,
+            foregroundColor: c.brandOnPrimary,
+            disabledBackgroundColor: c.surfaceSunken,
+            disabledForegroundColor: c.textMuted,
+            shape: const RoundedRectangleBorder(borderRadius: AppRadius.smAll),
           ),
-          icon: const Icon(Icons.qr_code_scanner),
+          icon: const AppIcon(AppIcons.scan, size: AppSize.iconMd),
         ),
       ],
     );
   }
 }
 
-/// Message with an icon and an optional "Tekrar dene" — the stock screens'
+// Message with an icon and an optional "Tekrar dene" — the stock screens'
 /// version of `ErrorView` (with inventory-specific wording).
 class StockMessagePanel extends StatelessWidget {
   const StockMessagePanel({
@@ -158,8 +172,8 @@ class StockMessagePanel extends StatelessWidget {
   });
 
   final String message;
-  final IconData icon;
-  final BosTone? tone;
+  final AppIconData icon;
+  final Tone? tone;
   final VoidCallback? onRetry;
   final String? retryLabel;
 
@@ -179,37 +193,40 @@ class StockMessagePanel extends StatelessWidget {
   Widget _content(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: BosSpace.s24),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
       child: Column(
         children: [
           ExcludeSemantics(
             child: IconBadge(
               icon: icon,
-              tone: tone ?? BosColors.brand,
-              size: 72,
+              tone: tone ?? Tone.brand,
+              size: AppSize.primaryAction,
+              round: true,
             ),
           ),
-          const SizedBox(height: BosSpace.s16),
+          const SizedBox(height: AppSpacing.md),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: BosSpace.s16),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
             child: Semantics(
               liveRegion: true,
               child: Text(
                 message,
                 textAlign: TextAlign.center,
-                style: BosType.bodyLg.copyWith(color: BosColors.textPrimary),
+                style: context.text.titleMedium?.copyWith(
+                  color: context.colors.textPrimary,
+                ),
               ),
             ),
           ),
           if (onRetry != null) ...[
-            const SizedBox(height: BosSpace.s16),
+            const SizedBox(height: AppSpacing.md),
             FilledButton.icon(
               key: const Key('stock-retry'),
               onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
+              icon: const AppIcon(AppIcons.refresh),
               label: Text(retryLabel ?? l10n.retry),
               style: FilledButton.styleFrom(
-                minimumSize: const Size(200, BosSize.primaryAction),
+                minimumSize: const Size(200, AppSize.primaryAction),
               ),
             ),
           ],
@@ -228,31 +245,32 @@ class StockNotice extends StatelessWidget {
     super.key,
   });
 
-  final BosTone tone;
-  final IconData icon;
+  final Tone tone;
+  final AppIconData icon;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    final t = context.colors.tone(tone);
     return Semantics(
       liveRegion: true,
       container: true,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: tone.bg,
-          border: Border.all(color: tone.border),
-          borderRadius: BorderRadius.circular(BosRadius.lg),
+          color: t.bg,
+          border: Border.all(color: t.border),
+          borderRadius: AppRadius.mdAll,
         ),
         child: Padding(
-          padding: const EdgeInsets.all(BosSpace.s12),
+          padding: const EdgeInsets.all(AppSpacing.sm),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: tone.fg),
-              const SizedBox(width: BosSpace.s8),
+              AppIcon(icon, color: t.fg, size: AppSize.icon),
+              const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: DefaultTextStyle.merge(
-                  style: TextStyle(color: tone.fg),
+                  style: context.text.bodySmall?.copyWith(color: t.fg),
                   child: child,
                 ),
               ),
@@ -264,7 +282,7 @@ class StockNotice extends StatelessWidget {
   }
 }
 
-/// SKU in monospace plus the product / variant name and barcode.
+/// SKU (tabular figures) plus the product / variant name and barcode.
 class VariantHeader extends StatelessWidget {
   const VariantHeader({required this.variant, super.key});
 
@@ -272,7 +290,6 @@ class VariantHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final details = [
       if (variant.title != null) variant.title!,
       if (variant.barcode != null) variant.barcode!,
@@ -280,12 +297,17 @@ class VariantHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(variant.sku, style: BosType.mono.copyWith(fontSize: 17)),
+        Text(
+          variant.sku,
+          style: context.text.titleMedium?.tabular.copyWith(
+            color: context.colors.textPrimary,
+          ),
+        ),
         if (details.isNotEmpty)
           Text(
             details.join(' · '),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: BosColors.textMuted,
+            style: context.text.bodyMedium?.copyWith(
+              color: context.colors.textMuted,
             ),
           ),
       ],

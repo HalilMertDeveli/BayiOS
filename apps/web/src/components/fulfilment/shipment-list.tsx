@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CircleAlert, ClipboardList, Lock, RefreshCw, Truck } from "lucide-react";
+import { CircleAlert, ClipboardList, Lock, RefreshCw, Truck } from "@/components/ui/icons";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -53,7 +53,7 @@ export function ShipmentList() {
     return (
       <>
         <PageHeader title="Sevkiyatlar" />
-        <section aria-label="Sevkiyatlar" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Sevkiyatlar" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Lock className="size-6" />} title="Sevkiyatları görme yetkiniz yok" description="Rolünüz sevkiyatları görmeye izin vermiyor. Gerekirse işletme yöneticinizle görüşün." />
         </section>
       </>
@@ -106,17 +106,17 @@ export function ShipmentList() {
           Sevkiyatlar yükleniyor…
         </p>
       ) : data.status === "error" ? (
-        <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+        <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<CircleAlert className="size-6" />} title="Sevkiyatlar yüklenemedi" description={data.message} action={<Button size="lg" onClick={() => setAttempt((n) => n + 1)}>Tekrar dene</Button>} />
         </div>
       ) : data.items.length === 0 ? (
-        <section aria-label="Sevkiyatlar" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Sevkiyatlar" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Truck className="size-6" />} title="Bu filtrede sevkiyat yok" description="Bir toplama görevi tamamlandığında taslak sevkiyat burada görünür." />
         </section>
       ) : (
         <ul aria-label="Sevkiyatlar" className="flex flex-col gap-3">
           {data.items.map((s) => (
-            <li key={s.id} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-4 shadow-e1">
+            <li key={s.id} className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4 shadow-e1">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <h2 className="text-h3 text-fg">
                   <Link href={shipmentHref(s.id)} className="underline-offset-2 hover:underline">

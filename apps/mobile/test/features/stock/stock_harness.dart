@@ -7,7 +7,7 @@ import 'package:bayios_mobile/core/auth/auth_controller.dart';
 import 'package:bayios_mobile/core/auth/auth_repository.dart';
 import 'package:bayios_mobile/core/providers.dart';
 import 'package:bayios_mobile/core/session/session_controller.dart';
-import 'package:bayios_mobile/core/ui/app_theme.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
 import 'package:bayios_mobile/features/stock/scanner.dart';
 import 'package:bayios_mobile/features/stock/stock_errors.dart';
 import 'package:bayios_mobile/features/stock/stock_feature.dart';

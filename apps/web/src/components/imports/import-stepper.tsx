@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 import { WIZARD_STEPS, stepLabels, stepState, type WizardStep } from "@/lib/imports/steps";
 

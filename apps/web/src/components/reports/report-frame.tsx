@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarRange, CircleAlert, Lock } from "lucide-react";
+import { ArrowLeft, CalendarRange, CircleAlert, Lock } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -41,7 +41,7 @@ export function ReportGate({ report, children }: { report: ReportDefinition; chi
     <>
       <BackLink />
       <PageHeader title={report.title} />
-      <section aria-label={`${report.title} durumu`} className="rounded-lg border border-line bg-card shadow-e1">
+      <section aria-label={`${report.title} durumu`} className="rounded-xl border border-line bg-card shadow-e1">
         <EmptyState
           icon={<Lock className="size-6" />}
           title="Bu raporu görme yetkiniz yok"
@@ -85,7 +85,7 @@ export function ReportFrame({
         description={report.description}
         actions={allowed.export ? <ExportButtons report={report.id} filters={exportFilters} today={today} /> : undefined}
       />
-      <section aria-label="Filtreler" className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1">
+      <section aria-label="Filtreler" className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1">
         {filters}
       </section>
       {children}
@@ -179,7 +179,7 @@ export function WarehouseFilter({ value, onChange }: { value: string; onChange: 
 /** Report-level error with retry; stays on the page. */
 export function ReportError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+    <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
       <EmptyState
         headingLevel="h2"
         icon={<CircleAlert className="size-6" />}
@@ -194,7 +194,7 @@ export function ReportError({ message, onRetry }: { message: string; onRetry: ()
 /** Shown instead of the report while the range is invalid (nothing is requested). */
 export function InvalidRange({ message }: { message: string }) {
   return (
-    <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+    <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
       <EmptyState headingLevel="h2" icon={<CalendarRange className="size-6" />} title="Tarih aralığını düzeltin" description={message} />
     </div>
   );
@@ -208,7 +208,7 @@ export function StatList({ label, stats, loading = false }: { label: string; sta
     <section aria-label={label} aria-busy={loading || undefined}>
       <dl className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         {stats.map((s) => (
-          <div key={s.label} className="flex flex-col gap-1 rounded-lg border border-line bg-card p-4 shadow-e1">
+          <div key={s.label} className="flex flex-col gap-1 rounded-xl border border-line bg-card p-4 shadow-e1">
             <dt className="text-caption text-fg-muted">{s.label}</dt>
             <dd className={cn("text-h2 text-fg tabular-nums", loading && "animate-pulse text-fg-muted")}>{loading ? "…" : s.value}</dd>
             {s.hint ? <dd className="text-caption text-fg-muted">{s.hint}</dd> : null}

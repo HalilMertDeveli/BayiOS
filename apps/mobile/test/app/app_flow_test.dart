@@ -4,6 +4,7 @@ import 'package:bayios_mobile/core/api/api_exception.dart';
 import 'package:bayios_mobile/core/auth/auth_controller.dart';
 import 'package:bayios_mobile/core/providers.dart';
 import 'package:bayios_mobile/core/session/active_tenant_store.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,7 +17,7 @@ final _pickingFeature = AppFeature(
   id: 'picking',
   path: '/gorevler',
   label: (_) => 'Görevler',
-  icon: Icons.checklist,
+  icon: AppIcons.document,
   isVisible: (access) => access.canSome('tasks.pick'),
   builder: (_, _) => const Scaffold(body: Text('picking-screen')),
 );

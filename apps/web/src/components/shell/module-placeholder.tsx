@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Construction } from "lucide-react";
+import { Construction } from "@/components/ui/icons";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { findNavItem } from "@/lib/navigation";
@@ -12,7 +12,7 @@ export function ModulePlaceholder({ href, children }: { href: string; children?:
   return (
     <>
       <PageHeader title={item.label} />
-      <section aria-label={`${item.label} durumu`} className="rounded-lg border border-line bg-card shadow-e1">
+      <section aria-label={`${item.label} durumu`} className="rounded-xl border border-line bg-card shadow-e1">
         <EmptyState
           icon={<Construction className="size-6" />}
           title="Bu modül henüz geliştiriliyor"

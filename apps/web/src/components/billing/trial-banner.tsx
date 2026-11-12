@@ -2,7 +2,7 @@
 
 import { useCallback, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { Clock, X } from "lucide-react";
+import { Clock, X } from "@/components/ui/icons";
 import { PLAN_PAGE_HREF, planLabel } from "@/lib/billing/labels";
 import { daysLeftText, trialNotice } from "@/lib/billing/trial";
 import { useSession } from "@/lib/session/session-context";

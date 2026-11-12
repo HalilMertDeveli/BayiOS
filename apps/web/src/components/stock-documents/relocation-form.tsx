@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRightLeft, Lock } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, Lock } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
 import { CheckboxField } from "@/components/ui/checkbox-field";
@@ -125,7 +125,7 @@ export function RelocationForm() {
       <>
         <BackLink />
         <PageHeader title="Raf taşıma" />
-        <section className="rounded-lg border border-line bg-card shadow-e1">
+        <section className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<Lock className="size-6" />}
             title="Raf taşıma yetkiniz yok"
@@ -231,7 +231,7 @@ export function RelocationForm() {
           Raf taşıma yalnızca raf/göz takibi açık depolarda yapılır. Depo sayfasından bir depoda raf/göz takibini açın.
         </FormAlert>
       ) : null}
-      <form aria-label="Raf taşıma" noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1">
+      <form aria-label="Raf taşıma" noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1">
         <Select
           label="Depo"
           size="lg"

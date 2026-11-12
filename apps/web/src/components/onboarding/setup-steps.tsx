@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { Download, FileUp, PackagePlus, Send, Warehouse as WarehouseIcon } from "lucide-react";
+import { Download, FileUp, PackagePlus, Send, Warehouse as WarehouseIcon } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { InviteLinkDialog, toIssuedLink, type IssuedLink } from "@/components/members/invite-dialogs";
 import { Button, buttonClasses } from "@/components/ui/button";

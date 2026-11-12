@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useId } from "react";
-import { Shuffle, Save } from "lucide-react";
+import { Shuffle, Save } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -123,7 +123,7 @@ export function TaskSupervisorPanel({ loaded, onLoaded, onReload }: { loaded: Lo
   };
 
   return (
-    <section aria-labelledby={`${uid}-supervisor`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1">
+    <section aria-labelledby={`${uid}-supervisor`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1">
       <h2 id={`${uid}-supervisor`} className="text-h3 text-fg">
         Yönetici işlemleri
       </h2>

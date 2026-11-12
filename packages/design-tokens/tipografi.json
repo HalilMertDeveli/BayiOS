@@ -1,0 +1,186 @@
+[
+  {
+    "name": "Button",
+    "family": "Inter Tight",
+    "style": "Medium",
+    "size": 14,
+    "lineHeight": "20px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Button S",
+    "family": "Inter Tight",
+    "style": "Medium",
+    "size": 12,
+    "lineHeight": "16px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Heading/H1",
+    "family": "Inter Tight",
+    "style": "Bold",
+    "size": 44,
+    "lineHeight": "56px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Heading/H2",
+    "family": "Inter Tight",
+    "style": "Bold",
+    "size": 40,
+    "lineHeight": "50px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Heading/H3",
+    "family": "Inter Tight",
+    "style": "Bold",
+    "size": 36,
+    "lineHeight": "46px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Heading/H4",
+    "family": "Inter Tight",
+    "style": "Bold",
+    "size": 32,
+    "lineHeight": "42px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Heading/H5",
+    "family": "Inter Tight",
+    "style": "Bold",
+    "size": 24,
+    "lineHeight": "34px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Large/Regular",
+    "family": "Inter Tight",
+    "style": "Regular",
+    "size": 18,
+    "lineHeight": "24px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Large/Medium",
+    "family": "Inter Tight",
+    "style": "Medium",
+    "size": 18,
+    "lineHeight": "24px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Large/Semi Bold",
+    "family": "Inter Tight",
+    "style": "SemiBold",
+    "size": 18,
+    "lineHeight": "24px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Large/Bold",
+    "family": "Inter Tight",
+    "style": "Bold",
+    "size": 18,
+    "lineHeight": "24px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Medium/Regular",
+    "family": "Inter Tight",
+    "style": "Regular",
+    "size": 16,
+    "lineHeight": "20px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Medium/Medium",
+    "family": "Inter Tight",
+    "style": "Medium",
+    "size": 16,
+    "lineHeight": "20px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Medium/Semi Bold",
+    "family": "Inter Tight",
+    "style": "SemiBold",
+    "size": 16,
+    "lineHeight": "20px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Medium/Bold",
+    "family": "Inter Tight",
+    "style": "Bold",
+    "size": 16,
+    "lineHeight": "20px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Small/Regular",
+    "family": "Inter Tight",
+    "style": "Regular",
+    "size": 14,
+    "lineHeight": "18px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Small/Medium",
+    "family": "Inter Tight",
+    "style": "Medium",
+    "size": 14,
+    "lineHeight": "18px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Small/Semi Bold",
+    "family": "Inter Tight",
+    "style": "SemiBold",
+    "size": 14,
+    "lineHeight": "18px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "Small/Bold",
+    "family": "Inter Tight",
+    "style": "Bold",
+    "size": 14,
+    "lineHeight": "18px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "X-Samll/Regular",
+    "family": "Inter Tight",
+    "style": "Regular",
+    "size": 12,
+    "lineHeight": "16px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "X-Samll/Medium",
+    "family": "Inter Tight",
+    "style": "Medium",
+    "size": 12,
+    "lineHeight": "16px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "X-Samll/Semi Bold",
+    "family": "Inter Tight",
+    "style": "SemiBold",
+    "size": 12,
+    "lineHeight": "16px",
+    "letterSpacing": "0%"
+  },
+  {
+    "name": "X-Samll/Bold",
+    "family": "Inter Tight",
+    "style": "Bold",
+    "size": 12,
+    "lineHeight": "16px",
+    "letterSpacing": "0%"
+  }
+]

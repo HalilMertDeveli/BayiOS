@@ -18,7 +18,7 @@ export function StepFrame({
   // Unique per instance: a hidden (kept-alive) previous route may still hold another step card.
   const headingId = `${useId()}-step`;
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-5 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <section aria-labelledby={headingId} className="flex flex-col gap-5 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
       <div className="flex flex-col gap-1">
         <h2 id={headingId} ref={headingRef} tabIndex={-1} className="text-h2 text-fg focus:outline-none">
           {title}

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
+import { cn } from "@/lib/cn";
 import Link from "next/link";
-import { Bot, ChevronRight, CircleAlert, ClipboardCheck, ClipboardList, LayoutDashboard, PackageMinus, Plus, ShoppingCart, Sparkles, type LucideIcon } from "lucide-react";
+import { Bot, ChevronRight, CircleAlert, ClipboardCheck, ClipboardList, LayoutDashboard, PackageMinus, Plus, ShoppingCart, Sparkles, type IconComponent } from "@/components/ui/icons";
 import { TaskStatusBadge } from "@/components/fulfilment/fulfilment-badges";
 import { SetupChecklist } from "@/components/onboarding/setup-checklist";
 import { OrderStatus } from "@/components/orders/order-badges";
@@ -102,7 +103,7 @@ export function Dashboard() {
           {tiles.plan ? <PlanTile /> : null}
         </div>
       ) : (
-        <section aria-label="Pano durumu" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Pano durumu" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<LayoutDashboard className="size-6" />}
             title="Panoda gösterilecek özet yok"
@@ -126,7 +127,7 @@ function Tile<T>({
 }: {
   id: string;
   title: string;
-  Icon: LucideIcon;
+  Icon: IconComponent;
   href: string;
   linkLabel: string;
   state: TileState<T>;
@@ -136,13 +137,16 @@ function Tile<T>({
   // Unique per instance: a hidden (kept-alive) previous route may hold the same tile (a11y audit A-1).
   const headingId = `${useId()}-tile-${id}`;
   return (
-    <section aria-labelledby={headingId} aria-busy={state.status === "loading" || undefined} className="flex flex-col rounded-xl border border-line bg-card shadow-e1">
-      <h2 id={headingId} className="flex items-center gap-3 px-5 pt-5 text-h3 text-fg">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-subtle text-brand-fg" aria-hidden="true">
+    <section aria-labelledby={headingId} aria-busy={state.status === "loading" || undefined} className="flex flex-col rounded-2xl border border-line bg-card shadow-e1">
+      {/* UI kit card header: title left, bordered icon box right, hairline under it. */}
+      <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
+        <h2 id={headingId} className="text-h3 text-fg">
+          {title}
+        </h2>
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-line text-fg-muted" aria-hidden="true">
           <Icon className="size-5" />
         </span>
-        {title}
-      </h2>
+      </div>
       <div className="flex flex-1 flex-col gap-3 px-5 pt-4 pb-5">
         {state.status === "loading" ? (
           <div aria-hidden="true" className="flex flex-col gap-2">
@@ -177,8 +181,8 @@ function Tile<T>({
 
 function Kpi({ value, label }: { value: string; label: string }) {
   return (
-    <p className="flex flex-wrap items-baseline gap-x-2">
-      <span className="text-display font-semibold tracking-tight text-fg tabular-nums">{value}</span>
+    <p className="flex flex-wrap items-baseline gap-x-2 rounded-xl bg-sunken px-4 py-3">
+      <span className="text-display font-bold tracking-tight text-fg tabular-nums">{value}</span>
       <span className="text-body text-fg-muted">{label}</span>
     </p>
   );
@@ -202,11 +206,11 @@ function StatusBar({ items }: { items: readonly { status: string; count: number 
   const total = items.reduce((sum, i) => sum + i.count, 0);
   if (total === 0) return null;
   return (
-    <div aria-hidden="true" data-testid="today-status-bar" className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-sunken">
+    <div aria-hidden="true" data-testid="today-status-bar" className="flex h-3 w-full gap-1 overflow-hidden rounded-sm bg-chart-track">
       {items.map((i) => {
         const key = orderBadgeKey(i.status);
         const tone = key ? orderStatusMeta[key].tone : "neutral";
-        return <span key={i.status} className={toneFill[tone]} style={{ width: `${(i.count / total) * 100}%` }} />;
+        return <span key={i.status} className={cn("rounded-xs", toneFill[tone])} style={{ width: `${(i.count / total) * 100}%` }} />;
       })}
     </div>
   );

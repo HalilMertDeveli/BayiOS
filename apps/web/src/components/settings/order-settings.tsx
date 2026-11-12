@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, useId } from "react";
-import { CircleAlert, Lock, RotateCcw, Save, X } from "lucide-react";
+import { CircleAlert, Lock, RotateCcw, Save, X } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Button } from "@/components/ui/button";
 import { CheckboxField } from "@/components/ui/checkbox-field";
@@ -64,7 +64,7 @@ export function OrderSettings() {
   };
 
   return (
-    <section aria-labelledby={`${uid}-order-settings`} className="flex flex-col gap-4 rounded-lg border border-line bg-card p-4 shadow-e1 sm:p-6">
+    <section aria-labelledby={`${uid}-order-settings`} className="flex flex-col gap-4 rounded-xl border border-line bg-card p-4 shadow-e1 sm:p-6">
       <div className="flex flex-col gap-1">
         <h2 id={`${uid}-order-settings`} className="text-h3 text-fg">
           Sipariş ayarları

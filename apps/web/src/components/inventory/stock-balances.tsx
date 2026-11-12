@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
-import { ArrowRightLeft, Boxes, CircleAlert, PackagePlus, Rows3, Rows4, ScanBarcode, SearchX, SlidersHorizontal } from "lucide-react";
+import { ArrowRightLeft, Boxes, CircleAlert, PackagePlus, Rows3, Rows4, ScanBarcode, SearchX, SlidersHorizontal } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -275,7 +275,7 @@ export function StockBalances() {
         }
       />
 
-      <section aria-label="Filtreler" className="flex flex-col gap-3 rounded-lg border border-line bg-card p-4 shadow-e1">
+      <section aria-label="Filtreler" className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 shadow-e1">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_2fr]">
           <Select
             label="Depo"
@@ -343,7 +343,7 @@ export function StockBalances() {
         </div>
 
         {current?.status === "error" ? (
-          <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+          <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
             <EmptyState
               headingLevel="h3"
               icon={<CircleAlert className="size-6" />}
@@ -379,13 +379,13 @@ export function StockBalances() {
               {loading ? (
                 <SkeletonCards />
               ) : rows.length === 0 ? (
-                <div className="rounded-lg border border-line bg-card">{emptyView}</div>
+                <div className="rounded-xl border border-line bg-card">{emptyView}</div>
               ) : (
                 <ul aria-label="Stok bakiyeleri" className="flex flex-col gap-2">
                   {rows.map((b) => {
                     const v = skuOf(b);
                     return (
-                      <li key={b.id} className="rounded-lg border border-line bg-card p-4 shadow-e1">
+                      <li key={b.id} className="rounded-xl border border-line bg-card p-4 shadow-e1">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex min-w-0 flex-col">
                             <Link

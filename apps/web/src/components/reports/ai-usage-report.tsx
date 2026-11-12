@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { Bot } from "lucide-react";
+import { Bot } from "@/components/ui/icons";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { getAiUsage, type AiUsageReport } from "@/lib/reports/api";
@@ -57,7 +57,7 @@ function AiUsageReportBody() {
       ) : state.status === "error" ? (
         <ReportError message={state.message} onRetry={reload} />
       ) : empty ? (
-        <div className="rounded-lg border border-line bg-card shadow-e1">
+        <div className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState icon={<Bot className="size-6" />} title="Bu aralıkta AI kullanımı yok" description="Seçilen günlerde WhatsApp mesajı ayrıştırılmadı." />
         </div>
       ) : (

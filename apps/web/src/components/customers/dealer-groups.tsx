@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent, useId } from "react";
 import Link from "next/link";
-import { Archive, ArchiveRestore, ArrowLeft, CircleAlert, Pencil, Plus, UsersRound } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, CircleAlert, Pencil, Plus, UsersRound } from "@/components/ui/icons";
 import { FormAlert } from "@/components/catalog/form-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -132,7 +132,7 @@ export function DealerGroups() {
           </label>
         </div>
         {state.status === "error" ? (
-          <div role="alert" className="rounded-lg border border-line bg-card shadow-e1">
+          <div role="alert" className="rounded-xl border border-line bg-card shadow-e1">
             <EmptyState headingLevel="h3" icon={<CircleAlert className="size-6" />} title="Gruplar yüklenemedi" description={state.message} action={<Button onClick={reload}>Tekrar dene</Button>} />
           </div>
         ) : (
@@ -157,9 +157,9 @@ export function DealerGroups() {
             </div>
             <ul aria-label="Bayi grupları" className="flex flex-col gap-2 md:hidden">
               {state.status === "loading" ? <li className="py-6 text-center text-body text-fg-muted">Yükleniyor…</li> : null}
-              {state.status === "ready" && rows.length === 0 ? <li className="rounded-lg border border-line bg-card p-4 text-body text-fg-muted">Henüz bayi grubu yok.</li> : null}
+              {state.status === "ready" && rows.length === 0 ? <li className="rounded-xl border border-line bg-card p-4 text-body text-fg-muted">Henüz bayi grubu yok.</li> : null}
               {rows.map((g) => (
-                <li key={g.id} className="rounded-lg border border-line bg-card p-4 shadow-e1">
+                <li key={g.id} className="rounded-xl border border-line bg-card p-4 shadow-e1">
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-medium text-fg">{g.name}</span>
                     <Badge tone={g.status === "archived" ? "warning" : "success"}>{g.status === "archived" ? "Arşivlendi" : "Aktif"}</Badge>

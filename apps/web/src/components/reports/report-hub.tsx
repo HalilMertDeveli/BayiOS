@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeftRight, Bot, ChevronRight, ClipboardList, Lock, PackageMinus, ShoppingCart, Trophy, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Bot, ChevronRight, ClipboardList, Lock, PackageMinus, ShoppingCart, Trophy, type IconComponent } from "@/components/ui/icons";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { ordersOnly, reportAccess, reportHref, visibleReports, type ReportId } from "@/lib/reports/definitions";
 import { useSession } from "@/lib/session/session-context";
 
-const ICONS: Record<ReportId, LucideIcon> = {
+const ICONS: Record<ReportId, IconComponent> = {
   orders: ShoppingCart,
   "top-products": Trophy,
   "critical-stock": PackageMinus,
@@ -24,7 +24,7 @@ export function ReportHub() {
     return (
       <>
         <PageHeader title="Raporlar" />
-        <section aria-label="Raporlar durumu" className="rounded-lg border border-line bg-card shadow-e1">
+        <section aria-label="Raporlar durumu" className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<Lock className="size-6" />}
             title="Raporları görme yetkiniz yok"
@@ -51,7 +51,7 @@ export function ReportHub() {
             <li key={report.id}>
               <Link
                 href={reportHref(report.id)}
-                className="flex h-full items-start gap-3 rounded-lg border border-line bg-card p-4 shadow-e1 hover:bg-sunken"
+                className="flex h-full items-start gap-3 rounded-xl border border-line bg-card p-4 shadow-e1 hover:bg-sunken"
               >
                 <Icon className="mt-0.5 size-5 shrink-0 text-brand-fg" aria-hidden="true" />
                 <span className="flex flex-1 flex-col gap-1">

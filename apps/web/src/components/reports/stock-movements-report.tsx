@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, type TableColumn } from "@/components/ui/table";
@@ -66,7 +66,7 @@ function StockMovementsReportBody() {
       ) : state.status === "error" ? (
         <ReportError message={state.message} onRetry={reload} />
       ) : report && report.totals.length === 0 ? (
-        <div className="rounded-lg border border-line bg-card shadow-e1">
+        <div className="rounded-xl border border-line bg-card shadow-e1">
           <EmptyState
             icon={<ArrowLeftRight className="size-6" />}
             title="Bu aralıkta stok hareketi yok"

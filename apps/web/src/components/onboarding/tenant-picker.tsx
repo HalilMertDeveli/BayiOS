@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, ChevronRight, Plus } from "lucide-react";
+import { Building2, ChevronRight, Plus } from "@/components/ui/icons";
 import { FormMessage } from "@/components/auth/auth-layout";
 import { Badge } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";

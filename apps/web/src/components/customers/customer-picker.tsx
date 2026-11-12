@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, UserRound } from "lucide-react";
+import { Search, UserRound } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { listCustomers, type Customer } from "@/lib/customers/api";
