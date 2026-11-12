@@ -1,6 +1,9 @@
 import 'dart:async';
 
-import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -73,12 +76,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
+      appBar: AppTopBar(
+        title: widget.title,
         actions: [
-          IconButton(
+          TopBarIconButton(
             tooltip: l10n.stockScanTorch,
-            icon: const Icon(Icons.flashlight_on_outlined),
+            icon: AppIcons.flashlight,
             onPressed: _controller.toggleTorch,
           ),
         ],
@@ -96,19 +99,19 @@ class _ScannerScreenState extends State<ScannerScreen> {
           SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.all(BosSpace.s16),
+              padding: const EdgeInsets.all(AppSpacing.md),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(l10n.stockScanHint, textAlign: TextAlign.center),
-                  const SizedBox(height: BosSpace.s12),
+                  const SizedBox(height: AppSpacing.sm),
                   OutlinedButton.icon(
                     key: const Key('scanner-manual'),
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.keyboard_outlined),
+                    icon: const AppIcon(AppIcons.keyboard),
                     label: Text(l10n.stockScanManual),
                     style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(BosSize.primaryAction),
+                      minimumSize: const Size.fromHeight(AppSize.primaryAction),
                     ),
                   ),
                 ],
@@ -136,28 +139,28 @@ class ScannerErrorPanel extends StatelessWidget {
       _ => l10n.stockScanFailed,
     };
     return ColoredBox(
-      color: BosColors.surfacePage,
+      color: context.colors.surfacePage,
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.all(BosSpace.s24),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
+              AppIcon(
                 code == MobileScannerErrorCode.permissionDenied
-                    ? Icons.no_photography_outlined
-                    : Icons.videocam_off_outlined,
+                    ? AppIcons.cameraOff
+                    : AppIcons.videocamOff,
                 size: 48,
-                color: BosColors.danger.fg,
+                color: context.colors.danger.fg,
               ),
-              const SizedBox(height: BosSpace.s16),
+              const SizedBox(height: AppSpacing.md),
               Semantics(
                 liveRegion: true,
                 child: Text(
                   message,
                   key: const Key('scanner-error'),
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyLarge,
+                  style: context.text.bodyLarge,
                 ),
               ),
             ],

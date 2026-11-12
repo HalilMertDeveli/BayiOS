@@ -1,8 +1,14 @@
 import 'package:bayios_mobile/core/api/api_exception.dart';
 import 'package:bayios_mobile/core/api/problem_messages.dart';
+import 'package:bayios_mobile/core/auth/auth_controller.dart';
 import 'package:bayios_mobile/core/providers.dart';
+import 'package:bayios_mobile/core/session/display_name.dart';
+import 'package:bayios_mobile/core/session/session_controller.dart';
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
 import 'package:bayios_mobile/core/ui/components.dart';
-import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,14 +30,16 @@ class LoadingView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox.square(
-              dimension: 40,
-              child: CircularProgressIndicator(strokeWidth: 4),
+              dimension: 36,
+              child: CircularProgressIndicator(strokeWidth: 3),
             ),
-            const SizedBox(height: BosSpace.s16),
+            const SizedBox(height: AppSpacing.md),
             ExcludeSemantics(
               child: Text(
                 text,
-                style: BosType.body.copyWith(color: BosColors.textSecondary),
+                style: context.text.bodySmall?.copyWith(
+                  color: context.colors.textMuted,
+                ),
               ),
             ),
           ],
@@ -103,17 +111,17 @@ class ErrorView extends StatelessWidget {
     final offline = isConnectionError(error);
     return Center(
       child: EmptyState(
-        icon: offline ? Icons.cloud_off_outlined : Icons.error_outline,
-        tone: offline ? BosColors.warning : BosColors.danger,
+        icon: offline ? AppIcons.offline : AppIcons.infoCircle,
+        tone: offline ? Tone.warning : Tone.danger,
         title: errorMessage(l10n, error),
         action: onRetry == null
             ? null
             : FilledButton.icon(
                 onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
+                icon: const AppIcon(AppIcons.refresh),
                 label: Text(l10n.retry),
                 style: FilledButton.styleFrom(
-                  minimumSize: const Size(200, BosSize.primaryAction),
+                  minimumSize: const Size(200, AppSize.minTouchTarget),
                 ),
               ),
       ),
@@ -129,26 +137,33 @@ class ErrorMessageBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final danger = context.colors.danger;
     return Semantics(
       liveRegion: true,
       container: true,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: BosColors.danger.bg,
-          border: Border.all(color: BosColors.danger.border),
-          borderRadius: BorderRadius.circular(BosRadius.lg),
+          color: danger.bg,
+          border: Border.all(color: danger.border),
+          borderRadius: AppRadius.mdAll,
         ),
         child: Padding(
-          padding: const EdgeInsets.all(BosSpace.s12),
+          padding: const EdgeInsets.all(AppSpacing.sm),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.error_outline, color: BosColors.danger.fg),
-              const SizedBox(width: BosSpace.s8),
+              AppIcon(
+                AppIcons.infoCircle,
+                color: danger.fg,
+                size: AppSize.icon,
+              ),
+              const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Text(
                   message,
-                  style: TextStyle(color: BosColors.danger.fg),
+                  style: context.text.bodySmall?.medium.copyWith(
+                    color: danger.fg,
+                  ),
                 ),
               ),
             ],
@@ -169,8 +184,9 @@ class OfflineBanner extends ConsumerWidget {
     final reachable = ref.watch(networkStatusProvider);
     if (reachable) return const SizedBox.shrink();
     final l10n = AppLocalizations.of(context);
+    final warning = context.colors.warning;
     return Material(
-      color: BosColors.warning.bg,
+      color: warning.bg,
       child: SafeArea(
         bottom: false,
         child: Semantics(
@@ -178,19 +194,22 @@ class OfflineBanner extends ConsumerWidget {
           container: true,
           child: Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal: BosSpace.s16,
-              vertical: BosSpace.s4,
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.xxs,
             ),
             child: Row(
               children: [
-                Icon(Icons.wifi_off, color: BosColors.warning.fg),
-                const SizedBox(width: BosSpace.s12),
+                AppIcon(
+                  AppIcons.wifiOff,
+                  color: warning.fg,
+                  size: AppSize.icon,
+                ),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     l10n.offlineBanner,
-                    style: TextStyle(
-                      color: BosColors.warning.fg,
-                      fontWeight: FontWeight.w600,
+                    style: context.text.bodySmall?.semiBold.copyWith(
+                      color: warning.fg,
                     ),
                   ),
                 ),
@@ -198,9 +217,7 @@ class OfflineBanner extends ConsumerWidget {
                   key: const Key('offline-banner-retry'),
                   onPressed: () =>
                       ref.read(networkStatusProvider.notifier).probe(),
-                  style: TextButton.styleFrom(
-                    foregroundColor: BosColors.warning.fg,
-                  ),
+                  style: TextButton.styleFrom(foregroundColor: warning.fg),
                   child: Text(l10n.retry),
                 ),
               ],
@@ -222,3 +239,36 @@ String roleLabel(AppLocalizations l10n, String role) => switch (role) {
   'viewer' => l10n.roleViewer,
   _ => l10n.roleUnknown,
 };
+
+/// The signed-in user's initials avatar (top bar of the top-level pages).
+class UserAvatar extends ConsumerWidget {
+  const UserAvatar({super.key, this.size = 40});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(sessionControllerProvider);
+    if (session is! SessionReady) return const SizedBox.shrink();
+    final auth = ref.watch(authControllerProvider);
+    final name =
+        displayNameFor(session.me, auth is SignedIn ? auth.user : null) ??
+        session.tenantName;
+    return AppAvatar(name: name, size: size);
+  }
+}
+
+/// Loading state of a list page: card-shaped skeletons (announced as
+/// "Yükleniyor…"), scrollable so pull-to-refresh keeps working.
+class ListLoadingView extends StatelessWidget {
+  const ListLoadingView({super.key, this.count = 4});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    physics: const AlwaysScrollableScrollPhysics(),
+    padding: const EdgeInsets.all(AppSpacing.md),
+    children: [SkeletonList(count: count)],
+  );
+}

@@ -1,6 +1,7 @@
 import 'package:bayios_mobile/core/api/contract.dart';
 import 'package:bayios_mobile/core/api/endpoint.dart';
 import 'package:bayios_mobile/core/session/access.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
@@ -38,8 +39,8 @@ class AppFeature {
   /// Turkish, absolute path, e.g. `/gorevler`.
   final String path;
   final String Function(AppLocalizations l10n) label;
-  final IconData icon;
-  final IconData? selectedIcon;
+  final AppIconData icon;
+  final AppIconData? selectedIcon;
   final Widget Function(BuildContext context, GoRouterState state) builder;
 
   /// Sub-routes, relative to [path] (e.g. `GoRoute(path: ':id', …)`).

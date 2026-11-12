@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:bayios_mobile/core/api/api_exception.dart';
 import 'package:bayios_mobile/core/session/session_controller.dart';
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
 import 'package:bayios_mobile/core/ui/components.dart';
-import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/dashboard/dashboard_data.dart';
 import 'package:bayios_mobile/features/picking/pick_controller.dart';
@@ -19,6 +22,7 @@ import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 /// /gorevler/:id — task / order detail with the shelf-ordered pick list and
 /// the scan flow (M03/M04): camera or manual code, quantity, shortage,
@@ -43,32 +47,33 @@ class PickScreen extends ConsumerWidget {
       );
     }
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.pickingDefaultTitle)),
+      appBar: AppTopBar(title: l10n.pickingDefaultTitle),
       body: switch (async.error) {
         null => const LoadingView(),
         final ApiException e when e.kind == ApiErrorKind.notFound => Center(
           child: Padding(
-            padding: const EdgeInsets.all(BosSpace.s24),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.search_off,
-                  size: 48,
-                  color: BosColors.textMuted,
+                const IconBadge(
+                  icon: AppIcons.search,
+                  tone: Tone.neutral,
+                  size: AppSize.primaryAction,
+                  round: true,
                 ),
-                const SizedBox(height: BosSpace.s16),
+                const SizedBox(height: AppSpacing.md),
                 Text(
                   l10n.pickingNotFound,
                   key: const Key('pick-not-found'),
                   textAlign: TextAlign.center,
-                  style: BosType.bodyLg,
+                  style: context.text.bodyLarge,
                 ),
-                const SizedBox(height: BosSpace.s24),
+                const SizedBox(height: AppSpacing.lg),
                 FilledButton(
                   onPressed: () => context.go('/gorevler'),
                   style: FilledButton.styleFrom(
-                    minimumSize: const Size(200, BosSize.primaryAction),
+                    minimumSize: const Size(200, AppSize.primaryAction),
                   ),
                   child: Text(l10n.pickingBackToTasks),
                 ),
@@ -222,20 +227,17 @@ class _PickViewState extends ConsumerState<_PickView> {
     final showOrder = widget.session.access.canSome('orders.read');
 
     return Scaffold(
-      appBar: AppBar(
-        // The full order number is what the picker compares with the paper
-        // / label; the status badge sits in the body so it is not truncated.
-        title: FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(l10n.pickingTitle(task.orderNumber)),
-        ),
+      // The full order number is what the picker compares with the paper /
+      // label; the status badge sits in the body so it is not truncated.
+      appBar: AppTopBar(
+        title: l10n.pickingTitle(task.orderNumber),
+        fitTitle: true,
       ),
       body: RefreshIndicator(
         onRefresh: c.reload,
         child: ListView(
           key: const Key('pick-scroll'),
-          padding: const EdgeInsets.all(BosSpace.s16),
+          padding: const EdgeInsets.all(AppSpacing.md),
           children: [
             Semantics(
               container: true,
@@ -243,8 +245,8 @@ class _PickViewState extends ConsumerState<_PickView> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Wrap(
-                    spacing: BosSpace.s8,
-                    runSpacing: BosSpace.s4,
+                    spacing: AppSpacing.xs,
+                    runSpacing: AppSpacing.xxs,
                     children: [
                       TaskStatusBadge(task.status),
                       TaskPriorityBadge(task.priority),
@@ -252,16 +254,16 @@ class _PickViewState extends ConsumerState<_PickView> {
                   ),
                   if (taskCustomerLine(l10n, task) case final String customer)
                     Padding(
-                      padding: const EdgeInsets.only(top: BosSpace.s4),
+                      padding: const EdgeInsets.only(top: AppSpacing.xxs),
                       child: Text(
                         customer,
                         key: const Key('pick-customer'),
-                        style: BosType.bodyLg,
+                        style: context.text.titleMedium,
                       ),
                     ),
-                  const SizedBox(height: BosSpace.s8),
+                  const SizedBox(height: AppSpacing.sm),
                   PickProgressBar(value: totals.progress),
-                  const SizedBox(height: BosSpace.s4),
+                  const SizedBox(height: AppSpacing.xxs),
                   Text(
                     [
                       l10n.pickingProgress(
@@ -273,19 +275,19 @@ class _PickViewState extends ConsumerState<_PickView> {
                         l10n.tasksShort(formatQuantity(totals.short)),
                     ].join(' · '),
                     key: const Key('pick-progress'),
-                    style: BosType.body.copyWith(
-                      color: BosColors.textSecondary,
+                    style: context.text.bodySmall?.copyWith(
+                      color: context.colors.textMuted,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: BosSpace.s12),
+            const SizedBox(height: AppSpacing.sm),
             // After completion the "Toplama tamamlandı" banner says it all.
             if (c.notice case final notice?
                 when c.active || notice.tone != PickTone.success) ...[
               _Banner(feedback: notice, key: const Key('pick-notice')),
-              const SizedBox(height: BosSpace.s12),
+              const SizedBox(height: AppSpacing.sm),
             ],
             ..._status(context, l10n),
             // Result and manual entry first: "✗ Yanlış ürün" must be visible
@@ -293,23 +295,19 @@ class _PickViewState extends ConsumerState<_PickView> {
             // open.
             if (c.canWork) ...[
               _FeedbackBox(controller: c, current: current),
-              const SizedBox(height: BosSpace.s12),
+              const SizedBox(height: AppSpacing.sm),
             ],
             if (c.canWork && current != null) ...[
               _manualEntry(l10n),
-              const SizedBox(height: BosSpace.s12),
+              const SizedBox(height: AppSpacing.sm),
               _CurrentLine(controller: c, line: current),
-              const SizedBox(height: BosSpace.s16),
+              const SizedBox(height: AppSpacing.md),
             ],
             if (showOrder) ...[
               _OrderInfo(orderId: task.orderId),
-              const SizedBox(height: BosSpace.s16),
+              const SizedBox(height: AppSpacing.md),
             ],
-            Text(
-              l10n.pickingLinesTitle,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: BosSpace.s8),
+            SectionHeader(l10n.pickingLinesTitle),
             for (final line in c.lines) ...[
               _LineTile(
                 line: line,
@@ -318,7 +316,7 @@ class _PickViewState extends ConsumerState<_PickView> {
                     ? () => c.focusLine(line.id)
                     : null,
               ),
-              const SizedBox(height: BosSpace.s8),
+              const SizedBox(height: AppSpacing.xs),
             ],
           ],
         ),
@@ -345,7 +343,7 @@ class _PickViewState extends ConsumerState<_PickView> {
                 : l10n.pickingDoneNoShipment,
           ),
         ),
-        const SizedBox(height: BosSpace.s12),
+        const SizedBox(height: AppSpacing.sm),
       ];
     }
     if (c.canWork) return const [];
@@ -370,11 +368,11 @@ class _PickViewState extends ConsumerState<_PickView> {
     return [
       _Banner(feedback: info, key: const Key('pick-readonly')),
       if (c.canClaim) ...[
-        const SizedBox(height: BosSpace.s12),
+        const SizedBox(height: AppSpacing.sm),
         FilledButton.icon(
           key: const Key('pick-claim'),
           onPressed: c.pending == null ? c.claim : null,
-          icon: const Icon(Icons.pan_tool_alt_outlined),
+          icon: const AppIcon(AppIcons.handPointer),
           label: Text(
             c.pending == PickPending.claim
                 ? l10n.loading
@@ -383,47 +381,39 @@ class _PickViewState extends ConsumerState<_PickView> {
                 : l10n.pickingClaim,
           ),
           style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(BosSize.primaryAction),
+            minimumSize: const Size.fromHeight(AppSize.primaryAction),
           ),
         ),
       ],
-      const SizedBox(height: BosSpace.s12),
+      const SizedBox(height: AppSpacing.sm),
     ];
   }
 
   Widget _manualEntry(AppLocalizations l10n) {
     final shelf = controller.step == PickStep.location;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: TextField(
-            key: const Key('pick-manual-code'),
-            controller: _manual,
-            focusNode: _manualFocus,
-            textInputAction: TextInputAction.send,
-            autocorrect: false,
-            enableSuggestions: false,
-            // Hardware (keyboard-wedge) scanners type the code + Enter here.
-            onSubmitted: (_) => unawaited(_submitManual()),
-            decoration: InputDecoration(
-              labelText: l10n.pickingManualLabel,
-              hintText: shelf
-                  ? l10n.pickingManualHintShelf
-                  : l10n.pickingManualHintItem,
-            ),
-          ),
+    return LabeledField(
+      label: l10n.pickingManualLabel,
+      trailing: OutlinedButton(
+        key: const Key('pick-manual-submit'),
+        onPressed: controller.sending ? null : _submitManual,
+        child: Text(l10n.pickingManualSubmit),
+      ),
+      child: TextField(
+        key: const Key('pick-manual-code'),
+        controller: _manual,
+        focusNode: _manualFocus,
+        textInputAction: TextInputAction.send,
+        autocorrect: false,
+        enableSuggestions: false,
+        // Hardware (keyboard-wedge) scanners type the code + Enter here.
+        onSubmitted: (_) => unawaited(_submitManual()),
+        decoration: InputDecoration(
+          hintText: shelf
+              ? l10n.pickingManualHintShelf
+              : l10n.pickingManualHintItem,
+          prefixIcon: const AppIcon(AppIcons.scan),
         ),
-        const SizedBox(width: BosSpace.s8),
-        FilledButton.tonal(
-          key: const Key('pick-manual-submit'),
-          onPressed: controller.sending ? null : _submitManual,
-          style: FilledButton.styleFrom(
-            minimumSize: const Size(BosSize.minTouchTarget, 56),
-          ),
-          child: Text(l10n.pickingManualSubmit),
-        ),
-      ],
+      ),
     );
   }
 
@@ -434,75 +424,61 @@ class _PickViewState extends ConsumerState<_PickView> {
   ) {
     final c = controller;
     final done = totals.openLines == 0;
-    return Material(
-      elevation: 8,
-      color: BosColors.surfaceCard,
+    // Thumb-zone action bar: card surface with a hairline on top.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: context.colors.surfaceCard,
+        border: Border(top: BorderSide(color: context.colors.borderDefault)),
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
-            BosSpace.s16,
-            BosSpace.s8,
-            BosSpace.s16,
-            BosSpace.s12,
+            AppSpacing.md,
+            AppSpacing.xs,
+            AppSpacing.md,
+            AppSpacing.sm,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (!done) ...[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    IconButton.outlined(
-                      key: const Key('pick-qty-minus'),
-                      tooltip: l10n.pickingQuantityDecrease,
-                      onPressed: c.canDecrement ? c.decrementQuantity : null,
-                      icon: const Icon(Icons.remove),
-                      constraints: const BoxConstraints.tightFor(
-                        width: 56,
-                        height: 56,
-                      ),
+                LabeledField(
+                  label: l10n.pickingQuantityLabel,
+                  leading: StepperButton(
+                    key: const Key('pick-qty-minus'),
+                    tooltip: l10n.pickingQuantityDecrease,
+                    onPressed: c.canDecrement ? c.decrementQuantity : null,
+                    icon: AppIcons.minus4,
+                  ),
+                  trailing: StepperButton(
+                    key: const Key('pick-qty-plus'),
+                    tooltip: l10n.pickingQuantityIncrease,
+                    onPressed: c.canIncrement ? c.incrementQuantity : null,
+                    icon: AppIcons.plus4,
+                  ),
+                  child: TextField(
+                    key: const Key('pick-qty'),
+                    controller: _quantity,
+                    onChanged: c.setQuantityText,
+                    textAlign: TextAlign.center,
+                    style: context.text.titleLarge?.tabular,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
                     ),
-                    const SizedBox(width: BosSpace.s8),
-                    Expanded(
-                      child: TextField(
-                        key: const Key('pick-qty'),
-                        controller: _quantity,
-                        onChanged: c.setQuantityText,
-                        textAlign: TextAlign.center,
-                        style: BosType.h3,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: l10n.pickingQuantityLabel,
-                          errorText: switch (c.quantityError) {
-                            final e? => quantityErrorText(
-                              l10n,
-                              e,
-                              c.quantityMax,
-                            ),
-                            null => null,
-                          },
-                          errorMaxLines: 2,
-                        ),
-                      ),
+                    decoration: InputDecoration(
+                      // 16 + 24 + 16 = 56 dp, level with the − / + buttons.
+                      contentPadding: const EdgeInsets.all(AppSpacing.md),
+                      errorText: switch (c.quantityError) {
+                        final e? => quantityErrorText(l10n, e, c.quantityMax),
+                        null => null,
+                      },
+                      errorMaxLines: 2,
                     ),
-                    const SizedBox(width: BosSpace.s8),
-                    IconButton.outlined(
-                      key: const Key('pick-qty-plus'),
-                      tooltip: l10n.pickingQuantityIncrease,
-                      onPressed: c.canIncrement ? c.incrementQuantity : null,
-                      icon: const Icon(Icons.add),
-                      constraints: const BoxConstraints.tightFor(
-                        width: 56,
-                        height: 56,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: BosSpace.s8),
+                const SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
                     if (c.permissions.reportShortage && current != null) ...[
@@ -510,22 +486,22 @@ class _PickViewState extends ConsumerState<_PickView> {
                         key: const Key('pick-shortage'),
                         onPressed: c.sending ? null : () => _shortage(current),
                         style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, BosSize.primaryAction),
-                          foregroundColor: BosColors.danger.fg,
+                          minimumSize: const Size(0, AppSize.primaryAction),
+                          foregroundColor: context.colors.danger.fg,
                         ),
                         child: Text(l10n.pickingReportShortage),
                       ),
-                      const SizedBox(width: BosSpace.s8),
+                      const SizedBox(width: AppSpacing.xs),
                     ],
                     Expanded(
                       child: FilledButton.icon(
                         key: const Key('pick-camera'),
                         onPressed: c.sending ? null : _openCamera,
-                        icon: const Icon(Icons.qr_code_scanner),
+                        icon: const AppIcon(AppIcons.scan),
                         label: Text(l10n.pickingScanCamera),
                         style: FilledButton.styleFrom(
                           minimumSize: const Size.fromHeight(
-                            BosSize.primaryAction,
+                            AppSize.primaryAction,
                           ),
                         ),
                       ),
@@ -536,7 +512,7 @@ class _PickViewState extends ConsumerState<_PickView> {
                 FilledButton.icon(
                   key: const Key('pick-complete'),
                   onPressed: c.pending == null ? _complete : null,
-                  icon: const Icon(Icons.done_all),
+                  icon: const AppIcon(AppIcons.doneAll),
                   label: Text(
                     c.pending == PickPending.complete
                         ? l10n.loading
@@ -545,7 +521,7 @@ class _PickViewState extends ConsumerState<_PickView> {
                         : l10n.pickingComplete,
                   ),
                   style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(BosSize.primaryAction),
+                    minimumSize: const Size.fromHeight(AppSize.primaryAction),
                   ),
                 ),
             ],
@@ -573,138 +549,143 @@ class _CurrentLine extends StatelessWidget {
       _ => l10n.pickingStepItemNoLocation(line.sku),
     };
     final shelfStep = c.step == PickStep.location;
-    return DecoratedBox(
+    return AppCard(
       key: const Key('pick-current'),
-      decoration: BoxDecoration(
-        color: BosColors.surfaceCard,
-        border: Border.all(color: BosColors.brandPrimary, width: 2),
-        borderRadius: BorderRadius.circular(BosRadius.xl),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(BosSpace.s16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ScanStepIndicator(
-              key: const Key('pick-steps'),
-              current: shelfStep ? 0 : 1,
-              steps: [
-                ScanStep(
-                  l10n.scanStepShelf,
-                  detail: line.locationCode,
-                  skipped: line.locationId == null,
+      borderColor: context.colors.brandPrimary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ScanStepIndicator(
+            key: const Key('pick-steps'),
+            current: shelfStep ? 0 : 1,
+            steps: [
+              ScanStep(
+                l10n.scanStepShelf,
+                detail: line.locationCode,
+                skipped: line.locationId == null,
+              ),
+              ScanStep(l10n.scanStepProduct, detail: line.sku),
+              ScanStep(
+                l10n.scanStepQuantity,
+                detail:
+                    '${formatQuantity(line.quantityRemaining)} ${line.unit}',
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          // What to do now, in words (the indicator is the overview).
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: context.colors.brand.bg,
+              border: Border.all(color: context.colors.brand.border),
+              borderRadius: AppRadius.mdAll,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: AppSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  AppIcon(
+                    shelfStep ? AppIcons.shelves : AppIcons.scan,
+                    color: context.colors.brand.fg,
+                    size: AppSize.iconMd,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      stepText,
+                      key: const Key('pick-step'),
+                      style: context.text.titleMedium?.bold.copyWith(
+                        color: context.colors.brand.fg,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          if (line.locationCode != null)
+            Row(
+              children: [
+                AppIcon(
+                  AppIcons.pin3,
+                  size: AppSize.iconLg,
+                  color: context.colors.brandPrimary,
                 ),
-                ScanStep(l10n.scanStepProduct, detail: line.sku),
-                ScanStep(
-                  l10n.scanStepQuantity,
-                  detail:
-                      '${formatQuantity(line.quantityRemaining)} ${line.unit}',
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    line.locationCode!,
+                    key: const Key('pick-current-location'),
+                    style: context.text.displaySmall?.tabular.copyWith(
+                      color: context.colors.textPrimary,
+                    ),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: BosSpace.s12),
-            // What to do now, in words (the indicator is the overview).
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: BosColors.brandPrimarySubtle,
-                border: Border.all(color: BosColors.brand.border),
-                borderRadius: BorderRadius.circular(BosRadius.lg),
+          if (!line.locationIsActive) _InactiveShelfWarning(line: line),
+          Text(
+            line.sku,
+            style: context.text.titleMedium?.tabular.copyWith(
+              color: context.colors.textPrimary,
+            ),
+          ),
+          Text(
+            line.name,
+            style: context.text.bodyMedium?.copyWith(
+              color: context.colors.textSecondary,
+            ),
+          ),
+          if (line.barcode != null)
+            Text(
+              l10n.pickingBarcode(line.barcode!),
+              style: context.text.bodySmall!.copyWith(
+                color: context.colors.textMuted,
               ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: BosSpace.s12,
-                  vertical: BosSpace.s12,
+            ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            l10n.pickingRemaining(
+              formatQuantity(line.quantityRemaining),
+              line.unit,
+            ),
+            key: const Key('pick-current-remaining'),
+            style: context.text.displaySmall!.tabular,
+          ),
+          Text(
+            l10n.pickingLineQuantity(
+              formatQuantity(line.quantityPicked),
+              formatQuantity(line.quantityToPick),
+              line.unit,
+            ),
+            style: context.text.bodyMedium!.copyWith(
+              color: context.colors.textSecondary,
+            ),
+          ),
+          if (location != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Wrap(
+              spacing: AppSpacing.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              alignment: WrapAlignment.spaceBetween,
+              children: [
+                StatusChip(
+                  l10n.pickingShelfChip(location.label),
+                  location.isKnown ? Tone.success : Tone.warning,
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      shelfStep ? Icons.shelves : Icons.qr_code_scanner,
-                      color: BosColors.brandPrimary,
-                      size: 28,
-                    ),
-                    const SizedBox(width: BosSpace.s12),
-                    Expanded(
-                      child: Text(
-                        stepText,
-                        key: const Key('pick-step'),
-                        style: BosType.h3.copyWith(
-                          color: BosColors.brandPrimaryHover,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
+                TextButton(
+                  key: const Key('pick-change-shelf'),
+                  onPressed: c.clearLocation,
+                  child: Text(l10n.pickingChangeShelf),
                 ),
-              ),
+              ],
             ),
-            const SizedBox(height: BosSpace.s12),
-            if (line.locationCode != null)
-              Row(
-                children: [
-                  const Icon(
-                    Icons.place_outlined,
-                    size: 32,
-                    color: BosColors.brandPrimary,
-                  ),
-                  const SizedBox(width: BosSpace.s8),
-                  Expanded(
-                    child: Text(
-                      line.locationCode!,
-                      key: const Key('pick-current-location'),
-                      style: BosType.display.copyWith(fontFamily: 'monospace'),
-                    ),
-                  ),
-                ],
-              ),
-            if (!line.locationIsActive) _InactiveShelfWarning(line: line),
-            Text(line.sku, style: BosType.h3.copyWith(fontFamily: 'monospace')),
-            Text(
-              line.name,
-              style: BosType.bodyLg.copyWith(color: BosColors.textSecondary),
-            ),
-            if (line.barcode != null)
-              Text(
-                l10n.pickingBarcode(line.barcode!),
-                style: BosType.caption.copyWith(color: BosColors.textMuted),
-              ),
-            const SizedBox(height: BosSpace.s8),
-            Text(
-              l10n.pickingRemaining(
-                formatQuantity(line.quantityRemaining),
-                line.unit,
-              ),
-              key: const Key('pick-current-remaining'),
-              style: BosType.quantity,
-            ),
-            Text(
-              l10n.pickingLineQuantity(
-                formatQuantity(line.quantityPicked),
-                formatQuantity(line.quantityToPick),
-                line.unit,
-              ),
-              style: BosType.body.copyWith(color: BosColors.textSecondary),
-            ),
-            if (location != null) ...[
-              const SizedBox(height: BosSpace.s8),
-              Wrap(
-                spacing: BosSpace.s8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                alignment: WrapAlignment.spaceBetween,
-                children: [
-                  ToneBadge(
-                    l10n.pickingShelfChip(location.label),
-                    location.isKnown ? BosColors.success : BosColors.warning,
-                  ),
-                  TextButton(
-                    key: const Key('pick-change-shelf'),
-                    onPressed: c.clearLocation,
-                    child: Text(l10n.pickingChangeShelf),
-                  ),
-                ],
-              ),
-            ],
           ],
-        ),
+        ],
       ),
     );
   }
@@ -735,14 +716,14 @@ class _FeedbackBox extends StatelessWidget {
       children: [
         _Banner(feedback: feedback, key: const Key('pick-feedback')),
         if (c.hasFailedScan && !c.sending) ...[
-          const SizedBox(height: BosSpace.s8),
+          const SizedBox(height: AppSpacing.xs),
           FilledButton.icon(
             key: const Key('pick-resend'),
             onPressed: c.resend,
-            icon: const Icon(Icons.refresh),
+            icon: const AppIcon(AppIcons.refresh),
             label: Text(l10n.pickingResend),
             style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(BosSize.primaryAction),
+              minimumSize: const Size.fromHeight(AppSize.primaryAction),
             ),
           ),
         ],
@@ -792,96 +773,90 @@ class _LineTile extends StatelessWidget {
       ShortageReason.insufficient => l10n.pickingShortageReasonInsufficient,
       final other => other,
     };
-    return DecoratedBox(
+    return AppCard(
       key: Key('pick-line-${line.sku}'),
-      decoration: BoxDecoration(
-        color: BosColors.surfaceCard,
-        border: Border.all(
-          color: isCurrent ? BosColors.brandPrimary : BosColors.borderDefault,
-          width: isCurrent ? 2 : 1,
-        ),
-        borderRadius: BorderRadius.circular(BosRadius.lg),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(BosSpace.s12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 80,
-                  child: Text(
-                    line.locationCode ?? l10n.pickingNoLocation,
-                    style: BosType.mono.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(line.sku, style: BosType.mono),
-                      Text(
-                        line.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: BosType.caption.copyWith(
-                          color: BosColors.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  l10n.pickingLineQuantity(
-                    formatQuantity(line.quantityPicked),
-                    formatQuantity(line.quantityToPick),
-                    line.unit,
-                  ),
-                  style: BosType.body,
-                ),
-              ],
-            ),
-            if (!line.locationIsActive && line.isOpen)
-              _InactiveShelfWarning(line: line),
-            if (line.quantityShort > 0 || !line.isOpen || onFocus != null)
+      borderColor: isCurrent ? context.colors.brandPrimary : null,
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Padding(
-                padding: const EdgeInsets.only(top: BosSpace.s4),
-                child: Row(
+                padding: const EdgeInsets.only(right: AppSpacing.sm),
+                child: StatusChip(
+                  line.locationCode ?? l10n.pickingNoLocation,
+                  Tone.neutral,
+                  icon: AppIcons.pin3,
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (line.quantityShort > 0)
-                      Flexible(
-                        child: ToneBadge(
-                          reason == null
-                              ? l10n.tasksShort(
-                                  formatQuantity(line.quantityShort),
-                                )
-                              : l10n.pickingShortageLabel(
-                                  formatQuantity(line.quantityShort),
-                                  reason,
-                                ),
-                          BosColors.danger,
-                        ),
-                      )
-                    else if (line.quantityToPick == 0 &&
-                        line.quantityPicked == 0)
-                      // Emptied by a re-allocation (#98): kept, not deleted.
-                      ToneBadge(l10n.pickingLineMoved, BosColors.neutral)
-                    else if (!line.isOpen)
-                      ToneBadge(l10n.pickingLineDone, BosColors.success),
-                    const Spacer(),
-                    if (onFocus != null)
-                      TextButton(
-                        key: Key('pick-focus-${line.sku}'),
-                        onPressed: onFocus,
-                        child: Text(l10n.pickingSwitchToLine),
+                    Text(
+                      line.sku,
+                      style: context.text.bodyMedium?.semiBold.tabular,
+                    ),
+                    Text(
+                      line.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.text.bodySmall!.copyWith(
+                        color: context.colors.textMuted,
                       ),
+                    ),
                   ],
                 ),
               ),
-          ],
-        ),
+              Text(
+                l10n.pickingLineQuantity(
+                  formatQuantity(line.quantityPicked),
+                  formatQuantity(line.quantityToPick),
+                  line.unit,
+                ),
+                style: context.text.bodySmall?.semiBold.tabular,
+              ),
+            ],
+          ),
+          if (!line.locationIsActive && line.isOpen)
+            _InactiveShelfWarning(line: line),
+          if (line.quantityShort > 0 || !line.isOpen || onFocus != null)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xxs),
+              child: Row(
+                children: [
+                  if (line.quantityShort > 0)
+                    Flexible(
+                      child: StatusChip(
+                        reason == null
+                            ? l10n.tasksShort(
+                                formatQuantity(line.quantityShort),
+                              )
+                            : l10n.pickingShortageLabel(
+                                formatQuantity(line.quantityShort),
+                                reason,
+                              ),
+                        Tone.danger,
+                      ),
+                    )
+                  else if (line.quantityToPick == 0 && line.quantityPicked == 0)
+                    // Emptied by a re-allocation (#98): kept, not deleted.
+                    StatusChip(l10n.pickingLineMoved, Tone.neutral)
+                  else if (!line.isOpen)
+                    StatusChip(l10n.pickingLineDone, Tone.success),
+                  const Spacer(),
+                  if (onFocus != null)
+                    TextButton(
+                      key: Key('pick-focus-${line.sku}'),
+                      onPressed: onFocus,
+                      child: Text(l10n.pickingSwitchToLine),
+                    ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -903,7 +878,9 @@ class _OrderInfo extends ConsumerWidget {
       return Text(
         l10n.pickingOrderUnavailable,
         key: const Key('pick-order-unavailable'),
-        style: BosType.caption.copyWith(color: BosColors.textMuted),
+        style: context.text.bodySmall!.copyWith(
+          color: context.colors.textMuted,
+        ),
       );
     }
     final rows = <(String, String)>[
@@ -916,46 +893,43 @@ class _OrderInfo extends ConsumerWidget {
       if (order.notes case final notes? when notes.trim().isNotEmpty)
         (l10n.pickingOrderNotes, notes),
     ];
-    return Card(
+    return AppCard(
       key: const Key('pick-order'),
-      child: Padding(
-        padding: const EdgeInsets.all(BosSpace.s16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l10n.pickingOrderTitle,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: BosSpace.s8),
-            for (final (label, value) in rows)
-              Padding(
-                padding: const EdgeInsets.only(bottom: BosSpace.s4),
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '$label: ',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+      title: l10n.pickingOrderTitle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (label, value) in rows)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xxs),
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '$label: ',
+                      style: context.text.bodySmall?.semiBold.copyWith(
+                        color: context.colors.textPrimary,
                       ),
-                      TextSpan(text: value),
-                    ],
-                  ),
-                  style: BosType.body,
+                    ),
+                    TextSpan(text: value),
+                  ],
+                ),
+                style: context.text.bodySmall?.copyWith(
+                  color: context.colors.textSecondary,
                 ),
               ),
-            if (order.hasShortage)
-              ToneBadge(l10n.pickingOrderShortageFlag, BosColors.danger),
-          ],
-        ),
+            ),
+          if (order.hasShortage)
+            StatusChip(l10n.pickingOrderShortageFlag, Tone.danger),
+        ],
       ),
     );
   }
 
   /// `2026-11-08` → `08.11.2026`.
   static String _date(String iso) {
-    final parts = iso.split('-');
-    return parts.length == 3 ? '${parts[2]}.${parts[1]}.${parts[0]}' : iso;
+    final date = DateTime.tryParse(iso);
+    return date == null ? iso : DateFormat('dd.MM.yyyy', 'tr').format(date);
   }
 }
 
@@ -970,19 +944,22 @@ class _InactiveShelfWarning extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: BosSpace.s4),
+      padding: const EdgeInsets.only(top: AppSpacing.xxs),
       child: Row(
         key: Key('pick-line-inactive-${line.sku}'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.warning_amber, size: 20, color: BosColors.warning.fg),
-          const SizedBox(width: BosSpace.s4),
+          AppIcon(
+            AppIcons.warning,
+            size: AppSize.icon,
+            color: context.colors.warning.fg,
+          ),
+          const SizedBox(width: AppSpacing.xxs),
           Expanded(
             child: Text(
               l10n.pickingShelfInactive,
-              style: BosType.caption.copyWith(
-                color: BosColors.warning.fg,
-                fontWeight: FontWeight.w600,
+              style: context.text.bodySmall!.semiBold.copyWith(
+                color: context.colors.warning.fg,
               ),
             ),
           ),

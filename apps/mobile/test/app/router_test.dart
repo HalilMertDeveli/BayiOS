@@ -5,6 +5,7 @@ import 'package:bayios_mobile/core/api/api_exception.dart';
 import 'package:bayios_mobile/core/session/access.dart';
 import 'package:bayios_mobile/core/session/me.dart';
 import 'package:bayios_mobile/core/session/session_controller.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,7 +15,7 @@ AppFeature _feature(String id, {bool Function(Access)? visible}) => AppFeature(
   id: id,
   path: '/$id',
   label: (_) => id,
-  icon: Icons.circle,
+  icon: AppIcons.document,
   builder: (_, _) => const SizedBox(),
   isVisible: visible ?? (_) => true,
 );

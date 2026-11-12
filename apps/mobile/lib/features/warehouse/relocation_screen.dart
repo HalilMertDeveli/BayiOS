@@ -1,6 +1,10 @@
 import 'dart:async';
 
-import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/picking/scan_alerts.dart';
 import 'package:bayios_mobile/features/stock/quantity.dart';
@@ -69,8 +73,8 @@ class _RelocationScreenState extends ConsumerState<RelocationScreen> {
           body = Center(
             child: StockMessagePanel(
               key: const Key('relocation-load-error'),
-              icon: Icons.cloud_off_outlined,
-              tone: BosColors.danger,
+              icon: AppIcons.offline,
+              tone: Tone.danger,
               message: documentErrorMessage(l10n, c.loadError!),
               onRetry: c.load,
               error: c.loadError,
@@ -79,14 +83,14 @@ class _RelocationScreenState extends ConsumerState<RelocationScreen> {
         } else if (c.warehouses.isEmpty) {
           body = StockMessagePanel(
             key: const Key('relocation-no-warehouse'),
-            icon: Icons.shelves,
+            icon: AppIcons.shelves,
             message: l10n.relocationNoWarehouse,
           );
         } else {
           body = _RelocationForm(controller: c);
         }
         return Scaffold(
-          appBar: AppBar(title: Text(l10n.relocationTitle)),
+          appBar: AppTopBar(title: l10n.relocationTitle),
           body: body,
           bottomNavigationBar:
               c.loading || c.loadError != null || c.warehouses.isEmpty
@@ -110,20 +114,17 @@ class _RelocationForm extends StatelessWidget {
     final submission = c.submission;
     return ListView(
       key: const Key('relocation-form'),
-      padding: const EdgeInsets.all(BosSpace.s16),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         if (submission is MoveDone) ...[
           StockNotice(
             key: const Key('relocation-done'),
-            tone: BosColors.success,
-            icon: Icons.check_circle_outline,
+            tone: Tone.success,
+            icon: AppIcons.checkCircle1,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  l10n.relocationDone,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
+                Text(l10n.relocationDone, style: AppTextStyles.strong),
                 Text(
                   l10n.relocationDoneLine(
                     submission.sku,
@@ -142,46 +143,51 @@ class _RelocationForm extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: BosSpace.s16),
+          const SizedBox(height: AppSpacing.md),
         ],
         if (submission is MoveFailed) ...[
           _FailureNotice(controller: c, failure: submission),
-          const SizedBox(height: BosSpace.s16),
+          const SizedBox(height: AppSpacing.md),
         ],
         if (c.warehouses.length > 1) ...[
-          DropdownButtonFormField<String>(
-            key: ValueKey('relocation-warehouse-${c.warehouse?.id}'),
-            initialValue: c.warehouse?.id,
-            isExpanded: true,
-            decoration: InputDecoration(
-              labelText: l10n.relocationWarehouseLabel,
-            ),
-            items: [
-              for (final w in c.warehouses)
-                DropdownMenuItem(
-                  value: w.id,
-                  child: Text(
-                    w.isDefault
-                        ? l10n.receivingWarehouseDefault(w.name)
-                        : w.name,
-                    overflow: TextOverflow.ellipsis,
+          LabeledField(
+            label: l10n.relocationWarehouseLabel,
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('relocation-warehouse-${c.warehouse?.id}'),
+              initialValue: c.warehouse?.id,
+              isExpanded: true,
+              style: context.text.bodyMedium?.copyWith(
+                color: context.colors.textPrimary,
+              ),
+              icon: const AppIcon(AppIcons.arrowDown2, size: AppSize.icon),
+              decoration: const InputDecoration(),
+              items: [
+                for (final w in c.warehouses)
+                  DropdownMenuItem(
+                    value: w.id,
+                    child: Text(
+                      w.isDefault
+                          ? l10n.receivingWarehouseDefault(w.name)
+                          : w.name,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-            ],
-            onChanged: c.locked
-                ? null
-                : (id) {
-                    if (id != null) unawaited(c.selectWarehouse(id));
-                  },
+              ],
+              onChanged: c.locked
+                  ? null
+                  : (id) {
+                      if (id != null) unawaited(c.selectWarehouse(id));
+                    },
+            ),
           ),
-          const SizedBox(height: BosSpace.s16),
+          const SizedBox(height: AppSpacing.md),
         ],
         if (c.shelvesLoading)
           LoadingView(label: l10n.receivingBins)
         else if (c.shelvesError != null)
           StockMessagePanel(
-            icon: Icons.cloud_off_outlined,
-            tone: BosColors.danger,
+            icon: AppIcons.offline,
+            tone: Tone.danger,
             message: documentErrorMessage(l10n, c.shelvesError!),
             onRetry: c.retryShelves,
             error: c.shelvesError,
@@ -247,7 +253,7 @@ class _RelocationForm extends StatelessWidget {
                     onChanged: c.setQuantityText,
                     onStep: c.stepQuantity,
                   ),
-                  const SizedBox(height: BosSpace.s8),
+                  const SizedBox(height: AppSpacing.xs),
                   _AvailableLine(controller: c),
                   if (c.hasReserved)
                     SwitchListTile(
@@ -285,11 +291,11 @@ class _RelocationForm extends StatelessWidget {
             ),
           ],
           if (c.problem case final MoveScanProblem problem) ...[
-            const SizedBox(height: BosSpace.s8),
+            const SizedBox(height: AppSpacing.xs),
             StockNotice(
               key: const Key('relocation-problem'),
-              tone: BosColors.danger,
-              icon: Icons.block,
+              tone: Tone.danger,
+              icon: AppIcons.block,
               child: Text(_problemText(l10n, problem)),
             ),
           ],
@@ -332,48 +338,59 @@ class _Step extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
     final done = value != null;
-    return Card(
-      shape: active
-          ? RoundedRectangleBorder(
-              side: const BorderSide(color: BosColors.brandPrimary, width: 2),
-              borderRadius: BorderRadius.circular(BosRadius.xl),
-            )
-          : null,
-      child: Padding(
-        padding: const EdgeInsets.all(BosSpace.s12),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: AppCard(
+        borderColor: active ? context.colors.brandPrimary : null,
+        padding: const EdgeInsets.all(AppSpacing.sm),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 14,
-                  backgroundColor: done
-                      ? BosColors.success.bg
-                      : BosColors.brandPrimarySubtle,
+                Container(
+                  width: AppSize.iconLg,
+                  height: AppSize.iconLg,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: done
+                        ? context.colors.success.bg
+                        : active
+                        ? context.colors.brandPrimary
+                        : context.colors.surfaceSunken,
+                    border: Border.all(
+                      color: done
+                          ? context.colors.success.border
+                          : active
+                          ? context.colors.brandPrimary
+                          : context.colors.borderDefault,
+                    ),
+                  ),
                   child: done
-                      ? Icon(Icons.check, size: 18, color: BosColors.success.fg)
+                      ? AppIcon(
+                          AppIcons.check,
+                          size: AppSize.iconSm,
+                          color: context.colors.success.fg,
+                        )
                       : Text(
                           '$index',
-                          style: const TextStyle(
-                            color: BosColors.brandPrimary,
-                            fontWeight: FontWeight.w700,
+                          style: context.text.titleSmall?.bold.copyWith(
+                            color: active
+                                ? context.colors.brandOnPrimary
+                                : context.colors.textMuted,
                           ),
                         ),
                 ),
-                const SizedBox(width: BosSpace.s8),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: theme.textTheme.titleMedium),
+                      Text(title, style: context.text.titleMedium),
                       if (value != null)
-                        Text(
-                          value!,
-                          style: BosType.mono.copyWith(fontSize: 17),
-                        ),
+                        Text(value!, style: context.text.titleMedium?.tabular),
                     ],
                   ),
                 ),
@@ -386,7 +403,7 @@ class _Step extends StatelessWidget {
               ],
             ),
             if (active && !done) ...[
-              const SizedBox(height: BosSpace.s12),
+              const SizedBox(height: AppSpacing.sm),
               child,
             ],
           ],
@@ -408,7 +425,7 @@ class _AvailableLine extends StatelessWidget {
     if (c.balanceLoading) {
       return Text(
         l10n.loading,
-        style: const TextStyle(color: BosColors.textMuted),
+        style: TextStyle(color: context.colors.textMuted),
       );
     }
     final available = c.balance?.available;
@@ -422,8 +439,8 @@ class _AvailableLine extends StatelessWidget {
             key: const Key('relocation-available'),
             style: TextStyle(
               color: available == null || available <= 0
-                  ? BosColors.danger.fg
-                  : BosColors.textMuted,
+                  ? context.colors.danger.fg
+                  : context.colors.textMuted,
             ),
           ),
         ),
@@ -449,15 +466,12 @@ class _FailureNotice extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return StockNotice(
       key: const Key('relocation-failure'),
-      tone: BosColors.danger,
-      icon: Icons.error_outline,
+      tone: Tone.danger,
+      icon: AppIcons.infoCircle,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l10n.relocationFailed,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
+          Text(l10n.relocationFailed, style: AppTextStyles.strong),
           Text(
             documentErrorMessage(
               l10n,
@@ -473,26 +487,26 @@ class _FailureNotice extends StatelessWidget {
             ),
           if (failure.pending) ...[
             Text(l10n.docEntryPendingHint),
-            const SizedBox(height: BosSpace.s8),
+            const SizedBox(height: AppSpacing.xs),
             Wrap(
-              spacing: BosSpace.s8,
-              runSpacing: BosSpace.s8,
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
               children: [
                 FilledButton.icon(
                   key: const Key('relocation-resend'),
                   onPressed: controller.submit,
-                  icon: const Icon(Icons.refresh),
+                  icon: const AppIcon(AppIcons.refresh),
                   label: Text(l10n.resend),
                   style: FilledButton.styleFrom(
-                    backgroundColor: BosColors.dangerSolid,
-                    minimumSize: const Size(0, BosSize.primaryAction),
+                    backgroundColor: context.colors.dangerSolid,
+                    minimumSize: const Size(0, AppSize.primaryAction),
                   ),
                 ),
                 TextButton(
                   key: const Key('relocation-discard'),
                   onPressed: controller.discardPending,
                   style: TextButton.styleFrom(
-                    foregroundColor: BosColors.danger.fg,
+                    foregroundColor: context.colors.danger.fg,
                   ),
                   child: Text(l10n.docEntryDiscard),
                 ),
@@ -519,13 +533,16 @@ class _MoveBar extends StatelessWidget {
       MoveSending(:final retryingBusy) => retryingBusy,
       _ => false,
     };
-    return Material(
-      elevation: 8,
-      color: BosColors.surfaceCard,
+    // Thumb-zone action bar: card surface with a hairline on top.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: context.colors.surfaceCard,
+        border: Border(top: BorderSide(color: context.colors.borderDefault)),
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.all(BosSpace.s12),
+          padding: const EdgeInsets.all(AppSpacing.sm),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -536,7 +553,7 @@ class _MoveBar extends StatelessWidget {
                   key: const Key('relocation-busy-retry'),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: BosSpace.s8),
+                const SizedBox(height: AppSpacing.xs),
               ],
               FilledButton.icon(
                 key: const Key('relocation-submit'),
@@ -544,19 +561,19 @@ class _MoveBar extends StatelessWidget {
                     ? c.submit
                     : null,
                 icon: sending
-                    ? const SizedBox.square(
-                        dimension: 20,
+                    ? SizedBox.square(
+                        dimension: AppSize.icon,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: BosColors.brandOnPrimary,
+                          color: context.colors.brandOnPrimary,
                         ),
                       )
-                    : const Icon(Icons.swap_vert),
+                    : const AppIcon(AppIcons.trolley02),
                 label: Text(
                   sending ? l10n.relocationSubmitting : l10n.relocationSubmit,
                 ),
                 style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(BosSize.primaryAction),
+                  minimumSize: const Size.fromHeight(AppSize.primaryAction),
                 ),
               ),
             ],

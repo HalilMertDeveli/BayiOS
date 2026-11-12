@@ -1,6 +1,9 @@
 import 'dart:async';
 
-import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/picking/tasks_widgets.dart';
 import 'package:bayios_mobile/features/stock/stock_errors.dart';
@@ -111,12 +114,12 @@ class _CountListState extends ConsumerState<CountListScreen> {
     }
     final Widget body;
     if (_loading && _items.isEmpty) {
-      body = const LoadingView();
+      body = const ListLoadingView();
     } else if (_error != null) {
       body = ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
-          const SizedBox(height: BosSpace.s48),
+          const SizedBox(height: AppSpacing.xxl),
           ErrorView(error: _error!, onRetry: _load),
         ],
       );
@@ -124,29 +127,29 @@ class _CountListState extends ConsumerState<CountListScreen> {
       body = ListView(
         key: const Key('count-list'),
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(BosSpace.s16),
+        padding: const EdgeInsets.all(AppSpacing.md),
         children: [
           if (_items.isEmpty)
             TasksMessage(
               key: const Key('count-empty'),
-              icon: Icons.fact_check_outlined,
+              icon: AppIcons.receiptBill2,
               title: l10n.countEmpty,
               body: l10n.countEmptyHint,
             )
           else
             for (final c in _items) ...[
               _CountCard(count: c, onTap: () => context.go(countPath(c.id))),
-              const SizedBox(height: BosSpace.s8),
+              const SizedBox(height: AppSpacing.xs),
             ],
           if (_moreError != null)
             ErrorMessageBox(documentErrorMessage(l10n, _moreError!)),
           if (_cursor != null) ...[
-            const SizedBox(height: BosSpace.s8),
+            const SizedBox(height: AppSpacing.xs),
             OutlinedButton(
               key: const Key('count-load-more'),
               onPressed: _loadingMore ? null : _loadMore,
               style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(BosSize.minTouchTarget),
+                minimumSize: const Size.fromHeight(AppSize.minTouchTarget),
               ),
               child: Text(_loadingMore ? l10n.loading : l10n.tasksLoadMore),
             ),
@@ -155,7 +158,7 @@ class _CountListState extends ConsumerState<CountListScreen> {
       );
     }
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.countListTitle)),
+      appBar: AppTopBar(title: l10n.countListTitle),
       body: RefreshIndicator(onRefresh: _load, child: body),
     );
   }
@@ -170,47 +173,33 @@ class _CountCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
-    return Card(
+    final progress = count.lineCount == 0
+        ? 0.0
+        : (count.countedLineCount / count.lineCount).clamp(0, 1).toDouble();
+    return ListCard(
       key: Key('count-${count.id}'),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: BosSize.primaryAction),
-          child: Padding(
-            padding: const EdgeInsets.all(BosSpace.s16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        count.number,
-                        style: BosType.mono.copyWith(fontSize: 17),
-                      ),
-                    ),
-                    if (count.isBlind)
-                      ToneBadge(l10n.countBlind, BosColors.purple),
-                  ],
-                ),
-                const SizedBox(height: BosSpace.s4),
-                Text(
-                  '${count.warehouseName ?? '—'} · '
-                  '${countScopeLabel(l10n, count.scope)}',
-                  style: theme.textTheme.bodyLarge,
-                ),
-                Text(
-                  l10n.countProgress(count.countedLineCount, count.lineCount),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: BosColors.textMuted,
-                  ),
-                ),
-              ],
+      onTap: onTap,
+      leading: const IconBadge(icon: AppIcons.receiptBill2),
+      title: count.number,
+      subtitle:
+          '${count.warehouseName ?? '—'} · '
+          '${countScopeLabel(l10n, count.scope)}',
+      footer: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (count.isBlind) ...[
+            StatusChip(l10n.countBlind, Tone.purple),
+            const SizedBox(height: AppSpacing.xs),
+          ],
+          PickProgressBar(value: progress),
+          const SizedBox(height: AppSpacing.xxs),
+          Text(
+            l10n.countProgress(count.countedLineCount, count.lineCount),
+            style: context.text.labelMedium?.copyWith(
+              color: context.colors.textMuted,
             ),
           ),
-        ),
+        ],
       ),
     );
   }

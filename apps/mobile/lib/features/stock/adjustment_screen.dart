@@ -1,6 +1,10 @@
 import 'package:bayios_mobile/core/api/api_exception.dart';
 import 'package:bayios_mobile/core/api/idempotency.dart';
-import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/features/stock/quantity.dart';
 import 'package:bayios_mobile/features/stock/stock_api.dart';
 import 'package:bayios_mobile/features/stock/stock_errors.dart';
@@ -162,20 +166,20 @@ class _AdjustmentScreenState extends ConsumerState<AdjustmentScreen> {
     if (!access.can(StockPermissions.adjust)) {
       body = StockMessagePanel(
         key: const Key('adjust-no-permission'),
-        icon: Icons.lock_outline,
+        icon: AppIcons.lock,
         message: l10n.stockAdjustForbidden,
       );
     } else if (target == null) {
       body = StockMessagePanel(
         key: const Key('adjust-no-target'),
-        icon: Icons.manage_search,
+        icon: AppIcons.search,
         message: l10n.stockAdjustNoTarget,
       );
     } else {
       body = _form(context, l10n, target);
     }
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.stockAdjustTitle)),
+      appBar: AppTopBar(title: l10n.stockAdjustTitle),
       body: body,
     );
   }
@@ -189,17 +193,22 @@ class _AdjustmentScreenState extends ConsumerState<AdjustmentScreen> {
     final error = _error;
     final b = target.balance;
     return ListView(
-      padding: const EdgeInsets.all(BosSpace.s16),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(BosSpace.s16),
+            padding: const EdgeInsets.all(AppSpacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 VariantHeader(variant: target.variant),
-                const SizedBox(height: BosSpace.s8),
-                Text(placeLabel(target.warehouse, target.location)),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  placeLabel(target.warehouse, target.location),
+                  style: context.text.bodySmall?.semiBold.copyWith(
+                    color: context.colors.textPrimary,
+                  ),
+                ),
                 Text(
                   l10n.stockAdjustCurrent(
                     formatQuantity(b.onHand),
@@ -211,12 +220,12 @@ class _AdjustmentScreenState extends ConsumerState<AdjustmentScreen> {
             ),
           ),
         ),
-        const SizedBox(height: BosSpace.s16),
+        const SizedBox(height: AppSpacing.md),
         if (error != null && !needsNegativeStockConfirmation(error)) ...[
           StockNotice(
             key: const Key('adjust-error'),
-            tone: BosColors.danger,
-            icon: Icons.error_outline,
+            tone: Tone.danger,
+            icon: AppIcons.infoCircle,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -228,15 +237,15 @@ class _AdjustmentScreenState extends ConsumerState<AdjustmentScreen> {
                   ),
                 ),
                 if (_pending) ...[
-                  const SizedBox(height: BosSpace.s4),
+                  const SizedBox(height: AppSpacing.xxs),
                   Text(l10n.stockAdjustPendingHint),
                 ],
               ],
             ),
           ),
-          const SizedBox(height: BosSpace.s16),
+          const SizedBox(height: AppSpacing.md),
         ],
-        Text(l10n.stockAdjustTypeLabel, style: BosType.h3),
+        SectionHeader(l10n.stockAdjustTypeLabel),
         RadioGroup<AdjustmentType>(
           groupValue: _type,
           onChanged: (value) {
@@ -246,50 +255,63 @@ class _AdjustmentScreenState extends ConsumerState<AdjustmentScreen> {
               _typeError = null;
             });
           },
-          child: Column(
-            children: [
-              for (final type in AdjustmentType.values)
-                RadioListTile<AdjustmentType>(
-                  key: Key('adjust-type-${type.wire}'),
-                  value: type,
-                  enabled: !locked,
-                  title: Text(_typeLabel(l10n, type)),
-                ),
-            ],
+          child: AppCard(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
+            child: Column(
+              children: [
+                for (final type in AdjustmentType.values)
+                  RadioListTile<AdjustmentType>(
+                    key: Key('adjust-type-${type.wire}'),
+                    value: type,
+                    enabled: !locked,
+                    title: Text(_typeLabel(l10n, type)),
+                  ),
+              ],
+            ),
           ),
         ),
         if (_typeError != null)
-          Text(_typeError!, style: TextStyle(color: BosColors.danger.fg)),
-        const SizedBox(height: BosSpace.s12),
-        TextField(
-          key: const Key('adjust-quantity'),
-          controller: _quantity,
-          enabled: !locked,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
-            labelText: l10n.stockAdjustQuantityLabel,
-            errorText: _quantityError,
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xxs),
+            child: Text(
+              _typeError!,
+              style: context.text.bodySmall?.medium.copyWith(
+                color: context.colors.danger.fg,
+              ),
+            ),
+          ),
+        const SizedBox(height: AppSpacing.sm),
+        LabeledField(
+          label: l10n.stockAdjustQuantityLabel,
+          child: TextField(
+            key: const Key('adjust-quantity'),
+            controller: _quantity,
+            enabled: !locked,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(errorText: _quantityError),
           ),
         ),
-        const SizedBox(height: BosSpace.s12),
-        TextField(
-          key: const Key('adjust-reason'),
-          controller: _reason,
-          enabled: !locked,
-          maxLength: adjustmentReasonMaxLength,
-          minLines: 2,
-          maxLines: 4,
-          decoration: InputDecoration(
-            labelText: l10n.stockAdjustReasonLabel,
-            helperText: l10n.stockAdjustReasonHint,
-            errorText: _reasonError,
+        const SizedBox(height: AppSpacing.sm),
+        LabeledField(
+          label: l10n.stockAdjustReasonLabel,
+          child: TextField(
+            key: const Key('adjust-reason'),
+            controller: _reason,
+            enabled: !locked,
+            maxLength: adjustmentReasonMaxLength,
+            minLines: 2,
+            maxLines: 4,
+            decoration: InputDecoration(
+              helperText: l10n.stockAdjustReasonHint,
+              errorText: _reasonError,
+            ),
           ),
         ),
-        const SizedBox(height: BosSpace.s16),
+        const SizedBox(height: AppSpacing.md),
         FilledButton.icon(
           key: const Key('adjust-submit'),
           onPressed: _sending ? null : () => _save(target),
-          icon: Icon(_pending ? Icons.refresh : Icons.save_outlined),
+          icon: AppIcon(_pending ? AppIcons.refresh : AppIcons.save),
           label: Text(
             _sending
                 ? l10n.stockAdjustSaving
@@ -298,7 +320,7 @@ class _AdjustmentScreenState extends ConsumerState<AdjustmentScreen> {
                 : l10n.stockAdjustSubmit,
           ),
           style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(BosSize.primaryAction),
+            minimumSize: const Size.fromHeight(AppSize.primaryAction),
           ),
         ),
         if (_pending)

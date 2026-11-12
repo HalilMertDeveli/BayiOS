@@ -1,4 +1,7 @@
-import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/picking/pick_controller.dart';
 import 'package:bayios_mobile/features/picking/pick_session.dart';
@@ -98,10 +101,10 @@ class _ShortageDialogState extends State<ShortageDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(l10n.pickingShortageBody),
-          const SizedBox(height: BosSpace.s16),
+          const SizedBox(height: AppSpacing.md),
           Text(
             l10n.pickingShortageReasonLabel,
-            style: BosType.body.copyWith(fontWeight: FontWeight.w600),
+            style: context.text.bodyMedium!.semiBold,
           ),
           RadioGroup<String>(
             groupValue: _reason,
@@ -125,24 +128,30 @@ class _ShortageDialogState extends State<ShortageDialog> {
             Text(
               _reasonError!,
               key: const Key('shortage-reason-error'),
-              style: BosType.caption.copyWith(color: BosColors.danger.fg),
-            ),
-          const SizedBox(height: BosSpace.s12),
-          TextField(
-            key: const Key('shortage-quantity'),
-            controller: _quantity,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: l10n.pickingShortageQuantityLabel(line.unit),
-              helperText: l10n.pickingShortageOpenHint(
-                formatQuantity(line.quantityRemaining),
+              style: context.text.bodySmall!.copyWith(
+                color: context.colors.danger.fg,
               ),
-              errorText: _quantityError,
-              errorMaxLines: 2,
+            ),
+          const SizedBox(height: AppSpacing.sm),
+          LabeledField(
+            label: l10n.pickingShortageQuantityLabel(line.unit),
+            child: TextField(
+              key: const Key('shortage-quantity'),
+              controller: _quantity,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                helperText: l10n.pickingShortageOpenHint(
+                  formatQuantity(line.quantityRemaining),
+                ),
+                errorText: _quantityError,
+                errorMaxLines: 2,
+              ),
             ),
           ),
           if (_error != null) ...[
-            const SizedBox(height: BosSpace.s12),
+            const SizedBox(height: AppSpacing.sm),
             ErrorMessageBox(_error!),
           ],
         ],
@@ -157,8 +166,8 @@ class _ShortageDialogState extends State<ShortageDialog> {
           key: const Key('shortage-submit'),
           onPressed: _busy ? null : _submit,
           style: FilledButton.styleFrom(
-            backgroundColor: BosColors.dangerSolid,
-            foregroundColor: BosColors.textInverse,
+            backgroundColor: context.colors.dangerSolid,
+            foregroundColor: context.colors.textInverse,
           ),
           child: Text(_busy ? l10n.loading : l10n.pickingShortageSubmit),
         ),

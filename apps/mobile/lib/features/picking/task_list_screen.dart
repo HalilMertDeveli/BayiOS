@@ -1,6 +1,8 @@
 import 'package:bayios_mobile/core/session/access.dart';
 import 'package:bayios_mobile/core/session/session_controller.dart';
-import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/picking/picking_api.dart';
 import 'package:bayios_mobile/features/picking/picking_errors.dart';
@@ -42,7 +44,7 @@ class TaskListScreen extends ConsumerWidget {
     if (tabs.isEmpty) {
       // The route guard hides the feature; this is only a safety net.
       return Scaffold(
-        appBar: AppBar(title: Text(l10n.tasksTitle)),
+        appBar: AppTopBar(title: l10n.tasksTitle, trailing: const UserAvatar()),
         body: Center(child: Text(l10n.errorForbidden)),
       );
     }
@@ -52,19 +54,17 @@ class TaskListScreen extends ConsumerWidget {
       length: tabs.length,
       initialIndex: initial,
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(l10n.tasksTitle),
+        appBar: AppTopBar(
+          title: l10n.tasksTitle,
+          trailing: const UserAvatar(),
           bottom: tabs.length < 2
               ? null
               : TabBar(
-                  labelStyle: BosType.body.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
                   tabs: [
                     for (final t in tabs)
                       Tab(
                         key: Key('tasks-tab-${t.name}'),
-                        height: BosSize.primaryAction,
+                        height: AppSize.primaryAction,
                         text: _label(l10n, t),
                       ),
                   ],
@@ -163,7 +163,7 @@ class _TaskTabViewState extends ConsumerState<_TaskTabView>
       content = ListView(
         key: Key('tasks-list-${widget.tab.name}'),
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(BosSpace.s16),
+        padding: const EdgeInsets.all(AppSpacing.md),
         children: [
           if (items.isEmpty)
             _empty(l10n)
@@ -174,17 +174,17 @@ class _TaskTabViewState extends ConsumerState<_TaskTabView>
                 userId: widget.userId,
                 onTap: () => context.go(taskPath(task.id)),
               ),
-              const SizedBox(height: BosSpace.s8),
+              const SizedBox(height: AppSpacing.xs),
             ],
           if (_moreError != null)
             ErrorMessageBox(pickingErrorMessage(l10n, _moreError!)),
           if (cursor != null) ...[
-            const SizedBox(height: BosSpace.s8),
+            const SizedBox(height: AppSpacing.xs),
             OutlinedButton(
               key: const Key('tasks-load-more'),
               onPressed: _loadingMore ? null : () => _loadMore(cursor),
               style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(BosSize.minTouchTarget),
+                minimumSize: const Size.fromHeight(AppSize.minTouchTarget),
               ),
               child: Text(_loadingMore ? l10n.loading : l10n.tasksLoadMore),
             ),
@@ -195,7 +195,7 @@ class _TaskTabViewState extends ConsumerState<_TaskTabView>
       content = ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
-          const SizedBox(height: BosSpace.s48),
+          const SizedBox(height: AppSpacing.xxl),
           ErrorView(
             error: async.error!,
             onRetry: () => ref.invalidate(tasksPageProvider(widget.tab)),
@@ -203,7 +203,7 @@ class _TaskTabViewState extends ConsumerState<_TaskTabView>
         ],
       );
     } else {
-      content = const LoadingView();
+      content = const ListLoadingView();
     }
     return RefreshIndicator(onRefresh: _refresh, child: content);
   }
@@ -211,19 +211,19 @@ class _TaskTabViewState extends ConsumerState<_TaskTabView>
   Widget _empty(AppLocalizations l10n) => switch (widget.tab) {
     TaskTab.assigned => TasksMessage(
       key: const Key('tasks-empty'),
-      icon: Icons.inbox_outlined,
+      icon: AppIcons.packageOpen,
       title: l10n.tasksEmptyAssigned,
       body: l10n.tasksEmptyAssignedHint,
     ),
     TaskTab.pool => TasksMessage(
       key: const Key('tasks-empty'),
-      icon: Icons.inbox_outlined,
+      icon: AppIcons.packageOpen,
       title: l10n.tasksEmptyPool,
       body: l10n.tasksEmptyHint,
     ),
     TaskTab.all => TasksMessage(
       key: const Key('tasks-empty'),
-      icon: Icons.inbox_outlined,
+      icon: AppIcons.packageOpen,
       title: l10n.tasksEmptyAll,
       body: l10n.tasksEmptyHint,
     ),

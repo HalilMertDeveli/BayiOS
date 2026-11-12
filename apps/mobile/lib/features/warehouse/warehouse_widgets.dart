@@ -1,5 +1,8 @@
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
 import 'package:bayios_mobile/core/ui/components.dart';
-import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/features/stock/quantity.dart';
 import 'package:bayios_mobile/features/stock/stock_errors.dart';
 import 'package:bayios_mobile/features/stock/stock_widgets.dart';
@@ -21,10 +24,10 @@ class WarehouseForbidden extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(title)),
+    appBar: AppTopBar(title: title),
     body: StockMessagePanel(
       key: const Key('warehouse-no-permission'),
-      icon: Icons.lock_outline,
+      icon: AppIcons.lock,
       message: message,
     ),
   );
@@ -78,50 +81,49 @@ class _QuantityStepperState extends State<QuantityStepper> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final style = IconButton.styleFrom(
-      minimumSize: const Size.square(BosSize.primaryAction),
-    );
+    // Compact: the label floats on the field border (scan screens).
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        IconButton.outlined(
+        StepperButton(
           key: Key('${widget.keyPrefix}-minus'),
           tooltip: l10n.receivingQuantityMinus,
           onPressed: widget.enabled ? () => widget.onStep(-1) : null,
-          style: style,
-          icon: const Icon(Icons.remove),
+          icon: AppIcons.minus4,
         ),
-        const SizedBox(width: BosSpace.s8),
+        const SizedBox(width: AppSpacing.xs),
         Expanded(
           child: TextField(
             key: Key('${widget.keyPrefix}-quantity'),
             controller: _controller,
             enabled: widget.enabled,
             textAlign: TextAlign.center,
-            style: BosType.h2,
+            style: context.text.titleLarge?.tabular,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
               labelText: widget.label,
+              floatingLabelBehavior: FloatingLabelBehavior.always,
+              // 16 + 24 + 16 = 56 dp, level with the − / + buttons.
+              contentPadding: const EdgeInsets.all(AppSpacing.md),
               errorText: widget.error,
               errorMaxLines: 3,
             ),
             onChanged: widget.onChanged,
           ),
         ),
-        const SizedBox(width: BosSpace.s8),
-        IconButton.outlined(
+        const SizedBox(width: AppSpacing.xs),
+        StepperButton(
           key: Key('${widget.keyPrefix}-plus'),
           tooltip: l10n.receivingQuantityPlus,
           onPressed: widget.enabled ? () => widget.onStep(1) : null,
-          style: style,
-          icon: const Icon(Icons.add),
+          icon: AppIcons.plus4,
         ),
       ],
     );
   }
 }
 
-/// The scanned shelf (sticky across product scans) with a way to clear it,
+// The scanned shelf (sticky across product scans) with a way to clear it,
 /// and the field to scan / type another one.
 class ShelfScanField extends StatelessWidget {
   const ShelfScanField({
@@ -152,22 +154,21 @@ class ShelfScanField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (shelf != null)
           Row(
             children: [
-              const Icon(Icons.shelves, color: BosColors.brandPrimary),
-              const SizedBox(width: BosSpace.s8),
+              AppIcon(AppIcons.shelves, color: context.colors.brandPrimary),
+              const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Semantics(
                   liveRegion: true,
                   child: Text(
                     l10n.docShelfCurrent(shelf!),
                     key: Key('$keyPrefix-shelf-current'),
-                    style: theme.textTheme.titleMedium,
+                    style: context.text.titleMedium,
                   ),
                 ),
               ),
@@ -175,7 +176,7 @@ class ShelfScanField extends StatelessWidget {
                 key: Key('$keyPrefix-shelf-clear'),
                 tooltip: l10n.docShelfClear,
                 onPressed: enabled ? onClear : null,
-                icon: const Icon(Icons.close),
+                icon: const AppIcon(AppIcons.closeRemove),
               ),
             ],
           ),
@@ -189,11 +190,11 @@ class ShelfScanField extends StatelessWidget {
           onSubmit: onScanned,
         ),
         if (missing) ...[
-          const SizedBox(height: BosSpace.s8),
+          const SizedBox(height: AppSpacing.xs),
           StockNotice(
             key: Key('$keyPrefix-shelf-missing'),
-            tone: BosColors.danger,
-            icon: Icons.error_outline,
+            tone: Tone.danger,
+            icon: AppIcons.infoCircle,
             child: Text(l10n.docShelfMissing),
           ),
         ],
@@ -258,44 +259,41 @@ class EntryFeedbackView extends StatelessWidget {
       case EntryStale(:final error):
         return StockNotice(
           key: Key('$keyPrefix-stale'),
-          tone: BosColors.warning,
-          icon: Icons.sync_problem,
+          tone: Tone.warning,
+          icon: AppIcons.syncProblem,
           child: Text(message(error)),
         );
       case EntryPending(:final error):
         return StockNotice(
           key: Key('$keyPrefix-pending'),
-          tone: BosColors.danger,
-          icon: Icons.cloud_off_outlined,
+          tone: Tone.danger,
+          icon: AppIcons.offline,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                l10n.docEntryUnknown,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
+              Text(l10n.docEntryUnknown, style: context.text.bodySmall?.bold),
               Text(message(error)),
               Text(l10n.docEntryPendingHint),
-              const SizedBox(height: BosSpace.s8),
+              const SizedBox(height: AppSpacing.xs),
               Wrap(
-                spacing: BosSpace.s8,
-                runSpacing: BosSpace.s8,
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
                 children: [
                   FilledButton.icon(
                     key: Key('$keyPrefix-resend'),
                     onPressed: sending ? null : onResend,
-                    icon: const Icon(Icons.refresh),
+                    icon: const AppIcon(AppIcons.refresh),
                     label: Text(l10n.resend),
                     style: FilledButton.styleFrom(
-                      backgroundColor: BosColors.dangerSolid,
-                      minimumSize: const Size(0, BosSize.primaryAction),
+                      backgroundColor: context.colors.dangerSolid,
+                      minimumSize: const Size(0, AppSize.primaryAction),
                     ),
                   ),
                   TextButton(
                     key: Key('$keyPrefix-discard'),
                     onPressed: sending ? null : onDiscard,
                     style: TextButton.styleFrom(
-                      foregroundColor: BosColors.danger.fg,
+                      foregroundColor: context.colors.danger.fg,
                     ),
                     child: Text(l10n.docEntryDiscard),
                   ),
@@ -332,8 +330,8 @@ class DocumentScanSteps extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(
-          horizontal: BosSpace.s8,
-          vertical: BosSpace.s12,
+          horizontal: AppSpacing.xs,
+          vertical: AppSpacing.sm,
         ),
         child: ScanStepIndicator(
           current: needsShelf ? 0 : 2,

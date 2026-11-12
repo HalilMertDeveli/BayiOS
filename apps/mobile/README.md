@@ -40,6 +40,12 @@ flutter build apk --debug
 CI: `.github/workflows/ci-mobile.yml` (`apps/mobile/**` veya `packages/contracts/**` değişince; `ci gate` bekler).
 Emülatörde gerçek yığına karşı web ↔ mobil akış: `.github/workflows/e2e-mobile.yml` (aşağıda "Web ↔ mobil gerçek akış").
 
+Tasarım ekran görüntüleri (#222; her ekran açık + koyu, 375×812 @2x, sahte veri, gömülü Inter Tight + kit ikonları) normal
+`flutter test`te atlanır; üretmek için:
+```bash
+flutter test --dart-define=BAYIOS_SCREENSHOTS=true test/screenshots   # → docs/design/screenshots/mobile/<ekran>-<light|dark>.png
+```
+
 | Test | Kapsam |
 |---|---|
 | `test/core/api/api_client_test.dart` | `X-Tenant-Id`, `Idempotency-Key` (yeniden denemede aynı anahtar), 401 → yenile → tekrar, Problem Details, Retry-After, ağ/zaman aşımı |
@@ -54,6 +60,7 @@ Emülatörde gerçek yığına karşı web ↔ mobil akış: `.github/workflows/
 | `test/core/push/*` | Push kaydı: Firebase yoksa hiçbir şey; izin bir kez; işletmede kayıt; token yenileme; işletme değişimi (eski işletmeden silme); çevrimdışı kayıt aynı anahtarla yeniden; çıkıştan önce silme + FCM token iptali |
 | `test/app/push_coordinator_test.dart` | Bildirime dokunma → `/gorevler/:id` (oturum geri yüklendikten sonra; soğuk başlangıç; başka üyelik işletmesine geçiş; üye olunmayan işletme yok sayılır; ön planda "Aç" bandı) |
 | `test/features/warehouse/*` | Depo (#168): gelen transfer listesi (hedef depo filtresi), raf + adet + ürün okutarak teslim alma (kısmi), `transfer.over_receipt` / `unknown_code` / `wrong_item` / `unknown_location` Türkçe mesajları, `transfer.busy` tek otomatik tekrar (aynı anahtar), kayıp yanıt → aynı `Idempotency-Key` ile "Tekrar gönder", 412 / `invalid_transition` → yeniden yükleme; sayım `add`/`set` (0 yalnızca `set`), kör sayımda sistem miktarı gizli, "Sayımı bitir" `If-Match` + 412; raf taşıma adımları, cihazda raf/ürün/adet doğrulama, izin bazlı gizleme |
+| `test/core/ui/*` | Tema (#222): açık + koyu `AppColors` WCAG AA kontrastları, Inter Tight + kit tip ölçeği, 48 dp; bileşenler (adım göstergesi, geri bildirim bandı, durum çipi, baş harf avatarı) |
 | `test/core/network/connection_errors_test.dart` | Ağ yok → bant; ağ gelince `/meta` yoklaması → bant kalkar, başarısız yükleme kendiliğinden yenilenir; çevrimdışıyken periyodik yoklama; sunucu hatası otomatik yenilenmez |
 
 ## Emülatör smoke (gerçek yerel yığın)
@@ -277,7 +284,12 @@ lib/
                             ProblemDetails, problem_messages.dart (Türkçe), contract.dart (ContractSchema)
     auth/                   AuthRepository (+ Supabase), AuthController, güvenli oturum deposu
     session/                SessionController (/me + tenant), Access (izinler), Me modelleri
-    ui/                     tokens.dart (web tasarım token'ları), app_theme.dart, widgets.dart
+    theme/                  Tek tasarım kaynağı (#222, UI kit): app_palette.dart (üretilmiş, packages/design-tokens),
+                            app_colors.dart (AppColors açık/koyu = web --bos-* token'ları), app_spacing.dart
+                            (AppSpacing/AppRadius/AppShadows/AppSize), app_theme.dart (Material 3 + Inter Tight),
+                            app_icon.dart (AppIcon + AppIcons, assets/icons/*.svg)
+    ui/                     components.dart (AppTopBar, AppBottomNav, AppCard, KpiCard, ListCard, StatusChip,
+                            AppAvatar, LabeledField, AppButton, EmptyState, SkeletonList, …), widgets.dart
                             (ErrorView = tekrar dene kalıbı, OfflineBanner, LoadingView, roleLabel)
     providers.dart          appEnv, dio, apiClient, activeTenantId, networkStatus, identityApi
   features/<ad>/            <ad>_feature.dart + ekranlar + o özelliğin API/model dosyaları
@@ -290,7 +302,7 @@ Yeni özellik (ör. toplama):
 2. `lib/features/picking/picking_feature.dart`:
    ```dart
    final pickingFeature = AppFeature(
-     id: 'picking', path: '/gorevler', label: (l) => l.navTasks, icon: Icons.checklist,
+     id: 'picking', path: '/gorevler', label: (l) => l.navTasks, icon: AppIcons.document,
      isVisible: (access) => access.canAny(['tasks.read.own', 'tasks.read.all']),
      builder: (context, state) => const PickingListScreen(),
      routes: [GoRoute(path: ':id', builder: ...)],

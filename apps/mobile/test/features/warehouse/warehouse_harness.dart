@@ -1,5 +1,5 @@
 import 'package:bayios_mobile/app/app.dart';
-import 'package:bayios_mobile/core/ui/app_theme.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
 import 'package:bayios_mobile/features/picking/scan_alerts.dart';
 import 'package:bayios_mobile/features/warehouse/warehouse_feature.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';

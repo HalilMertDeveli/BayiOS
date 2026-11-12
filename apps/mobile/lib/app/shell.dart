@@ -2,7 +2,7 @@ import 'package:bayios_mobile/app/feature.dart';
 import 'package:bayios_mobile/app/features.dart';
 import 'package:bayios_mobile/core/session/access.dart';
 import 'package:bayios_mobile/core/session/session_controller.dart';
-import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,25 +37,18 @@ class AppShell extends ConsumerWidget {
       body: child,
       bottomNavigationBar: items.length < 2
           ? null
-          // Hairline on top: the bar stays separate from scrolled content
-          // without a heavy shadow (styling: navigationBarTheme).
-          : DecoratedBox(
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: BosColors.borderDefault)),
-              ),
-              child: NavigationBar(
-                selectedIndex: index,
-                onDestinationSelected: (i) => context.go(items[i].path),
-                destinations: [
-                  for (final f in items)
-                    NavigationDestination(
-                      key: Key('nav-${f.id}'),
-                      icon: Icon(f.icon),
-                      selectedIcon: Icon(f.selectedIcon ?? f.icon),
-                      label: f.label(l10n),
-                    ),
-                ],
-              ),
+          : AppBottomNav(
+              selectedIndex: index,
+              onSelected: (i) => context.go(items[i].path),
+              items: [
+                for (final f in items)
+                  AppNavItem(
+                    key: Key('nav-${f.id}'),
+                    icon: f.icon,
+                    selectedIcon: f.selectedIcon,
+                    label: f.label(l10n),
+                  ),
+              ],
             ),
     );
   }

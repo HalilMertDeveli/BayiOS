@@ -19,7 +19,9 @@ dependencies:
     sdk: flutter
   flutter_riverpod: 3.5.0
   flutter_secure_storage: 11.2.0
+  flutter_svg: 2.3.4
   go_router: 18.1.3
+  google_fonts: 8.2.1
   intl: 0.20.3
   mobile_scanner: 7.5.0
   supabase_flutter: 2.18.3
@@ -40,3 +42,9 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+  assets:
+    # Kit icons (24×24 SVG, currentColor) — lib/core/theme/app_icon.dart.
+    - assets/icons/
+    # Inter Tight (SIL OFL 1.1, assets/google_fonts/OFL.txt), bundled so
+    # google_fonts never fetches at runtime (offline handhelds, tests).
+    - assets/google_fonts/

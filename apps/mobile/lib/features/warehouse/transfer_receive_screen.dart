@@ -1,9 +1,12 @@
 import 'dart:async';
 
-import 'package:bayios_mobile/core/ui/tokens.dart';
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
+import 'package:bayios_mobile/core/ui/components.dart';
 import 'package:bayios_mobile/core/ui/widgets.dart';
 import 'package:bayios_mobile/features/picking/scan_alerts.dart';
-import 'package:bayios_mobile/features/picking/tasks_widgets.dart';
 import 'package:bayios_mobile/features/stock/quantity.dart';
 import 'package:bayios_mobile/features/stock/stock_api.dart';
 import 'package:bayios_mobile/features/stock/stock_errors.dart';
@@ -79,8 +82,8 @@ class _TransferReceiveScreenState extends ConsumerState<TransferReceiveScreen> {
           body = Center(
             child: StockMessagePanel(
               key: const Key('transfer-load-error'),
-              icon: Icons.cloud_off_outlined,
-              tone: BosColors.danger,
+              icon: AppIcons.offline,
+              tone: Tone.danger,
               message: documentErrorMessage(
                 l10n,
                 c.loadError!,
@@ -97,8 +100,8 @@ class _TransferReceiveScreenState extends ConsumerState<TransferReceiveScreen> {
           );
         }
         return Scaffold(
-          appBar: AppBar(
-            title: Text(c.transfer?.number ?? l10n.transferReceiveTitle),
+          appBar: AppTopBar(
+            title: c.transfer?.number ?? l10n.transferReceiveTitle,
           ),
           body: body,
         );
@@ -123,11 +126,11 @@ class _ReceiveBody extends StatelessWidget {
     return ListView(
       key: const Key('transfer-receive'),
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(BosSpace.s16),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(BosSpace.s16),
+            padding: const EdgeInsets.all(AppSpacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -139,13 +142,13 @@ class _ReceiveBody extends StatelessWidget {
                           transfer.sourceWarehouseName ?? '—',
                           transfer.destinationWarehouseName ?? '—',
                         ),
-                        style: Theme.of(context).textTheme.titleMedium,
+                        style: context.text.titleMedium,
                       ),
                     ),
-                    ToneBadge(label, tone),
+                    StatusChip(label, tone),
                   ],
                 ),
-                const SizedBox(height: BosSpace.s4),
+                const SizedBox(height: AppSpacing.xxs),
                 Semantics(
                   liveRegion: true,
                   child: Text(
@@ -158,24 +161,21 @@ class _ReceiveBody extends StatelessWidget {
                   ),
                 ),
                 if (transfer.note case final String note when note.isNotEmpty)
-                  Text(
-                    note,
-                    style: const TextStyle(color: BosColors.textMuted),
-                  ),
+                  Text(note, style: TextStyle(color: context.colors.textMuted)),
               ],
             ),
           ),
         ),
-        const SizedBox(height: BosSpace.s16),
+        const SizedBox(height: AppSpacing.md),
         if (!c.writable)
           StockNotice(
             key: const Key('transfer-not-receivable'),
             tone: transfer.status == TransferStatus.received
-                ? BosColors.success
-                : BosColors.warning,
+                ? Tone.success
+                : Tone.warning,
             icon: transfer.status == TransferStatus.received
-                ? Icons.check_circle_outline
-                : Icons.info_outline,
+                ? AppIcons.checkCircle1
+                : AppIcons.infoCircle,
             child: Text(
               transfer.status == TransferStatus.received
                   ? l10n.transferAllReceived
@@ -189,7 +189,7 @@ class _ReceiveBody extends StatelessWidget {
             shelfRequired: showShelf,
             quantityText: c.quantityText,
           ),
-          const SizedBox(height: BosSpace.s16),
+          const SizedBox(height: AppSpacing.md),
           if (showShelf) ...[
             ShelfScanField(
               keyPrefix: 'transfer',
@@ -201,7 +201,7 @@ class _ReceiveBody extends StatelessWidget {
               onScanned: c.setShelf,
               onClear: c.clearShelf,
             ),
-            const SizedBox(height: BosSpace.s16),
+            const SizedBox(height: AppSpacing.md),
           ],
           QuantityStepper(
             keyPrefix: 'transfer',
@@ -212,7 +212,7 @@ class _ReceiveBody extends StatelessWidget {
             onChanged: c.setQuantityText,
             onStep: c.stepQuantity,
           ),
-          const SizedBox(height: BosSpace.s16),
+          const SizedBox(height: AppSpacing.md),
           CodeEntryField(
             fieldKey: const Key('transfer-code-field'),
             scanKey: const Key('transfer-code-scan'),
@@ -225,11 +225,11 @@ class _ReceiveBody extends StatelessWidget {
           ),
         ],
         if (c.retryingBusy) ...[
-          const SizedBox(height: BosSpace.s8),
+          const SizedBox(height: AppSpacing.xs),
           Text(l10n.docBusyRetrying, key: const Key('transfer-busy-retry')),
         ],
         if (c.feedback case final EntryFeedback feedback) ...[
-          const SizedBox(height: BosSpace.s12),
+          const SizedBox(height: AppSpacing.sm),
           EntryFeedbackView(
             keyPrefix: 'transfer',
             feedback: feedback,
@@ -244,12 +244,12 @@ class _ReceiveBody extends StatelessWidget {
             onDiscard: c.discardPending,
           ),
         ],
-        const SizedBox(height: BosSpace.s16),
+        const SizedBox(height: AppSpacing.md),
         Text(
           l10n.transferLinesTitle(detail.lines.length),
-          style: Theme.of(context).textTheme.titleMedium,
+          style: context.text.titleMedium,
         ),
-        const SizedBox(height: BosSpace.s8),
+        const SizedBox(height: AppSpacing.xs),
         for (final line in detail.sortedLines) _LineTile(line: line),
       ],
     );
@@ -264,29 +264,30 @@ class _LineTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
     return Card(
       key: Key('transfer-line-${line.id}'),
       child: Padding(
-        padding: const EdgeInsets.all(BosSpace.s12),
+        padding: const EdgeInsets.all(AppSpacing.sm),
         child: Row(
           children: [
-            Icon(
-              line.done ? Icons.check_circle : Icons.local_shipping_outlined,
-              color: line.done ? BosColors.success.fg : BosColors.textMuted,
+            AppIcon(
+              line.done ? AppIcons.checkCircle1 : AppIcons.packageMoving,
+              color: line.done
+                  ? context.colors.success.fg
+                  : context.colors.textMuted,
             ),
-            const SizedBox(width: BosSpace.s12),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(line.sku, style: BosType.mono.copyWith(fontSize: 17)),
+                  Text(line.sku, style: context.text.titleMedium?.tabular),
                   Text(
                     l10n.transferLineProgress(
                       formatQuantity(line.receivedQuantity),
                       formatQuantity(line.quantity),
                     ),
-                    style: theme.textTheme.bodyLarge,
+                    style: context.text.bodyLarge,
                   ),
                   if (!line.done)
                     Text(
@@ -298,8 +299,8 @@ class _LineTile extends StatelessWidget {
                               formatQuantity(line.inTransitQuantity),
                               line.destinationLocationCode!,
                             ),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: BosColors.textMuted,
+                      style: context.text.bodyMedium?.copyWith(
+                        color: context.colors.textMuted,
                       ),
                     ),
                 ],

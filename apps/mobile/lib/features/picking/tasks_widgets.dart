@@ -1,5 +1,8 @@
+import 'package:bayios_mobile/core/theme/app_colors.dart';
+import 'package:bayios_mobile/core/theme/app_icon.dart';
+import 'package:bayios_mobile/core/theme/app_spacing.dart';
+import 'package:bayios_mobile/core/theme/app_theme.dart';
 import 'package:bayios_mobile/core/ui/components.dart';
-import 'package:bayios_mobile/core/ui/tokens.dart';
 import 'package:bayios_mobile/features/picking/pick_session.dart';
 import 'package:bayios_mobile/features/picking/picking_models.dart';
 import 'package:bayios_mobile/l10n/app_localizations.dart';
@@ -9,79 +12,29 @@ import 'package:intl/intl.dart';
 /// Route of a task's pick screen.
 String taskPath(String id) => '/gorevler/${Uri.encodeComponent(id)}';
 
-(String, BosTone) taskStatusMeta(
-  AppLocalizations l10n,
-  String status,
-) => switch (status) {
-  PickingTaskStatus.open => (l10n.tasksStatusOpen, BosColors.info),
-  PickingTaskStatus.inProgress => (
-    l10n.tasksStatusInProgress,
-    BosColors.warning,
-  ),
-  PickingTaskStatus.completed => (l10n.tasksStatusCompleted, BosColors.success),
-  PickingTaskStatus.completedWithShortage => (
-    l10n.tasksStatusCompletedWithShortage,
-    BosColors.danger,
-  ),
-  PickingTaskStatus.cancelled => (l10n.tasksStatusCancelled, BosColors.neutral),
-  _ => (status, BosColors.neutral),
-};
-
-/// Small coloured label (status, "Tamam", "2 eksik").
-class ToneBadge extends StatelessWidget {
-  const ToneBadge(this.text, this.tone, {super.key, this.icon});
-
-  final String text;
-  final BosTone tone;
-
-  /// Optional leading glyph (status is never colour-only).
-  final IconData? icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: tone.bg,
-        border: Border.all(color: tone.border),
-        borderRadius: BorderRadius.circular(BosRadius.xl * 2),
+(String, Tone) taskStatusMeta(AppLocalizations l10n, String status) =>
+    switch (status) {
+      PickingTaskStatus.open => (l10n.tasksStatusOpen, Tone.info),
+      PickingTaskStatus.inProgress => (
+        l10n.tasksStatusInProgress,
+        Tone.warning,
       ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          icon == null ? BosSpace.s12 : BosSpace.s8,
-          BosSpace.s4,
-          BosSpace.s12,
-          BosSpace.s4,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 16, color: tone.fg),
-              const SizedBox(width: BosSpace.s4),
-            ],
-            Flexible(
-              child: Text(
-                text,
-                style: BosType.caption.copyWith(
-                  color: tone.fg,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
+      PickingTaskStatus.completed => (l10n.tasksStatusCompleted, Tone.success),
+      PickingTaskStatus.completedWithShortage => (
+        l10n.tasksStatusCompletedWithShortage,
+        Tone.danger,
       ),
-    );
-  }
-}
+      PickingTaskStatus.cancelled => (l10n.tasksStatusCancelled, Tone.neutral),
+      _ => (status, Tone.neutral),
+    };
 
 /// Label and tone of a task priority; null for `normal` (no badge: most
 /// tasks are normal, a badge on every card would be noise).
-(String, BosTone)? taskPriorityMeta(AppLocalizations l10n, String priority) =>
+(String, Tone)? taskPriorityMeta(AppLocalizations l10n, String priority) =>
     switch (priority) {
-      TaskPriority.urgent => (l10n.tasksPriorityUrgent, BosColors.danger),
-      TaskPriority.high => (l10n.tasksPriorityHigh, BosColors.warning),
-      TaskPriority.low => (l10n.tasksPriorityLow, BosColors.neutral),
+      TaskPriority.urgent => (l10n.tasksPriorityUrgent, Tone.danger),
+      TaskPriority.high => (l10n.tasksPriorityHigh, Tone.warning),
+      TaskPriority.low => (l10n.tasksPriorityLow, Tone.neutral),
       _ => null,
     };
 
@@ -94,14 +47,14 @@ class TaskPriorityBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final meta = taskPriorityMeta(AppLocalizations.of(context), priority);
     if (meta == null) return const SizedBox.shrink();
-    return ToneBadge(
+    return StatusChip(
       meta.$1,
       meta.$2,
       key: Key('task-priority-$priority'),
       icon: switch (priority) {
-        TaskPriority.urgent => Icons.bolt,
-        TaskPriority.high => Icons.arrow_upward,
-        _ => Icons.arrow_downward,
+        TaskPriority.urgent => AppIcons.bolt,
+        TaskPriority.high => AppIcons.arrowUp2,
+        _ => AppIcons.arrowDown2,
       },
     );
   }
@@ -127,7 +80,7 @@ class TaskStatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, tone) = taskStatusMeta(AppLocalizations.of(context), status);
-    return ToneBadge(label, tone);
+    return StatusChip(label, tone);
   }
 }
 
@@ -138,15 +91,16 @@ class PickProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return ExcludeSemantics(
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(BosRadius.xl),
+        borderRadius: BorderRadius.circular(AppRadius.full),
         child: LinearProgressIndicator(
           value: value,
-          minHeight: 10,
-          backgroundColor: BosColors.surfaceSunken,
+          minHeight: 8,
+          backgroundColor: c.chartTrack,
           // Finished work turns green: done at a glance.
-          color: value >= 1 ? BosColors.success.fg : BosColors.brandPrimary,
+          color: value >= 1 ? c.success.fg : c.brandAccent,
         ),
       ),
     );
@@ -170,7 +124,7 @@ class TaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
+    final c = context.colors;
     final who = task.assignedTo == null
         ? l10n.tasksInPool
         : task.assignedTo == userId
@@ -180,8 +134,8 @@ class TaskCard extends StatelessWidget {
     // Urgent / high work is marked on the card edge as well as by the badge
     // (colour is a second cue, never the only one).
     final stripe = switch (task.priority) {
-      TaskPriority.urgent => BosColors.danger.fg,
-      TaskPriority.high => BosColors.warning.border,
+      TaskPriority.urgent => c.danger.fg,
+      TaskPriority.high => c.warning.border,
       _ => null,
     };
     final customer = taskCustomerLine(l10n, task);
@@ -195,16 +149,16 @@ class TaskCard extends StatelessWidget {
           decoration: BoxDecoration(
             border: stripe == null
                 ? null
-                : Border(left: BorderSide(color: stripe, width: 6)),
+                : Border(left: BorderSide(color: stripe, width: 4)),
           ),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: BosSize.primaryAction),
+            constraints: const BoxConstraints(minHeight: AppSize.primaryAction),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(
-                BosSpace.s16,
-                BosSpace.s16,
-                BosSpace.s8,
-                BosSpace.s16,
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.sm,
+                AppSpacing.md,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,69 +169,66 @@ class TaskCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           l10n.tasksOrder(task.orderNumber),
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
+                          style: context.text.titleMedium?.copyWith(
+                            color: c.textPrimary,
                           ),
                         ),
                       ),
-                      const SizedBox(width: BosSpace.s8),
+                      const SizedBox(width: AppSpacing.xs),
                       TaskStatusBadge(task.status),
                     ],
                   ),
                   if (priority != null || task.type == 'putaway') ...[
-                    const SizedBox(height: BosSpace.s8),
+                    const SizedBox(height: AppSpacing.xs),
                     Wrap(
-                      spacing: BosSpace.s8,
-                      runSpacing: BosSpace.s4,
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xxs,
                       children: [
                         TaskPriorityBadge(task.priority),
                         if (task.type == 'putaway')
-                          ToneBadge(
+                          StatusChip(
                             l10n.tasksTypePutaway,
-                            BosColors.purple,
-                            icon: Icons.move_down,
+                            Tone.purple,
+                            icon: AppIcons.rightDownLine,
                           ),
                       ],
                     ),
                   ],
                   if (customer != null)
                     _IconLine(
-                      icon: Icons.storefront_outlined,
+                      icon: AppIcons.store03,
                       child: Text(
                         customer,
                         key: Key('task-customer-${task.id}'),
-                        style: BosType.bodyLg.copyWith(
-                          fontWeight: FontWeight.w600,
+                        style: context.text.bodyMedium?.medium.copyWith(
+                          color: c.textPrimary,
                         ),
                       ),
                     ),
                   _IconLine(
                     icon: task.assignedTo == null
-                        ? Icons.inbox_outlined
-                        : Icons.person_outline,
+                        ? AppIcons.twoUser
+                        : AppIcons.profile,
                     child: Text(
                       [l10n.tasksLines(task.lineCount), who].join(' · '),
-                      style: BosType.body.copyWith(
-                        color: BosColors.textSecondary,
+                      style: context.text.bodySmall?.copyWith(
+                        color: c.textMuted,
                       ),
                     ),
                   ),
-                  const SizedBox(height: BosSpace.s12),
+                  const SizedBox(height: AppSpacing.sm),
                   Row(
                     children: [
                       Expanded(child: PickProgressBar(value: task.progress)),
-                      const SizedBox(width: BosSpace.s12),
+                      const SizedBox(width: AppSpacing.sm),
                       Text(
                         l10n.tasksPercent(percent),
-                        style: BosType.body.copyWith(
-                          fontWeight: FontWeight.w700,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                        style: context.text.bodySmall?.semiBold.tabular
+                            .copyWith(color: c.textPrimary),
                       ),
-                      const SizedBox(width: BosSpace.s4),
                     ],
                   ),
-                  const SizedBox(height: BosSpace.s4),
+                  const SizedBox(height: AppSpacing.xs),
                   Row(
                     children: [
                       Expanded(
@@ -286,20 +237,22 @@ class TaskCard extends StatelessWidget {
                             formatQuantity(task.quantityPicked),
                             formatQuantity(task.quantityToPick),
                           ),
-                          style: BosType.caption.copyWith(
-                            color: BosColors.textMuted,
+                          style: context.text.labelMedium?.copyWith(
+                            color: c.textMuted,
                           ),
                         ),
                       ),
                       if (task.quantityShort > 0)
-                        ToneBadge(
+                        StatusChip(
                           l10n.tasksShort(formatQuantity(task.quantityShort)),
-                          BosColors.danger,
-                          icon: Icons.report_outlined,
+                          Tone.danger,
+                          icon: AppIcons.infoCircle,
                         ),
-                      const Icon(
-                        Icons.chevron_right,
-                        color: BosColors.textMuted,
+                      const SizedBox(width: AppSpacing.xxs),
+                      AppIcon(
+                        AppIcons.arrowRight2,
+                        size: AppSize.icon,
+                        color: c.textMuted,
                       ),
                     ],
                   ),
@@ -317,21 +270,25 @@ class TaskCard extends StatelessWidget {
 class _IconLine extends StatelessWidget {
   const _IconLine({required this.icon, required this.child});
 
-  final IconData icon;
+  final AppIconData icon;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: BosSpace.s8),
+      padding: const EdgeInsets.only(top: AppSpacing.xs),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(icon, size: 20, color: BosColors.textMuted),
+            padding: const EdgeInsets.only(top: 1),
+            child: AppIcon(
+              icon,
+              size: AppSize.iconSm,
+              color: context.colors.textMuted,
+            ),
           ),
-          const SizedBox(width: BosSpace.s8),
+          const SizedBox(width: AppSpacing.xs),
           Expanded(child: child),
         ],
       ),
@@ -348,7 +305,7 @@ class TasksMessage extends StatelessWidget {
     super.key,
   });
 
-  final IconData icon;
+  final AppIconData icon;
   final String title;
   final String? body;
 

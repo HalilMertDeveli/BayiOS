@@ -36,5 +36,18 @@ Durum: **Kit** = kit ekranının düzeni uygulandı · **Türetildi** = kit'te k
 | Giderler, belgeler, entegrasyonlar, satış fişleri, alınan ödemeler, tedarikçiler, satın alma siparişleri | — | 126, 130, 162, 176, 184, 188, 192 | **Yok** — BayiOS kapsamında değil |
 
 ## Mobil (`apps/mobile`, depo uygulaması, 375, tek sütun + alt gezinme)
-Kit'in mobil ekranları web'in duyarlı hâlidir; alt gezinme çubuğu kit'te yok, kit kart/başlık stilinden türetildi.
-Ayrıntılı liste mobil bölümünde (bkz. PR açıklaması ve `docs/design/screenshots/mobile/`).
+Kit'in mobil ekranları web'in duyarlı hâlidir; BayiOS mobil uygulaması depo personeli içindir (sipariş, müşteri,
+fatura ekranı yoktur). Ekran görüntüleri: `flutter test --dart-define=BAYIOS_SCREENSHOTS=true test/screenshots`.
+
+| BayiOS ekranı | Kit referansı | Durum |
+|---|---|---|
+| Giriş | 107/209 sign in | Kit |
+| Oturum yükleniyor, işletme seçimi, üyelik yok | sign-in kartı | Türetildi |
+| Depo panosu (KPI kutuları, sıradaki görevler) | 105/207 dashboard | Kit kart + KPI (sadeleştirildi) |
+| Görev listesi (+ boş durum) | 121/223 | Kit liste kartı |
+| Toplama (barkod) | — | Türetildi |
+| Stok sorgu (boş, sonuç, hata) | 145/247 | Türetildi |
+| Mal kabul, düzeltme, sayım, transfer kabul, raf taşıma | 174/276 form | Kit form; okutma ekranlarında etiket alan kenarında (yer darlığı) |
+| Depo merkezi, transfer ve sayım listeleri | liste kartı | Kit |
+| Profil + Hakkında (kredi satırı) | 147/249 settings | Kit |
+| Alt gezinme çubuğu | — | Türetildi (kit'te yok) |
